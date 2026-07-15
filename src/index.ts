@@ -29,6 +29,7 @@ export {
 } from "./components/InlineConfirm.js";
 export {
   Checkbox,
+  type CheckboxErrorLive,
   type CheckboxProps,
   NumberInput,
   type NumberInputProps,
@@ -44,6 +45,7 @@ export {
 } from "./components/Inputs.js";
 export {
   type FieldControlProps,
+  type FieldErrorLive,
   LabeledField,
   type LabeledFieldChild,
   type LabeledFieldControlProps,
@@ -96,6 +98,10 @@ export {
   type ThemeToggleProps,
 } from "./components/ThemeToggle.js";
 export {
+  supportsNativeCssScope,
+  UnsupportedBrowserError,
+} from "./styles/install.js";
+export {
   type ColorTokenName,
   type FoundationTokenName,
   PUBLIC_COLOR_TOKEN_NAMES,
@@ -107,4 +113,5 @@ export {
   THEME_STORAGE_KEY,
   type ThemeChoice,
 } from "./theme/contract.js";
+export type { AnnouncementMode } from "./utils/announcement.js";
 export type { HeadingLevel } from "./utils/heading.js";

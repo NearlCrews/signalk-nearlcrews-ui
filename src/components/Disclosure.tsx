@@ -1,6 +1,7 @@
 import type { DetailsHTMLAttributes, ReactNode } from "react";
 
 import { classNames } from "../utils/class-names.js";
+import { hasReactContent } from "../utils/react-node.js";
 
 export interface DisclosureProps
   extends Omit<
@@ -18,6 +19,10 @@ export function Disclosure({
   title,
   ...props
 }: DisclosureProps): React.JSX.Element {
+  if (!hasReactContent(title)) {
+    throw new Error("Disclosure requires a non-empty title.");
+  }
+
   return (
     <details
       {...props}

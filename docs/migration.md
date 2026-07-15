@@ -40,10 +40,24 @@ npm pack --ignore-scripts
 In the consumer:
 
 ```sh
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.1.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.2.0.tgz
 ```
 
 The dependency belongs in `devDependencies` because the consumer publishes compiled panel assets.
+
+## Upgrading from 0.1.x
+
+Version 0.2 changes interaction and layout contracts that are public during the `0.x` series:
+
+- Loading buttons remain focusable and use `aria-disabled="true"` instead of the native `disabled` attribute. Update tests to assert the busy and ARIA states, then verify that pointer and keyboard activation remain suppressed.
+- `Stack` is the sole source of external vertical rhythm. Wrap adjacent sections, fields, disclosures, and action bars in an explicit `Stack` instead of relying on component sibling margins.
+- `SegmentedControl` exposes the radio group on its root element. Do not assert a fieldset implementation, and assert each disabled option or the group's `aria-disabled` state instead.
+- Responsive component rules follow `PanelRoot` width. Test narrow embedded panels inside a wide viewport, not only narrow browser viewports.
+- Required labels, legends, section titles, disclosure titles, collapsible titles, and metric labels reject whitespace-only content.
+- Persistent field and checkbox errors default to `errorLive="off"`. Opt in to `polite` or `assertive` only when interaction-driven changes need announcement.
+- `PanelRoot` adds a private content wrapper to support container queries. Consumer selectors must not depend on the package's internal DOM or class names.
+
+Use `supportsNativeCssScope(window)` when a consumer must render a local compatibility message before mounting `PanelRoot`. Catch `UnsupportedBrowserError` only at a product-owned error boundary. Do not bypass the check with unscoped copies of the package CSS.
 
 ## Adopt in small steps
 
@@ -54,9 +68,11 @@ The dependency belongs in `devDependencies` because the consumer publishes compi
 5. Replace status and banner presentation while preserving plugin-specific state.
 6. Remove the replaced local styles and components.
 
-Use `CollapsibleSection` only for heading-backed, controlled, summarized, or action-bearing content. Keep `Disclosure` for simple native details. Use `mountStrategy="unmount"` for expensive content that should exist only while open, or retain the default when form state and focus targets must stay mounted.
+Use `CollapsibleSection` only for heading-backed, controlled, summarized, or action-bearing content. Keep `Disclosure` for simple native details. Use `mountStrategy="unmount"` for expensive content that should exist only while open, `mountStrategy="lazy-retain"` when the first open should defer initialization but later closes must preserve state, or retain the default when form state and focus targets must exist before the first open.
 
 When save or discard disables its initiating button, pass a ref to `ActionBar.statusRef` and focus that status after the operation. The consumer still owns save timing, status text, and focus-transfer timing.
+
+When dismissing a banner removes the focused button, pass `dismissFocusRef` for the next logical focus target. The consumer still owns banner visibility and target selection.
 
 Do not move fetch hooks, reducers, unit conversion, save logic, or domain validation into this package.
 

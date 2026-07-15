@@ -6,6 +6,10 @@ import {
   type ReactNode,
   useId,
 } from "react";
+import {
+  type AnnouncementMode,
+  announcementRole,
+} from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
@@ -24,6 +28,7 @@ export interface LabeledFieldControlProps extends FieldControlProps {
 
 export type LabeledFieldLayout = "stacked" | "inline";
 export type LabeledFieldDensity = "comfortable" | "compact";
+export type FieldErrorLive = AnnouncementMode;
 
 export type LabeledFieldChild =
   | ReactElement<FieldControlProps>
@@ -35,6 +40,7 @@ export interface LabeledFieldProps
   readonly density?: LabeledFieldDensity;
   readonly description?: ReactNode;
   readonly error?: ReactNode;
+  readonly errorLive?: FieldErrorLive;
   readonly label: ReactNode;
   readonly layout?: LabeledFieldLayout;
   readonly required?: boolean;
@@ -46,11 +52,16 @@ export function LabeledField({
   density = "comfortable",
   description,
   error,
+  errorLive = "off",
   label,
   layout = "stacked",
   required = false,
   ...props
 }: LabeledFieldProps): React.JSX.Element {
+  if (!hasReactContent(label)) {
+    throw new Error("LabeledField requires a non-empty label.");
+  }
+
   const generatedId = useId();
   const elementChild = typeof children === "function" ? undefined : children;
   const controlId = elementChild?.props.id ?? `${generatedId}-control`;
@@ -99,12 +110,9 @@ export function LabeledField({
       <label className="snui-field__label" htmlFor={controlId}>
         {label}{" "}
         {required ? (
-          <>
-            <span className="snui-required-mark" aria-hidden="true">
-              *
-            </span>
-            <span className="snui-visually-hidden"> (required)</span>
-          </>
+          <span className="snui-required-mark" aria-hidden="true">
+            *
+          </span>
         ) : null}
       </label>
       {hasDescription ? (
@@ -114,7 +122,12 @@ export function LabeledField({
       ) : null}
       <div className="snui-field__control">{control}</div>
       {hasError ? (
-        <div id={errorId} className="snui-field__error" role="alert">
+        <div
+          id={errorId}
+          className="snui-field__error"
+          role={announcementRole(errorLive)}
+          aria-live={errorLive}
+        >
           {error}
         </div>
       ) : null}

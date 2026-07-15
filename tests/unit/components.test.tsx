@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type AriaAttributes, createRef, Fragment, useState } from "react";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -76,6 +82,75 @@ describe("form primitives", () => {
     expect(checkbox).toHaveAccessibleDescription(
       "Starts the optional data provider.",
     );
+  });
+
+  it("associates checkbox errors without announcing persistent validation", () => {
+    render(
+      <PanelRoot>
+        <Checkbox
+          label="Enable provider"
+          description="Starts the optional data provider."
+          error="Accept the provider terms first."
+        />
+      </PanelRoot>,
+    );
+
+    const checkbox = screen.getByRole("checkbox", { name: "Enable provider" });
+    expect(checkbox).toHaveAttribute("aria-invalid", "true");
+    expect(checkbox).toHaveAttribute("aria-errormessage");
+    expect(checkbox).toHaveAccessibleDescription(
+      "Starts the optional data provider. Accept the provider terms first.",
+    );
+    expect(
+      screen.getByText("Accept the provider terms first."),
+    ).toHaveAttribute("aria-live", "off");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("supports opt-in field and checkbox error announcements", () => {
+    render(
+      <PanelRoot>
+        <LabeledField
+          label="Server URL"
+          error="The server URL is invalid."
+          errorLive="polite"
+        >
+          <TextInput />
+        </LabeledField>
+        <Checkbox
+          label="Enable provider"
+          error="The provider cannot be enabled."
+          errorLive="assertive"
+        />
+      </PanelRoot>,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "The server URL is invalid.",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The provider cannot be enabled.",
+    );
+  });
+
+  it("rejects whitespace-only field and checkbox labels", () => {
+    expect(() =>
+      render(
+        <PanelRoot>
+          <LabeledField label="  ">
+            <TextInput />
+          </LabeledField>
+        </PanelRoot>,
+      ),
+    ).toThrow("LabeledField requires a non-empty label.");
+
+    expect(() =>
+      render(
+        <PanelRoot>
+          <Checkbox label={"\t"} />
+        </PanelRoot>,
+      ),
+    ).toThrow("Checkbox requires a non-empty label.");
   });
 
   it("merges checkbox label and description references supplied by callers", () => {
@@ -304,6 +379,24 @@ describe("form primitives", () => {
 });
 
 describe("feedback and layout primitives", () => {
+  it("rejects whitespace-only names for semantic grouping primitives", () => {
+    expect(() => render(<FieldGroup legend="  ">Content</FieldGroup>)).toThrow(
+      "FieldGroup requires a non-empty legend.",
+    );
+    expect(() => render(<Disclosure title="  ">Content</Disclosure>)).toThrow(
+      "Disclosure requires a non-empty title.",
+    );
+    expect(() => render(<Section title="  ">Content</Section>)).toThrow(
+      "Section requires a non-empty title.",
+    );
+    expect(() =>
+      render(<CollapsibleSection title="  ">Content</CollapsibleSection>),
+    ).toThrow("CollapsibleSection requires a non-empty title.");
+    expect(() => render(<Metric label="  " value="12" />)).toThrow(
+      "Metric requires a non-empty label.",
+    );
+  });
+
   it("announces only banners explicitly marked as live", () => {
     render(
       <PanelRoot>
@@ -329,6 +422,18 @@ describe("feedback and layout primitives", () => {
     expect(container.querySelector(".snui-banner")).not.toHaveAttribute(
       "aria-live",
     );
+  });
+
+  it("preserves an explicit off live-region setting", () => {
+    render(
+      <PanelRoot>
+        <Banner role="alert" live="off">
+          Connection failed.
+        </Banner>
+      </PanelRoot>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "off");
   });
 
   it("supports polite banner announcements without requiring a title", () => {
@@ -510,6 +615,38 @@ describe("feedback and layout primitives", () => {
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
+  it("moves focus to the requested destination after dismissal", async () => {
+    const user = userEvent.setup();
+    const destinationRef = createRef<HTMLButtonElement>();
+
+    function Fixture(): React.JSX.Element {
+      const [visible, setVisible] = useState(true);
+
+      return (
+        <PanelRoot>
+          {visible ? (
+            <Banner
+              dismissFocusRef={destinationRef}
+              onDismiss={() => setVisible(false)}
+            >
+              Provider notice
+            </Banner>
+          ) : null}
+          <Button ref={destinationRef}>Provider settings</Button>
+        </PanelRoot>
+      );
+    }
+
+    render(<Fixture />);
+    await user.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Provider settings" }),
+      ).toHaveFocus();
+    });
+  });
+
   it("falls back to a named banner dismissal for blank labels", () => {
     render(
       <PanelRoot>
@@ -617,6 +754,37 @@ describe("feedback and layout primitives", () => {
     );
   });
 
+  it("lazily mounts collapsible content and retains its state", async () => {
+    const user = userEvent.setup();
+    const { container } = render(
+      <PanelRoot>
+        <CollapsibleSection
+          title="Advanced settings"
+          mountStrategy="lazy-retain"
+        >
+          <TextInput aria-label="Provider token" />
+        </CollapsibleSection>
+      </PanelRoot>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    expect(
+      container.querySelector('input[aria-label="Provider token"]'),
+    ).toBeNull();
+
+    await user.click(toggle);
+    const input = screen.getByRole("textbox", { name: "Provider token" });
+    await user.type(input, "retained value");
+    await user.click(toggle);
+
+    const retainedInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Provider token"]',
+    );
+    expect(retainedInput).not.toBeNull();
+    expect(retainedInput).not.toBeVisible();
+    expect(retainedInput).toHaveValue("retained value");
+  });
+
   it("renders shared rhythm and metric presentation primitives", () => {
     const { container } = render(
       <PanelRoot>
@@ -645,6 +813,33 @@ describe("feedback and layout primitives", () => {
     expect(screen.getByText("Ready")).toBeVisible();
     expect(screen.getByText("Updates")).toBeVisible();
     expect(screen.getByText("Since startup")).toBeVisible();
+    expect(screen.getByRole("group", { name: "Updates" })).toHaveTextContent(
+      "12",
+    );
+  });
+
+  it("groups multiple section actions in their own layout wrapper", () => {
+    const { container } = render(
+      <PanelRoot>
+        <Section
+          title="Sources"
+          actions={
+            <>
+              <Button>Add</Button>
+              <Button>Refresh</Button>
+            </>
+          }
+        >
+          Ready
+        </Section>
+      </PanelRoot>,
+    );
+
+    const actions = container.querySelector(".snui-section__actions");
+    expect(actions).not.toBeNull();
+    expect(within(actions as HTMLElement).getAllByRole("button")).toHaveLength(
+      2,
+    );
   });
 });
 
@@ -665,19 +860,58 @@ describe("buttons and confirmation", () => {
     expect(content?.children).toHaveLength(2);
   });
 
-  it("disables a loading button and exposes busy state", () => {
+  it("keeps a loading button focusable while suppressing activation", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onSubmit = vi.fn((event: React.SubmitEvent<HTMLFormElement>) =>
+      event.preventDefault(),
+    );
+    const renderButton = (loading: boolean): React.JSX.Element => (
+      <PanelRoot>
+        <form onSubmit={onSubmit}>
+          <Button
+            loading={loading}
+            variant="primary"
+            type="submit"
+            onClick={onClick}
+          >
+            Save
+          </Button>
+        </form>
+      </PanelRoot>
+    );
+    const { rerender } = render(renderButton(false));
+    const idleButton = screen.getByRole("button", { name: "Save" });
+    idleButton.focus();
+
+    rerender(renderButton(true));
+
+    const button = screen.getByRole("button", { name: "Working: Save" });
+    expect(button).toBe(idleButton);
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button.querySelector(".snui-button__spinner")).not.toBeNull();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    await user.click(button);
+    expect(button).toHaveFocus();
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("localizes a loading button with an explicit accessible label", () => {
     render(
       <PanelRoot>
-        <Button loading variant="primary">
+        <Button loading loadingLabel="Saving" aria-label="Save settings">
           Save
         </Button>
       </PanelRoot>,
     );
 
-    const button = screen.getByRole("button", { name: /Save/ });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("aria-busy", "true");
-    expect(button.querySelector(".snui-button__spinner")).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Saving: Save settings" }),
+    ).toHaveAttribute("aria-busy", "true");
   });
 
   it("keeps aria-disabled buttons focusable while suppressing activation", async () => {
@@ -924,6 +1158,51 @@ describe("buttons and confirmation", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Confirm action" }),
     ).toBeVisible();
+  });
+
+  it("accepts localized confirmation labels, native attributes, and a root ref", () => {
+    const rootRef = createRef<HTMLElement>();
+    const confirmationProps = {
+      fallbackTitle: "Confirmer l’action",
+      cancelLabel: "Annuler",
+      confirmLabel: "Confirmer",
+      message: "Cette action est permanente.",
+      onCancel: vi.fn(),
+      onConfirm: vi.fn(),
+    } as const;
+    const { rerender } = render(
+      <PanelRoot>
+        <InlineConfirm
+          {...confirmationProps}
+          open
+          rootRef={rootRef}
+          data-testid="localized-confirmation"
+          aria-labelledby="confirmation-context"
+          aria-describedby="confirmation-guidance"
+        />
+        <span id="confirmation-context">Safety check</span>
+        <span id="confirmation-guidance">Review before continuing.</span>
+      </PanelRoot>,
+    );
+
+    expect(rootRef.current).toBe(screen.getByTestId("localized-confirmation"));
+    expect(
+      screen.getByRole("region", {
+        name: "Safety check Confirmer l’action",
+      }),
+    ).toBeVisible();
+    expect(rootRef.current).toHaveAccessibleDescription(
+      "Review before continuing. Cette action est permanente.",
+    );
+    expect(screen.getByRole("button", { name: "Annuler" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Confirmer" })).toBeVisible();
+
+    rerender(
+      <PanelRoot>
+        <InlineConfirm {...confirmationProps} open={false} rootRef={rootRef} />
+      </PanelRoot>,
+    );
+    expect(rootRef.current).toBeNull();
   });
 
   it("supports an explicit confirmation heading level", () => {

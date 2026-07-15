@@ -61,7 +61,7 @@ ${owned(".snui-button--secondary")} {
 ${owned('.snui-button--secondary:not(:disabled):not([aria-disabled="true"]):hover')},
 ${owned('.snui-button--ghost:not(:disabled):not([aria-disabled="true"]):hover')} {
   border-color: var(--snui-color-accent-fill);
-  background: var(--snui-color-surface-raised);
+  background: var(--snui-color-interactive-hover);
 }
 
 ${owned(".snui-button--ghost")} {
@@ -144,6 +144,9 @@ ${owned(".snui-textarea")} {
 }
 
 ${owned(".snui-range")} {
+  --snui-range-progress-color: var(--snui-color-accent-fill);
+  --snui-range-track-color: var(--snui-color-border);
+
   appearance: none;
   width: 100%;
   min-height: var(--snui-control-min-height);
@@ -157,7 +160,7 @@ ${owned(".snui-range::-webkit-slider-runnable-track")} {
   height: 0.375rem;
   border: 0;
   border-radius: 999px;
-  background: var(--snui-color-border);
+  background: var(--snui-range-track-color);
 }
 
 ${owned(".snui-range::-webkit-slider-thumb")} {
@@ -174,13 +177,13 @@ ${owned(".snui-range::-moz-range-track")} {
   height: 0.375rem;
   border: 0;
   border-radius: 999px;
-  background: var(--snui-color-border);
+  background: var(--snui-range-track-color);
 }
 
 ${owned(".snui-range::-moz-range-progress")} {
   height: 0.375rem;
   border-radius: 999px;
-  background: var(--snui-color-accent-fill);
+  background: var(--snui-range-progress-color);
 }
 
 ${owned(".snui-range::-moz-range-thumb")} {
@@ -189,6 +192,11 @@ ${owned(".snui-range::-moz-range-thumb")} {
   border: 2px solid var(--snui-color-surface);
   border-radius: 50%;
   background: var(--snui-color-accent-fill);
+}
+
+${owned('.snui-range[aria-invalid="true"]')} {
+  --snui-range-progress-color: var(--snui-color-danger);
+  --snui-range-track-color: var(--snui-color-danger);
 }
 
 ${owned(".snui-checkbox")} {
@@ -259,6 +267,19 @@ ${owned(".snui-checkbox__description")} {
   overflow-wrap: anywhere;
 }
 
+${owned(".snui-checkbox__error")} {
+  grid-column: 2;
+  min-width: 0;
+  color: var(--snui-color-danger);
+  font-size: 0.875rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+${owned('.snui-checkbox__input[aria-invalid="true"]')} {
+  border-color: var(--snui-color-danger);
+}
+
 ${owned(".snui-segmented")} {
   min-width: 0;
   padding: 0;
@@ -292,7 +313,7 @@ ${owned(".snui-segmented__option")} {
 }
 
 ${owned('.snui-segmented__option:not(:disabled):not([aria-checked="true"]):hover')} {
-  background: var(--snui-color-surface-raised);
+  background: var(--snui-color-interactive-hover);
   color: var(--snui-color-text);
 }
 
@@ -300,7 +321,7 @@ ${owned('.snui-segmented__option:not(:disabled):not([aria-checked="true"]):activ
   background: color-mix(
     in srgb,
     var(--snui-color-accent-fill) 12%,
-    var(--snui-color-surface-raised)
+    var(--snui-color-interactive-hover)
   );
 }
 
@@ -317,7 +338,7 @@ ${owned('.snui-segmented__option[aria-checked="true"]:not(:disabled):active')} {
 ${owned(".snui-button:disabled")},
 ${owned(".snui-input:disabled")},
 ${owned(".snui-range:disabled")},
-${owned(".snui-segmented:not(:disabled) .snui-segmented__option:disabled")} {
+${owned('.snui-segmented:not([aria-disabled="true"]) .snui-segmented__option:disabled')} {
   cursor: not-allowed;
   opacity: 0.58;
 }
@@ -332,13 +353,13 @@ ${owned('.snui-button[aria-disabled="true"]:not(:disabled) .snui-button__spinner
 }
 
 ${owned(".snui-checkbox:has(.snui-checkbox__input:disabled)")},
-${owned(".snui-segmented:disabled")} {
+${owned('.snui-segmented[aria-disabled="true"]')} {
   cursor: not-allowed;
   opacity: 0.58;
 }
 
 ${owned(".snui-checkbox:has(.snui-checkbox__input:disabled) .snui-checkbox__input")},
-${owned(".snui-segmented:disabled .snui-segmented__option")} {
+${owned('.snui-segmented[aria-disabled="true"] .snui-segmented__option')} {
   cursor: not-allowed;
   opacity: 1;
 }

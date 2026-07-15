@@ -69,7 +69,7 @@ const PanelSurface = forwardRef<HTMLDivElement, PanelSurfaceProps>(
         data-snui-version={PACKAGE_VERSION}
         data-snui-theme={theme === "auto" ? undefined : theme}
       >
-        {children}
+        <div className="snui-root__content">{children}</div>
       </div>
     );
   },

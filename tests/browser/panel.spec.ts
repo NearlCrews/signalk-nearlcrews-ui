@@ -123,7 +123,7 @@ test("keeps library styling inside the panel root", async ({
     nestedButton.textContent = "Nested version";
     const reentryRoot = document.createElement("div");
     reentryRoot.className = "snui-root";
-    reentryRoot.dataset.snuiVersion = "0.1.0";
+    reentryRoot.dataset.snuiVersion = "0.2.0";
     reentryRoot.dataset.snuiTheme = "night";
     const reentryButton = document.createElement("button");
     reentryButton.id = "reentry-version-button";
@@ -193,6 +193,45 @@ test("supports disclosure and segmented-control keyboard navigation", async ({
   ).toBeGreaterThanOrEqual(4);
 });
 
+test("uses right-to-left keyboard order and mirrored disclosure carets", async ({
+  page,
+}) => {
+  const disclosure = page.locator("details", {
+    has: page.getByText("Advanced settings"),
+  });
+  const chevron = disclosure.locator(".snui-disclosure__chevron");
+  const segmented = disclosure.locator(".snui-segmented");
+
+  await disclosure.evaluate((element) => element.setAttribute("dir", "rtl"));
+  await expect(chevron).toHaveCSS("transform", "matrix(-1, 0, 0, 1, 0, 0)");
+  await disclosure.locator("summary").click();
+
+  const normal = page.getByRole("radio", { name: "Normal" });
+  const minimal = page.getByRole("radio", { name: "Minimal" });
+  await segmented.evaluate((element) => element.setAttribute("dir", "rtl"));
+  await normal.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(minimal).toBeFocused();
+  await expect(minimal).toHaveAttribute("aria-checked", "true");
+});
+
+test("reflows from panel width rather than viewport width", async ({
+  page,
+}) => {
+  test.skip(page.viewportSize()?.width === 375);
+  const root = page.locator("[data-snui-version]");
+  const sectionHeader = page.locator(".snui-section__header").first();
+  const content = root.locator(".snui-root__content");
+
+  await expect(sectionHeader).toHaveCSS("flex-direction", "row");
+  await root.evaluate((element) => {
+    element.style.width = "320px";
+  });
+  await expect(sectionHeader).toHaveCSS("flex-direction", "column");
+  await expect(content).toHaveCSS("padding-left", "12px");
+  expect(page.viewportSize()).toMatchObject({ width: 1280 });
+});
+
 test("applies the control target floor to every interactive primitive", async ({
   page,
 }, testInfo) => {
@@ -257,6 +296,7 @@ test("provides hover and active feedback for raw action controls", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("radio", { name: "Light" }).click();
   for (const control of [
     page.getByRole("button", { name: "Dismiss" }),
     page.getByRole("button", { name: "Provider status and metrics" }),
@@ -276,6 +316,7 @@ test("provides hover and active feedback for raw action controls", async ({
     const hoverBackground = await control.evaluate(
       (element) => getComputedStyle(element).backgroundColor,
     );
+    expect(hoverBackground).toBe("rgb(238, 242, 247)");
 
     await page.mouse.down();
     await expect
@@ -367,6 +408,27 @@ test("keeps aria-disabled focus indicators fully opaque", async ({ page }) => {
   );
 });
 
+test("retains loading-button focus and suppresses repeat activation", async ({
+  page,
+}) => {
+  await page.goto("/?states=1&focus-loading=1");
+  const button = page.getByTestId("focus-loading-button");
+
+  await button.click();
+  await expect(button).toBeFocused();
+  await expect(button).toHaveAttribute("aria-disabled", "true");
+  await expect(button).toHaveAttribute("aria-busy", "true");
+  await expect(button).toHaveAccessibleName("Saving: Fixture configuration");
+  await expect(button).toHaveAttribute("data-activation-count", "1");
+
+  await button.press("Enter");
+  await button.press("Space");
+  await button.evaluate((element) => (element as HTMLButtonElement).click());
+
+  await expect(button).toBeFocused();
+  await expect(button).toHaveAttribute("data-activation-count", "1");
+});
+
 test("keeps field-group actions in a compact desktop header", async ({
   page,
 }, testInfo) => {
@@ -454,6 +516,27 @@ test("dismisses banners without coupling visibility to the library", async ({
   await expect(bannerText).toBeVisible();
   await page.getByRole("button", { name: "Dismiss" }).click();
   await expect(bannerText).toBeHidden();
+  await expect(page.getByRole("button", { name: "Save" })).toBeFocused();
+});
+
+test("styles checkbox and range validation consistently", async ({ page }) => {
+  await page.goto("/?states=1");
+  const checkbox = page.getByRole("checkbox", { name: "Missing agreement" });
+  const range = page.getByRole("slider", {
+    name: "Invalid confidence threshold",
+  });
+  const dangerColor = "rgb(180, 35, 24)";
+
+  await expect(checkbox).toHaveAttribute("aria-invalid", "true");
+  await expect(checkbox).toHaveCSS("border-color", dangerColor);
+  await expect(range).toHaveAttribute("aria-invalid", "true");
+  expect(
+    await range.evaluate((element) =>
+      getComputedStyle(element)
+        .getPropertyValue("--snui-range-track-color")
+        .trim(),
+    ),
+  ).toBe("#b42318");
 });
 
 test("uses inline confirmation with Escape, confirm, and managed focus", async ({
@@ -673,7 +756,10 @@ test("keeps native controls and focus visible in forced colors", async ({
     page.getByRole("checkbox", { name: "Partially configured option" }),
   ).toHaveJSProperty("indeterminate", true);
   await expect(
-    page.getByRole("slider", { name: "Confidence threshold" }),
+    page.getByRole("slider", {
+      name: "Confidence threshold",
+      exact: true,
+    }),
   ).toBeVisible();
   const selectedSegment = page.getByRole("radio", { name: "Normal" });
   const unselectedSegment = page.getByRole("radio", { name: "Minimal" });

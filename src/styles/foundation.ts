@@ -2,7 +2,9 @@ import { owned, scopeStyles } from "./scope.js";
 
 export const FOUNDATION_STYLES = scopeStyles(`
 :scope,
-${owned("*")} {
+${owned("*")},
+${owned("*::before")},
+${owned("*::after")} {
   box-sizing: border-box;
 }
 
@@ -10,12 +12,18 @@ ${owned("*")} {
   width: 100%;
   max-width: none;
   margin-inline: auto;
-  padding: var(--snui-space-4);
   background: var(--snui-color-background);
   color: var(--snui-color-text);
   font-family: var(--snui-font-family);
   font-size: var(--snui-font-size);
   line-height: var(--snui-line-height);
+  container-name: snui-panel;
+  container-type: inline-size;
+}
+
+${owned(".snui-root__content")} {
+  min-width: 0;
+  padding: var(--snui-space-4);
 }
 
 :scope.snui-root--standard {
@@ -80,8 +88,8 @@ ${owned(".snui-visually-hidden")} {
   border: 0 !important;
 }
 
-@media (max-width: 37.5rem) {
-  :scope {
+@container snui-panel (max-width: 37.5rem) {
+  ${owned(".snui-root__content")} {
     padding: var(--snui-space-3);
   }
 }

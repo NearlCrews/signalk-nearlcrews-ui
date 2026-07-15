@@ -43,14 +43,14 @@ ${owned(".snui-collapsible__toggle")} {
 }
 
 ${owned(".snui-collapsible__toggle:not(:disabled):hover")} {
-  background: var(--snui-color-surface-raised);
+  background: var(--snui-color-interactive-hover);
 }
 
 ${owned(".snui-collapsible__toggle:not(:disabled):active")} {
   background: color-mix(
     in srgb,
     var(--snui-color-accent-fill) 12%,
-    var(--snui-color-surface-raised)
+    var(--snui-color-interactive-hover)
   );
 }
 
@@ -69,8 +69,16 @@ ${owned(".snui-collapsible__chevron")} {
   transition: transform var(--snui-transition-fast);
 }
 
+${owned(".snui-collapsible__chevron:dir(rtl)")} {
+  transform: scaleX(-1);
+}
+
 ${owned('.snui-collapsible__toggle[aria-expanded="true"] .snui-collapsible__chevron')} {
   transform: rotate(90deg);
+}
+
+${owned('.snui-collapsible__toggle[aria-expanded="true"] .snui-collapsible__chevron:dir(rtl)')} {
+  transform: scaleX(-1) rotate(90deg);
 }
 
 ${owned(".snui-collapsible__actions")} {
@@ -108,7 +116,7 @@ ${owned(".snui-collapsible__content")} {
   border-top: 1px solid var(--snui-color-border);
 }
 
-@media (max-width: 37.5rem) {
+@container snui-panel (max-width: 37.5rem) {
   ${owned(".snui-collapsible__header")} {
     align-items: center;
   }

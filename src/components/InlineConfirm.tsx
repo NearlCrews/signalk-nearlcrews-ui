@@ -1,41 +1,53 @@
 import {
+  type HTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
+  type Ref,
   useEffect,
   useId,
+  useImperativeHandle,
   useRef,
 } from "react";
+import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
 import { hasReactContent } from "../utils/react-node.js";
 import { Button, type ButtonVariant } from "./Button.js";
 
-export interface InlineConfirmProps {
+export interface InlineConfirmProps
+  extends Omit<HTMLAttributes<HTMLElement>, "children" | "onCancel" | "title"> {
   readonly busy?: boolean;
   readonly cancelLabel?: ReactNode;
-  readonly className?: string;
   readonly confirmLabel?: ReactNode;
   readonly confirmVariant?: Extract<ButtonVariant, "primary" | "danger">;
+  readonly fallbackTitle?: ReactNode;
   readonly headingLevel?: HeadingLevel;
   readonly message: ReactNode;
   readonly onCancel: () => void;
   readonly onConfirm: () => void;
   readonly open: boolean;
+  readonly rootRef?: Ref<HTMLElement | null>;
   readonly title?: ReactNode;
 }
 
 export function InlineConfirm({
+  "aria-describedby": ariaDescribedBy,
+  "aria-labelledby": ariaLabelledBy,
   busy = false,
   cancelLabel = "Cancel",
   className,
   confirmLabel = "Confirm",
   confirmVariant = "danger",
+  fallbackTitle = "Confirm action",
   headingLevel = 2,
   message,
+  onKeyDown,
   onCancel,
   onConfirm,
   open,
+  rootRef,
   title,
+  ...props
 }: InlineConfirmProps): React.JSX.Element | null {
   const titleId = useId();
   const messageId = useId();
@@ -45,8 +57,23 @@ export function InlineConfirm({
   const focusIsInside = useRef(false);
   const wasOpen = useRef(false);
   const wasBusy = useRef(busy);
-  const effectiveTitle = hasReactContent(title) ? title : "Confirm action";
+  const effectiveTitle = hasReactContent(title)
+    ? title
+    : hasReactContent(fallbackTitle)
+      ? fallbackTitle
+      : "Confirm action";
+  const effectiveCancelLabel = hasReactContent(cancelLabel)
+    ? cancelLabel
+    : "Cancel";
+  const effectiveConfirmLabel = hasReactContent(confirmLabel)
+    ? confirmLabel
+    : "Confirm";
   const Heading = HEADING_ELEMENTS[headingLevel];
+
+  useImperativeHandle<HTMLElement | null, HTMLElement | null>(
+    rootRef,
+    () => containerRef.current,
+  );
 
   useEffect(() => {
     if (!open) return undefined;
@@ -111,6 +138,8 @@ export function InlineConfirm({
   }, [busy, open]);
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
+    onKeyDown?.(event);
+    if (event.defaultPrevented) return;
     if (event.key !== "Escape" || busy) return;
     event.preventDefault();
     event.stopPropagation();
@@ -123,10 +152,11 @@ export function InlineConfirm({
     // The focusable region owns Escape handling for itself and its descendants.
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
     <section
+      {...props}
       ref={containerRef}
       className={classNames("snui-inline-confirm", className)}
-      aria-labelledby={titleId}
-      aria-describedby={messageId}
+      aria-labelledby={joinIdReferences(ariaLabelledBy, titleId)}
+      aria-describedby={joinIdReferences(ariaDescribedBy, messageId)}
       aria-busy={busy || undefined}
       tabIndex={-1}
       onKeyDown={handleKeyDown}
@@ -139,10 +169,10 @@ export function InlineConfirm({
       </div>
       <div className="snui-inline-confirm__actions">
         <Button ref={cancelRef} disabled={busy} onClick={onCancel}>
-          {cancelLabel}
+          {effectiveCancelLabel}
         </Button>
         <Button variant={confirmVariant} loading={busy} onClick={onConfirm}>
-          {confirmLabel}
+          {effectiveConfirmLabel}
         </Button>
       </div>
     </section>

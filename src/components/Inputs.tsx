@@ -6,6 +6,10 @@ import {
   type TextareaHTMLAttributes,
   useId,
 } from "react";
+import {
+  type AnnouncementMode,
+  announcementRole,
+} from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
@@ -105,16 +109,24 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
 export interface CheckboxProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "children" | "type"> {
   readonly description?: ReactNode;
+  readonly error?: ReactNode;
+  readonly errorLive?: CheckboxErrorLive;
   readonly label: ReactNode;
 }
+
+export type CheckboxErrorLive = AnnouncementMode;
 
 export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
   function Checkbox(
     {
       "aria-describedby": ariaDescribedBy,
+      "aria-errormessage": ariaErrorMessage,
+      "aria-invalid": ariaInvalid,
       "aria-labelledby": ariaLabelledBy,
       className,
       description,
+      error,
+      errorLive = "off",
       id,
       label,
       required,
@@ -122,13 +134,25 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
     },
     ref,
   ) {
+    if (!hasReactContent(label)) {
+      throw new Error("Checkbox requires a non-empty label.");
+    }
+
     const generatedId = useId();
     const controlId = id ?? generatedId;
     const labelId = `${controlId}-label`;
     const hasDescription = hasReactContent(description);
+    const hasError = hasReactContent(error);
     const descriptionId = hasDescription
       ? `${controlId}-description`
       : undefined;
+    const errorId = hasError ? `${controlId}-error` : undefined;
+    const describedBy = joinIdReferences(
+      ariaDescribedBy,
+      descriptionId,
+      errorId,
+    );
+    const errorMessage = joinIdReferences(ariaErrorMessage, errorId);
 
     return (
       <label
@@ -143,22 +167,31 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
           className="snui-checkbox__input"
           required={required}
           aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
-          aria-describedby={joinIdReferences(ariaDescribedBy, descriptionId)}
+          aria-describedby={describedBy}
+          aria-errormessage={errorMessage}
+          aria-invalid={hasError ? true : ariaInvalid}
         />
         <span id={labelId} className="snui-checkbox__label">
           {label}{" "}
           {required ? (
-            <>
-              <span className="snui-required-mark" aria-hidden="true">
-                *
-              </span>
-              <span className="snui-visually-hidden"> (required)</span>
-            </>
+            <span className="snui-required-mark" aria-hidden="true">
+              *
+            </span>
           ) : null}
         </span>
         {hasDescription ? (
           <span id={descriptionId} className="snui-checkbox__description">
             {description}
+          </span>
+        ) : null}
+        {hasError ? (
+          <span
+            id={errorId}
+            className="snui-checkbox__error"
+            role={announcementRole(errorLive)}
+            aria-live={errorLive}
+          >
+            {error}
           </span>
         ) : null}
       </label>

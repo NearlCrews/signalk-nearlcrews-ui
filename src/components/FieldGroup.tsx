@@ -29,6 +29,10 @@ export const FieldGroup = forwardRef<HTMLFieldSetElement, FieldGroupProps>(
     },
     ref,
   ) {
+    if (!hasReactContent(legend)) {
+      throw new Error("FieldGroup requires a non-empty legend.");
+    }
+
     const generatedId = useId();
     const hasDescription = hasReactContent(description);
     const descriptionId = hasDescription

@@ -23,6 +23,10 @@ export function Section({
   title,
   ...props
 }: SectionProps): React.JSX.Element {
+  if (!hasReactContent(title)) {
+    throw new Error("Section requires a non-empty title.");
+  }
+
   const titleId = useId();
   const Heading = HEADING_ELEMENTS[headingLevel];
 
@@ -41,7 +45,9 @@ export function Section({
             <div className="snui-section__description">{description}</div>
           ) : null}
         </div>
-        {actions}
+        {hasReactContent(actions) ? (
+          <div className="snui-section__actions">{actions}</div>
+        ) : null}
       </header>
       {children}
     </section>

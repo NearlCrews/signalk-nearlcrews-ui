@@ -37,14 +37,18 @@ const fixtureParameters = new URLSearchParams(window.location.search);
 const showStates = fixtureParameters.has("states");
 const startBusy = fixtureParameters.has("busy");
 const becomeBusyOnConfirm = fixtureParameters.has("busy-on-confirm");
+const testFocusLoading = fixtureParameters.has("focus-loading");
 
 function Fixture(): React.JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmBusy, setConfirmBusy] = useState(startBusy);
+  const [focusLoading, setFocusLoading] = useState(false);
+  const [focusLoadingActivations, setFocusLoadingActivations] = useState(0);
   const [logLevel, setLogLevel] = useState<LogLevel>("normal");
   const [noticeVisible, setNoticeVisible] = useState(true);
   const [statusOpen, setStatusOpen] = useState(false);
   const indeterminateRef = useRef<HTMLInputElement>(null);
+  const saveRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (indeterminateRef.current !== null) {
@@ -67,6 +71,7 @@ function Fixture(): React.JSX.Element {
           <Banner
             tone="info"
             title="Server units apply"
+            dismissFocusRef={saveRef}
             onDismiss={() => setNoticeVisible(false)}
           >
             Values are stored in SI and displayed using Signal K preferences.
@@ -200,6 +205,16 @@ function Fixture(): React.JSX.Element {
               >
                 <TextInput defaultValue="not a URL" />
               </LabeledField>
+              <LabeledField
+                label="Invalid confidence threshold"
+                error="Choose a supported confidence threshold."
+              >
+                <RangeInput defaultValue={25} min={0} max={100} />
+              </LabeledField>
+              <Checkbox
+                label="Missing agreement"
+                error="Accept the provider agreement."
+              />
               <Checkbox label="Unavailable option" disabled />
               <Checkbox label="Optional diagnostics" />
               <Checkbox
@@ -210,7 +225,22 @@ function Fixture(): React.JSX.Element {
                 <Cluster gap={2}>
                   <Button disabled>Disabled</Button>
                   <Button ariaDisabled>Unavailable here</Button>
-                  <Button loading>Saving</Button>
+                  {testFocusLoading ? (
+                    <Button
+                      data-testid="focus-loading-button"
+                      data-activation-count={focusLoadingActivations}
+                      loading={focusLoading}
+                      loadingLabel="Saving"
+                      onClick={() => {
+                        setFocusLoading(true);
+                        setFocusLoadingActivations((count) => count + 1);
+                      }}
+                    >
+                      Fixture configuration
+                    </Button>
+                  ) : (
+                    <Button loading>Saving</Button>
+                  )}
                   <Button onClick={() => setConfirmBusy((current) => !current)}>
                     Toggle confirmation busy
                   </Button>
@@ -242,7 +272,9 @@ function Fixture(): React.JSX.Element {
               <Button variant="danger" onClick={() => setConfirmOpen(true)}>
                 Reset
               </Button>
-              <Button variant="primary">Save</Button>
+              <Button ref={saveRef} variant="primary">
+                Save
+              </Button>
             </>
           }
         />

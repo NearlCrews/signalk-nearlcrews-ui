@@ -40,6 +40,7 @@ These color token names are public API:
 - `--snui-color-background`
 - `--snui-color-surface`
 - `--snui-color-surface-raised`
+- `--snui-color-interactive-hover`
 - `--snui-color-text`
 - `--snui-color-text-muted`
 - `--snui-color-border`
@@ -71,16 +72,22 @@ These foundation token names are also public API:
 
 Token values may change in a compatible release to fix contrast, browser behavior, or theme consistency. Removing or renaming a public token is breaking.
 
+Consumers may override public tokens through the native `style` prop on `PanelRoot`. Token overrides must remain on that versioned root and must not target private classes or DOM structure. Inline overrides apply across theme choices, so consumers must verify Light, Dark, and Night contrast before using them.
+
 ## Accessibility
 
 - Normal text and control labels must meet WCAG AA contrast.
 - Accent fills use a separate on-accent token. The foreground must not be assumed to be white.
 - Focus must be visible in every theme.
 - Status must include visible text or another non-color cue.
+- Banners include a visible severity symbol as well as screen-reader severity text. Consumers may localize the text with `toneLabel`.
 - Single-choice segmented controls use radio-group semantics, roving focus, arrow keys, Home, and End.
+- Horizontal segmented-control arrows follow document direction, and disclosure carets mirror in right-to-left layouts.
 - Disclosures use native details and summary behavior.
 - Collapsible sections expose a named region and real heading, keep header summaries and actions outside the toggle, restore focus when focused content closes, and preserve the `aria-controls` target while collapsed.
 - Persistent banners are not live regions unless the consumer explicitly requests polite or assertive announcements.
+- Persistent field and checkbox errors default to `aria-live="off"`. Consumers opt in to polite or assertive announcements when validation changes after an interaction.
+- Loading buttons remain focusable, expose busy and disabled accessibility states, and suppress repeat pointer and keyboard activation.
 - Confirmation regions receive focus, support Escape while idle, and restore focus when dismissed.
 - `ariaDisabled` buttons remain focusable, suppress pointer and keyboard activation, and use disabled presentation.
 - Raw links inside a panel use theme-safe link tokens for default, visited, and hover states.
@@ -92,7 +99,7 @@ Token values may change in a compatible release to fix contrast, browser behavio
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.1.0"])
+@scope (.snui-root[data-snui-version="0.2.0"])
   to ([data-snui-version]) {
   /* component rules */
 }
@@ -102,14 +109,14 @@ Every descendant selector is inside a native CSS scope rooted at the exact packa
 
 ## Density and responsive behavior
 
-Desktop controls have a compact 40-pixel minimum height. Coarse-pointer controls use 44 pixels. Panels must reflow without horizontal page overflow at 320 CSS pixels, and action groups may wrap when space is limited.
+Desktop controls have a compact 40-pixel minimum height. A device with any coarse pointer uses 44 pixels. Panels must reflow without horizontal page overflow at 320 CSS pixels, and action groups may wrap when space is limited. Responsive component rules use the `PanelRoot` inline size instead of the browser viewport, so a narrow embedded panel reflows correctly in a wide host window.
 
-`PanelRoot` is full width by default. `width="standard"` caps content at `--snui-content-width-standard`, and `width="wide"` caps it at `--snui-content-width-wide`. `Stack` owns vertical rhythm, `Cluster` owns wrapping inline rhythm, and plugin-specific tables and workflow layouts remain local.
+`PanelRoot` is full width by default. `width="standard"` caps content at `--snui-content-width-standard`, and `width="wide"` caps it at `--snui-content-width-wide`. `Stack` is the sole owner of external vertical rhythm between shared surfaces, `Cluster` owns wrapping inline rhythm, and plugin-specific tables and workflow layouts remain local.
 
 ## Compatibility
 
 - React support is `>=19.2 <20` for `0.x`.
-- Native CSS `@scope` sets the browser floors: Chromium and Edge 118, Firefox 146, and Safari 17.4. Unsupported engines receive a runtime compatibility error before style installation. Consumer adoption is blocked until every supported kiosk and embedded WebView deployment meets that floor.
+- Native CSS `@scope` sets the browser floors: Chromium and Edge 118, Firefox 146, and Safari 17.4. `supportsNativeCssScope` lets consumers check support before rendering, and unsupported engines receive `UnsupportedBrowserError` before style installation. No unscoped fallback is provided. Consumer adoption is blocked until every supported kiosk and embedded WebView deployment meets that floor.
 - React and `react/jsx-runtime` remain external to the unbundled library build. Consumer remotes may embed React's small JSX element-construction helper. React itself must resolve through the host singleton, and React or React DOM implementations must never be embedded.
 - Consumers bundle this package into each Module Federation remote.
 - Consumers must not share this package dynamically between remotes.

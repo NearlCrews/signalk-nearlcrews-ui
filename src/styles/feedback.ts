@@ -10,9 +10,16 @@ ${owned(".snui-banner")} {
 }
 
 ${owned(".snui-banner__content")},
+${owned(".snui-banner__text")},
 ${owned(".snui-banner__body")} {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+${owned(".snui-banner__content")} {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--snui-space-2);
 }
 
 ${owned(".snui-banner__actions")} {
@@ -46,14 +53,14 @@ ${owned(".snui-banner__dismiss")} {
 }
 
 ${owned(".snui-banner__dismiss:hover")} {
-  background: var(--snui-color-surface-raised);
+  background: var(--snui-color-interactive-hover);
 }
 
 ${owned(".snui-banner__dismiss:active")} {
   background: color-mix(
     in srgb,
     var(--snui-color-accent-fill) 12%,
-    var(--snui-color-surface-raised)
+    var(--snui-color-interactive-hover)
   );
   transform: translateY(1px);
 }
@@ -62,7 +69,7 @@ ${owned(".snui-action-bar__status:focus")} {
   border-radius: var(--snui-radius-sm);
 }
 
-@media (max-width: 37.5rem) {
+@container snui-panel (max-width: 37.5rem) {
   ${owned(".snui-banner")} {
     align-items: stretch;
     flex-direction: column;

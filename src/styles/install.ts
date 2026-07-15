@@ -7,6 +7,17 @@ interface InstalledStyle {
 
 type StyleRegistry = Map<string, InstalledStyle>;
 
+export class UnsupportedBrowserError extends Error {
+  readonly feature = "CSS @scope";
+
+  constructor() {
+    super(
+      "signalk-nearlcrews-ui requires a browser with native CSS @scope support.",
+    );
+    this.name = "UnsupportedBrowserError";
+  }
+}
+
 const STYLE_REGISTRY_KEY = Symbol.for(
   "signalk-nearlcrews-ui.style-registry.v1",
 );
@@ -25,15 +36,23 @@ function getStyleRegistry(ownerDocument: Document): StyleRegistry {
   return registry;
 }
 
+export function supportsNativeCssScope(
+  ownerWindow: Window | null | undefined = typeof window === "undefined"
+    ? undefined
+    : window,
+): boolean {
+  return (
+    ownerWindow !== null &&
+    ownerWindow !== undefined &&
+    typeof Reflect.get(ownerWindow, "CSSScopeRule") === "function"
+  );
+}
+
 function assertNativeScopeSupport(ownerDocument: Document): void {
   const ownerWindow = ownerDocument.defaultView;
   if (ownerWindow === null) return;
 
-  if (typeof ownerWindow.CSSScopeRule !== "function") {
-    throw new Error(
-      "signalk-nearlcrews-ui requires a browser with native CSS @scope support.",
-    );
-  }
+  if (!supportsNativeCssScope(ownerWindow)) throw new UnsupportedBrowserError();
 }
 
 export function installPanelStyles(

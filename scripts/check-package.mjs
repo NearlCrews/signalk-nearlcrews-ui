@@ -21,6 +21,37 @@ if (packageJson.private === true) {
   );
 }
 
+const signalKDiscoveryKeywords = new Set([
+  "signalk-embeddable-webapp",
+  "signalk-node-server-addon",
+  "signalk-node-server-plugin",
+  "signalk-wasm-plugin",
+  "signalk-webapp",
+]);
+const forbiddenKeyword = packageJson.keywords?.find(
+  (keyword) =>
+    signalKDiscoveryKeywords.has(keyword) ||
+    keyword.startsWith("signalk-category-"),
+);
+if (forbiddenKeyword !== undefined) {
+  throw new Error(
+    `The npm-only UI library must not use Signal K discovery keyword ${forbiddenKeyword}.`,
+  );
+}
+
+for (const field of [
+  "signalk",
+  "signalk-plugin-enabled-by-default",
+  "wasmCapabilities",
+  "wasmManifest",
+]) {
+  if (Object.hasOwn(packageJson, field)) {
+    throw new Error(
+      `The npm-only UI library must not define Signal K package field ${field}.`,
+    );
+  }
+}
+
 const versionMatches = [
   ...versionSource.matchAll(/^export const PACKAGE_VERSION = "([^"]+)";$/gm),
 ];

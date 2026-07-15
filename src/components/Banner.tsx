@@ -1,4 +1,10 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import {
+  forwardRef,
+  type HTMLAttributes,
+  type MouseEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
@@ -9,11 +15,13 @@ export type BannerLive = "off" | "polite" | "assertive";
 export interface BannerProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "aria-live" | "title"> {
   readonly actions?: ReactNode;
+  readonly dismissFocusRef?: RefObject<HTMLElement | null>;
   readonly dismissLabel?: string;
   readonly live?: BannerLive;
-  readonly onDismiss?: () => void;
+  readonly onDismiss?: (event: MouseEvent<HTMLButtonElement>) => void;
   readonly title?: ReactNode;
   readonly tone?: BannerTone;
+  readonly toneLabel?: string;
 }
 
 const TONE_LABELS: Readonly<Record<BannerTone, string>> = {
@@ -23,18 +31,30 @@ const TONE_LABELS: Readonly<Record<BannerTone, string>> = {
   danger: "Error",
 };
 
-export function Banner({
-  actions,
-  children,
-  className,
-  dismissLabel = "Dismiss",
-  live,
-  onDismiss,
-  role: suppliedRole,
-  title,
-  tone = "info",
-  ...props
-}: BannerProps): React.JSX.Element {
+const TONE_ICONS: Readonly<Record<BannerTone, string>> = {
+  info: "i",
+  success: "✓",
+  warning: "!",
+  danger: "×",
+};
+
+export const Banner = forwardRef<HTMLDivElement, BannerProps>(function Banner(
+  {
+    actions,
+    children,
+    className,
+    dismissFocusRef,
+    dismissLabel = "Dismiss",
+    live,
+    onDismiss,
+    role: suppliedRole,
+    title,
+    tone = "info",
+    toneLabel = TONE_LABELS[tone],
+    ...props
+  },
+  ref,
+): React.JSX.Element {
   const effectiveLive = live ?? "off";
   const role =
     suppliedRole ??
@@ -45,23 +65,30 @@ export function Banner({
         : undefined);
   const hasActions = hasReactContent(actions) || onDismiss !== undefined;
   const effectiveDismissLabel = dismissLabel.trim() || "Dismiss";
+  const effectiveToneLabel = toneLabel.trim() || TONE_LABELS[tone];
 
   return (
     <div
       {...props}
+      ref={ref}
       className={classNames("snui-banner", `snui-banner--${tone}`, className)}
       role={role}
-      aria-live={effectiveLive === "off" ? undefined : effectiveLive}
+      aria-live={live}
     >
       <div className="snui-banner__content">
-        <span className="snui-visually-hidden">{TONE_LABELS[tone]}. </span>
-        {hasReactContent(title) ? (
-          <div className="snui-banner__title">
-            {title}
-            <span className="snui-visually-hidden">. </span>
-          </div>
-        ) : null}
-        <div className="snui-banner__body">{children}</div>
+        <span className="snui-banner__tone-icon" aria-hidden="true">
+          {TONE_ICONS[tone]}
+        </span>
+        <div className="snui-banner__text">
+          <span className="snui-visually-hidden">{effectiveToneLabel}. </span>
+          {hasReactContent(title) ? (
+            <div className="snui-banner__title">
+              {title}
+              <span className="snui-visually-hidden">. </span>
+            </div>
+          ) : null}
+          <div className="snui-banner__body">{children}</div>
+        </div>
       </div>
       {hasActions ? (
         <div className="snui-banner__actions">
@@ -70,7 +97,12 @@ export function Banner({
             <button
               type="button"
               className="snui-banner__dismiss"
-              onClick={onDismiss}
+              onClick={(event) => {
+                onDismiss(event);
+                if (dismissFocusRef !== undefined) {
+                  queueMicrotask(() => dismissFocusRef.current?.focus());
+                }
+              }}
             >
               {effectiveDismissLabel}
             </button>
@@ -79,4 +111,4 @@ export function Banner({
       ) : null}
     </div>
   );
-}
+});

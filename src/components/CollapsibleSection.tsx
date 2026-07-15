@@ -11,7 +11,7 @@ import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
 import { hasReactContent } from "../utils/react-node.js";
 
-export type CollapsibleMountStrategy = "retain" | "unmount";
+export type CollapsibleMountStrategy = "lazy-retain" | "retain" | "unmount";
 export type CollapsibleSummaryPlacement = "below" | "header";
 
 export interface CollapsibleSectionProps
@@ -44,15 +44,29 @@ export function CollapsibleSection({
   title,
   ...props
 }: CollapsibleSectionProps): React.JSX.Element {
+  if (!hasReactContent(title)) {
+    throw new Error("CollapsibleSection requires a non-empty title.");
+  }
+
   const generatedId = useId();
   const contentId = `${generatedId}-content`;
   const titleId = `${generatedId}-title`;
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const effectiveOpen = open ?? internalOpen;
+  const [mountState, setMountState] = useState({
+    hasOpened: effectiveOpen,
+    observedOpen: effectiveOpen,
+  });
   const toggleRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const focusWasInside = useRef(false);
   const Heading = HEADING_ELEMENTS[headingLevel];
+
+  let hasOpened = mountState.hasOpened;
+  if (mountState.observedOpen !== effectiveOpen) {
+    hasOpened = hasOpened || effectiveOpen;
+    setMountState({ hasOpened, observedOpen: effectiveOpen });
+  }
 
   useEffect(() => {
     const ownerDocument = contentRef.current?.ownerDocument;
@@ -97,7 +111,10 @@ export function CollapsibleSection({
     onOpenChange?.(nextOpen);
   };
 
-  const renderChildren = mountStrategy === "retain" || effectiveOpen;
+  const renderChildren =
+    mountStrategy === "retain" ||
+    effectiveOpen ||
+    (mountStrategy === "lazy-retain" && hasOpened);
   const renderSummary = !effectiveOpen && hasReactContent(summary);
 
   return (

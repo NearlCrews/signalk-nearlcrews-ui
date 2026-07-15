@@ -1,5 +1,6 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import { type HTMLAttributes, type ReactNode, useId } from "react";
 
+import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
 import type { StatusTone } from "./StatusIndicator.js";
@@ -153,6 +154,7 @@ export interface MetricProps
 }
 
 export function Metric({
+  "aria-labelledby": ariaLabelledBy,
   className,
   detail,
   label,
@@ -160,12 +162,23 @@ export function Metric({
   value,
   ...props
 }: MetricProps): React.JSX.Element {
+  if (!hasReactContent(label)) {
+    throw new Error("Metric requires a non-empty label.");
+  }
+
+  const labelId = useId();
+
   return (
+    // biome-ignore lint/a11y/useSemanticElements: Metrics may render outside MetricGrid, and fieldset would imply form controls.
     <div
       {...props}
       className={classNames("snui-metric", `snui-metric--${tone}`, className)}
+      role="group"
+      aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
     >
-      <div className="snui-metric__label">{label}</div>
+      <div id={labelId} className="snui-metric__label">
+        {label}
+      </div>
       <div className="snui-metric__value">{value}</div>
       {hasReactContent(detail) ? (
         <div className="snui-metric__detail">{detail}</div>

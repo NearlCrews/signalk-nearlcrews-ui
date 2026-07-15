@@ -6,6 +6,7 @@ import { SegmentedControl } from "./SegmentedControl.js";
 
 export interface ThemeToggleProps {
   readonly className?: string;
+  readonly labels?: Partial<Readonly<Record<ThemeChoice, ReactNode>>>;
   readonly legend?: ReactNode;
 }
 
@@ -16,22 +17,24 @@ const THEME_LABELS: Readonly<Record<ThemeChoice, string>> = {
   night: "Night",
 };
 
-const THEME_OPTIONS = THEME_CHOICES.map((value) => ({
-  label: THEME_LABELS[value],
-  value,
-}));
-
 export function ThemeToggle({
   className,
+  labels,
   legend = "Panel theme",
 }: ThemeToggleProps): React.JSX.Element {
   const { setTheme, theme } = usePanelTheme();
+  const options = THEME_CHOICES.map((value) => ({
+    label: hasReactContent(labels?.[value])
+      ? labels?.[value]
+      : THEME_LABELS[value],
+    value,
+  }));
 
   return (
     <SegmentedControl
       {...(className === undefined ? {} : { className })}
       legend={hasReactContent(legend) ? legend : "Panel theme"}
-      options={THEME_OPTIONS}
+      options={options}
       value={theme}
       onChange={setTheme}
     />

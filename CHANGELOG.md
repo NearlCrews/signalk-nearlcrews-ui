@@ -6,6 +6,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-15
+
+### Added
+
+- Checkbox validation messages, configurable field error announcements, and consistent invalid range styling.
+- `loadingLabel`, banner tone labels, dismissal focus destinations, per-instance theme labels, and localized inline-confirmation fallbacks.
+- The `lazy-retain` collapsible mount strategy, semantic metric names, native attribute and ref support for composite primitives, and a dedicated section-action wrapper.
+- The public `--snui-color-interactive-hover` token, `supportsNativeCssScope`, and `UnsupportedBrowserError`.
+
+### Changed
+
+- Loading buttons now remain focusable with `aria-disabled` while suppressing repeat pointer and keyboard activation.
+- Responsive rules now follow panel width through container queries, coarse target sizing follows any coarse pointer, and pseudo-elements inherit border-box sizing.
+- Segmented controls use direct radio-group semantics and direction-aware arrow keys. Disclosure and collapsible carets mirror in right-to-left layouts.
+- `Stack` is the sole owner of external vertical rhythm between shared surfaces. Required semantic names now reject whitespace-only content.
+- Banners include a visible, non-color severity cue, preserve explicit `aria-live="off"`, and expose their root ref.
+
+### Fixed
+
+- Light-theme hover feedback is visibly distinct from raised surfaces.
+- Field-group actions retain logical reading order when narrow panels reflow.
+- Invalid range tracks no longer lose their danger color to later base track rules.
+
 ## [0.1.0] - 2026-07-15
 
 ### Added

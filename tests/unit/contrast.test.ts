@@ -43,6 +43,7 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
       tokens["--snui-color-background"],
       tokens["--snui-color-surface"],
       tokens["--snui-color-surface-raised"],
+      tokens["--snui-color-interactive-hover"],
     ]) {
       expect(
         contrastRatio(tokens["--snui-color-text"], surface),
@@ -79,6 +80,7 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
         tokens["--snui-color-background"],
         tokens["--snui-color-surface"],
         tokens["--snui-color-surface-raised"],
+        tokens["--snui-color-interactive-hover"],
       ]) {
         expect(contrastRatio(tokens[token], surface)).toBeGreaterThanOrEqual(
           4.5,
@@ -97,6 +99,7 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
         tokens["--snui-color-background"],
         tokens["--snui-color-surface"],
         tokens["--snui-color-surface-raised"],
+        tokens["--snui-color-interactive-hover"],
       ]) {
         expect(contrastRatio(tokens[token], surface)).toBeGreaterThanOrEqual(
           4.5,
@@ -110,6 +113,7 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
       tokens["--snui-color-background"],
       tokens["--snui-color-surface"],
       tokens["--snui-color-surface-raised"],
+      tokens["--snui-color-interactive-hover"],
     ]) {
       expect(
         contrastRatio(tokens["--snui-color-focus"], surface),
@@ -122,6 +126,7 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
       tokens["--snui-color-background"],
       tokens["--snui-color-surface"],
       tokens["--snui-color-surface-raised"],
+      tokens["--snui-color-interactive-hover"],
     ]) {
       expect(
         contrastRatio(tokens["--snui-color-border"], surface),

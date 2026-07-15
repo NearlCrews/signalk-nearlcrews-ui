@@ -4,6 +4,7 @@ export type ColorTokenName =
   | "--snui-color-background"
   | "--snui-color-surface"
   | "--snui-color-surface-raised"
+  | "--snui-color-interactive-hover"
   | "--snui-color-text"
   | "--snui-color-text-muted"
   | "--snui-color-border"
@@ -25,6 +26,7 @@ export const LIGHT_TOKENS: ThemeTokenSet = {
   "--snui-color-background": "#f4f6f8",
   "--snui-color-surface": "#ffffff",
   "--snui-color-surface-raised": "#ffffff",
+  "--snui-color-interactive-hover": "#eef2f7",
   "--snui-color-text": "#18202c",
   "--snui-color-text-muted": "#596273",
   "--snui-color-border": "#7c8797",
@@ -45,6 +47,7 @@ export const DARK_TOKENS: ThemeTokenSet = {
   "--snui-color-background": "#10131c",
   "--snui-color-surface": "#181d29",
   "--snui-color-surface-raised": "#202737",
+  "--snui-color-interactive-hover": "#202737",
   "--snui-color-text": "#f5f7fa",
   "--snui-color-text-muted": "#b3bac7",
   "--snui-color-border": "#667085",
@@ -65,6 +68,7 @@ export const NIGHT_TOKENS: ThemeTokenSet = {
   "--snui-color-background": "#050000",
   "--snui-color-surface": "#100000",
   "--snui-color-surface-raised": "#190000",
+  "--snui-color-interactive-hover": "#260000",
   "--snui-color-text": "#ff7878",
   "--snui-color-text-muted": "#d05252",
   "--snui-color-border": "#a63d3d",
@@ -185,7 +189,7 @@ ${NIGHT_BLOCK}
   --snui-shadow-raised: 0 0.125rem 0.5rem rgb(90 0 0 / 28%);
 }
 
-@media (pointer: coarse) {
+@media (any-pointer: coarse) {
   ${ROOT_SELECTOR} {
     --snui-control-min-height: 2.75rem;
   }

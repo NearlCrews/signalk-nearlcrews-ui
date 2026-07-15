@@ -9,6 +9,7 @@ export type ButtonShape = "default" | "pill";
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly ariaDisabled?: boolean;
   readonly loading?: boolean;
+  readonly loadingLabel?: string;
   readonly shape?: ButtonShape;
   readonly size?: ButtonSize;
   readonly variant?: ButtonVariant;
@@ -21,9 +22,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       children,
       "aria-busy": ariaBusy,
       "aria-disabled": nativeAriaDisabled,
+      "aria-label": ariaLabel,
       className,
       disabled,
       loading = false,
+      loadingLabel = "Working",
       onClick,
       shape = "default",
       size = "default",
@@ -37,6 +40,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       ariaDisabled ||
       nativeAriaDisabled === true ||
       nativeAriaDisabled === "true";
+    const blocksActivation = isAriaDisabled || loading;
+    const effectiveLoadingLabel = loadingLabel.trim() || "Working";
+    const effectiveAriaLabel =
+      loading && ariaLabel !== undefined
+        ? `${effectiveLoadingLabel}: ${ariaLabel}`
+        : ariaLabel;
 
     return (
       <button
@@ -50,11 +59,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           `snui-button--shape-${shape}`,
           className,
         )}
-        disabled={disabled === true || loading}
-        aria-disabled={isAriaDisabled || undefined}
+        disabled={disabled}
+        aria-disabled={blocksActivation || undefined}
         aria-busy={loading ? true : ariaBusy}
+        aria-label={effectiveAriaLabel}
         onClick={(event: MouseEvent<HTMLButtonElement>) => {
-          if (isAriaDisabled) {
+          if (blocksActivation) {
             event.preventDefault();
             event.stopPropagation();
             return;
@@ -65,7 +75,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         {loading ? (
           <>
             <span className="snui-button__spinner" aria-hidden="true" />
-            <span className="snui-visually-hidden">Working: </span>
+            {ariaLabel === undefined ? (
+              <>
+                <span className="snui-visually-hidden">
+                  {effectiveLoadingLabel}:
+                </span>{" "}
+              </>
+            ) : null}
           </>
         ) : null}
         <span className="snui-button__content">{children}</span>

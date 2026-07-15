@@ -1,6 +1,15 @@
-import { type KeyboardEvent, type ReactNode, useId, useRef } from "react";
+import {
+  type HTMLAttributes,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+  useId,
+  useRef,
+} from "react";
 
+import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { hasReactContent } from "../utils/react-node.js";
 
 export interface SegmentedControlOption<Value extends string> {
   readonly disabled?: boolean;
@@ -8,17 +17,15 @@ export interface SegmentedControlOption<Value extends string> {
   readonly value: Value;
 }
 
-export interface SegmentedControlProps<Value extends string> {
-  readonly className?: string;
+export interface SegmentedControlProps<Value extends string>
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange"> {
   readonly disabled?: boolean;
   readonly legend: ReactNode;
   readonly onChange: (value: Value) => void;
   readonly options: readonly SegmentedControlOption<Value>[];
+  readonly rootRef?: Ref<HTMLDivElement>;
   readonly value: Value;
 }
-
-const NEXT_KEYS = new Set(["ArrowRight", "ArrowDown"]);
-const PREVIOUS_KEYS = new Set(["ArrowLeft", "ArrowUp"]);
 
 export function SegmentedControl<Value extends string>({
   className,
@@ -26,8 +33,15 @@ export function SegmentedControl<Value extends string>({
   legend,
   onChange,
   options,
+  rootRef,
   value,
+  "aria-labelledby": ariaLabelledBy,
+  ...props
 }: SegmentedControlProps<Value>): React.JSX.Element {
+  if (!hasReactContent(legend)) {
+    throw new Error("SegmentedControl requires a non-empty legend.");
+  }
+
   const legendId = useId();
   const buttons = useRef(new Map<Value, HTMLButtonElement>());
   const enabledOptions = options.filter((option) => option.disabled !== true);
@@ -45,10 +59,22 @@ export function SegmentedControl<Value extends string>({
       (option) => option.value === currentValue,
     );
 
-    if (NEXT_KEYS.has(event.key)) {
+    const ownerWindow = event.currentTarget.ownerDocument.defaultView;
+    const isRtl =
+      ownerWindow?.getComputedStyle(event.currentTarget).direction === "rtl";
+
+    if (
+      event.key === "ArrowDown" ||
+      (event.key === "ArrowRight" && !isRtl) ||
+      (event.key === "ArrowLeft" && isRtl)
+    ) {
       nextIndex =
         currentIndex < 0 ? 0 : (currentIndex + 1) % enabledOptions.length;
-    } else if (PREVIOUS_KEYS.has(event.key)) {
+    } else if (
+      event.key === "ArrowUp" ||
+      (event.key === "ArrowLeft" && !isRtl) ||
+      (event.key === "ArrowRight" && isRtl)
+    ) {
       nextIndex =
         currentIndex < 0
           ? enabledOptions.length - 1
@@ -69,18 +95,19 @@ export function SegmentedControl<Value extends string>({
   };
 
   return (
-    <fieldset
+    <div
+      {...props}
+      ref={rootRef}
       className={classNames("snui-segmented", className)}
-      disabled={disabled}
+      role="radiogroup"
+      aria-disabled={disabled || undefined}
+      aria-orientation="horizontal"
+      aria-labelledby={joinIdReferences(ariaLabelledBy, legendId)}
     >
-      <legend id={legendId} className="snui-visually-hidden">
+      <span id={legendId} className="snui-visually-hidden">
         {legend}
-      </legend>
-      <div
-        className="snui-segmented__group"
-        role="radiogroup"
-        aria-labelledby={legendId}
-      >
+      </span>
+      <div className="snui-segmented__group">
         {options.map((option) => {
           const checked = option.value === value;
           const optionDisabled = disabled || option.disabled === true;
@@ -109,6 +136,6 @@ export function SegmentedControl<Value extends string>({
           );
         })}
       </div>
-    </fieldset>
+    </div>
   );
 }

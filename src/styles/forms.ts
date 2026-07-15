@@ -141,7 +141,7 @@ ${owned(".snui-field-group:disabled > .snui-field-group__description")} {
   opacity: 0.68;
 }
 
-@media (max-width: 37.5rem) {
+@container snui-panel (max-width: 37.5rem) {
   ${owned(".snui-field--inline")} {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -163,9 +163,13 @@ ${owned(".snui-field-group:disabled > .snui-field-group__description")} {
 
   ${owned(".snui-field-group__actions")} {
     grid-column: 1;
-    grid-row: auto;
+    grid-row: 3;
     justify-content: flex-start;
     margin-top: var(--snui-space-2);
+  }
+
+  ${owned(".snui-field-group__content")} {
+    grid-row: 4;
   }
 }
 `);
