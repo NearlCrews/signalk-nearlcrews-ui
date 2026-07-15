@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signal K NearlCrews UI federation fixture</title>
+  </head>
+  <body>
+    <main>
+      <h1>Module Federation runtime fixture</h1>
+      <section aria-labelledby="classic-heading">
+        <h2 id="classic-heading">Classic remote</h2>
+        <div id="classic-root"></div>
+      </section>
+      <section aria-labelledby="esm-heading">
+        <h2 id="esm-heading">ESM remote</h2>
+        <div id="esm-root"></div>
+      </section>
+      <p id="federation-error" role="alert"></p>
+    </main>
+    <script type="module" src="/federation.tsx"></script>
+  </body>
+</html>

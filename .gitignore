@@ -1,0 +1,8 @@
+coverage/
+dist/
+fixtures/federation/*/dist/
+node_modules/
+playwright-report/
+test-results/
+*.tgz
+*.tsbuildinfo

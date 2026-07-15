@@ -1,0 +1,54 @@
+name: Feature request
+description: Propose a reusable package capability
+title: "[FEATURE] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the consumer problem and why existing primitives do not solve it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: consumers
+    attributes:
+      label: Reuse evidence
+      description: Identify at least two consumer locations or explain why package-level ownership is still appropriate.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed API and behavior
+      description: Include component props, state ownership, keyboard behavior, and responsive behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Package boundary
+      description: Explain why this is presentational and does not own Signal K requests, units, validation, persistence, or domain workflows.
+    validations:
+      required: true
+
+  - type: textarea
+    id: themes
+    attributes:
+      label: Theme and accessibility impact
+      description: Cover Auto, Light, Dark, Night, focus, keyboard use, contrast, motion, target size, and 320-pixel reflow.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context

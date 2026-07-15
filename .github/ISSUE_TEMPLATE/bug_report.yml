@@ -1,0 +1,114 @@
+name: Bug report
+description: Report a reproducible defect in the UI package
+title: "[BUG] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. Remove credentials, private vessel data, and sensitive server output before submitting.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the defect and its user impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest component code and steps that reproduce the behavior.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: input
+    id: package-version
+    attributes:
+      label: Package version
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: input
+    id: react-version
+    attributes:
+      label: React version
+      placeholder: 19.2.7
+    validations:
+      required: true
+
+  - type: input
+    id: signalk-version
+    attributes:
+      label: Signal K Server version
+      description: Use "standalone fixture" when Signal K is not involved.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: remote-format
+    attributes:
+      label: Remote format
+      options:
+        - Classic global Module Federation
+        - ESM Module Federation
+        - Standalone bundle
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: browser
+    attributes:
+      label: Browser and version
+    validations:
+      required: true
+
+  - type: dropdown
+    id: theme
+    attributes:
+      label: Theme
+      options:
+        - Auto
+        - Light
+        - Dark
+        - Night
+        - All themes
+        - Not applicable
+    validations:
+      required: true
+
+  - type: textarea
+    id: accessibility
+    attributes:
+      label: Accessibility impact
+      description: Describe keyboard, focus, screen-reader, contrast, motion, reflow, or target-size impact.
+
+  - type: textarea
+    id: output
+    attributes:
+      label: Sanitized output or screenshots
+      description: Include only output that contains no credentials or private data.
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context

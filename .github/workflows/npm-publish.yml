@@ -1,0 +1,97 @@
+name: Publish npm package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Verify release
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    outputs:
+      dist-tag: ${{ steps.package.outputs.dist-tag }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - name: Set up npm
+        run: npm install --global npm@12.0.1
+      - name: Verify release metadata
+        id: package
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          EXPECTED_TAG="v${PACKAGE_VERSION}"
+          if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
+            echo "Release tag ($RELEASE_TAG) must exactly match $EXPECTED_TAG." >&2
+            exit 1
+          fi
+          git fetch origin main --no-tags
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Release commit $GITHUB_SHA is not an ancestor of origin/main." >&2
+            exit 1
+          fi
+          if [[ "$PACKAGE_VERSION" == *-* ]]; then
+            echo "dist-tag=next" >> "$GITHUB_OUTPUT"
+          else
+            echo "dist-tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Install dependencies
+        run: npm ci
+      - name: Install browser dependencies
+        run: npx --no-install playwright install --with-deps chromium webkit
+      - name: Run release checks
+        env:
+          SNUI_RELEASE_APPROVED: "true"
+        run: npm run release:check
+      - name: Pack verified package
+        run: |
+          mkdir package
+          npm pack --ignore-scripts --pack-destination package
+      - name: Preserve verified package
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: npm-package
+          path: package/*.tgz
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: Publish to npm
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org/
+          package-manager-cache: false
+      - name: Set up npm
+        run: npm install --global npm@12.0.1
+      - name: Download verified package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: npm-package
+          path: package
+      - name: Publish verified package
+        env:
+          DIST_TAG: ${{ needs.verify.outputs.dist-tag }}
+        run: npm publish ./package/*.tgz --access public --tag "$DIST_TAG"

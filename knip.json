@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "src/index.ts",
+    "scripts/*.mjs",
+    "fixtures/browser/main.tsx",
+    "fixtures/browser/federation.tsx",
+    "fixtures/browser/vite.config.ts",
+    "fixtures/federation/Panel.tsx"
+  ],
+  "project": [
+    "src/**/*.{ts,tsx}",
+    "scripts/*.mjs",
+    "fixtures/**/*.{ts,tsx,cjs}",
+    "tests/**/*.{ts,tsx}",
+    "*.{ts,mjs}"
+  ],
+  "ignoreDependencies": ["@arethetypeswrong/cli"]
+}

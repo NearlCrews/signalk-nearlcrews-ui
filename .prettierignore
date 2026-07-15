@@ -1,0 +1,8 @@
+coverage/
+dist/
+fixtures/federation/*/dist/
+node_modules/
+package-lock.json
+playwright-report/
+test-results/
+**/*.{cjs,css,gql,graphql,html,js,jsx,json,jsonc,mjs,ts,tsx}

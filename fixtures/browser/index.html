@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Signal K NearlCrews UI fixture</title>
+    <style>
+    body {
+      margin: 0;
+      background: #dfe4ea;
+    }
+
+    body:has([data-snui-theme="dark"]) {
+      background: #10131c;
+    }
+
+    body:has([data-snui-theme="night"]) {
+      background: #050000;
+    }
+
+    body > button {
+      display: none;
+    }
+    </style>
+  </head>
+  <body>
+    <button id="outside-button" class="snui-button" type="button">
+      Outside root
+    </button>
+    <div id="root"></div>
+    <script type="module" src="/main.tsx"></script>
+  </body>
+</html>
