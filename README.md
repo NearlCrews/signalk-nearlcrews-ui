@@ -168,7 +168,7 @@ npm run validate
 npm run test:browser
 ```
 
-Development supports Node 22.13 or newer within the Node 22, 24, and 26 release lines. npm 12.0.1 is preferred, and npm 11.16 or newer remains accepted during the transition. These are source-tooling requirements and do not impose a Node runtime on consumers of the browser bundle.
+Development supports Node 22.22.2 or newer in the Node 22 release line, Node 24.15.0 or newer in the Node 24 release line, or Node 26. npm 12.0.1 is preferred, and npm 11.16 or newer remains accepted during the transition. These are source-tooling requirements and do not impose a Node runtime on consumers of the browser bundle.
 
 `npm run validate` runs Biome formatting and linting, Prettier documentation formatting, type-aware ESLint rules, Knip dead-code analysis, TypeScript checks, unit coverage, full and runtime dependency audits, compilation, packed-package validation, bundle-size and React-externalization checks, and classic and ESM Module Federation fixture builds.
 

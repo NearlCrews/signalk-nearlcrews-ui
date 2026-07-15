@@ -4,7 +4,7 @@ Review the [Code of Conduct](.github/CODE_OF_CONDUCT.md) before participating. U
 
 ## Local checks
 
-Use Node 22.13 or newer within the Node 22, 24, or 26 release lines. npm 12.0.1 is preferred. Install the locked dependency tree and run:
+Use Node 22.22.2 or newer in the Node 22 release line, Node 24.15.0 or newer in the Node 24 release line, or Node 26. npm 12.0.1 is preferred. Install the locked dependency tree and run:
 
 ```sh
 npm ci

@@ -3,6 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     environment: "jsdom",
+    execArgv: ["--no-experimental-webstorage"],
     include: ["tests/unit/**/*.test.{ts,tsx}"],
     setupFiles: ["./tests/setup.ts"],
     coverage: {
