@@ -87,7 +87,7 @@
     "test:federation": "npm run build && npm run test:federation:built",
     "test:federation:built": "webpack --config fixtures/federation/classic/webpack.config.cjs --json fixtures/federation/classic/dist/stats.json && webpack --config fixtures/federation/esm/webpack.config.cjs --json fixtures/federation/esm/dist/stats.json && node scripts/check-federation-build.mjs",
     "test:package": "npm run build && npm run test:package:built",
-    "test:package:built": "publint && node scripts/check-package.mjs",
+    "test:package:built": "publint --pack=false && node scripts/check-package.mjs",
     "validate": "npm run format:check && npm run lint && npm run knip && npm run type-check && npm run test:coverage && npm run audit && npm run audit:runtime && npm run build && npm run test:package:built && npm run test:bundle:built && npm run test:federation:built",
     "release:check": "node scripts/check-release-approval.mjs && npm run validate && npm run test:browser",
     "prepublishOnly": "node scripts/check-release-approval.mjs && npm run test:browser",

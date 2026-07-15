@@ -10,9 +10,9 @@
   ],
   "project": [
     "src/**/*.{ts,tsx}",
-    "scripts/*.mjs",
+    "scripts/**/*.mjs",
     "fixtures/**/*.{ts,tsx,cjs}",
-    "tests/**/*.{ts,tsx}",
+    "tests/**/*.{ts,tsx,mjs}",
     "*.{ts,mjs}"
   ],
   "ignoreDependencies": ["@arethetypeswrong/cli"]

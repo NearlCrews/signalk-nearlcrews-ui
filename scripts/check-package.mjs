@@ -3,6 +3,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { parseNpmPackResult, runNpmPack } from "./lib/npm-pack.mjs";
+
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const versionSource = await readFile("src/version.ts", "utf8");
 const changelog = await readFile("CHANGELOG.md", "utf8");
@@ -56,12 +58,8 @@ for (const [documentName, document, expectedText] of [
   }
 }
 
-const output = execFileSync(
-  "npm",
-  ["pack", "--dry-run", "--json", "--ignore-scripts"],
-  { encoding: "utf8" },
-);
-const [packResult] = JSON.parse(output);
+const output = runNpmPack(["--dry-run", "--json", "--ignore-scripts"]);
+const packResult = parseNpmPackResult(output, packageJson.name);
 const files = new Set(packResult.files.map((file) => file.path));
 
 for (const requiredFile of [
@@ -117,18 +115,13 @@ const temporaryDirectory = await mkdtemp(
 );
 
 try {
-  const packedOutput = execFileSync(
-    "npm",
-    [
-      "pack",
-      "--ignore-scripts",
-      "--json",
-      "--pack-destination",
-      temporaryDirectory,
-    ],
-    { encoding: "utf8" },
-  );
-  const [packedArtifact] = JSON.parse(packedOutput);
+  const packedOutput = runNpmPack([
+    "--ignore-scripts",
+    "--json",
+    "--pack-destination",
+    temporaryDirectory,
+  ]);
+  const packedArtifact = parseNpmPackResult(packedOutput, packageJson.name);
   const tarballPath = join(temporaryDirectory, packedArtifact.filename);
   const executable =
     process.platform === "win32"

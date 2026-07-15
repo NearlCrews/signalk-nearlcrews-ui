@@ -4,7 +4,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     execArgv: ["--no-experimental-webstorage"],
-    include: ["tests/unit/**/*.test.{ts,tsx}"],
+    include: ["tests/unit/**/*.test.{ts,tsx,mjs}"],
     setupFiles: ["./tests/setup.ts"],
     coverage: {
       provider: "v8",
