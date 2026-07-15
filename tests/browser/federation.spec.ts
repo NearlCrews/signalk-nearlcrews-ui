@@ -14,6 +14,15 @@ test("loads classic and ESM remotes against one host React", async ({
   await expect(page.getByText("Fixture ready")).toHaveCount(2);
   await expect(page.locator("style[data-snui-styles]")).toHaveCount(1);
 
+  const roots = page.locator("[data-snui-version]");
+  const firstThemeGroup = page
+    .getByRole("radiogroup", { name: "Theme" })
+    .first();
+  await firstThemeGroup.getByRole("radio", { name: "Night" }).click();
+  await expect(roots).toHaveCount(2);
+  await expect(roots.nth(0)).toHaveAttribute("data-snui-theme", "night");
+  await expect(roots.nth(1)).toHaveAttribute("data-snui-theme", "night");
+
   await page.evaluate(() => window.unmountFederationFixture?.("classic-root"));
   await expect(page.getByText("Fixture ready")).toHaveCount(1);
   await expect(page.locator("style[data-snui-styles]")).toHaveCount(1);

@@ -16,14 +16,20 @@ export interface PanelRootProps extends HTMLAttributes<HTMLDivElement> {
   readonly children: ReactNode;
   readonly legacyThemeStorageKeys?: readonly string[];
   readonly styleNonce?: string;
+  readonly width?: PanelWidth;
 }
+
+export type PanelWidth = "standard" | "wide" | "full";
 
 const EMPTY_LEGACY_STORAGE_KEYS: readonly string[] = [];
 
 type PanelSurfaceProps = Omit<PanelRootProps, "legacyThemeStorageKeys">;
 
 const PanelSurface = forwardRef<HTMLDivElement, PanelSurfaceProps>(
-  function PanelSurface({ children, className, styleNonce, ...props }, ref) {
+  function PanelSurface(
+    { children, className, styleNonce, width = "full", ...props },
+    ref,
+  ) {
     const { theme } = usePanelTheme();
     const rootElement = useRef<HTMLDivElement | null>(null);
 
@@ -58,7 +64,7 @@ const PanelSurface = forwardRef<HTMLDivElement, PanelSurfaceProps>(
       <div
         {...props}
         ref={setRootRef}
-        className={classNames(ROOT_CLASS, className)}
+        className={classNames(ROOT_CLASS, `snui-root--${width}`, className)}
         data-snui-root=""
         data-snui-version={PACKAGE_VERSION}
         data-snui-theme={theme === "auto" ? undefined : theme}

@@ -1,6 +1,7 @@
 interface InstalledStyle {
   readonly element: HTMLStyleElement;
   readonly styles: string;
+  readonly version: string;
   references: number;
 }
 
@@ -24,13 +25,33 @@ function getStyleRegistry(ownerDocument: Document): StyleRegistry {
   return registry;
 }
 
+function assertNativeScopeSupport(ownerDocument: Document): void {
+  const ownerWindow = ownerDocument.defaultView;
+  if (ownerWindow === null) return;
+
+  if (typeof ownerWindow.CSSScopeRule !== "function") {
+    throw new Error(
+      "signalk-nearlcrews-ui requires a browser with native CSS @scope support.",
+    );
+  }
+}
+
 export function installPanelStyles(
   ownerDocument: Document,
   version: string,
   styles: string,
   nonce: string | undefined,
 ): () => void {
+  assertNativeScopeSupport(ownerDocument);
   const documentStyles = getStyleRegistry(ownerDocument);
+
+  for (const candidate of documentStyles.values()) {
+    if (candidate.version === version && candidate.styles !== styles) {
+      throw new Error(
+        `Conflicting signalk-nearlcrews-ui styles were loaded for version ${version}.`,
+      );
+    }
+  }
 
   const key = `${version}\u0000${nonce ?? ""}`;
   let installed = documentStyles.get(key);
@@ -42,7 +63,7 @@ export function installPanelStyles(
     element.textContent = styles;
     ownerDocument.head.append(element);
 
-    installed = { element, references: 0, styles };
+    installed = { element, references: 0, styles, version };
     documentStyles.set(key, installed);
   } else if (installed.styles !== styles) {
     throw new Error(

@@ -28,7 +28,7 @@ export function Disclosure({
         <span className="snui-disclosure__chevron" aria-hidden="true">
           ›
         </span>
-        <span>{title}</span>
+        <span className="snui-disclosure__title">{title}</span>
       </summary>
       <div className="snui-disclosure__content">{children}</div>
     </details>

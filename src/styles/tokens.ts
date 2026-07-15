@@ -1,6 +1,6 @@
 import { ROOT_SELECTOR } from "../version.js";
 
-type ColorTokenName =
+export type ColorTokenName =
   | "--snui-color-background"
   | "--snui-color-surface"
   | "--snui-color-surface-raised"
@@ -10,6 +10,9 @@ type ColorTokenName =
   | "--snui-color-accent-fill"
   | "--snui-color-accent-fill-hover"
   | "--snui-color-on-accent"
+  | "--snui-color-link"
+  | "--snui-color-link-hover"
+  | "--snui-color-link-visited"
   | "--snui-color-focus"
   | "--snui-color-success"
   | "--snui-color-warning"
@@ -28,6 +31,9 @@ export const LIGHT_TOKENS: ThemeTokenSet = {
   "--snui-color-accent-fill": "#2563eb",
   "--snui-color-accent-fill-hover": "#1d4ed8",
   "--snui-color-on-accent": "#ffffff",
+  "--snui-color-link": "#1d4ed8",
+  "--snui-color-link-hover": "#1e40af",
+  "--snui-color-link-visited": "#6d28d9",
   "--snui-color-focus": "#1d4ed8",
   "--snui-color-success": "#166534",
   "--snui-color-warning": "#854d0e",
@@ -45,6 +51,9 @@ export const DARK_TOKENS: ThemeTokenSet = {
   "--snui-color-accent-fill": "#4c93ff",
   "--snui-color-accent-fill-hover": "#70a8ff",
   "--snui-color-on-accent": "#10131c",
+  "--snui-color-link": "#92b8ff",
+  "--snui-color-link-hover": "#b6ceff",
+  "--snui-color-link-visited": "#d8b4fe",
   "--snui-color-focus": "#8db9ff",
   "--snui-color-success": "#75d59a",
   "--snui-color-warning": "#f7bd69",
@@ -62,6 +71,9 @@ export const NIGHT_TOKENS: ThemeTokenSet = {
   "--snui-color-accent-fill": "#e54848",
   "--snui-color-accent-fill-hover": "#ff5a5a",
   "--snui-color-on-accent": "#190000",
+  "--snui-color-link": "#ff9292",
+  "--snui-color-link-hover": "#ffb0b0",
+  "--snui-color-link-visited": "#e87373",
   "--snui-color-focus": "#ff6b6b",
   "--snui-color-success": "#ff8a7a",
   "--snui-color-warning": "#ffad66",
@@ -79,6 +91,40 @@ const LIGHT_BLOCK = renderTokenBlock(LIGHT_TOKENS);
 const DARK_BLOCK = renderTokenBlock(DARK_TOKENS);
 const NIGHT_BLOCK = renderTokenBlock(NIGHT_TOKENS);
 
+export const PUBLIC_FOUNDATION_TOKEN_NAMES = [
+  "--snui-font-family",
+  "--snui-font-size",
+  "--snui-line-height",
+  "--snui-space-1",
+  "--snui-space-2",
+  "--snui-space-3",
+  "--snui-space-4",
+  "--snui-space-5",
+  "--snui-space-6",
+  "--snui-radius-sm",
+  "--snui-radius-md",
+  "--snui-radius-lg",
+  "--snui-control-min-height",
+  "--snui-content-width-standard",
+  "--snui-content-width-wide",
+  "--snui-transition-fast",
+] as const;
+
+export type FoundationTokenName =
+  (typeof PUBLIC_FOUNDATION_TOKEN_NAMES)[number];
+
+export const PUBLIC_COLOR_TOKEN_NAMES = Object.freeze(
+  Object.keys(LIGHT_TOKENS) as ColorTokenName[],
+);
+
+export const PUBLIC_TOKEN_NAMES: readonly (
+  | ColorTokenName
+  | FoundationTokenName
+)[] = Object.freeze([
+  ...PUBLIC_COLOR_TOKEN_NAMES,
+  ...PUBLIC_FOUNDATION_TOKEN_NAMES,
+]);
+
 export const TOKEN_STYLES = `
 ${ROOT_SELECTOR} {
 ${LIGHT_BLOCK}
@@ -95,7 +141,8 @@ ${LIGHT_BLOCK}
   --snui-radius-md: 0.625rem;
   --snui-radius-lg: 0.875rem;
   --snui-control-min-height: 2.5rem;
-  --snui-content-max-width: 72rem;
+  --snui-content-width-standard: 72rem;
+  --snui-content-width-wide: 96rem;
   --snui-focus-ring: 0 0 0 3px color-mix(in srgb, var(--snui-color-focus) 38%, transparent);
   --snui-shadow-raised: 0 0.125rem 0.5rem rgb(15 23 42 / 14%);
   --snui-transition-fast: 140ms ease;

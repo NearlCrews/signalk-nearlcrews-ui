@@ -18,26 +18,42 @@ export interface FieldControlProps {
   readonly required?: boolean;
 }
 
+export interface LabeledFieldControlProps extends FieldControlProps {
+  readonly id: string;
+}
+
+export type LabeledFieldLayout = "stacked" | "inline";
+export type LabeledFieldDensity = "comfortable" | "compact";
+
+export type LabeledFieldChild =
+  | ReactElement<FieldControlProps>
+  | ((controlProps: LabeledFieldControlProps) => ReactNode);
+
 export interface LabeledFieldProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
-  readonly children: ReactElement<FieldControlProps>;
+  readonly children: LabeledFieldChild;
+  readonly density?: LabeledFieldDensity;
   readonly description?: ReactNode;
   readonly error?: ReactNode;
   readonly label: ReactNode;
+  readonly layout?: LabeledFieldLayout;
   readonly required?: boolean;
 }
 
 export function LabeledField({
   children,
   className,
+  density = "comfortable",
   description,
   error,
   label,
+  layout = "stacked",
   required = false,
   ...props
 }: LabeledFieldProps): React.JSX.Element {
   const generatedId = useId();
-  const controlId = children.props.id ?? `${generatedId}-control`;
+  const elementChild = typeof children === "function" ? undefined : children;
+  const controlId = elementChild?.props.id ?? `${generatedId}-control`;
   const hasDescription = hasReactContent(description);
   const hasError = hasReactContent(error);
   const descriptionId = hasDescription
@@ -45,16 +61,16 @@ export function LabeledField({
     : undefined;
   const errorId = hasError ? `${generatedId}-error` : undefined;
   const describedBy = joinIdReferences(
-    children.props["aria-describedby"],
+    elementChild?.props["aria-describedby"],
     descriptionId,
     errorId,
   );
   const errorMessage = joinIdReferences(
-    children.props["aria-errormessage"],
+    elementChild?.props["aria-errormessage"],
     errorId,
   );
 
-  const control = cloneElement(children, {
+  const controlProps: LabeledFieldControlProps = {
     id: controlId,
     ...(describedBy === undefined ? {} : { "aria-describedby": describedBy }),
     ...(errorId === undefined
@@ -64,10 +80,22 @@ export function LabeledField({
           "aria-invalid": true,
         }),
     ...(required ? { required: true } : {}),
-  });
+  };
+  const control =
+    typeof children === "function"
+      ? children(controlProps)
+      : cloneElement(children, controlProps);
 
   return (
-    <div {...props} className={classNames("snui-field", className)}>
+    <div
+      {...props}
+      className={classNames(
+        "snui-field",
+        `snui-field--${layout}`,
+        `snui-field--${density}`,
+        className,
+      )}
+    >
       <label className="snui-field__label" htmlFor={controlId}>
         {label}{" "}
         {required ? (
@@ -84,7 +112,7 @@ export function LabeledField({
           {description}
         </div>
       ) : null}
-      {control}
+      <div className="snui-field__control">{control}</div>
       {hasError ? (
         <div id={errorId} className="snui-field__error" role="alert">
           {error}

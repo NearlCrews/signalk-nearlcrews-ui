@@ -1,5 +1,6 @@
 import { type HTMLAttributes, type ReactNode, useId } from "react";
 
+import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
 import { hasReactContent } from "../utils/react-node.js";
@@ -14,6 +15,7 @@ export interface SectionProps
 
 export function Section({
   actions,
+  "aria-labelledby": ariaLabelledBy,
   children,
   className,
   description,
@@ -28,15 +30,15 @@ export function Section({
     <section
       {...props}
       className={classNames("snui-section", className)}
-      aria-labelledby={titleId}
+      aria-labelledby={joinIdReferences(ariaLabelledBy, titleId)}
     >
       <header className="snui-section__header">
-        <div>
+        <div className="snui-section__heading-group">
           <Heading id={titleId} className="snui-section__title">
             {title}
           </Heading>
           {hasReactContent(description) ? (
-            <p className="snui-section__description">{description}</p>
+            <div className="snui-section__description">{description}</div>
           ) : null}
         </div>
         {actions}

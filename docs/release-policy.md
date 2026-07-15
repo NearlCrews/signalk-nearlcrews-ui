@@ -12,7 +12,7 @@ The following are public API and require semantic-versioning treatment:
 
 - Exported component names and props
 - Public TypeScript types
-- Public color token names
+- Public color and foundation token names
 - Theme names and persistence behavior
 - Keyboard, focus, and accessibility semantics
 - Supported React, browser, or development-tool floors
@@ -37,7 +37,7 @@ Prerelease versions publish under `next`. Stable versions publish under `latest`
 Every release candidate must pass:
 
 - Formatting, type-aware linting, Knip, type checking, unit tests, and coverage
-- Chromium, WebKit, and mobile Chromium browser tests
+- Chromium, Firefox, WebKit, and mobile Chromium browser tests
 - Axe, contrast, reduced-motion, forced-colors, and screenshot checks
 - 320-pixel reflow and coarse-pointer target checks
 - Packed-artifact inspection and type-resolution checks

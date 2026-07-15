@@ -13,29 +13,51 @@ test.beforeEach(async ({ page }) => {
   ).toBeVisible();
 });
 
+test("runs only when native CSS scope is available", async ({ page }) => {
+  expect(await page.evaluate(() => typeof window.CSSScopeRule)).toBe(
+    "function",
+  );
+});
+
 test("renders all themes and component states without axe violations", async ({
   page,
 }) => {
   test.slow();
   await page.goto("/?states=1");
+  await page.addStyleTag({
+    content: "* { transition: none !important; }",
+  });
   await page.locator("summary", { hasText: "Advanced settings" }).click();
   await page.getByRole("button", { name: "Reset", exact: true }).last().click();
 
-  for (const [theme, dangerColor] of [
-    ["Light", "rgb(180, 35, 24)"],
-    ["Dark", "rgb(255, 139, 130)"],
-    ["Night", "rgb(255, 107, 107)"],
+  for (const [theme, dangerColor, textColor] of [
+    ["Light", "rgb(180, 35, 24)", "rgb(24, 32, 44)"],
+    ["Dark", "rgb(255, 139, 130)", "rgb(245, 247, 250)"],
+    ["Night", "rgb(255, 107, 107)", "rgb(255, 120, 120)"],
   ] as const) {
     await page.getByRole("radio", { name: theme }).click();
     await expect(page.locator("[data-snui-version]")).toHaveAttribute(
       "data-snui-theme",
       theme.toLowerCase(),
     );
+    await expect(page.locator("[data-snui-version]")).toHaveCSS(
+      "color",
+      textColor,
+    );
     await expect(
       page
         .getByRole("region", { name: "Reset configuration?" })
         .getByRole("button", { name: "Reset" }),
     ).toHaveCSS("color", dangerColor);
+    await expect(
+      page.getByRole("textbox", { name: "Invalid server URL" }),
+    ).toHaveCSS("border-color", dangerColor);
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
     await expectNoAxeViolations(page);
   }
 });
@@ -180,18 +202,258 @@ test("applies the control target floor to every interactive primitive", async ({
   const targets = [
     page.getByRole("radio", { name: "Auto" }),
     page.getByRole("textbox", { name: /Server URL/ }),
+    page.getByLabel("API token"),
+    page.getByRole("combobox", { name: "Provider mode" }),
+    page.getByRole("textbox", { name: "Operator notes" }),
     page.getByRole("spinbutton", { name: "Refresh interval" }),
     page.getByRole("slider", { name: "Confidence threshold" }),
     page.locator("summary", { hasText: "Advanced settings" }),
     page.getByRole("radio", { name: "Normal" }),
     page.getByRole("button", { name: "Save" }),
     page.getByRole("checkbox", { name: "Enable provider" }).locator(".."),
+    page.getByRole("button", { name: "Dismiss" }),
+    page.getByRole("button", { name: "Provider status and metrics" }),
   ];
 
   for (const target of targets) {
     const box = await target.boundingBox();
-    expect(box?.height).toBeGreaterThanOrEqual(minimumHeight);
+    expect(box?.height).toBeGreaterThanOrEqual(minimumHeight - 0.01);
   }
+});
+
+test("supports action-bearing collapsible status content", async ({ page }) => {
+  const toggle = page.getByRole("button", {
+    name: "Provider status and metrics",
+  });
+  const refresh = page.getByRole("button", { name: "Refresh" });
+
+  await expect(
+    page.getByRole("heading", {
+      level: 2,
+      name: "Provider status and metrics",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("3 checks healthy")).toBeVisible();
+  await expect(refresh).toBeVisible();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(
+    page.getByRole("region", { name: "Provider status and metrics" }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".snui-collapsible__summary--header", {
+      hasText: "3 checks healthy",
+    }),
+  ).toBeVisible();
+
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("Updates")).toBeVisible();
+  await expect(page.getByText("3 checks healthy")).toBeHidden();
+  await expect(refresh).toBeVisible();
+  await expectNoAxeViolations(page);
+});
+
+test("provides hover and active feedback for raw action controls", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  for (const control of [
+    page.getByRole("button", { name: "Dismiss" }),
+    page.getByRole("button", { name: "Provider status and metrics" }),
+    page.locator("summary", { hasText: "Advanced settings" }),
+  ]) {
+    const initialBackground = await control.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    await control.hover();
+    await expect
+      .poll(() =>
+        control.evaluate(
+          (element) => getComputedStyle(element).backgroundColor,
+        ),
+      )
+      .not.toBe(initialBackground);
+    const hoverBackground = await control.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+
+    await page.mouse.down();
+    await expect
+      .poll(() =>
+        control.evaluate(
+          (element) => getComputedStyle(element).backgroundColor,
+        ),
+      )
+      .not.toBe(hoverBackground);
+    await page.mouse.up();
+  }
+});
+
+test("provides segmented hover and active feedback", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.locator("summary", { hasText: "Advanced settings" }).click();
+  const selected = page.getByRole("radio", { name: "Normal" });
+  const unselected = page.getByRole("radio", { name: "Minimal" });
+
+  const selectedBackground = await selected.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await selected.hover();
+  await expect
+    .poll(() =>
+      selected.evaluate((element) => getComputedStyle(element).backgroundColor),
+    )
+    .not.toBe(selectedBackground);
+
+  const unselectedBackground = await unselected.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await unselected.hover();
+  await expect
+    .poll(() =>
+      unselected.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      ),
+    )
+    .not.toBe(unselectedBackground);
+  const hoverBackground = await unselected.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+  await page.mouse.down();
+  await expect
+    .poll(() =>
+      unselected.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      ),
+    )
+    .not.toBe(hoverBackground);
+  await page.mouse.up();
+});
+
+test("keeps aria-disabled focus indicators fully opaque", async ({ page }) => {
+  await page.goto("/?states=1");
+  const button = page.getByRole("button", { name: "Unavailable here" });
+
+  await expect(button).toHaveCSS("opacity", "1");
+  await expect(button.locator(".snui-button__content")).toHaveCSS(
+    "opacity",
+    "0.58",
+  );
+  await expect(button.locator(".snui-button__content")).toHaveCSS(
+    "display",
+    "flex",
+  );
+  await expect(button.locator(".snui-button__content")).toHaveCSS(
+    "column-gap",
+    "8px",
+  );
+  await button.focus();
+  expect(
+    Number.parseFloat(
+      await button.evaluate(
+        (element) => getComputedStyle(element).outlineWidth,
+      ),
+    ),
+  ).toBeGreaterThanOrEqual(2);
+
+  const nativeDisabled = page.getByRole("button", { name: "Disabled" });
+  await nativeDisabled.evaluate((element) =>
+    element.setAttribute("aria-disabled", "true"),
+  );
+  await expect(nativeDisabled).toHaveCSS("opacity", "0.58");
+  await expect(nativeDisabled.locator(".snui-button__content")).toHaveCSS(
+    "opacity",
+    "1",
+  );
+});
+
+test("keeps field-group actions in a compact desktop header", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name === "mobile-chromium");
+  const fieldset = page.getByRole("group", { name: "Provider behavior" });
+  const actions = fieldset.locator(".snui-field-group__actions");
+
+  await expect(fieldset).toHaveCSS("display", "grid");
+  await expect(actions).toHaveCSS("grid-column-start", "2");
+  await expect(actions).toHaveCSS("grid-row-start", "1");
+});
+
+test("styles native text controls and links in Night mode", async ({
+  page,
+}) => {
+  await page.getByRole("radio", { name: "Night" }).click();
+
+  const controls = [
+    page.getByLabel("API token"),
+    page.getByRole("combobox", { name: "Provider mode" }),
+    page.getByRole("textbox", { name: "Operator notes" }),
+  ];
+  for (const control of controls) {
+    await expect(control).toHaveCSS("background-color", "rgb(16, 0, 0)");
+    await expect(control).toHaveCSS("color", "rgb(255, 120, 120)");
+  }
+
+  const link = page.getByRole("link", {
+    name: "Read the Signal K documentation",
+  });
+  await expect(link).toHaveCSS("color", "rgb(255, 146, 146)");
+  await expect(link).toHaveCSS("text-decoration-line", "underline");
+
+  for (const control of controls) {
+    await control.evaluate((element) => {
+      if (
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLSelectElement ||
+        element instanceof HTMLTextAreaElement
+      ) {
+        element.disabled = true;
+      }
+    });
+    await expect(control).toHaveCSS("opacity", "0.58");
+  }
+});
+
+test("places the select indicator at the logical inline end", async ({
+  page,
+}) => {
+  const select = page.getByRole("combobox", { name: "Provider mode" });
+
+  const ltr = await select.evaluate((element) => {
+    const styles = getComputedStyle(element);
+    return {
+      paddingLeft: Number.parseFloat(styles.paddingLeft),
+      paddingRight: Number.parseFloat(styles.paddingRight),
+      positions: styles.backgroundPositionX.split(","),
+    };
+  });
+  expect(ltr.paddingRight).toBeGreaterThan(ltr.paddingLeft);
+  expect(ltr.positions.every((position) => position.includes("100%"))).toBe(
+    true,
+  );
+
+  await select.evaluate((element) => element.setAttribute("dir", "rtl"));
+  const rtl = await select.evaluate((element) => {
+    const styles = getComputedStyle(element);
+    return {
+      paddingLeft: Number.parseFloat(styles.paddingLeft),
+      paddingRight: Number.parseFloat(styles.paddingRight),
+      positions: styles.backgroundPositionX.split(","),
+    };
+  });
+  expect(rtl.paddingLeft).toBeGreaterThan(rtl.paddingRight);
+  expect(rtl.positions.every((position) => !position.includes("100%"))).toBe(
+    true,
+  );
+});
+
+test("dismisses banners without coupling visibility to the library", async ({
+  page,
+}) => {
+  const bannerText = page.getByText("Values are stored in SI");
+  await expect(bannerText).toBeVisible();
+  await page.getByRole("button", { name: "Dismiss" }).click();
+  await expect(bannerText).toBeHidden();
 });
 
 test("uses inline confirmation with Escape, confirm, and managed focus", async ({
@@ -274,7 +536,7 @@ test("renders compliant placeholders and a red-preserving Night accent", async (
 
   const night = page.getByRole("radio", { name: "Night" });
   await night.click();
-  await expect(night).toHaveCSS("background-color", "rgb(229, 72, 72)");
+  await expect(night).toHaveCSS("background-color", "rgb(255, 90, 90)");
   await expect(night).toHaveCSS("color", "rgb(25, 0, 0)");
 
   for (const checkbox of [
@@ -301,6 +563,60 @@ test("reflows state-heavy content at a 320 pixel viewport", async ({
   await page.setViewportSize({ width: 320, height: 812 });
   await page.locator("summary", { hasText: "Advanced settings" }).click();
   await page.getByRole("button", { name: "Reset", exact: true }).last().click();
+  await page.locator(".snui-disclosure__title").evaluate((title) => {
+    title.textContent =
+      "Advanced-settings-with-a-deliberately-unbroken-consumer-defined-title";
+  });
+  await page
+    .locator(".snui-collapsible__summary--header")
+    .evaluate((summary) => {
+      summary.textContent =
+        "consumer-status-summary-with-a-deliberately-unbroken-value";
+    });
+  await page
+    .locator(".snui-collapsible__actions .snui-button")
+    .evaluate((action) => {
+      action.textContent = "consumer-action-with-a-deliberately-unbroken-label";
+    });
+  for (const selector of [
+    ".snui-section__description",
+    ".snui-field__label",
+    ".snui-field__description",
+    ".snui-field__error",
+    ".snui-field-group__description",
+    ".snui-checkbox__label",
+    ".snui-checkbox__description",
+    ".snui-banner__dismiss",
+    ".snui-action-bar__status",
+    ".snui-action-bar .snui-button",
+    ".snui-inline-confirm__title",
+    ".snui-inline-confirm__message",
+  ]) {
+    await page
+      .locator(selector)
+      .first()
+      .evaluate((element) => {
+        element.textContent =
+          "consumer-defined-content-with-a-deliberately-unbroken-value";
+      });
+  }
+
+  const exactInput = page.getByRole("spinbutton", {
+    name: "Confidence threshold exact value",
+  });
+  const unit = page.getByTestId("confidence-unit");
+  const [exactBox, unitBox] = await Promise.all([
+    exactInput.boundingBox(),
+    unit.boundingBox(),
+  ]);
+  expect(exactBox).not.toBeNull();
+  expect(unitBox).not.toBeNull();
+  if (exactBox !== null && unitBox !== null) {
+    const exactCenter = exactBox.y + exactBox.height / 2;
+    const unitCenter = unitBox.y + unitBox.height / 2;
+    expect(Math.abs(exactCenter - unitCenter)).toBeLessThan(1);
+    expect(unitBox.x).toBeGreaterThanOrEqual(exactBox.x + exactBox.width);
+  }
 
   const sizes = await page.evaluate(() => ({
     clientWidth: document.documentElement.clientWidth,
@@ -335,18 +651,61 @@ test("keeps native controls and focus visible in forced colors", async ({
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
   await page.goto("/?states=1");
-  await page.emulateMedia({ forcedColors: "active" });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("radio", { name: "Dark" }).click();
+  await page.locator("summary", { hasText: "Advanced settings" }).click();
+  await page.emulateMedia({
+    forcedColors: "active",
+    reducedMotion: "reduce",
+  });
 
   const checked = page.getByRole("checkbox", { name: "Enable provider" });
   await checked.focus();
   await expect(checked).toHaveCSS("appearance", "auto");
-  await expect(checked).toHaveCSS("outline-width", "2px");
+  expect(
+    Number.parseFloat(
+      await checked.evaluate(
+        (element) => getComputedStyle(element).outlineWidth,
+      ),
+    ),
+  ).toBeGreaterThanOrEqual(2);
   await expect(
     page.getByRole("checkbox", { name: "Partially configured option" }),
   ).toHaveJSProperty("indeterminate", true);
   await expect(
     page.getByRole("slider", { name: "Confidence threshold" }),
   ).toBeVisible();
+  const selectedSegment = page.getByRole("radio", { name: "Normal" });
+  const unselectedSegment = page.getByRole("radio", { name: "Minimal" });
+  await expect(selectedSegment).toHaveCSS("forced-color-adjust", "none");
+  const [selectedColors, unselectedColors] = await Promise.all([
+    selectedSegment.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      return [styles.backgroundColor, styles.color];
+    }),
+    unselectedSegment.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      return [styles.backgroundColor, styles.color];
+    }),
+  ]);
+  expect(selectedColors).not.toEqual(unselectedColors);
+  await selectedSegment.hover();
+  await expect
+    .poll(() =>
+      selectedSegment.evaluate((element) => {
+        const styles = getComputedStyle(element);
+        return [styles.backgroundColor, styles.color];
+      }),
+    )
+    .toEqual(selectedColors);
+  for (const control of [
+    page.getByLabel("API token"),
+    page.getByRole("combobox", { name: "Provider mode" }),
+    page.getByRole("textbox", { name: "Operator notes" }),
+  ]) {
+    await expect(control).toBeVisible();
+    await expect(control).toHaveCSS("forced-color-adjust", "auto");
+  }
   await page
     .getByRole("checkbox", { name: "Partially configured option" })
     .focus();

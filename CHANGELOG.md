@@ -10,4 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- Initial package contract, React primitives, scoped themes, and verification fixtures.
+- Accessible React form, feedback, layout, disclosure, metric, theme, and confirmation primitives.
+- Scoped Light, Dark, and Night themes with public color, spacing, typography, radius, sizing, and transition tokens.
+- Classic and ESM Module Federation fixtures, strict CSP coverage, and Chromium, Firefox, WebKit, and mobile browser tests.
+- Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
+- GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.

@@ -12,6 +12,24 @@ import {
 } from "../../src/index.js";
 
 describe("PanelRoot themes", () => {
+  it("uses full width by default and offers bounded width options", () => {
+    render(
+      <>
+        <PanelRoot data-testid="full">Full</PanelRoot>
+        <PanelRoot data-testid="standard" width="standard">
+          Standard
+        </PanelRoot>
+        <PanelRoot data-testid="wide" width="wide">
+          Wide
+        </PanelRoot>
+      </>,
+    );
+
+    expect(screen.getByTestId("full")).toHaveClass("snui-root--full");
+    expect(screen.getByTestId("standard")).toHaveClass("snui-root--standard");
+    expect(screen.getByTestId("wide")).toHaveClass("snui-root--wide");
+  });
+
   it("mounts one head style per nonce and reference-counts panel roots", () => {
     const { container, unmount } = render(
       <>
@@ -182,6 +200,52 @@ describe("PanelRoot themes", () => {
       ),
     ).toThrow(/Conflicting signalk-nearlcrews-ui styles/);
     remove();
+  });
+
+  it("rejects same-version style conflicts across different nonces", async () => {
+    const { installPanelStyles } = await import("../../src/styles/install.js");
+    const remove = installPanelStyles(
+      document,
+      "cross-nonce-conflict",
+      ".fixture { color: red; }",
+      "first-nonce",
+    );
+
+    expect(() =>
+      installPanelStyles(
+        document,
+        "cross-nonce-conflict",
+        ".fixture { color: blue; }",
+        "second-nonce",
+      ),
+    ).toThrow(/Conflicting signalk-nearlcrews-ui styles/);
+    expect(
+      document.head.querySelectorAll(
+        'style[data-snui-styles="cross-nonce-conflict"]',
+      ),
+    ).toHaveLength(1);
+    remove();
+  });
+
+  it("rejects browser engines with an undefined CSS scope constructor", async () => {
+    const { installPanelStyles } = await import("../../src/styles/install.js");
+    const unsupportedDocument = {
+      defaultView: {
+        CSSScopeRule: undefined,
+        navigator: { userAgent: "unsupported-browser" },
+      },
+    } as unknown as Document;
+
+    expect(() =>
+      installPanelStyles(
+        unsupportedDocument,
+        "unsupported-version",
+        ".fixture { color: red; }",
+        undefined,
+      ),
+    ).toThrow(
+      "signalk-nearlcrews-ui requires a browser with native CSS @scope support.",
+    );
   });
 
   it("persists a shared theme and synchronizes mounted panel roots", async () => {

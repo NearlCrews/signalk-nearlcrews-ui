@@ -2,24 +2,36 @@ import {
   forwardRef,
   type InputHTMLAttributes,
   type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
   useId,
 } from "react";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
 
+export type TextInputType =
+  | "email"
+  | "password"
+  | "search"
+  | "tel"
+  | "text"
+  | "url";
+
 export type TextInputProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
   "type"
->;
+> & {
+  readonly type?: TextInputType;
+};
 
 export const TextInput = forwardRef<HTMLInputElement, TextInputProps>(
-  function TextInput({ className, ...props }, ref) {
+  function TextInput({ className, type = "text", ...props }, ref) {
     return (
       <input
         {...props}
         ref={ref}
-        type="text"
+        type={type}
         className={classNames("snui-input", className)}
       />
     );
@@ -57,6 +69,34 @@ export const RangeInput = forwardRef<HTMLInputElement, RangeInputProps>(
         ref={ref}
         type="range"
         className={classNames("snui-range", className)}
+      />
+    );
+  },
+);
+
+export type SelectProps = SelectHTMLAttributes<HTMLSelectElement>;
+
+export const Select = forwardRef<HTMLSelectElement, SelectProps>(
+  function Select({ className, ...props }, ref) {
+    return (
+      <select
+        {...props}
+        ref={ref}
+        className={classNames("snui-input", "snui-select", className)}
+      />
+    );
+  },
+);
+
+export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement>;
+
+export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
+  function Textarea({ className, ...props }, ref) {
+    return (
+      <textarea
+        {...props}
+        ref={ref}
+        className={classNames("snui-input", "snui-textarea", className)}
       />
     );
   },

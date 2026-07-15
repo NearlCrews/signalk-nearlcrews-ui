@@ -8,7 +8,7 @@ ${owned("*")} {
 
 :scope {
   width: 100%;
-  max-width: var(--snui-content-max-width);
+  max-width: none;
   margin-inline: auto;
   padding: var(--snui-space-4);
   background: var(--snui-color-background);
@@ -18,11 +18,36 @@ ${owned("*")} {
   line-height: var(--snui-line-height);
 }
 
+:scope.snui-root--standard {
+  max-width: var(--snui-content-width-standard);
+}
+
+:scope.snui-root--wide {
+  max-width: var(--snui-content-width-wide);
+}
+
 ${owned("button")},
 ${owned("input")},
 ${owned("select")},
 ${owned("textarea")} {
   font: inherit;
+}
+
+${owned("a:any-link")} {
+  color: var(--snui-color-link);
+  text-decoration-line: underline;
+  text-decoration-thickness: 0.08em;
+  text-underline-offset: 0.14em;
+  overflow-wrap: anywhere;
+}
+
+${owned("a:visited")} {
+  color: var(--snui-color-link-visited);
+}
+
+${owned("a:any-link:hover")} {
+  color: var(--snui-color-link-hover);
+  text-decoration-thickness: 0.14em;
 }
 
 ${owned("button")},

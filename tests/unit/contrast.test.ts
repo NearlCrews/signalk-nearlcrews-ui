@@ -4,6 +4,8 @@ import {
   DARK_TOKENS,
   LIGHT_TOKENS,
   NIGHT_TOKENS,
+  PUBLIC_FOUNDATION_TOKEN_NAMES,
+  PUBLIC_TOKEN_NAMES,
   type ThemeTokenSet,
 } from "../../src/styles/tokens.js";
 
@@ -85,6 +87,24 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
     }
   });
 
+  it("keeps link states above WCAG AA", () => {
+    for (const token of [
+      "--snui-color-link",
+      "--snui-color-link-hover",
+      "--snui-color-link-visited",
+    ] as const) {
+      for (const surface of [
+        tokens["--snui-color-background"],
+        tokens["--snui-color-surface"],
+        tokens["--snui-color-surface-raised"],
+      ]) {
+        expect(contrastRatio(tokens[token], surface)).toBeGreaterThanOrEqual(
+          4.5,
+        );
+      }
+    }
+  });
+
   it("keeps focus indicators distinguishable from adjacent surfaces", () => {
     for (const surface of [
       tokens["--snui-color-background"],
@@ -120,4 +140,26 @@ it("keeps the Night on-accent foreground red-preserving", () => {
 
   expect(green).toBeLessThanOrEqual(32);
   expect(blue).toBeLessThanOrEqual(32);
+});
+
+it("exports the complete public foundation token surface", () => {
+  expect(PUBLIC_FOUNDATION_TOKEN_NAMES).toEqual([
+    "--snui-font-family",
+    "--snui-font-size",
+    "--snui-line-height",
+    "--snui-space-1",
+    "--snui-space-2",
+    "--snui-space-3",
+    "--snui-space-4",
+    "--snui-space-5",
+    "--snui-space-6",
+    "--snui-radius-sm",
+    "--snui-radius-md",
+    "--snui-radius-lg",
+    "--snui-control-min-height",
+    "--snui-content-width-standard",
+    "--snui-content-width-wide",
+    "--snui-transition-fast",
+  ]);
+  expect(new Set(PUBLIC_TOKEN_NAMES).size).toBe(PUBLIC_TOKEN_NAMES.length);
 });
