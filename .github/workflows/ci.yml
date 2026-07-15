@@ -85,8 +85,10 @@ jobs:
         include:
           - architecture: x64
             runner: ubuntu-24.04
+            snapshot_variant: ubuntu24-x64
           - architecture: arm64
             runner: ubuntu-24.04-arm
+            snapshot_variant: ubuntu24-arm64
     steps:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -117,6 +119,8 @@ jobs:
       - name: Install browser dependencies
         run: npx --no-install playwright install --with-deps chromium firefox webkit
       - name: Run browser tests
+        env:
+          SNUI_SNAPSHOT_VARIANT: ${{ matrix.snapshot_variant }}
         run: npm run test:browser
       - name: Upload browser report
         if: ${{ !cancelled() }}

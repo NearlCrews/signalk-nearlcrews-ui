@@ -30,7 +30,8 @@ npx --no-install playwright install chromium firefox webkit
 - Document public API changes in `CHANGELOG.md`.
 - Treat exported components, props, types, tokens, theme persistence, keyboard behavior, focus behavior, and compatibility floors as versioned API.
 - Update browser snapshots only after visually inspecting the result in every affected theme and viewport.
-- Keep ARM64 and x64 visual baselines separate because native controls and font rasterization differ by runner architecture.
+- Keep local ARM64 and x64 visual baselines separate because native controls and font rasterization differ by architecture.
+- Keep hosted visual baselines separate by runner image and architecture through `SNUI_SNAPSHOT_VARIANT`.
 - Keep code, documentation, package metadata, and repository templates consistent.
 - Do not publish, tag, or create a release without explicit final approval.
 

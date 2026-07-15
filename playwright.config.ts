@@ -1,9 +1,11 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const snapshotVariant = process.env.SNUI_SNAPSHOT_VARIANT ?? process.arch;
+
 export default defineConfig({
   testDir: "./tests/browser",
   outputDir: "./test-results/playwright",
-  snapshotPathTemplate: `{testDir}/{testFilePath}-snapshots/{arg}-{projectName}-{platform}-${process.arch}{ext}`,
+  snapshotPathTemplate: `{testDir}/{testFilePath}-snapshots/{arg}-{projectName}-{platform}-${snapshotVariant}{ext}`,
   fullyParallel: true,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
