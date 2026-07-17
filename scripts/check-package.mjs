@@ -1,9 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { parseNpmPackResult, runNpmPack } from "./lib/npm-pack.mjs";
+
+const require = createRequire(import.meta.url);
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const versionSource = await readFile("src/version.ts", "utf8");
@@ -154,14 +157,25 @@ try {
   ]);
   const packedArtifact = parseNpmPackResult(packedOutput, packageJson.name);
   const tarballPath = join(temporaryDirectory, packedArtifact.filename);
-  const executable =
-    process.platform === "win32"
-      ? "node_modules/.bin/attw.cmd"
-      : "node_modules/.bin/attw";
+  const attwPackageJsonPath = require.resolve(
+    "@arethetypeswrong/cli/package.json",
+  );
+  const attwPackageJson = JSON.parse(
+    await readFile(attwPackageJsonPath, "utf8"),
+  );
+  const attwBin = attwPackageJson.bin?.attw;
+
+  if (typeof attwBin !== "string" || attwBin.length === 0) {
+    throw new Error(
+      "@arethetypeswrong/cli package.json does not declare bin.attw.",
+    );
+  }
+
+  const attwEntryPoint = resolve(dirname(attwPackageJsonPath), attwBin);
 
   execFileSync(
-    executable,
-    [tarballPath, "--profile", "esm-only", "--no-emoji"],
+    process.execPath,
+    [attwEntryPoint, tarballPath, "--profile", "esm-only", "--no-emoji"],
     { stdio: "inherit" },
   );
 } finally {

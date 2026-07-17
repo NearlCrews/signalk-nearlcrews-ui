@@ -24,6 +24,7 @@ The React package must not own:
 
 The public theme names are `auto`, `light`, `dark`, and `night`.
 
+- Light is the implicit default when no valid shared or legacy preference exists.
 - Auto follows an explicit host theme before the operating-system preference.
 - Light uses dark text on light surfaces.
 - Dark uses light text on dark surfaces and dark text on the brighter accent fill.
@@ -31,7 +32,7 @@ The public theme names are `auto`, `light`, `dark`, and `night`.
 
 Night styling ends at the panel root. It does not modify host chrome, the document body, or surrounding gutters. A full-surface night experience requires the host to coordinate those surfaces.
 
-Theme preference is shared across NearlCrews administration panels through `signalk-nearlcrews-ui.theme.v1`. Binnacle and other chartplotter interfaces maintain separate product preferences.
+Theme preference is shared across NearlCrews administration panels through `signalk-nearlcrews-ui.theme.v1`. Explicit selections and migrated legacy values are persisted. The implicit Light default is not persisted, and separately bundled roots share the current explicit or migrated choice in memory when storage is unavailable. A selection whose storage write fails remains current in memory for the page session but is not durable. Existing valid stored choices, including Auto, otherwise remain authoritative. Binnacle and other chartplotter interfaces maintain separate product preferences.
 
 ## Public CSS tokens
 
@@ -99,7 +100,7 @@ Consumers may override public tokens through the native `style` prop on `PanelRo
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.2.0"])
+@scope (.snui-root[data-snui-version="0.3.0"])
   to ([data-snui-version]) {
   /* component rules */
 }

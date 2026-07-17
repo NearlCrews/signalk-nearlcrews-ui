@@ -24,7 +24,7 @@ Known legacy theme storage keys are:
 | Synthetic Values         | `skn-theme`  |
 | Virtual Weather Sensors  | `svws-theme` |
 
-Emitter Cannon and Synthetic Values intentionally share `skn-theme`. Pass only the current consumer's key, for example `<PanelRoot legacyThemeStorageKeys={["cl-theme"]}>`. The shared `signalk-nearlcrews-ui.theme.v1` value always wins when valid. Otherwise, `PanelRoot` copies the first valid legacy value into the shared key and uses Auto when neither is valid.
+Emitter Cannon and Synthetic Values intentionally share `skn-theme`. Pass only the current consumer's key, for example `<PanelRoot legacyThemeStorageKeys={["cl-theme"]}>`. The shared `signalk-nearlcrews-ui.theme.v1` value always wins when valid. Otherwise, `PanelRoot` copies the first valid legacy value into the shared key and uses Light without persisting an implicit preference when neither is valid.
 
 The plugin should have a production remote-load check and at least one browser smoke test before replacing broad panel structure. Verify `typeof window.CSSScopeRule === "function"` in every supported deployment class. A passing developer-browser test does not establish support in an older kiosk or embedded WebView. Treat a failed check as an adoption blocker, retain the existing consumer UI, and update the deployment browser before migrating that consumer.
 
@@ -40,10 +40,25 @@ npm pack --ignore-scripts
 In the consumer:
 
 ```sh
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.2.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.3.0.tgz
 ```
 
 The dependency belongs in `devDependencies` because the consumer publishes compiled panel assets.
+
+## Upgrading from 0.2.x
+
+Version 0.3 changes the theme default, which is public behavior during the `0.x` series:
+
+- A panel with no valid shared or legacy preference now starts in Light instead of Auto.
+- The implicit Light default is not written to storage. An explicit Light selection is persisted normally.
+- Existing valid shared and legacy preferences remain unchanged, including Auto.
+- Values that `0.2` persisted as Auto cannot be distinguished from an explicit Auto selection, so they remain Auto after upgrading. Select Light, or clear both the shared preference and the consumer's legacy preference, when an operator wants the new default.
+- Auto remains available and continues to follow explicit host themes before the operating-system preference.
+- Separately bundled roots share explicit and migrated choices in memory when browser storage is unavailable or a write cannot be persisted.
+
+Update browser tests that assume Auto is initially selected or initially owns roving focus. Test the fresh Light default first, then select Auto explicitly before asserting host or operating-system theme following.
+
+Refresh consumer metadata that records the exact bundled dependency version, including third-party notices. Rebuild before approving any consumer bundle-size baseline; do not raise a ceiling solely to make the upgrade pass.
 
 ## Upgrading from 0.1.x
 

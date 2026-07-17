@@ -62,6 +62,27 @@ test("renders all themes and component states without axe violations", async ({
   }
 });
 
+test("uses Light for a fresh profile before host and system themes", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.addInitScript(() => {
+    window.localStorage.clear();
+    document.documentElement.dataset.bsTheme = "dark";
+  });
+  await page.goto("/");
+
+  const root = page.locator("[data-snui-version]");
+  await expect(root).toHaveAttribute("data-snui-theme", "light");
+  await expect(root).toHaveCSS("background-color", "rgb(244, 246, 248)");
+  await expect(page.getByRole("radio", { name: "Light" })).toBeChecked();
+  expect(
+    await page.evaluate(() =>
+      window.localStorage.getItem("signalk-nearlcrews-ui.theme.v1"),
+    ),
+  ).toBeNull();
+});
+
 test("persists explicit themes across reloads", async ({ page }) => {
   await page.getByRole("radio", { name: "Night" }).click();
   await expect(page.locator("[data-snui-version]")).toHaveAttribute(
@@ -76,7 +97,28 @@ test("persists explicit themes across reloads", async ({ page }) => {
   );
 });
 
+test("persists an explicit Auto preference across reloads", async ({
+  page,
+}) => {
+  await page.getByRole("radio", { name: "Auto" }).click();
+  await expect(page.locator("[data-snui-version]")).not.toHaveAttribute(
+    "data-snui-theme",
+  );
+  expect(
+    await page.evaluate(() =>
+      window.localStorage.getItem("signalk-nearlcrews-ui.theme.v1"),
+    ),
+  ).toBe("auto");
+
+  await page.reload();
+  await expect(page.getByRole("radio", { name: "Auto" })).toBeChecked();
+  await expect(page.locator("[data-snui-version]")).not.toHaveAttribute(
+    "data-snui-theme",
+  );
+});
+
 test("uses the host theme while Auto is selected", async ({ page }) => {
+  await page.getByRole("radio", { name: "Auto" }).click();
   await page.evaluate(() => {
     document.documentElement.dataset.bsTheme = "dark";
   });
@@ -90,6 +132,7 @@ test("uses the operating-system theme while Auto is selected", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "dark" });
+  await page.getByRole("radio", { name: "Auto" }).click();
   const root = page.locator("[data-snui-version]");
 
   await expect(root).not.toHaveAttribute("data-snui-theme");
@@ -123,7 +166,7 @@ test("keeps library styling inside the panel root", async ({
     nestedButton.textContent = "Nested version";
     const reentryRoot = document.createElement("div");
     reentryRoot.className = "snui-root";
-    reentryRoot.dataset.snuiVersion = "0.2.0";
+    reentryRoot.dataset.snuiVersion = "0.3.0";
     reentryRoot.dataset.snuiTheme = "night";
     const reentryButton = document.createElement("button");
     reentryButton.id = "reentry-version-button";

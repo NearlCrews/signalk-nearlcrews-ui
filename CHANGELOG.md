@@ -6,6 +6,24 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-07-17
+
+### Added
+
+- Dedicated Windows package validation and fresh-profile browser coverage for the Light default.
+- In-page theme synchronization for separately bundled roots when browser storage is unavailable.
+
+### Changed
+
+- Panels without a valid shared or legacy preference now use Light without persisting an implicit choice. Existing stored preferences, including Auto, remain unchanged.
+- Classic and ESM Module Federation fixtures now derive their required React version from the package peer dependency.
+- Updated Vite and compatible transitive development dependencies to their current patch releases.
+
+### Fixed
+
+- Package validation now invokes the declared `attw` JavaScript entry point through Node instead of launching platform-specific command shims.
+- Later-mounted panel roots no longer replace an in-memory explicit theme with the implicit fallback when storage is unavailable.
+
 ## [0.2.0] - 2026-07-15
 
 ### Added

@@ -15,6 +15,10 @@ import {
 } from "./contract.js";
 
 const THEME_CHANGE_EVENT = "signalk-nearlcrews-ui-theme-change";
+const VOLATILE_THEME_KEY = Symbol.for(THEME_CHANGE_EVENT);
+
+type StoredTheme = ThemeChoice | null | undefined;
+type VolatileTheme = ThemeChoice | readonly [ThemeChoice] | null;
 
 interface ThemeContextValue {
   readonly theme: ThemeChoice;
@@ -23,41 +27,71 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function readStorage(key: string): ThemeChoice | null {
-  if (typeof window === "undefined") return null;
+function readStorage(key: string): StoredTheme {
+  if (typeof window === "undefined") return undefined;
 
   try {
     const value = window.localStorage.getItem(key);
     return isThemeChoice(value) ? value : null;
   } catch {
-    return null;
+    return undefined;
   }
 }
 
-function readInitialTheme(legacyKeys: readonly string[]): ThemeChoice {
+function readVolatileTheme(): VolatileTheme {
+  if (typeof window === "undefined") return null;
+
+  const value = (window as unknown as Record<symbol, unknown>)[
+    VOLATILE_THEME_KEY
+  ];
+  const theme: unknown = Array.isArray(value)
+    ? (value as readonly unknown[])[0]
+    : value;
+  return isThemeChoice(theme) ? (value as Exclude<VolatileTheme, null>) : null;
+}
+
+function writeVolatileTheme(theme: ThemeChoice | null, fallback = false): void {
+  (window as unknown as Record<symbol, unknown>)[VOLATILE_THEME_KEY] = fallback
+    ? [theme]
+    : theme;
+}
+
+function resolveTheme(legacyKeys: readonly string[]): StoredTheme {
   const sharedTheme = readStorage(THEME_STORAGE_KEY);
-  if (sharedTheme !== null) return sharedTheme;
+  const volatileTheme = readVolatileTheme();
+  if (volatileTheme !== null && typeof volatileTheme !== "string") {
+    return volatileTheme[0];
+  }
+
+  if (sharedTheme) {
+    return sharedTheme;
+  }
+
+  if (sharedTheme === undefined && isThemeChoice(volatileTheme)) {
+    return volatileTheme;
+  }
 
   for (const key of legacyKeys) {
     const legacyTheme = readStorage(key);
-    if (legacyTheme !== null) return legacyTheme;
+    if (legacyTheme) {
+      return legacyTheme;
+    }
   }
 
-  return "auto";
+  return sharedTheme;
 }
 
-function writeSharedTheme(theme: ThemeChoice): void {
-  if (typeof window === "undefined") return;
-
+function writeSharedTheme(theme: ThemeChoice): boolean {
   try {
     window.localStorage.setItem(THEME_STORAGE_KEY, theme);
+    return true;
   } catch {
     // Storage can be unavailable in private or locked-down browser contexts.
+    return false;
   }
 }
 
 function broadcastTheme(theme: ThemeChoice): void {
-  if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent<ThemeChoice>(THEME_CHANGE_EVENT, { detail: theme }),
   );
@@ -87,8 +121,8 @@ export function ThemeProvider({
     () => JSON.parse(legacyStorageKeySignature) as readonly string[],
     [legacyStorageKeySignature],
   );
-  const [theme, setThemeState] = useState<ThemeChoice>(() =>
-    readInitialTheme(stableLegacyKeys),
+  const [theme, setThemeState] = useState<ThemeChoice>(
+    () => resolveTheme(stableLegacyKeys) ?? "light",
   );
 
   useEffect(() => {
@@ -99,7 +133,18 @@ export function ThemeProvider({
         setThemeState(event.detail);
         return;
       }
-      setThemeState(readStorage(THEME_STORAGE_KEY) ?? "auto");
+
+      const sharedTheme = readStorage(THEME_STORAGE_KEY);
+      if (sharedTheme === undefined) return;
+
+      if (sharedTheme === null) {
+        writeVolatileTheme(null);
+        setThemeState("light");
+        return;
+      }
+
+      writeVolatileTheme(sharedTheme);
+      setThemeState(sharedTheme);
     };
     const handleStorage = (event: StorageEvent): void => {
       if (
@@ -120,15 +165,24 @@ export function ThemeProvider({
   }, []);
 
   useEffect(() => {
-    const sharedTheme = readStorage(THEME_STORAGE_KEY);
-    const migratedTheme = sharedTheme ?? readInitialTheme(stableLegacyKeys);
+    const nextTheme = resolveTheme(stableLegacyKeys);
 
-    if (sharedTheme === null) writeSharedTheme(migratedTheme);
-    broadcastTheme(migratedTheme);
+    if (!nextTheme) {
+      writeVolatileTheme(null);
+      return;
+    }
+
+    const sharedTheme = readStorage(THEME_STORAGE_KEY);
+    if (sharedTheme === nextTheme) {
+      writeVolatileTheme(nextTheme);
+    } else if (sharedTheme === null) {
+      writeVolatileTheme(nextTheme, !writeSharedTheme(nextTheme));
+    }
+    broadcastTheme(nextTheme);
   }, [stableLegacyKeys]);
 
   const setTheme = useCallback((nextTheme: ThemeChoice): void => {
-    writeSharedTheme(nextTheme);
+    writeVolatileTheme(nextTheme, !writeSharedTheme(nextTheme));
     setThemeState(nextTheme);
     broadcastTheme(nextTheme);
   }, []);

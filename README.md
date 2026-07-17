@@ -18,6 +18,7 @@ The package is a public npm dependency for NearlCrews Signal K projects. It is n
 
 | Package | React        | JavaScript | Remote output                            | Browser verification                                      | Signal K boundary                                                              |
 | ------- | ------------ | ---------- | ---------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `0.3.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.2.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.1.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 
@@ -40,7 +41,7 @@ The repository builds real production Webpack remotes in classic global and ESM 
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.2.0
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.3.0
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball:
@@ -48,7 +49,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.2.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.3.0.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while continuing to share React with the Signal K Admin host.
@@ -182,14 +183,14 @@ An inline token override applies in every selected theme. Use it only when that 
 
 ## Theme preference
 
-The shared preference key is `signalk-nearlcrews-ui.theme.v1`. `PanelRoot` uses this order:
+The shared preference key is `signalk-nearlcrews-ui.theme.v1`. During a page session, independently bundled panel roots share the current explicit or migrated choice in memory. On first resolution, `PanelRoot` uses this order:
 
 1. Read the shared key when it contains a valid value.
 2. Otherwise, read the first valid key in `legacyThemeStorageKeys`.
 3. Copy the migrated preference to the shared key.
-4. Otherwise, use Auto.
+4. Otherwise, use Light without writing an implicit preference.
 
-Auto follows explicit Bootstrap or CoreUI host themes, legacy `.dark-mode`, and then the operating-system color preference. The Night theme uses a red-preserving palette inside the panel. It does not recolor Signal K host chrome or surrounding page gutters, so a host that needs full-surface night adaptation must coordinate those surfaces separately.
+Selecting a theme writes the shared key. If that write fails, the selection remains shared in memory for the page session but is not durable. Existing valid values, including Auto, otherwise remain authoritative. Auto follows explicit Bootstrap or CoreUI host themes, legacy `.dark-mode`, and then the operating-system color preference. The Night theme uses a red-preserving palette inside the panel. It does not recolor Signal K host chrome or surrounding page gutters, so a host that needs full-surface night adaptation must coordinate those surfaces separately.
 
 ## Package boundary
 

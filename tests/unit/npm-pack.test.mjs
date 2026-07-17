@@ -6,7 +6,7 @@ import { parseNpmPackResult, runNpmPack } from "../../scripts/lib/npm-pack.mjs";
 
 const PACKAGE_NAME = "signalk-nearlcrews-ui";
 const PACK_RESULT = {
-  filename: "signalk-nearlcrews-ui-0.2.0.tgz",
+  filename: "signalk-nearlcrews-ui-0.3.0.tgz",
   files: [{ path: "dist/index.js" }],
   size: 1024,
 };

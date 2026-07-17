@@ -1,5 +1,6 @@
 const path = require("node:path");
 const { container } = require("webpack");
+const { peerDependencies } = require("../../../package.json");
 
 const { ModuleFederationPlugin } = container;
 
@@ -50,7 +51,7 @@ module.exports = {
       shared: {
         react: {
           singleton: true,
-          requiredVersion: ">=19.0.0 <20.0.0",
+          requiredVersion: peerDependencies.react,
           import: false,
         },
       },
