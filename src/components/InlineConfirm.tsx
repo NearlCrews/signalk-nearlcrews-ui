@@ -150,7 +150,7 @@ export function InlineConfirm({
 
   return (
     // The focusable region owns Escape handling for itself and its descendants.
-    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions
+    // eslint-disable-next-line jsx-a11y-x/no-noninteractive-element-interactions
     <section
       {...props}
       ref={containerRef}
