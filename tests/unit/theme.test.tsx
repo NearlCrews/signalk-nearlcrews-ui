@@ -54,13 +54,13 @@ describe("PanelRoot themes", () => {
     const styles = document.head.querySelectorAll("style[data-snui-styles]");
     const style = styles[0];
 
-    expect(root).toHaveAttribute("data-snui-version", "0.4.0");
+    expect(root).toHaveAttribute("data-snui-version", "0.4.1");
     expect(root).toHaveAttribute("data-snui-root");
     expect(root?.querySelector("style")).toBeNull();
     expect(styles).toHaveLength(1);
     expect(style).toHaveAttribute("nonce", "fixture-nonce");
     expect(style?.textContent).toContain(
-      '.snui-root[data-snui-version="0.4.0"]',
+      '.snui-root[data-snui-version="0.4.1"]',
     );
     expect(style?.textContent).not.toMatch(/(^|[\s,{]):root([\s,{]|$)/m);
 

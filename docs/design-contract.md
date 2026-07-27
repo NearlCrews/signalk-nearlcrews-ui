@@ -101,7 +101,7 @@ Consumers may override public tokens through the native `style` prop on `PanelRo
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.4.0"])
+@scope (.snui-root[data-snui-version="0.4.1"])
   to ([data-snui-version]) {
   /* component rules */
 }

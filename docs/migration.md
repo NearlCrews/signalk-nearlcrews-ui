@@ -40,7 +40,7 @@ npm pack --ignore-scripts
 In the consumer:
 
 ```sh
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.4.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.4.1.tgz
 ```
 
 The dependency belongs in `devDependencies` because the consumer publishes compiled panel assets.

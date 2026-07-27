@@ -44,7 +44,7 @@ The repository builds real production Webpack remotes in classic global and ESM 
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.4.0
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.4.1
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball:
@@ -52,7 +52,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.4.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.4.1.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while continuing to share React with the Signal K Admin host.

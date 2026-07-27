@@ -6,7 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-07-27
+
+### Fixed
+
+- Refreshed the x64 and ubuntu24 Playwright visual baselines so release verification passes on GitHub-hosted runners. The library is unchanged from 0.4.0.
+
 ## [0.4.0] - 2026-07-27
+
+This version was tagged but not published to npm. Install 0.4.1 instead.
 
 ### Added
 
@@ -83,7 +91,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.1.0...v0.2.0
