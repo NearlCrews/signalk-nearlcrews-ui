@@ -1,10 +1,10 @@
-import { owned, scopeStyles } from "./scope.js";
+import { scopeStyles } from "./scope.js";
 
 export const FOUNDATION_STYLES = scopeStyles(`
 :scope,
-${owned("*")},
-${owned("*::before")},
-${owned("*::after")} {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
@@ -21,7 +21,7 @@ ${owned("*::after")} {
   container-type: inline-size;
 }
 
-${owned(".snui-root__content")} {
+.snui-root__content {
   min-width: 0;
   padding: var(--snui-space-4);
 }
@@ -34,14 +34,14 @@ ${owned(".snui-root__content")} {
   max-width: var(--snui-content-width-wide);
 }
 
-${owned("button")},
-${owned("input")},
-${owned("select")},
-${owned("textarea")} {
+button,
+input,
+select,
+textarea {
   font: inherit;
 }
 
-${owned("a:any-link")} {
+a:any-link {
   color: var(--snui-color-link);
   text-decoration-line: underline;
   text-decoration-thickness: 0.08em;
@@ -49,34 +49,34 @@ ${owned("a:any-link")} {
   overflow-wrap: anywhere;
 }
 
-${owned("a:visited")} {
+a:visited {
   color: var(--snui-color-link-visited);
 }
 
-${owned("a:any-link:hover")} {
+a:any-link:hover {
   color: var(--snui-color-link-hover);
   text-decoration-thickness: 0.14em;
 }
 
-${owned("button")},
-${owned("summary")},
-${owned('input[type="checkbox"]')},
-${owned('input[type="range"]')} {
+button,
+summary,
+input[type="checkbox"],
+input[type="range"] {
   touch-action: manipulation;
 }
 
-${owned(":focus-visible")} {
+:focus-visible {
   outline: 2px solid var(--snui-color-focus);
   outline-offset: 2px;
   box-shadow: var(--snui-focus-ring);
 }
 
-${owned("[disabled]")},
-${owned('[aria-disabled="true"]')} {
+[disabled],
+[aria-disabled="true"] {
   cursor: not-allowed;
 }
 
-${owned(".snui-visually-hidden")} {
+.snui-visually-hidden {
   position: absolute !important;
   width: 1px !important;
   height: 1px !important;
@@ -89,16 +89,16 @@ ${owned(".snui-visually-hidden")} {
 }
 
 @container snui-panel (max-width: 37.5rem) {
-  ${owned(".snui-root__content")} {
+  .snui-root__content {
     padding: var(--snui-space-3);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   :scope,
-  ${owned("*")},
-  ${owned("*::before")},
-  ${owned("*::after")} {
+  *,
+  *::before,
+  *::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;

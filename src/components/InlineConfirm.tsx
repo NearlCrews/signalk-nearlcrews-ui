@@ -55,7 +55,7 @@ export function InlineConfirm({
   const containerRef = useRef<HTMLElement>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const focusIsInside = useRef(false);
-  const wasOpen = useRef(false);
+  const busyRef = useRef(busy);
   const wasBusy = useRef(busy);
   const effectiveTitle = hasReactContent(title)
     ? title
@@ -76,6 +76,10 @@ export function InlineConfirm({
   );
 
   useEffect(() => {
+    busyRef.current = busy;
+  });
+
+  useEffect(() => {
     if (!open) return undefined;
 
     const activeElement = containerRef.current?.ownerDocument.activeElement;
@@ -86,7 +90,10 @@ export function InlineConfirm({
         ? (activeElement as HTMLElement)
         : null;
     return () => {
-      if (previousFocus.current?.isConnected === true) {
+      if (
+        focusIsInside.current &&
+        previousFocus.current?.isConnected === true
+      ) {
         previousFocus.current.focus();
       }
       previousFocus.current = null;
@@ -113,27 +120,30 @@ export function InlineConfirm({
   }, [open]);
 
   useEffect(() => {
+    if (!open) return;
+
+    if (busyRef.current) containerRef.current?.focus();
+    else cancelRef.current?.focus();
+    wasBusy.current = busyRef.current;
+  }, [open]);
+
+  useEffect(() => {
     if (!open) {
-      wasOpen.current = false;
       wasBusy.current = busy;
       return;
     }
+    if (busy === wasBusy.current) return;
 
     const container = containerRef.current;
     const activeElement = container?.ownerDocument.activeElement ?? null;
-    const shouldMoveFocus =
-      !wasOpen.current ||
-      (busy !== wasBusy.current &&
-        (focusIsInside.current ||
-          (activeElement !== null &&
-            container?.contains(activeElement) === true)));
+    const focusWithin =
+      focusIsInside.current ||
+      (activeElement !== null && container?.contains(activeElement) === true);
 
-    if (shouldMoveFocus) {
+    if (focusWithin) {
       if (busy) container?.focus();
       else cancelRef.current?.focus();
     }
-
-    wasOpen.current = true;
     wasBusy.current = busy;
   }, [busy, open]);
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   DARK_TOKENS,
+  HOVER_RAISED_TOKENS,
   LIGHT_TOKENS,
   NIGHT_TOKENS,
   PUBLIC_FOUNDATION_TOKEN_NAMES,
@@ -31,13 +32,14 @@ function contrastRatio(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-const themeCases: readonly [string, ThemeTokenSet][] = [
-  ["light", LIGHT_TOKENS],
-  ["dark", DARK_TOKENS],
-  ["night", NIGHT_TOKENS],
-];
+const themeCases: readonly [keyof typeof HOVER_RAISED_TOKENS, ThemeTokenSet][] =
+  [
+    ["light", LIGHT_TOKENS],
+    ["dark", DARK_TOKENS],
+    ["night", NIGHT_TOKENS],
+  ];
 
-describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
+describe.each(themeCases)("%s theme contrast", (name, tokens) => {
   it("keeps primary and muted text above WCAG AA", () => {
     for (const surface of [
       tokens["--snui-color-background"],
@@ -135,6 +137,22 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
         contrastRatio(tokens["--snui-color-accent-fill"], surface),
       ).toBeGreaterThanOrEqual(3);
     }
+  });
+
+  it("keeps hover fills readable and visibly distinct", () => {
+    const hoverRaised = HOVER_RAISED_TOKENS[name];
+    expect(
+      contrastRatio(tokens["--snui-color-text"], hoverRaised),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(hoverRaised, tokens["--snui-color-surface-raised"]),
+    ).toBeGreaterThanOrEqual(1.05);
+    expect(
+      contrastRatio(
+        tokens["--snui-color-interactive-hover"],
+        tokens["--snui-color-surface"],
+      ),
+    ).toBeGreaterThanOrEqual(1.05);
   });
 });
 

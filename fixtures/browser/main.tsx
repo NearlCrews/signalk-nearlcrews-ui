@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useRef, useState } from "react";
+import { StrictMode, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import {
@@ -47,14 +47,7 @@ function Fixture(): React.JSX.Element {
   const [logLevel, setLogLevel] = useState<LogLevel>("normal");
   const [noticeVisible, setNoticeVisible] = useState(true);
   const [statusOpen, setStatusOpen] = useState(false);
-  const indeterminateRef = useRef<HTMLInputElement>(null);
   const saveRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (indeterminateRef.current !== null) {
-      indeterminateRef.current.indeterminate = true;
-    }
-  }, []);
 
   return (
     <PanelRoot legacyThemeStorageKeys={["fixture-theme"]}>
@@ -217,10 +210,7 @@ function Fixture(): React.JSX.Element {
               />
               <Checkbox label="Unavailable option" disabled />
               <Checkbox label="Optional diagnostics" />
-              <Checkbox
-                ref={indeterminateRef}
-                label="Partially configured option"
-              />
+              <Checkbox indeterminate label="Partially configured option" />
               <Card>
                 <Cluster gap={2}>
                   <Button disabled>Disabled</Button>

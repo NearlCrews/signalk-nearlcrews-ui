@@ -84,6 +84,159 @@ describe("form primitives", () => {
     );
   });
 
+  it("reflects and updates the indeterminate checkbox state", () => {
+    const checkboxRef = createRef<HTMLInputElement>();
+    const { rerender } = render(
+      <PanelRoot>
+        <Checkbox ref={checkboxRef} label="Enable provider" indeterminate />
+      </PanelRoot>,
+    );
+
+    const checkbox = screen.getByRole("checkbox", { name: "Enable provider" });
+    expect(checkbox).toBePartiallyChecked();
+    expect(checkboxRef.current).toBe(checkbox);
+
+    rerender(
+      <PanelRoot>
+        <Checkbox
+          ref={checkboxRef}
+          label="Enable provider"
+          indeterminate={false}
+        />
+      </PanelRoot>,
+    );
+    expect(checkbox).not.toBePartiallyChecked();
+  });
+
+  it("re-asserts a held indeterminate state after user interaction", async () => {
+    const user = userEvent.setup();
+
+    function Harness(): React.JSX.Element {
+      const [checked, setChecked] = useState(false);
+      return (
+        <PanelRoot>
+          <Checkbox
+            label="Partially enabled"
+            indeterminate
+            checked={checked}
+            onChange={(event) => setChecked(event.currentTarget.checked)}
+          />
+        </PanelRoot>
+      );
+    }
+
+    render(<Harness />);
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Partially enabled",
+    });
+    expect(checkbox).toBePartiallyChecked();
+
+    await user.click(checkbox);
+    expect(checkbox).toBeChecked();
+    expect(checkbox).toBePartiallyChecked();
+  });
+
+  it("accepts date and time text input types", () => {
+    render(
+      <PanelRoot>
+        <LabeledField label="Maintenance date">
+          <TextInput type="date" />
+        </LabeledField>
+        <LabeledField label="Maintenance time">
+          <TextInput type="time" />
+        </LabeledField>
+      </PanelRoot>,
+    );
+
+    expect(screen.getByLabelText("Maintenance date")).toHaveAttribute(
+      "type",
+      "date",
+    );
+    expect(screen.getByLabelText("Maintenance time")).toHaveAttribute(
+      "type",
+      "time",
+    );
+  });
+
+  it("tracks the filled range progress across input and prop updates", () => {
+    const rangeRef = createRef<HTMLInputElement>();
+    const { rerender } = render(
+      <PanelRoot>
+        <RangeInput
+          ref={rangeRef}
+          aria-label="Depth alarm"
+          min={0}
+          max={200}
+          defaultValue={50}
+        />
+      </PanelRoot>,
+    );
+
+    const range = screen.getByRole("slider", { name: "Depth alarm" });
+    expect(rangeRef.current).toBe(range);
+    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("25%");
+
+    fireEvent.input(range, { target: { value: "150" } });
+    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("75%");
+
+    rerender(
+      <PanelRoot>
+        <RangeInput
+          ref={rangeRef}
+          aria-label="Depth alarm"
+          min={0}
+          max={100}
+          value={80}
+          onChange={() => undefined}
+        />
+      </PanelRoot>,
+    );
+    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("80%");
+  });
+
+  it("fills range progress from browser defaults and guards invalid bounds", () => {
+    render(
+      <PanelRoot>
+        <RangeInput aria-label="Volume" defaultValue={50} />
+        <RangeInput
+          aria-label="Broken bounds"
+          min="low"
+          max="high"
+          defaultValue={5}
+        />
+      </PanelRoot>,
+    );
+
+    const volume = screen.getByRole("slider", { name: "Volume" });
+    expect(volume.style.getPropertyValue("--snui-range-progress")).toBe("50%");
+
+    const broken = screen.getByRole("slider", { name: "Broken bounds" });
+    expect(broken.style.getPropertyValue("--snui-range-progress")).toBe("0%");
+  });
+
+  it("restores range progress when a controlled owner rejects input", async () => {
+    render(
+      <PanelRoot>
+        <RangeInput
+          aria-label="Locked threshold"
+          min={0}
+          max={200}
+          value={50}
+          onChange={() => undefined}
+        />
+      </PanelRoot>,
+    );
+
+    const range = screen.getByRole("slider", { name: "Locked threshold" });
+    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("25%");
+
+    fireEvent.input(range, { target: { value: "150" } });
+    await waitFor(() =>
+      expect(range.style.getPropertyValue("--snui-range-progress")).toBe("25%"),
+    );
+    expect(range).toHaveValue("50");
+  });
+
   it("associates checkbox errors without announcing persistent validation", () => {
     render(
       <PanelRoot>
@@ -1071,6 +1224,37 @@ describe("buttons and confirmation", () => {
       <PanelRoot>
         <Button>Outside action</Button>
         <InlineConfirm {...props} open busy />
+      </PanelRoot>,
+    );
+
+    expect(outsideAction).toHaveFocus();
+  });
+
+  it("leaves focus in place when dismissed after focus moved away", async () => {
+    const user = userEvent.setup();
+    const props = {
+      message: "Resetting.",
+      onCancel: vi.fn(),
+      onConfirm: vi.fn(),
+    } as const;
+    const { rerender } = render(
+      <PanelRoot>
+        <Button>Outside action</Button>
+        <InlineConfirm {...props} open />
+      </PanelRoot>,
+    );
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    const outsideAction = screen.getByRole("button", {
+      name: "Outside action",
+    });
+    await user.click(outsideAction);
+    expect(outsideAction).toHaveFocus();
+
+    rerender(
+      <PanelRoot>
+        <Button>Outside action</Button>
+        <InlineConfirm {...props} open={false} />
       </PanelRoot>,
     );
 

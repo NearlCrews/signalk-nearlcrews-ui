@@ -4,7 +4,11 @@ import {
   type ReactNode,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
+  useCallback,
   useId,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
 } from "react";
 import {
   type AnnouncementMode,
@@ -15,11 +19,14 @@ import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
 
 export type TextInputType =
+  | "date"
+  | "datetime-local"
   | "email"
   | "password"
   | "search"
   | "tel"
   | "text"
+  | "time"
   | "url";
 
 export type TextInputProps = Omit<
@@ -65,14 +72,51 @@ export type RangeInputProps = Omit<
   "type"
 >;
 
+function setRangeProgress(element: HTMLInputElement): void {
+  const minimum = Number(element.min || "0");
+  const maximum = Number(element.max || "100");
+  const span = maximum - minimum;
+  const ratio = span > 0 ? (Number(element.value) - minimum) / span : 0;
+  const percent = Math.min(Math.max(ratio * 100, 0), 100);
+  const safePercent = Number.isFinite(percent) ? percent : 0;
+  element.style.setProperty("--snui-range-progress", `${String(safePercent)}%`);
+}
+
 export const RangeInput = forwardRef<HTMLInputElement, RangeInputProps>(
-  function RangeInput({ className, ...props }, ref) {
+  function RangeInput({ className, onInput, ...props }, ref) {
+    const inputElement = useRef<HTMLInputElement | null>(null);
+
+    useImperativeHandle(ref, () => {
+      if (inputElement.current === null) {
+        throw new Error("RangeInput could not resolve its input element.");
+      }
+      return inputElement.current;
+    }, []);
+
+    const attachInput = useCallback((node: HTMLInputElement | null): void => {
+      inputElement.current = node;
+      if (node !== null) setRangeProgress(node);
+    }, []);
+
+    useLayoutEffect(() => {
+      if (inputElement.current !== null) setRangeProgress(inputElement.current);
+    });
+
     return (
       <input
         {...props}
-        ref={ref}
+        ref={attachInput}
         type="range"
         className={classNames("snui-range", className)}
+        onInput={(event) => {
+          const element = event.currentTarget;
+          setRangeProgress(element);
+          onInput?.(event);
+          // Re-sync after React restores a rejected controlled value.
+          queueMicrotask(() => {
+            if (element.isConnected) setRangeProgress(element);
+          });
+        }}
       />
     );
   },
@@ -111,6 +155,7 @@ export interface CheckboxProps
   readonly description?: ReactNode;
   readonly error?: ReactNode;
   readonly errorLive?: CheckboxErrorLive;
+  readonly indeterminate?: boolean;
   readonly label: ReactNode;
 }
 
@@ -128,6 +173,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
       error,
       errorLive = "off",
       id,
+      indeterminate,
       label,
       required,
       ...props
@@ -137,6 +183,21 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
     if (!hasReactContent(label)) {
       throw new Error("Checkbox requires a non-empty label.");
     }
+
+    const inputElement = useRef<HTMLInputElement | null>(null);
+
+    useImperativeHandle(ref, () => {
+      if (inputElement.current === null) {
+        throw new Error("Checkbox could not resolve its input element.");
+      }
+      return inputElement.current;
+    }, []);
+
+    useLayoutEffect(() => {
+      if (indeterminate !== undefined && inputElement.current !== null) {
+        inputElement.current.indeterminate = indeterminate;
+      }
+    });
 
     const generatedId = useId();
     const controlId = id ?? generatedId;
@@ -161,7 +222,7 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(
       >
         <input
           {...props}
-          ref={ref}
+          ref={inputElement}
           id={controlId}
           type="checkbox"
           className="snui-checkbox__input"

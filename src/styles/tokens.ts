@@ -68,10 +68,10 @@ export const NIGHT_TOKENS: ThemeTokenSet = {
   "--snui-color-background": "#050000",
   "--snui-color-surface": "#100000",
   "--snui-color-surface-raised": "#190000",
-  "--snui-color-interactive-hover": "#260000",
+  "--snui-color-interactive-hover": "#330000",
   "--snui-color-text": "#ff7878",
-  "--snui-color-text-muted": "#d05252",
-  "--snui-color-border": "#a63d3d",
+  "--snui-color-text-muted": "#d75b5b",
+  "--snui-color-border": "#ad4040",
   "--snui-color-accent-fill": "#e54848",
   "--snui-color-accent-fill-hover": "#ff5a5a",
   "--snui-color-on-accent": "#190000",
@@ -91,9 +91,21 @@ function renderTokenBlock(tokens: ThemeTokenSet): string {
     .join("\n");
 }
 
-const LIGHT_BLOCK = renderTokenBlock(LIGHT_TOKENS);
-const DARK_BLOCK = renderTokenBlock(DARK_TOKENS);
-const NIGHT_BLOCK = renderTokenBlock(NIGHT_TOKENS);
+/** Private hover fill for controls resting on raised surfaces. */
+export const HOVER_RAISED_TOKENS: Readonly<
+  Record<"light" | "dark" | "night", string>
+> = {
+  light: "#eef2f7",
+  dark: "#313847",
+  night: "#3d0a0a",
+};
+
+const LIGHT_BLOCK = `${renderTokenBlock(LIGHT_TOKENS)}
+  --snui-color-hover-raised: ${HOVER_RAISED_TOKENS.light};`;
+const DARK_BLOCK = `${renderTokenBlock(DARK_TOKENS)}
+  --snui-color-hover-raised: ${HOVER_RAISED_TOKENS.dark};`;
+const NIGHT_BLOCK = `${renderTokenBlock(NIGHT_TOKENS)}
+  --snui-color-hover-raised: ${HOVER_RAISED_TOKENS.night};`;
 
 export const PUBLIC_FOUNDATION_TOKEN_NAMES = [
   "--snui-font-family",
