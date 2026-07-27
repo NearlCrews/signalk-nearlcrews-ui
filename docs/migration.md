@@ -7,7 +7,7 @@ Migrate one plugin at a time. Do not combine adoption with a domain refactor or 
 Record:
 
 - The production panel bundle size and gzip size
-- Light, dark, and night screenshots
+- Light, Dark, and Night screenshots
 - The current theme storage key
 - A 320-pixel layout result
 - The existing save, validation, and provider workflows
@@ -40,7 +40,7 @@ npm pack --ignore-scripts
 In the consumer:
 
 ```sh
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.3.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.4.0.tgz
 ```
 
 The dependency belongs in `devDependencies` because the consumer publishes compiled panel assets.

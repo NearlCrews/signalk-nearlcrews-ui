@@ -18,6 +18,7 @@ The package is a public npm dependency for NearlCrews Signal K projects. It is n
 
 | Package | React        | JavaScript | Remote output                            | Browser verification                                      | Signal K boundary                                                              |
 | ------- | ------------ | ---------- | ---------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `0.4.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.3.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.2.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.1.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
@@ -28,7 +29,9 @@ The package is a public npm dependency for NearlCrews Signal K projects. It is n
 - Chromium or Edge 118 or newer, Firefox 146 or newer, or Safari 17.4 or newer
 - A consumer build that bundles this package into its configuration-panel remote
 
-The browser floors come from native CSS `@scope`, which became available in Chromium and Edge 118, Firefox 146, and Safari 17.4. `PanelRoot` throws a clear compatibility error when `CSSScopeRule` is unavailable instead of silently rendering unstyled controls. Signal K installations that embed an older browser engine must update that engine before adopting this package.
+The browser floors come from native CSS `@scope`, which became available in Chromium and Edge 118, Firefox 146, and Safari 17.4. `PanelRoot` throws a clear compatibility error when `CSSScopeRule` is unavailable instead of silently rendering unstyled controls. Signal K installations that embed an older browser engine must update that engine before adopting this package. Right-to-left caret mirroring, select indicator placement, and the range fill direction additionally use `:dir()`, which Chromium added in 120; Chromium and Edge 118 and 119 skip those cosmetic rules while everything else renders correctly.
+
+The package renders in the browser only. Theme resolution reads `window` interfaces such as `localStorage` while mounting, so the components are not intended for server-side rendering.
 
 Consumers that need to choose a fallback before rendering may call `supportsNativeCssScope(window)`. A failed `PanelRoot` installation throws the exported `UnsupportedBrowserError`, whose `feature` property is `CSS @scope`. The package does not ship an unscoped fallback because that would weaken style isolation between independently bundled panels.
 
@@ -41,7 +44,7 @@ The repository builds real production Webpack remotes in classic global and ESM 
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.3.0
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.4.0
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball:
@@ -49,7 +52,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.3.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.4.0.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while continuing to share React with the Signal K Admin host.
@@ -105,7 +108,7 @@ The host must supply the nonce through its own trusted bootstrap. Do not read it
 - `ThemeToggle` selects Auto, Light, Dark, or Night and accepts per-instance labels for localization.
 - `Button` supplies primary, secondary, ghost, and danger presentation, plus compact and pill options. `ariaDisabled` keeps a control focusable while suppressing activation at a list boundary. A loading button uses the same focus-preserving behavior and accepts `loadingLabel` for its accessible state name.
 - `SegmentedControl` implements a single-choice radio group with roving focus, Home, End, and direction-aware arrow keys.
-- `LabeledField`, `InputGroup`, `InputGroupControl`, `InputGroupAddon`, `TextInput`, `NumberInput`, `RangeInput`, `Select`, `Textarea`, and `Checkbox` provide accessible form structure. Render-prop fields identify the primary labeled control while allowing paired inputs, unit suffixes, and adjacent actions. Fields and checkboxes accept validation messages and opt-in live announcement modes.
+- `LabeledField`, `InputGroup`, `InputGroupControl`, `InputGroupAddon`, `TextInput`, `NumberInput`, `RangeInput`, `Select`, `Textarea`, and `Checkbox` provide accessible form structure. Render-prop fields identify the primary labeled control while allowing paired inputs, unit suffixes, and adjacent actions. Fields and checkboxes accept validation messages and opt-in live announcement modes. `TextInput` covers text, email, password, search, tel, url, date, time, and datetime-local entry. `Checkbox` drives the native mixed state through `indeterminate`, and `RangeInput` shows a filled progress track in every supported engine.
 - `FieldGroup` provides a native fieldset and legend with description, action, and disabled support.
 - `Section`, `Disclosure`, and `CollapsibleSection` provide semantic content grouping. `CollapsibleSection` supports controlled or uncontrolled state, heading navigation, below-content or header-trailing collapsed summaries, sibling actions, retained, lazily retained, or unmounted content, and focus restoration.
 - `Banner` and `StatusIndicator` provide text-backed feedback that does not rely on color alone. Banners accept actions, dismissal, a post-dismissal focus destination, localized severity text, and consumer-selected roles such as `note`.

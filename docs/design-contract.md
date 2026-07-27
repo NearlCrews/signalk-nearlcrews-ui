@@ -88,6 +88,7 @@ Consumers may override public tokens through the native `style` prop on `PanelRo
 - Collapsible sections expose a named region and real heading, keep header summaries and actions outside the toggle, restore focus when focused content closes, and preserve the `aria-controls` target while collapsed.
 - Persistent banners are not live regions unless the consumer explicitly requests polite or assertive announcements.
 - Persistent field and checkbox errors default to `aria-live="off"`. Consumers opt in to polite or assertive announcements when validation changes after an interaction.
+- Checkboxes expose the native mixed state through `indeterminate`, and platform interaction clears the mixed state as usual. Range inputs show a filled progress track alongside their thumb position.
 - Loading buttons remain focusable, expose busy and disabled accessibility states, and suppress repeat pointer and keyboard activation.
 - Confirmation regions receive focus, support Escape while idle, and restore focus when dismissed.
 - `ariaDisabled` buttons remain focusable, suppress pointer and keyboard activation, and use disabled presentation.
@@ -100,7 +101,7 @@ Consumers may override public tokens through the native `style` prop on `PanelRo
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.3.0"])
+@scope (.snui-root[data-snui-version="0.4.0"])
   to ([data-snui-version]) {
   /* component rules */
 }
@@ -118,6 +119,7 @@ Desktop controls have a compact 40-pixel minimum height. A device with any coars
 
 - React support is `>=19.2 <20` for `0.x`.
 - Native CSS `@scope` sets the browser floors: Chromium and Edge 118, Firefox 146, and Safari 17.4. `supportsNativeCssScope` lets consumers check support before rendering, and unsupported engines receive `UnsupportedBrowserError` before style installation. No unscoped fallback is provided. Consumer adoption is blocked until every supported kiosk and embedded WebView deployment meets that floor.
+- Right-to-left caret mirroring and select indicator placement use `:dir()`, which Chromium added in 120. On Chromium and Edge 118 and 119 those cosmetic rules, including the range fill direction, are skipped while layout, keyboard direction handling, and all other styling remain correct.
 - React and `react/jsx-runtime` remain external to the unbundled library build. Consumer remotes may embed React's small JSX element-construction helper. React itself must resolve through the host singleton, and React or React DOM implementations must never be embedded.
 - Consumers bundle this package into each Module Federation remote.
 - Consumers must not share this package dynamically between remotes.
