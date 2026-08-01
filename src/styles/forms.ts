@@ -1,3 +1,4 @@
+import { FIELD_ERROR_DECLARATIONS } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
@@ -143,11 +144,7 @@ export const FORM_STYLES = scopeStyles(`
 }
 
 .snui-field-group__error {
-  min-width: 0;
-  color: var(--snui-color-danger);
-  font-size: var(--snui-font-size-sm);
-  font-weight: var(--snui-font-weight-medium);
-  overflow-wrap: anywhere;
+${FIELD_ERROR_DECLARATIONS}
 }
 
 .snui-field-group:disabled > .snui-field-group__legend,

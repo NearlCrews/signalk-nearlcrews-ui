@@ -18,7 +18,20 @@ export function attachRef<T>(
 }
 
 /** Detaches a caller-supplied ref that did not provide its own cleanup. */
-export function detachRef<T>(ref: Ref<T> | undefined): void {
+function detachRef<T>(ref: Ref<T> | undefined): void {
   if (typeof ref === "function") ref(null);
   else if (ref !== null && ref !== undefined) ref.current = null;
+}
+
+/**
+ * Attaches a caller-supplied ref and returns the one cleanup that releases it,
+ * preferring the callback ref's own cleanup when it opted into React 19 ref
+ * cleanup. Use this wherever a component owns the node for a whole mount.
+ */
+export function composeRef<T>(ref: Ref<T> | undefined, node: T): () => void {
+  const release = attachRef(ref, node);
+  return () => {
+    if (release !== undefined) release();
+    else detachRef(ref);
+  };
 }

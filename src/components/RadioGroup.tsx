@@ -13,13 +13,12 @@ import {
   RadioField,
   Text,
 } from "react-aria-components";
-import {
-  type AnnouncementMode,
-  announcementRole,
-} from "../utils/announcement.js";
+import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { resolveFieldError } from "../utils/field-error.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { FieldError } from "./FieldError.js";
 
 export type RadioGroupOrientation = "horizontal" | "vertical";
 export type RadioGroupErrorLive = AnnouncementMode;
@@ -58,19 +57,16 @@ export function RadioGroup({
   value,
   ...props
 }: RadioGroupProps): React.JSX.Element {
-  if (!hasReactContent(label)) {
-    throw new Error("RadioGroup requires a non-empty label.");
-  }
+  requireContent(label, "RadioGroup requires a non-empty label.");
 
   const generatedId = useId();
   const hasDescription = hasReactContent(description);
   const hasError = hasReactContent(error);
-  // A live region must exist before its content arrives, so the container is
-  // mounted whenever announcements are requested and only its text varies.
-  const announcesErrors = errorLive !== "off";
-  const rendersError = hasError || announcesErrors;
-  const errorId = rendersError ? `${generatedId}-error` : undefined;
-  const referencedErrorId = hasError ? errorId : undefined;
+  const { errorId, referencedErrorId, rendersError } = resolveFieldError(
+    generatedId,
+    hasError,
+    errorLive,
+  );
   const describedBy = joinIdReferences(ariaDescribedBy, referencedErrorId);
   // react-aria's optional DOM props are not declared with `| undefined`,
   // which makes the target unexpressible for a React HTMLAttributes spread
@@ -105,14 +101,13 @@ export function RadioGroup({
       ) : null}
       <div className="snui-radio-group__options">{children}</div>
       {rendersError ? (
-        <div
-          id={errorId}
+        <FieldError
           className="snui-radio-group__error"
-          role={announcementRole(errorLive)}
-          aria-live={errorLive}
-        >
-          {hasError ? error : null}
-        </div>
+          error={error}
+          hasError={hasError}
+          id={errorId}
+          live={errorLive}
+        />
       ) : null}
     </RACRadioGroup>
   );
@@ -134,9 +129,7 @@ export function Radio({
   value,
   ...props
 }: RadioProps): React.JSX.Element {
-  if (!hasReactContent(children)) {
-    throw new Error("Radio requires a non-empty label.");
-  }
+  requireContent(children, "Radio requires a non-empty label.");
 
   // See RadioGroup for why the DOM prop spread needs a boundary assertion.
   const domProps = props as RACRadioFieldProps;

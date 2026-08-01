@@ -1,4 +1,5 @@
 import { scopeStyles } from "./scope.js";
+import { DATA_GRID_ROW_HEIGHTS, remLength } from "./tokens.js";
 
 export const TABLE_STYLES = scopeStyles(`
 .snui-data-grid {
@@ -158,11 +159,11 @@ export const TABLE_STYLES = scopeStyles(`
   inset-inline-start: 0;
   display: flex;
   width: 100%;
-  height: 2.75rem;
+  height: ${remLength(DATA_GRID_ROW_HEIGHTS.default)};
 }
 
 .snui-data-grid--compact.snui-data-grid--virtualized .snui-data-grid__row {
-  height: 2rem;
+  height: ${remLength(DATA_GRID_ROW_HEIGHTS.compact)};
 }
 
 .snui-data-grid--virtualized .snui-data-grid__row td {

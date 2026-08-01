@@ -119,6 +119,21 @@ ${NIGHT_SHADOW_BLOCK}`;
 /** Inline-size breakpoint below which panels switch to their narrow layout. */
 export const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
 
+/**
+ * Fixed data-grid row heights in pixels, per density. Virtualized rows are
+ * absolutely positioned by pixel offset, so the CSS rule and the virtualizer's
+ * size estimate have to agree; both read these numbers.
+ */
+export const DATA_GRID_ROW_HEIGHTS = {
+  compact: 32,
+  default: 44,
+} as const;
+
+/** Renders a pixel height as the rem length the stylesheet uses. */
+export function remLength(pixels: number): string {
+  return `${String(pixels / 16)}rem`;
+}
+
 export const PUBLIC_FOUNDATION_TOKEN_NAMES = [
   "--snui-font-family",
   "--snui-font-size",

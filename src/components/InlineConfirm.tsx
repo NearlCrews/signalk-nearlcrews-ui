@@ -14,8 +14,9 @@ import {
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
+import { prefersReducedMotion } from "../utils/motion.js";
 import { hasReactContent } from "../utils/react-node.js";
-import { attachRef, detachRef } from "../utils/ref.js";
+import { composeRef } from "../utils/ref.js";
 import { Button, type ButtonVariant } from "./Button.js";
 
 export type InlineConfirmCancelReason = "cancel" | "escape";
@@ -71,7 +72,6 @@ export function InlineConfirm({
 }: InlineConfirmProps): React.JSX.Element | null {
   const titleId = useId();
   const messageId = useId();
-  const cancelRef = useRef<HTMLButtonElement>(null);
   const containerRef = useRef<HTMLElement | null>(null);
   const previousFocus = useRef<HTMLElement | null>(null);
   const focusIsInside = useRef(false);
@@ -95,11 +95,10 @@ export function InlineConfirm({
   const attachContainer = useCallback(
     (node: HTMLElement): (() => void) => {
       containerRef.current = node;
-      const releaseRef = attachRef(ref, node);
+      const releaseRef = composeRef(ref, node);
       return () => {
         containerRef.current = null;
-        if (releaseRef !== undefined) releaseRef();
-        else detachRef(ref);
+        releaseRef();
       };
     },
     [ref],
@@ -159,14 +158,11 @@ export function InlineConfirm({
 
     // Keep the confirmation on screen before moving focus into it. Reduced
     // motion users get an instant jump instead of a smooth scroll. jsdom does
-    // not implement matchMedia or scrollIntoView, so both are feature
-    // detected rather than assumed.
-    const ownerWindow = container.ownerDocument.defaultView as {
-      matchMedia?: (query: string) => { matches: boolean } | undefined;
-    } | null;
-    const reduceMotion =
-      ownerWindow?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ===
-      true;
+    // not implement scrollIntoView, so it is feature detected rather than
+    // assumed.
+    const reduceMotion = prefersReducedMotion(
+      container.ownerDocument.defaultView,
+    );
     const scrollable = container as {
       scrollIntoView?: (options: ScrollIntoViewOptions) => void;
     };
@@ -230,7 +226,6 @@ export function InlineConfirm({
       </div>
       <div className="snui-inline-confirm__actions">
         <Button
-          ref={cancelRef}
           variant={cancelVariant}
           ariaDisabled={busy}
           onClick={() => cancel("cancel")}

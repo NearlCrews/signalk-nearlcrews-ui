@@ -5,7 +5,7 @@ import {
   SwitchField,
 } from "react-aria-components";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { requireContent } from "../utils/react-node.js";
 
 export interface SwitchProps
   extends Omit<
@@ -34,14 +34,9 @@ export function Switch({
   ref,
   ...props
 }: SwitchProps): React.JSX.Element {
-  if (!hasReactContent(children)) {
-    throw new Error("Switch requires a non-empty label.");
-  }
+  requireContent(children, "Switch requires a non-empty label.");
 
-  // react-aria's optional DOM props are not declared with `| undefined`,
-  // which makes the target unexpressible for a React HTMLAttributes spread
-  // under exactOptionalPropertyTypes. The rest props are plain DOM
-  // attributes, so this boundary assertion is sound.
+  // See RadioGroup for why the DOM prop spread needs a boundary assertion.
   const domProps = props as RACSwitchFieldProps;
 
   return (

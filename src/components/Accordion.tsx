@@ -3,7 +3,6 @@ import {
   cloneElement,
   type HTMLAttributes,
   isValidElement,
-  type ReactElement,
   type ReactNode,
   useState,
 } from "react";
@@ -28,34 +27,34 @@ export function Accordion({
   className,
   ...props
 }: AccordionProps): React.JSX.Element {
-  const sections = Children.toArray(children);
-  for (const child of sections) {
-    if (!isValidElement(child) || child.type !== CollapsibleSection) {
+  const sections = Children.toArray(children).map((child) => {
+    if (
+      !isValidElement<CollapsibleSectionProps>(child) ||
+      child.type !== CollapsibleSection
+    ) {
       throw new Error("Accordion accepts only CollapsibleSection children.");
     }
-  }
+    return child;
+  });
 
   const [openIndex, setOpenIndex] = useState<number | null>(() => {
     const initial = sections.findIndex(
-      (child) =>
-        (child as ReactElement<CollapsibleSectionProps>).props.defaultOpen ===
-        true,
+      (section) => section.props.defaultOpen === true,
     );
     return initial === -1 ? null : initial;
   });
 
   return (
     <div {...props} className={classNames("snui-accordion", className)}>
-      {sections.map((child, index) => {
-        const section = child as ReactElement<CollapsibleSectionProps>;
-        return cloneElement(section, {
+      {sections.map((section, index) =>
+        cloneElement(section, {
           open: openIndex === index,
           onOpenChange: (nextOpen: boolean): void => {
             section.props.onOpenChange?.(nextOpen);
             setOpenIndex(nextOpen ? index : null);
           },
-        });
-      })}
+        }),
+      )}
     </div>
   );
 }

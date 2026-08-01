@@ -2,10 +2,14 @@ import type { HTMLAttributes, ReactNode } from "react";
 
 import {
   type AnnouncementMode,
-  announcementRole,
+  liveRegionProps,
 } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
-import { isSemanticTone, type StatusTone, TONE_LABELS } from "../utils/tone.js";
+import {
+  isSemanticTone,
+  resolveToneLabel,
+  type StatusTone,
+} from "../utils/tone.js";
 
 export type { StatusTone };
 
@@ -25,23 +29,21 @@ export function StatusIndicator({
   toneLabel,
   ...props
 }: StatusIndicatorProps): React.JSX.Element {
-  const effectiveLive = live ?? "off";
-  const role = suppliedRole ?? announcementRole(effectiveLive);
-  // `alert` and `status` already imply a live region, so a roled indicator
-  // does not also carry aria-live.
-  const ariaLive = role === undefined ? live : undefined;
+  const region = liveRegionProps(live, suppliedRole);
   // The dot carries a per-tone shape, so the state survives without color.
+  // An explicitly blank label suppresses the announcement entirely here,
+  // unlike the tone-badged components that always name their tone.
   const trimmedToneLabel = toneLabel?.trim();
   const effectiveToneLabel = isSemanticTone(tone)
-    ? (trimmedToneLabel ?? "") || TONE_LABELS[tone]
+    ? resolveToneLabel(tone, toneLabel)
     : trimmedToneLabel;
 
   return (
     <span
       {...props}
       className={classNames("snui-status", `snui-status--${tone}`, className)}
-      role={role}
-      aria-live={ariaLive}
+      role={region.role}
+      aria-live={region["aria-live"]}
     >
       <span className="snui-status__dot" aria-hidden="true" />
       {trimmedToneLabel === "" || effectiveToneLabel === undefined ? null : (

@@ -9,14 +9,13 @@ import {
   useLayoutEffect,
   useRef,
 } from "react";
-import {
-  type AnnouncementMode,
-  announcementRole,
-} from "../utils/announcement.js";
+import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
-import { attachRef, detachRef } from "../utils/ref.js";
+import { resolveFieldError } from "../utils/field-error.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { composeRef } from "../utils/ref.js";
+import { FieldError } from "./FieldError.js";
 
 export type TextInputType =
   | "date"
@@ -106,7 +105,7 @@ export function RangeInput({
     (node: HTMLInputElement): (() => void) => {
       inputElement.current = node;
       setRangeProgress(node);
-      const releaseRef = attachRef(ref, node);
+      const releaseRef = composeRef(ref, node);
       const form = node.form;
       const handleReset = (): void => {
         // The native reset restores defaultValue only after the reset event
@@ -119,8 +118,7 @@ export function RangeInput({
       return () => {
         form?.removeEventListener("reset", handleReset);
         inputElement.current = null;
-        if (releaseRef !== undefined) releaseRef();
-        else detachRef(ref);
+        releaseRef();
       };
     },
     [ref],
@@ -218,9 +216,7 @@ export function Checkbox({
   required,
   ...props
 }: CheckboxProps): React.JSX.Element {
-  if (!hasReactContent(label)) {
-    throw new Error("Checkbox requires a non-empty label.");
-  }
+  requireContent(label, "Checkbox requires a non-empty label.");
 
   const inputElement = useRef<HTMLInputElement | null>(null);
 
@@ -229,7 +225,7 @@ export function Checkbox({
   const attachInput = useCallback(
     (node: HTMLInputElement): (() => void) => {
       inputElement.current = node;
-      const releaseRef = attachRef(ref, node);
+      const releaseRef = composeRef(ref, node);
       const form = node.form;
       const handleReset = (): void => {
         // A native reset restores checkedness from defaultChecked but never
@@ -245,8 +241,7 @@ export function Checkbox({
       return () => {
         form?.removeEventListener("reset", handleReset);
         inputElement.current = null;
-        if (releaseRef !== undefined) releaseRef();
-        else detachRef(ref);
+        releaseRef();
       };
     },
     [checked, indeterminate, ref],
@@ -264,12 +259,11 @@ export function Checkbox({
   const hasDescription = hasReactContent(description);
   const hasError = hasReactContent(error);
   const descriptionId = hasDescription ? `${controlId}-description` : undefined;
-  // A live region must exist before its content arrives, so the container is
-  // mounted whenever announcements are requested and only its text varies.
-  const announcesErrors = errorLive !== "off";
-  const rendersError = hasError || announcesErrors;
-  const errorId = rendersError ? `${controlId}-error` : undefined;
-  const referencedErrorId = hasError ? errorId : undefined;
+  const { errorId, referencedErrorId, rendersError } = resolveFieldError(
+    controlId,
+    hasError,
+    errorLive,
+  );
   const describedBy = joinIdReferences(
     ariaDescribedBy,
     descriptionId,
@@ -309,14 +303,14 @@ export function Checkbox({
         </span>
       ) : null}
       {rendersError ? (
-        <span
-          id={errorId}
+        <FieldError
+          as="span"
           className="snui-checkbox__error"
-          role={announcementRole(errorLive)}
-          aria-live={errorLive}
-        >
-          {hasError ? error : null}
-        </span>
+          error={error}
+          hasError={hasError}
+          id={errorId}
+          live={errorLive}
+        />
       ) : null}
     </label>
   );

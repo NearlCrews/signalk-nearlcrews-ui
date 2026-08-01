@@ -6,13 +6,12 @@ import {
   type ReactNode,
   useId,
 } from "react";
-import {
-  type AnnouncementMode,
-  announcementRole,
-} from "../utils/announcement.js";
+import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { resolveFieldError } from "../utils/field-error.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { FieldError } from "./FieldError.js";
 
 export interface FieldControlProps {
   readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
@@ -70,9 +69,7 @@ export function LabeledField({
   required = false,
   ...props
 }: LabeledFieldProps): React.JSX.Element {
-  if (!hasReactContent(label)) {
-    throw new Error("LabeledField requires a non-empty label.");
-  }
+  requireContent(label, "LabeledField requires a non-empty label.");
 
   const generatedId = useId();
   const elementChild = typeof children === "function" ? undefined : children;
@@ -82,12 +79,11 @@ export function LabeledField({
   const descriptionId = hasDescription
     ? `${generatedId}-description`
     : undefined;
-  // A live region must exist before its content arrives, so the container is
-  // mounted whenever announcements are requested and only its text varies.
-  const announcesErrors = errorLive !== "off";
-  const rendersError = hasError || announcesErrors;
-  const errorId = rendersError ? `${generatedId}-error` : undefined;
-  const referencedErrorId = hasError ? errorId : undefined;
+  const { errorId, referencedErrorId, rendersError } = resolveFieldError(
+    generatedId,
+    hasError,
+    errorLive,
+  );
   const describedBy = joinIdReferences(
     elementChild?.props["aria-describedby"],
     descriptionId,
@@ -100,7 +96,7 @@ export function LabeledField({
 
   const controlName = elementChild?.props.name ?? name;
   const controlDisabled = elementChild?.props.disabled ?? disabled;
-  const injectedProps: FieldControlProps = {
+  const injectedProps: FieldControlProps & { readonly id: string } = {
     id: controlId,
     ...(describedBy === undefined ? {} : { "aria-describedby": describedBy }),
     ...(referencedErrorId === undefined
@@ -117,7 +113,6 @@ export function LabeledField({
     typeof children === "function"
       ? children({
           ...injectedProps,
-          id: controlId,
           ...(descriptionId === undefined ? {} : { descriptionId }),
           ...(referencedErrorId === undefined
             ? {}
@@ -154,14 +149,13 @@ export function LabeledField({
       ) : null}
       <div className="snui-field__control">{control}</div>
       {rendersError ? (
-        <div
-          id={errorId}
+        <FieldError
           className="snui-field__error"
-          role={announcementRole(errorLive)}
-          aria-live={errorLive}
-        >
-          {hasError ? error : null}
-        </div>
+          error={error}
+          hasError={hasError}
+          id={errorId}
+          live={errorLive}
+        />
       ) : null}
     </div>
   );

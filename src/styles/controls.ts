@@ -1,8 +1,9 @@
-import { PACKAGE_VERSION, SPINNER_ANIMATION_NAME } from "../version.js";
+import { SPINNER_ANIMATION_NAME, versionedAnimationName } from "../version.js";
+import { FIELD_ERROR_DECLARATIONS } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 
-/** A versioned global name prevents keyframe collisions between package copies. */
-const PROGRESS_INDETERMINATE_ANIMATION = `snui-v${PACKAGE_VERSION.replace(/[^a-zA-Z0-9_-]/g, "-")}-progress-slide`;
+const PROGRESS_INDETERMINATE_ANIMATION =
+  versionedAnimationName("progress-slide");
 
 export const CONTROL_STYLES = `
 @keyframes ${SPINNER_ANIMATION_NAME} {
@@ -315,11 +316,7 @@ ${scopeStyles(`
 
 .snui-checkbox__error {
   grid-column: 2;
-  min-width: 0;
-  color: var(--snui-color-danger);
-  font-size: var(--snui-font-size-sm);
-  font-weight: var(--snui-font-weight-medium);
-  overflow-wrap: anywhere;
+${FIELD_ERROR_DECLARATIONS}
 }
 
 .snui-checkbox__input[aria-invalid="true"] {
@@ -360,11 +357,7 @@ ${scopeStyles(`
 }
 
 .snui-radio-group__error {
-  min-width: 0;
-  color: var(--snui-color-danger);
-  font-size: var(--snui-font-size-sm);
-  font-weight: var(--snui-font-weight-medium);
-  overflow-wrap: anywhere;
+${FIELD_ERROR_DECLARATIONS}
 }
 
 /*

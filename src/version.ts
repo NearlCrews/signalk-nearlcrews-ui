@@ -8,4 +8,8 @@ export const ROOT_CLASS = "snui-root";
 export const ROOT_SELECTOR = `.${ROOT_CLASS}[data-snui-version="${PACKAGE_VERSION}"]`;
 
 /** A versioned global name prevents keyframe collisions between package copies. */
-export const SPINNER_ANIMATION_NAME = `snui-v${PACKAGE_VERSION.replace(/[^a-zA-Z0-9_-]/g, "-")}-spin`;
+export function versionedAnimationName(suffix: string): string {
+  return `snui-v${PACKAGE_VERSION.replace(/[^a-zA-Z0-9_-]/g, "-")}-${suffix}`;
+}
+
+export const SPINNER_ANIMATION_NAME = versionedAnimationName("spin");

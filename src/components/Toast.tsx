@@ -13,11 +13,17 @@ import { createPortal } from "react-dom";
 
 import {
   type AnnouncementMode,
-  announcementRole,
+  liveRegionProps,
 } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
-import { type SemanticTone, TONE_GLYPHS, TONE_LABELS } from "../utils/tone.js";
+import { prefersReducedMotion } from "../utils/motion.js";
+import { usePortalContainerReady } from "../utils/portal.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
+import {
+  resolveToneLabel,
+  type SemanticTone,
+  TONE_GLYPHS,
+} from "../utils/tone.js";
 import { Button } from "./Button.js";
 
 /** Default auto-dismiss delay in milliseconds. */
@@ -130,9 +136,7 @@ function ToastCard<T extends ToastContent>({
     content.live ??
     (tone === "danger" || tone === "warning" ? "assertive" : "polite");
 
-  if (!hasReactContent(content.title)) {
-    throw new Error("Toast requires a non-empty title.");
-  }
+  requireContent(content.title, "Toast requires a non-empty title.");
 
   const [exiting, setExiting] = useState(false);
   const [contentReady, setContentReady] = useState(false);
@@ -159,17 +163,10 @@ function ToastCard<T extends ToastContent>({
     stopCountdown();
     setExiting(true);
     // Reduced motion skips the exit transition, so removal follows in the
-    // same tick. jsdom does not implement matchMedia, so it is feature
-    // detected rather than assumed.
-    const ownerWindow =
-      typeof window === "undefined"
-        ? null
-        : (window as unknown as {
-            matchMedia?: (query: string) => { matches: boolean } | undefined;
-          });
-    const reduceMotion =
-      ownerWindow?.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ===
-      true;
+    // same tick.
+    const reduceMotion = prefersReducedMotion(
+      typeof window === "undefined" ? null : window,
+    );
     exitTimerRef.current = window.setTimeout(
       () => {
         queue.dismiss(key);
@@ -220,12 +217,8 @@ function ToastCard<T extends ToastContent>({
     };
   }, [startCountdown, stopCountdown]);
 
-  const role = announcementRole(live);
-  // `alert` and `status` already imply a live region, so a roled toast does
-  // not also carry aria-live.
-  const ariaLive = role === undefined ? live : undefined;
-  const effectiveToneLabel =
-    (content.toneLabel?.trim() ?? "") || TONE_LABELS[tone];
+  const region = liveRegionProps(live);
+  const effectiveToneLabel = resolveToneLabel(tone, content.toneLabel);
   const effectiveDismissLabel = (dismissLabel?.trim() ?? "") || "Dismiss";
 
   return (
@@ -234,8 +227,8 @@ function ToastCard<T extends ToastContent>({
     // biome-ignore lint/a11y/noStaticElementInteractions: hover and focus pause auto-dismiss, they do not make the card interactive
     <div
       className={classNames("snui-toast", `snui-toast--${tone}`)}
-      role={role}
-      aria-live={ariaLive}
+      role={region.role}
+      aria-live={region["aria-live"]}
       data-exiting={exiting || undefined}
       onPointerEnter={() => {
         setPaused("hover", true);
@@ -312,20 +305,12 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
 
   const toasts = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
   const { getContainer } = useUNSAFE_PortalContext();
-  const [container, setContainer] = useState<HTMLElement | null>(null);
 
-  // The portal container reads the panel root lazily: the root element only
-  // exists once the commit attaches its ref, so the region resolves it one
-  // tick after mount and portals from that render onward. Outside a
-  // PanelRoot it falls back to the document body.
-  useEffect(() => {
-    const id = window.setTimeout(() => {
-      setContainer(getContainer?.() ?? document.body);
-    }, 0);
-    return () => {
-      window.clearTimeout(id);
-    };
-  }, [getContainer]);
+  // The portal container reads the panel root lazily, so it only resolves
+  // once the commit has attached that ref. Outside a PanelRoot the region
+  // falls back to the document body.
+  const portalReady = usePortalContainerReady();
+  const container = portalReady ? (getContainer?.() ?? document.body) : null;
 
   if (container === null) return null;
 

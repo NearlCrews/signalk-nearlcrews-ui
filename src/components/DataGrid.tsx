@@ -25,6 +25,8 @@ import {
   TableBody,
   TableHeader,
 } from "react-aria-components";
+import { DATA_GRID_ROW_HEIGHTS } from "../styles/tokens.js";
+import { hasAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
 import { attachRef } from "../utils/ref.js";
@@ -43,16 +45,6 @@ export { Cell, Column, Row };
 
 export type DataGridDensity = "default" | "compact";
 export type DataGridSelectionMode = "none" | "single" | "multiple";
-
-/**
- * Row heights mirror the fixed heights in table.ts. Virtualized rows are
- * absolutely positioned by pixel offset, so the estimate must match the
- * rendered height exactly.
- */
-const ROW_HEIGHTS: Readonly<Record<DataGridDensity, number>> = {
-  default: 44,
-  compact: 32,
-};
 
 const DEFAULT_VIRTUALIZE_THRESHOLD = 100;
 const VIRTUAL_OVERSCAN = 8;
@@ -119,6 +111,12 @@ function getRowKey(item: unknown, index: number): Key {
   return index;
 }
 
+/** Reads the first item without materializing the rest of the iterable. */
+function firstOf<T>(items: Iterable<T>): T | undefined {
+  for (const item of items) return item;
+  return undefined;
+}
+
 function isPlainStyle(style: unknown): style is CSSProperties | undefined {
   return (
     style === undefined ||
@@ -133,22 +131,21 @@ interface FragmentChildrenProps {
 // React.Children does not traverse fragments, but RAC collections flatten
 // them, so consumers reasonably wrap Column lists in one. These walkers
 // recurse into fragments so enhancements apply either way.
-function forEachColumn(
-  children: ReactNode,
-  fn: (column: ReactElement<ColumnProps>) => void,
-): void {
+function flattenColumns(children: ReactNode): ReactElement<ColumnProps>[] {
+  const columns: ReactElement<ColumnProps>[] = [];
   Children.forEach(children, (child) => {
     if (
       isValidElement<FragmentChildrenProps>(child) &&
       child.type === Fragment
     ) {
-      forEachColumn(child.props.children, fn);
+      columns.push(...flattenColumns(child.props.children));
       return;
     }
     if (isValidElement<ColumnProps>(child) && child.type === Column) {
-      fn(child);
+      columns.push(child);
     }
   });
+  return columns;
 }
 
 function mapColumns(
@@ -196,10 +193,7 @@ export function DataGrid<TRow, TColumn = unknown>({
   virtualizeThreshold = DEFAULT_VIRTUALIZE_THRESHOLD,
   zebra = false,
 }: DataGridProps<TRow, TColumn>): React.JSX.Element {
-  const hasLabel = typeof ariaLabel === "string" && ariaLabel.trim() !== "";
-  const hasLabelledBy =
-    typeof ariaLabelledBy === "string" && ariaLabelledBy.trim() !== "";
-  if (!hasLabel && !hasLabelledBy) {
+  if (!hasAccessibleName(ariaLabel, ariaLabelledBy)) {
     throw new Error(
       "DataGrid requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
     );
@@ -214,14 +208,15 @@ export function DataGrid<TRow, TColumn = unknown>({
   // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: virtualized ? items.length : 0,
-    estimateSize: () => ROW_HEIGHTS[density],
+    estimateSize: () => DATA_GRID_ROW_HEIGHTS[density],
     getScrollElement: () => scrollRef.current,
     overscan: VIRTUAL_OVERSCAN,
   });
 
   let headerChildren: ReactNode | ((column: TColumn) => ReactElement);
   if (typeof children === "function") {
-    const firstColumnItem = columns === undefined ? undefined : [...columns][0];
+    const firstColumnItem =
+      columns === undefined ? undefined : firstOf(columns);
     headerChildren = (column: TColumn): ReactElement => {
       const element = children(column);
       // RAC requires one row-header column and throws without it; default the
@@ -237,12 +232,9 @@ export function DataGrid<TRow, TColumn = unknown>({
       return element;
     };
   } else {
-    let hasRowHeader = false;
-    forEachColumn(children, (column) => {
-      if (column.props.isRowHeader === true) {
-        hasRowHeader = true;
-      }
-    });
+    const hasRowHeader = flattenColumns(children).some(
+      (column) => column.props.isRowHeader === true,
+    );
     let defaultedRowHeader = false;
     headerChildren = mapColumns(children, (column) => {
       let result = column;

@@ -5,10 +5,11 @@ import {
   useId,
 } from "react";
 
-import { announcementRole } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { resolveFieldError } from "../utils/field-error.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { FieldError } from "./FieldError.js";
 import type { FieldErrorLive } from "./LabeledField.js";
 
 export interface FieldGroupProps
@@ -33,9 +34,7 @@ export function FieldGroup({
   ref,
   ...props
 }: FieldGroupProps): React.JSX.Element {
-  if (!hasReactContent(legend)) {
-    throw new Error("FieldGroup requires a non-empty legend.");
-  }
+  requireContent(legend, "FieldGroup requires a non-empty legend.");
 
   const generatedId = useId();
   const hasDescription = hasReactContent(description);
@@ -43,12 +42,11 @@ export function FieldGroup({
     ? `${generatedId}-description`
     : undefined;
   const hasError = hasReactContent(error);
-  // A live region must exist before its content arrives, so the container is
-  // mounted whenever announcements are requested and only its text varies.
-  const announcesErrors = errorLive !== "off";
-  const rendersError = hasError || announcesErrors;
-  const errorId = rendersError ? `${generatedId}-error` : undefined;
-  const referencedErrorId = hasError ? errorId : undefined;
+  const { errorId, referencedErrorId, rendersError } = resolveFieldError(
+    generatedId,
+    hasError,
+    errorLive,
+  );
 
   return (
     <fieldset
@@ -73,14 +71,13 @@ export function FieldGroup({
       <div className="snui-field-group__content">
         {children}
         {rendersError ? (
-          <div
-            id={errorId}
+          <FieldError
             className="snui-field-group__error"
-            role={announcementRole(errorLive)}
-            aria-live={errorLive}
-          >
-            {hasError ? error : null}
-          </div>
+            error={error}
+            hasError={hasError}
+            id={errorId}
+            live={errorLive}
+          />
         ) : null}
       </div>
     </fieldset>

@@ -1,6 +1,6 @@
 import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
 
 export interface EmptyStateProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "title">,
@@ -22,9 +22,7 @@ export function EmptyState({
   title,
   ...props
 }: EmptyStateProps): React.JSX.Element {
-  if (!hasReactContent(title)) {
-    throw new Error("EmptyState requires a non-empty title.");
-  }
+  requireContent(title, "EmptyState requires a non-empty title.");
 
   return (
     <div

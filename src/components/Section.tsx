@@ -3,7 +3,7 @@ import { type HTMLAttributes, type ReactNode, useId } from "react";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
 
 export interface SectionProps
   extends Omit<HTMLAttributes<HTMLElement>, "title"> {
@@ -26,9 +26,7 @@ export function Section({
   title,
   ...props
 }: SectionProps): React.JSX.Element {
-  if (!hasReactContent(title)) {
-    throw new Error("Section requires a non-empty title.");
-  }
+  requireContent(title, "Section requires a non-empty title.");
 
   const titleId = useId();
   const Heading = HEADING_ELEMENTS[headingLevel];

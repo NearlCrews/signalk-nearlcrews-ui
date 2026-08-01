@@ -127,16 +127,13 @@ export {
   MenuSeparator,
   type MenuSeparatorProps,
 } from "./components/Menu.js";
+export type { OverlayPlacement } from "./components/overlay-placement.js";
 export {
   PanelRoot,
   type PanelRootProps,
   type PanelWidth,
 } from "./components/PanelRoot.js";
-export {
-  type OverlayPlacement,
-  Popover,
-  type PopoverProps,
-} from "./components/Popover.js";
+export { Popover, type PopoverProps } from "./components/Popover.js";
 export {
   Progress,
   type ProgressProps,

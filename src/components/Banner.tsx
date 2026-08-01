@@ -6,14 +6,14 @@ import type {
   RefObject,
 } from "react";
 
-import { announcementRole } from "../utils/announcement.js";
+import { liveRegionProps } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
 import {
   isSemanticTone,
+  resolveToneLabel,
   type StatusTone,
   TONE_GLYPHS,
-  TONE_LABELS,
 } from "../utils/tone.js";
 import { Button } from "./Button.js";
 
@@ -50,17 +50,12 @@ export function Banner({
   toneLabel,
   ...props
 }: BannerProps): React.JSX.Element {
-  const effectiveLive = live ?? "off";
-  const role = suppliedRole ?? announcementRole(effectiveLive);
-  // `alert` and `status` already imply a live region. Emitting `aria-live`
-  // beside them double speaks on some screen readers, and an explicit "off"
-  // would silence a role the caller asked for.
-  const ariaLive = role === undefined ? live : undefined;
+  const region = liveRegionProps(live, suppliedRole);
   const hasActions = hasReactContent(actions) || onDismiss !== undefined;
   const effectiveDismissLabel = dismissLabel.trim() || "Dismiss";
   const semantic = isSemanticTone(tone);
   const effectiveToneLabel = semantic
-    ? (toneLabel?.trim() ?? "") || TONE_LABELS[tone]
+    ? resolveToneLabel(tone, toneLabel)
     : undefined;
 
   return (
@@ -68,8 +63,8 @@ export function Banner({
       {...props}
       ref={ref}
       className={classNames("snui-banner", `snui-banner--${tone}`, className)}
-      role={role}
-      aria-live={ariaLive}
+      role={region.role}
+      aria-live={region["aria-live"]}
     >
       <div className="snui-banner__content">
         {semantic ? (

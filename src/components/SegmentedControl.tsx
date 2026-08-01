@@ -11,7 +11,7 @@ import {
 
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { requireContent } from "../utils/react-node.js";
 
 export type SegmentedControlLegendVisibility = "hidden" | "visible";
 export type SegmentedControlOrientation = "horizontal" | "vertical";
@@ -65,9 +65,7 @@ export function SegmentedControl<Value extends string>({
   "aria-labelledby": ariaLabelledBy,
   ...props
 }: SegmentedControlProps<Value>): React.JSX.Element {
-  if (!hasReactContent(legend)) {
-    throw new Error("SegmentedControl requires a non-empty legend.");
-  }
+  requireContent(legend, "SegmentedControl requires a non-empty legend.");
 
   const legendId = useId();
   const buttons = useRef(new Map<Value, HTMLButtonElement>());
@@ -149,11 +147,8 @@ export function SegmentedControl<Value extends string>({
     if (nextOption === undefined) return;
 
     event.preventDefault();
-    if (event[FOCUS_MOVE_MODIFIER]) {
-      buttons.current.get(nextOption.value)?.focus();
-      return;
-    }
-    select(nextOption.value);
+    // The focus modifier moves focus without changing the selection.
+    if (!event[FOCUS_MOVE_MODIFIER]) select(nextOption.value);
     buttons.current.get(nextOption.value)?.focus();
   };
 

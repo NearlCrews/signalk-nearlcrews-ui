@@ -1,4 +1,4 @@
-import { type ReactNode, useLayoutEffect, useReducer } from "react";
+import type { ReactNode } from "react";
 import {
   MenuTrigger,
   Pressable,
@@ -10,9 +10,13 @@ import {
   Separator as RACSeparator,
 } from "react-aria-components";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { usePortalContainerReady } from "../utils/portal.js";
+import { requireContent } from "../utils/react-node.js";
 import { Button, type ButtonSize, type ButtonVariant } from "./Button.js";
-import { OVERLAY_PLACEMENTS, type OverlayPlacement } from "./Popover.js";
+import {
+  OVERLAY_PLACEMENTS,
+  type OverlayPlacement,
+} from "./overlay-placement.js";
 
 export interface MenuProps {
   readonly children: ReactNode;
@@ -40,22 +44,13 @@ export function Menu({
   triggerSize,
   triggerVariant,
 }: MenuProps): React.JSX.Element {
-  if (!hasReactContent(label)) {
-    throw new Error(
-      "Menu requires a non-empty label to name its trigger button.",
-    );
-  }
+  requireContent(
+    label,
 
-  /*
-   * PanelRoot's portal container reads its root element lazily, so it is
-   * null on the very first render, before refs attach. Defer the overlay
-   * by one commit so RAC's PopoverInner mounts against a resolved
-   * container. See Popover for details.
-   */
-  const [portalReady, resolvePortalContainer] = useReducer(() => true, false);
-  useLayoutEffect(() => {
-    resolvePortalContainer();
-  }, []);
+    "Menu requires a non-empty label to name its trigger button.",
+  );
+
+  const portalReady = usePortalContainerReady();
 
   return (
     <MenuTrigger

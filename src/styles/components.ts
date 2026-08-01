@@ -1,3 +1,8 @@
+import {
+  FIELD_ERROR_DECLARATIONS,
+  toneDotShapeRules,
+  visuallyHiddenDeclarations,
+} from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
@@ -80,11 +85,7 @@ export const COMPONENT_STYLES = scopeStyles(`
 }
 
 .snui-field__error {
-  min-width: 0;
-  color: var(--snui-color-danger);
-  font-size: var(--snui-font-size-sm);
-  font-weight: var(--snui-font-weight-medium);
-  overflow-wrap: anywhere;
+${FIELD_ERROR_DECLARATIONS}
 }
 
 /*
@@ -96,15 +97,7 @@ export const COMPONENT_STYLES = scopeStyles(`
 .snui-checkbox__error:empty,
 .snui-field-group__error:empty,
 .snui-radio-group__error:empty {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+${visuallyHiddenDeclarations()}
 }
 
 .snui-required-mark {
@@ -140,31 +133,7 @@ export const COMPONENT_STYLES = scopeStyles(`
  * Each tone also gets a distinct dot shape, so the state does not depend on
  * color alone for a sighted user who cannot distinguish the hues.
  */
-.snui-status--info .snui-status__dot {
-  border-radius: var(--snui-radius-sm);
-}
-
-.snui-status--success .snui-status__dot {
-  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
-  border-radius: 0;
-}
-
-.snui-status--warning .snui-status__dot {
-  clip-path: polygon(50% 0, 100% 100%, 0 100%);
-  border-radius: 0;
-}
-
-.snui-status--danger .snui-status__dot {
-  clip-path: polygon(
-    50% 0,
-    100% 25%,
-    100% 75%,
-    50% 100%,
-    0 75%,
-    0 25%
-  );
-  border-radius: 0;
-}
+${toneDotShapeRules("snui-status", "snui-status__dot")}
 
 .snui-action-bar {
   display: flex;

@@ -188,6 +188,26 @@ export interface EmptyStateProps extends Omit<HTMLAttributes<HTMLDivElement>, "t
 }
 export declare function EmptyState({ action, className, description, icon, ref, title, ...props }: EmptyStateProps): React.JSX.Element;
 
+=== components/FieldError.d.ts ===
+import type { ReactNode } from "react";
+import { type AnnouncementMode } from "../utils/announcement.js";
+interface FieldErrorProps {
+    /** Element to render. Inline controls need a span, block fields a div. */
+    readonly as?: "div" | "span";
+    readonly className: string;
+    readonly error: ReactNode;
+    readonly hasError: boolean;
+    readonly id: string | undefined;
+    readonly live: AnnouncementMode;
+}
+/**
+ * The error region shared by every field wrapper. Render it whenever
+ * {@link resolveFieldError} reports `rendersError`, so the live region is in
+ * place before its text arrives.
+ */
+export declare function FieldError({ as: Element, className, error, hasError, id, live, }: FieldErrorProps): React.JSX.Element;
+export {};
+
 === components/FieldGroup.d.ts ===
 import { type FieldsetHTMLAttributes, type ReactNode, type RefAttributes } from "react";
 import type { FieldErrorLive } from "./LabeledField.js";
@@ -231,7 +251,7 @@ export declare function InlineConfirm({ "aria-describedby": ariaDescribedBy, "ar
 
 === components/Inputs.d.ts ===
 import { type InputHTMLAttributes, type ReactNode, type RefAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
-import { type AnnouncementMode } from "../utils/announcement.js";
+import type { AnnouncementMode } from "../utils/announcement.js";
 export type TextInputType = "date" | "datetime-local" | "email" | "month" | "password" | "search" | "tel" | "text" | "time" | "url" | "week";
 export type TextInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & RefAttributes<HTMLInputElement> & {
     readonly type?: TextInputType | undefined;
@@ -263,7 +283,7 @@ export declare function Checkbox({ "aria-describedby": ariaDescribedBy, "aria-er
 
 === components/LabeledField.d.ts ===
 import { type AriaAttributes, type HTMLAttributes, type ReactElement, type ReactNode } from "react";
-import { type AnnouncementMode } from "../utils/announcement.js";
+import type { AnnouncementMode } from "../utils/announcement.js";
 export interface FieldControlProps {
     readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
     readonly "aria-errormessage"?: AriaAttributes["aria-errormessage"];
@@ -363,9 +383,9 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 export declare function Badge({ children, className, tone, toneLabel, ...props }: BadgeProps): React.JSX.Element;
 
 === components/Menu.d.ts ===
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { type ButtonSize, type ButtonVariant } from "./Button.js";
-import { type OverlayPlacement } from "./Popover.js";
+import { type OverlayPlacement } from "./overlay-placement.js";
 export interface MenuProps {
     readonly children: ReactNode;
     readonly className?: string | undefined;
@@ -412,18 +432,9 @@ export type PanelWidth = "standard" | "wide" | "full";
 export declare function PanelRoot(props: PanelRootProps): React.JSX.Element;
 
 === components/Popover.d.ts ===
-import { type ReactElement, type ReactNode, type RefAttributes } from "react";
-import { type Placement as RACPlacement } from "react-aria-components";
+import type { ReactElement, ReactNode, RefAttributes } from "react";
 import type { ButtonProps } from "./Button.js";
-/**
- * Logical overlay edge. The "top" and "bottom" edges align the overlay's
- * start edge with the trigger's start edge, matching menu conventions; the
- * RAC equivalents are "top start" and "bottom start". RAC flips the
- * placement automatically when the overlay collides with the viewport.
- */
-export type OverlayPlacement = "top" | "bottom" | "start" | "end";
-/** RAC placement strings behind each library {@link OverlayPlacement}. */
-export declare const OVERLAY_PLACEMENTS: Readonly<Record<OverlayPlacement, RACPlacement>>;
+import { type OverlayPlacement } from "./overlay-placement.js";
 export interface PopoverProps extends RefAttributes<HTMLDivElement> {
     readonly children: ReactNode;
     readonly className?: string | undefined;
@@ -457,7 +468,7 @@ export declare function Progress({ className, label, max, min, ref, tone, value,
 
 === components/RadioGroup.d.ts ===
 import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
-import { type AnnouncementMode } from "../utils/announcement.js";
+import type { AnnouncementMode } from "../utils/announcement.js";
 export type RadioGroupOrientation = "horizontal" | "vertical";
 export type RadioGroupErrorLive = AnnouncementMode;
 export interface RadioGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">, RefAttributes<HTMLDivElement> {
@@ -616,6 +627,18 @@ export interface ToastRegionProps<T extends ToastContent = ToastContent> extends
  */
 export declare function ToastRegion<T extends ToastContent = ToastContent>({ className, dismissLabel, label, queue, ref, ...props }: ToastRegionProps<T>): React.JSX.Element | null;
 
+=== components/overlay-placement.d.ts ===
+import type { Placement as RACPlacement } from "react-aria-components";
+/**
+ * Logical overlay edge. The "top" and "bottom" edges align the overlay's
+ * start edge with the trigger's start edge, matching menu conventions; the
+ * react-aria equivalents are "top start" and "bottom start". react-aria flips
+ * the placement automatically when the overlay collides with the viewport.
+ */
+export type OverlayPlacement = "top" | "bottom" | "start" | "end";
+/** The react-aria placement behind each library {@link OverlayPlacement}. */
+export declare const OVERLAY_PLACEMENTS: Readonly<Record<OverlayPlacement, RACPlacement>>;
+
 === index.d.ts ===
 export { Accordion, type AccordionProps } from "./components/Accordion.js";
 export { ActionBar, type ActionBarProps, type ActionBarSticky, } from "./components/ActionBar.js";
@@ -631,8 +654,9 @@ export { Checkbox, type CheckboxErrorLive, type CheckboxProps, NumberInput, type
 export { type FieldControlProps, type FieldErrorLive, LabeledField, type LabeledFieldChild, type LabeledFieldControlProps, type LabeledFieldDensity, type LabeledFieldLayout, type LabeledFieldProps, } from "./components/LabeledField.js";
 export { Badge, type BadgeProps, Card, type CardDensity, type CardElement, type CardProps, Cluster, type ClusterElement, type ClusterProps, InputGroup, InputGroupAddon, type InputGroupAddonProps, InputGroupControl, type InputGroupControlProps, type InputGroupControlWidth, type InputGroupDensity, type InputGroupProps, type LayoutAlignment, Metric, MetricGrid, type MetricGridElement, type MetricGridProps, type MetricProps, type SpaceScale, Stack, type StackElement, type StackProps, } from "./components/Layout.js";
 export { Menu, MenuItem, type MenuItemProps, type MenuProps, MenuSection, type MenuSectionProps, MenuSeparator, type MenuSeparatorProps, } from "./components/Menu.js";
+export type { OverlayPlacement } from "./components/overlay-placement.js";
 export { PanelRoot, type PanelRootProps, type PanelWidth, } from "./components/PanelRoot.js";
-export { type OverlayPlacement, Popover, type PopoverProps, } from "./components/Popover.js";
+export { Popover, type PopoverProps } from "./components/Popover.js";
 export { Progress, type ProgressProps, type ProgressTone, } from "./components/Progress.js";
 export { Radio, RadioGroup, type RadioGroupErrorLive, type RadioGroupOrientation, type RadioGroupProps, type RadioProps, } from "./components/RadioGroup.js";
 export { Section, type SectionProps } from "./components/Section.js";
@@ -657,6 +681,9 @@ export declare const COMPONENT_STYLES: string;
 === styles/controls.d.ts ===
 export declare const CONTROL_STYLES: string;
 
+=== styles/dialog.d.ts ===
+export declare const DIALOG_STYLES: string;
+
 === styles/feedback.d.ts ===
 export declare const FEEDBACK_STYLES: string;
 
@@ -665,6 +692,40 @@ export declare const FORM_STYLES: string;
 
 === styles/foundation.d.ts ===
 export declare const FOUNDATION_STYLES: string;
+
+=== styles/fragments.d.ts ===
+/**
+ * Declaration blocks shared by more than one rule.
+ *
+ * Each fragment is interpolated where its rule already lives rather than
+ * hoisted into a single selector, so module order, and therefore the cascade,
+ * is unchanged. Only the declarations are written once.
+ */
+/**
+ * Takes an element out of flow while leaving it in the accessibility tree.
+ * The utility class has to beat component rules, so it marks every
+ * declaration important; a rule that already targets one component does not.
+ */
+export declare function visuallyHiddenDeclarations(important?: boolean): string;
+/** Shared presentation for every field error message. */
+export declare const FIELD_ERROR_DECLARATIONS: string;
+/** The raised surface every anchored overlay paints. */
+export declare const RAISED_OVERLAY_DECLARATIONS: string;
+/** The entering and exiting state of an anchored overlay. */
+export declare const OVERLAY_TRANSITION_DECLARATIONS: string;
+/**
+ * Forced colors flattens the overlay's border and shadow, so the surface
+ * boundary is redrawn with a system color. Indented for use inside a
+ * forced-colors media block.
+ */
+export declare const FORCED_COLORS_OUTLINE_DECLARATIONS: string;
+/**
+ * Gives each tone a distinct dot shape, so a state never depends on color
+ * alone for someone who cannot distinguish the hues. The block owns the tone
+ * modifier and the dot element, so indicators and toasts share one set of
+ * shapes.
+ */
+export declare function toneDotShapeRules(block: string, dotClass: string): string;
 
 === styles/index.d.ts ===
 export declare const PANEL_STYLES: string;
@@ -680,11 +741,11 @@ export declare function installPanelStyles(ownerDocument: Document, version: str
 === styles/layout.d.ts ===
 export declare const LAYOUT_STYLES: string;
 
-=== styles/overlays.d.ts ===
-export declare const DIALOG_STYLES: string;
+=== styles/menu.d.ts ===
 export declare const MENU_STYLES: string;
+
+=== styles/popover.d.ts ===
 export declare const POPOVER_STYLES: string;
-export declare const TOAST_STYLES: string;
 
 === styles/scope.d.ts ===
 /** Stops descendant rules at every nested package-version root. */
@@ -692,6 +753,9 @@ export declare function scopeStyles(styles: string): string;
 
 === styles/table.d.ts ===
 export declare const TABLE_STYLES: string;
+
+=== styles/toast.d.ts ===
+export declare const TOAST_STYLES: string;
 
 === styles/tokens.d.ts ===
 export type ColorTokenName = "--snui-color-background" | "--snui-color-surface" | "--snui-color-surface-raised" | "--snui-color-interactive-hover" | "--snui-color-hover-raised" | "--snui-color-text" | "--snui-color-text-muted" | "--snui-color-border" | "--snui-color-accent-fill" | "--snui-color-accent-fill-hover" | "--snui-color-on-accent" | "--snui-color-link" | "--snui-color-link-hover" | "--snui-color-link-visited" | "--snui-color-focus" | "--snui-color-success" | "--snui-color-warning" | "--snui-color-danger" | "--snui-color-info";
@@ -701,6 +765,17 @@ export declare const DARK_TOKENS: ThemeTokenSet;
 export declare const NIGHT_TOKENS: ThemeTokenSet;
 /** Inline-size breakpoint below which panels switch to their narrow layout. */
 export declare const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
+/**
+ * Fixed data-grid row heights in pixels, per density. Virtualized rows are
+ * absolutely positioned by pixel offset, so the CSS rule and the virtualizer's
+ * size estimate have to agree; both read these numbers.
+ */
+export declare const DATA_GRID_ROW_HEIGHTS: {
+    readonly compact: 32;
+    readonly default: 44;
+};
+/** Renders a pixel height as the rem length the stylesheet uses. */
+export declare function remLength(pixels: number): string;
 export declare const PUBLIC_FOUNDATION_TOKEN_NAMES: readonly ["--snui-font-family", "--snui-font-size", "--snui-font-size-sm", "--snui-font-size-xs", "--snui-font-weight-medium", "--snui-font-weight-semibold", "--snui-font-weight-bold", "--snui-font-weight-heavy", "--snui-line-height", "--snui-space-1", "--snui-space-2", "--snui-space-3", "--snui-space-4", "--snui-space-5", "--snui-space-6", "--snui-space-7", "--snui-space-8", "--snui-radius-sm", "--snui-radius-md", "--snui-radius-lg", "--snui-radius-pill", "--snui-control-min-height", "--snui-range-thumb-size", "--snui-range-progress-color", "--snui-range-track-color", "--snui-input-group-control-min", "--snui-input-group-control-basis", "--snui-content-width-standard", "--snui-content-width-wide", "--snui-focus-ring", "--snui-shadow-flat", "--snui-shadow-raised", "--snui-shadow-overlay", "--snui-ease-standard", "--snui-transition-fast", "--snui-transition-normal", "--snui-transition-slow", "--snui-motion-spin"];
 export type FoundationTokenName = (typeof PUBLIC_FOUNDATION_TOKEN_NAMES)[number];
 export declare const PUBLIC_COLOR_TOKEN_NAMES: readonly ColorTokenName[];
@@ -729,12 +804,49 @@ export declare function isThemeChoice(value: unknown): value is ThemeChoice;
 === utils/announcement.d.ts ===
 export type AnnouncementMode = "off" | "polite" | "assertive";
 export declare function announcementRole(mode: AnnouncementMode): "alert" | "status" | undefined;
+export interface LiveRegionProps {
+    readonly "aria-live": AnnouncementMode | undefined;
+    readonly role: string | undefined;
+}
+/**
+ * Pairs a role with aria-live for a region that announces its own updates.
+ *
+ * `alert` and `status` already imply a live region. Emitting `aria-live`
+ * beside them double speaks on some screen readers, and an explicit "off"
+ * would silence a role the caller asked for, so exactly one of the two is set.
+ */
+export declare function liveRegionProps(mode: AnnouncementMode | undefined, suppliedRole?: string): LiveRegionProps;
 
 === utils/aria.d.ts ===
+/**
+ * Reports whether either naming attribute carries text. Blank strings do not
+ * name a control, so they read the same as an absent attribute.
+ */
+export declare function hasAccessibleName(label: string | undefined, labelledBy: string | undefined): boolean;
 export declare function joinIdReferences(...ids: readonly (string | undefined)[]): string | undefined;
 
 === utils/class-names.d.ts ===
 export declare function classNames(...values: readonly (string | false | null | undefined)[]): string;
+
+=== utils/field-error.d.ts ===
+import type { AnnouncementMode } from "./announcement.js";
+export interface FieldErrorState {
+    /** Id of the error container, set whenever that container is in the DOM. */
+    readonly errorId: string | undefined;
+    /** Id for aria wiring, set only while the container actually holds an error. */
+    readonly referencedErrorId: string | undefined;
+    /** Whether the error container belongs in the DOM. */
+    readonly rendersError: boolean;
+}
+/**
+ * Resolves the ids and mounting rule for a field's error region.
+ *
+ * A live region must exist before its content arrives, so the container is
+ * mounted whenever announcements are requested and only its text varies. The
+ * referenced id stays undefined until there is an error, so aria-describedby
+ * and aria-errormessage never point at an empty region.
+ */
+export declare function resolveFieldError(idBase: string, hasError: boolean, errorLive: AnnouncementMode): FieldErrorState;
 
 === utils/heading.d.ts ===
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
@@ -747,8 +859,36 @@ export declare const HEADING_ELEMENTS: {
     readonly 6: "h6";
 };
 
+=== utils/motion.d.ts ===
+/**
+ * Reports the user's reduced-motion preference for a given view.
+ *
+ * jsdom implements neither matchMedia nor the media query, so the lookup is
+ * feature detected rather than assumed, and a missing implementation reads as
+ * "motion is fine".
+ */
+export declare function prefersReducedMotion(view: unknown): boolean;
+
+=== utils/portal.d.ts ===
+/**
+ * Defers an overlay by one commit so it mounts against a resolved portal
+ * container.
+ *
+ * PanelRoot's portal container reads its root element lazily, so it is null on
+ * the very first render, before refs attach. An overlay that mounted in that
+ * commit would mount react-aria's inner overlay before the container resolves,
+ * permanently breaking its role and focus effects.
+ */
+export declare function usePortalContainerReady(): boolean;
+
 === utils/react-node.d.ts ===
 import { type ReactNode } from "react";
+/**
+ * Throws when a required slot carries no rendered content. Blank text and
+ * empty fragments count as absent, so a component never ships an unnamed
+ * control or an untitled surface.
+ */
+export declare function requireContent(node: ReactNode, message: string): void;
 export declare function hasReactContent(node: ReactNode): boolean;
 
 === utils/ref.d.ts ===
@@ -759,8 +899,12 @@ import type { Ref } from "react";
  * component composes a caller ref with its own.
  */
 export declare function attachRef<T>(ref: Ref<T> | undefined, node: T): (() => void) | undefined;
-/** Detaches a caller-supplied ref that did not provide its own cleanup. */
-export declare function detachRef<T>(ref: Ref<T> | undefined): void;
+/**
+ * Attaches a caller-supplied ref and returns the one cleanup that releases it,
+ * preferring the callback ref's own cleanup when it opted into React 19 ref
+ * cleanup. Use this wherever a component owns the node for a whole mount.
+ */
+export declare function composeRef<T>(ref: Ref<T> | undefined, node: T): () => void;
 
 === utils/tone.d.ts ===
 export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
@@ -774,6 +918,12 @@ export declare const TONE_GLYPHS: Readonly<Record<SemanticTone, string>>;
 /** Default accessible names for each semantic tone. Callers may override them. */
 export declare const TONE_LABELS: Readonly<Record<SemanticTone, string>>;
 export declare function isSemanticTone(tone: StatusTone): tone is SemanticTone;
+/**
+ * Resolves the accessible name announced for a semantic tone. A caller label
+ * wins when it carries text; anything blank falls back to the default name so
+ * the tone is never announced as nothing.
+ */
+export declare function resolveToneLabel(tone: SemanticTone, toneLabel: string | undefined): string;
 
 === version.d.ts ===
 /** The package version used to isolate styles from other loaded versions. */
@@ -783,4 +933,5 @@ export declare const ROOT_CLASS = "snui-root";
 /** The exact selector prevents styles from crossing package-version roots. */
 export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.5.0\"]";
 /** A versioned global name prevents keyframe collisions between package copies. */
+export declare function versionedAnimationName(suffix: string): string;
 export declare const SPINNER_ANIMATION_NAME: string;

@@ -11,7 +11,7 @@ import {
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
 
 export type CollapsibleMountStrategy = "lazy-retain" | "retain" | "unmount";
 export type CollapsibleSummaryPlacement = "below" | "header";
@@ -51,9 +51,7 @@ export function CollapsibleSection({
   title,
   ...props
 }: CollapsibleSectionProps): React.JSX.Element {
-  if (!hasReactContent(title)) {
-    throw new Error("CollapsibleSection requires a non-empty title.");
-  }
+  requireContent(title, "CollapsibleSection requires a non-empty title.");
 
   const generatedId = useId();
   const contentId = `${generatedId}-content`;

@@ -11,7 +11,7 @@ import { PANEL_STYLES } from "../styles/index.js";
 import { installPanelStyles } from "../styles/install.js";
 import { ThemeProvider, usePanelTheme } from "../theme/context.js";
 import { classNames } from "../utils/class-names.js";
-import { attachRef, detachRef } from "../utils/ref.js";
+import { composeRef } from "../utils/ref.js";
 import { PACKAGE_VERSION, ROOT_CLASS } from "../version.js";
 
 export interface PanelRootProps
@@ -57,18 +57,14 @@ function PanelSurface({
     [styleNonce],
   );
 
-  // The caller ref composes through attachRef in a layout effect, keeping the
+  // The caller ref composes through composeRef in a layout effect, keeping the
   // commit-phase timing the imperative handle provided, so swapping the ref
   // does not reinstall the style element.
   useLayoutEffect(() => {
     const node = rootElement.current;
     if (node === null) return undefined;
 
-    const releaseRef = attachRef(ref, node);
-    return () => {
-      if (releaseRef !== undefined) releaseRef();
-      else detachRef(ref);
-    };
+    return composeRef(ref, node);
   }, [ref]);
 
   // Overlay components (Dialog, Menu, Toast) portal into the panel root so

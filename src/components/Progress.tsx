@@ -5,7 +5,7 @@ import {
   type ProgressBarProps as RACProgressBarProps,
 } from "react-aria-components";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { requireContent } from "../utils/react-node.js";
 import type { SemanticTone } from "../utils/tone.js";
 
 export type ProgressTone = SemanticTone;
@@ -35,9 +35,7 @@ export function Progress({
   valueText,
   ...props
 }: ProgressProps): React.JSX.Element {
-  if (!hasReactContent(label)) {
-    throw new Error("Progress requires a non-empty label.");
-  }
+  requireContent(label, "Progress requires a non-empty label.");
 
   const indeterminate = value === undefined;
   const span = max - min;
@@ -46,10 +44,7 @@ export function Progress({
       ? 0
       : Math.min(Math.max(((value - min) / span) * 100, 0), 100);
 
-  // react-aria's optional DOM props are not declared with `| undefined`,
-  // which makes the target unexpressible for a React HTMLAttributes spread
-  // under exactOptionalPropertyTypes. The rest props are plain DOM
-  // attributes, so this boundary assertion is sound.
+  // See RadioGroup for why the DOM prop spread needs a boundary assertion.
   const domProps = props as RACProgressBarProps;
 
   return (

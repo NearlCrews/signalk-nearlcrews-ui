@@ -9,7 +9,7 @@ import {
   useId,
 } from "react";
 
-import { joinIdReferences } from "../utils/aria.js";
+import { hasAccessibleName, joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
@@ -82,7 +82,7 @@ function useButtonState({
   size,
   variant,
 }: ButtonStateInput) {
-  if (iconOnly && !ariaLabel?.trim() && !ariaLabelledBy?.trim()) {
+  if (iconOnly && !hasAccessibleName(ariaLabel, ariaLabelledBy)) {
     throw new Error(
       "Button with iconOnly requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
     );
@@ -97,44 +97,50 @@ function useButtonState({
   const loadingId = useId();
 
   return {
-    ariaBusy: loading ? true : ariaBusy,
-    ariaLabel,
     blocksActivation,
-    className: classNames(
-      "snui-button",
-      `snui-button--${variant}`,
-      `snui-button--size-${size}`,
-      `snui-button--shape-${shape}`,
-      fullWidth ? "snui-button--full-width" : undefined,
-      iconOnly ? "snui-button--icon-only" : undefined,
-      className,
-    ),
-    content: (
-      <>
-        {loading ? (
-          <>
-            <span className="snui-button__spinner" aria-hidden="true" />
-            {/*
-             * Busy state is a description, not part of the name. Rewriting the
-             * accessible name mid-interaction makes the button read as a
-             * different control to assistive technology.
-             */}
-            <span
-              id={loadingId}
-              className="snui-visually-hidden"
-              aria-hidden="true"
-            >
-              {effectiveLoadingLabel}
-            </span>
-          </>
-        ) : null}
-        <span className="snui-button__content">{children}</span>
-      </>
-    ),
-    describedBy: joinIdReferences(
-      ariaDescribedBy,
-      loading ? loadingId : undefined,
-    ),
+    // Presentation and naming are identical for both elements, so the two
+    // forms spread one object rather than restating every attribute.
+    dom: {
+      "aria-busy": loading ? true : ariaBusy,
+      "aria-describedby": joinIdReferences(
+        ariaDescribedBy,
+        loading ? loadingId : undefined,
+      ),
+      "aria-disabled": blocksActivation || undefined,
+      "aria-label": ariaLabel,
+      "aria-labelledby": ariaLabelledBy,
+      children: (
+        <>
+          {loading ? (
+            <>
+              <span className="snui-button__spinner" aria-hidden="true" />
+              {/*
+               * Busy state is a description, not part of the name. Rewriting
+               * the accessible name mid-interaction makes the button read as a
+               * different control to assistive technology.
+               */}
+              <span
+                id={loadingId}
+                className="snui-visually-hidden"
+                aria-hidden="true"
+              >
+                {effectiveLoadingLabel}
+              </span>
+            </>
+          ) : null}
+          <span className="snui-button__content">{children}</span>
+        </>
+      ),
+      className: classNames(
+        "snui-button",
+        `snui-button--${variant}`,
+        `snui-button--size-${size}`,
+        `snui-button--shape-${shape}`,
+        fullWidth ? "snui-button--full-width" : undefined,
+        iconOnly ? "snui-button--icon-only" : undefined,
+        className,
+      ),
+    },
   };
 }
 
@@ -216,20 +222,13 @@ function NativeButton({
   return (
     <Component
       {...buttonProps}
+      {...state.dom}
       ref={ref}
       type={type}
-      className={state.className}
       disabled={disabled}
-      aria-disabled={state.blocksActivation || undefined}
-      aria-busy={state.ariaBusy}
-      aria-label={state.ariaLabel}
-      aria-labelledby={ariaLabelledBy}
-      aria-describedby={state.describedBy}
       onClick={guardClick(state.blocksActivation, onClick)}
       onKeyDown={guardKeyDown(state.blocksActivation, onKeyDown)}
-    >
-      {state.content}
-    </Component>
+    />
   );
 }
 
@@ -277,19 +276,12 @@ function AnchorButton({
   return (
     <Component
       {...anchorProps}
+      {...state.dom}
       ref={ref}
       href={href}
-      className={state.className}
-      aria-disabled={state.blocksActivation || undefined}
-      aria-busy={state.ariaBusy}
-      aria-label={state.ariaLabel}
-      aria-labelledby={ariaLabelledBy}
-      aria-describedby={state.describedBy}
       onClick={guardClick(state.blocksActivation, onClick)}
       onKeyDown={guardKeyDown(state.blocksActivation, onKeyDown)}
-    >
-      {state.content}
-    </Component>
+    />
   );
 }
 

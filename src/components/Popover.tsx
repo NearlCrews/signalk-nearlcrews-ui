@@ -1,38 +1,22 @@
-import {
-  type ComponentProps,
-  type CSSProperties,
-  type ReactElement,
-  type ReactNode,
-  type RefAttributes,
-  useLayoutEffect,
-  useReducer,
+import type {
+  ComponentProps,
+  CSSProperties,
+  ReactElement,
+  ReactNode,
+  RefAttributes,
 } from "react";
 import {
   DialogTrigger,
   Pressable,
-  type Placement as RACPlacement,
   Popover as RACPopover,
 } from "react-aria-components";
 import { classNames } from "../utils/class-names.js";
+import { usePortalContainerReady } from "../utils/portal.js";
 import type { ButtonProps } from "./Button.js";
-
-/**
- * Logical overlay edge. The "top" and "bottom" edges align the overlay's
- * start edge with the trigger's start edge, matching menu conventions; the
- * RAC equivalents are "top start" and "bottom start". RAC flips the
- * placement automatically when the overlay collides with the viewport.
- */
-export type OverlayPlacement = "top" | "bottom" | "start" | "end";
-
-/** RAC placement strings behind each library {@link OverlayPlacement}. */
-export const OVERLAY_PLACEMENTS: Readonly<
-  Record<OverlayPlacement, RACPlacement>
-> = {
-  bottom: "bottom start",
-  end: "end",
-  start: "start",
-  top: "top start",
-};
+import {
+  OVERLAY_PLACEMENTS,
+  type OverlayPlacement,
+} from "./overlay-placement.js";
 
 export interface PopoverProps extends RefAttributes<HTMLDivElement> {
   readonly children: ReactNode;
@@ -58,18 +42,7 @@ export function Popover({
   trigger,
   width = "auto",
 }: PopoverProps): React.JSX.Element {
-  /*
-   * PanelRoot's portal container reads its root element lazily, so it is
-   * null on the very first render, before refs attach. A popover that
-   * mounts in that commit would mount RAC's PopoverInner before the
-   * container resolves, permanently breaking RAC's role and focus effects.
-   * Defer the overlay by one commit so PopoverInner always mounts against
-   * a resolved container.
-   */
-  const [portalReady, resolvePortalContainer] = useReducer(() => true, false);
-  useLayoutEffect(() => {
-    resolvePortalContainer();
-  }, []);
+  const portalReady = usePortalContainerReady();
 
   return (
     <DialogTrigger

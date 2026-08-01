@@ -8,16 +8,16 @@ import {
 
 import {
   type AnnouncementMode,
-  announcementRole,
+  liveRegionProps,
 } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
 import {
   isSemanticTone,
+  resolveToneLabel,
   type StatusTone,
   TONE_GLYPHS,
-  TONE_LABELS,
 } from "../utils/tone.js";
 
 export type SpaceScale = 1 | 2 | 3 | 4 | 5 | 6;
@@ -246,20 +246,14 @@ export function Metric({
   value,
   ...props
 }: MetricProps): React.JSX.Element {
-  if (!hasReactContent(label)) {
-    throw new Error("Metric requires a non-empty label.");
-  }
+  requireContent(label, "Metric requires a non-empty label.");
 
   const labelId = useId();
   const semantic = isSemanticTone(tone);
   const effectiveToneLabel = semantic
-    ? (toneLabel?.trim() ?? "") || TONE_LABELS[tone]
+    ? resolveToneLabel(tone, toneLabel)
     : undefined;
-  const effectiveLive = live ?? "off";
-  const valueRole = announcementRole(effectiveLive);
-  // `alert` and `status` already imply a live region, so a roled value does
-  // not also carry aria-live.
-  const valueAriaLive = valueRole === undefined ? live : undefined;
+  const valueRegion = liveRegionProps(live);
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: Metrics may render outside MetricGrid, and fieldset would imply form controls.
@@ -274,8 +268,8 @@ export function Metric({
       </div>
       <div
         className="snui-metric__value"
-        role={valueRole}
-        aria-live={valueAriaLive}
+        role={valueRegion.role}
+        aria-live={valueRegion["aria-live"]}
       >
         {semantic ? (
           <span className="snui-metric__tone-glyph" aria-hidden="true">
@@ -314,7 +308,7 @@ export function Badge({
 }: BadgeProps): React.JSX.Element {
   const semantic = isSemanticTone(tone);
   const effectiveToneLabel = semantic
-    ? (toneLabel?.trim() ?? "") || TONE_LABELS[tone]
+    ? resolveToneLabel(tone, toneLabel)
     : undefined;
 
   return (

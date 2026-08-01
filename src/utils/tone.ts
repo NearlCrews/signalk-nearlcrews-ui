@@ -25,3 +25,15 @@ export const TONE_LABELS: Readonly<Record<SemanticTone, string>> = {
 export function isSemanticTone(tone: StatusTone): tone is SemanticTone {
   return tone !== "neutral";
 }
+
+/**
+ * Resolves the accessible name announced for a semantic tone. A caller label
+ * wins when it carries text; anything blank falls back to the default name so
+ * the tone is never announced as nothing.
+ */
+export function resolveToneLabel(
+  tone: SemanticTone,
+  toneLabel: string | undefined,
+): string {
+  return (toneLabel?.trim() ?? "") || TONE_LABELS[tone];
+}

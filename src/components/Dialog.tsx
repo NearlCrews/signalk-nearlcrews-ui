@@ -4,8 +4,6 @@ import {
   type ReactNode,
   type RefAttributes,
   useId,
-  useLayoutEffect,
-  useReducer,
 } from "react";
 import {
   Dialog as AriaDialog,
@@ -16,7 +14,8 @@ import {
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import type { HeadingLevel } from "../utils/heading.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { usePortalContainerReady } from "../utils/portal.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
 
 export type DialogWidth = "standard" | "wide";
 
@@ -73,20 +72,11 @@ function DialogSurface({
   style,
   title,
   width = "standard",
-}: DialogSurfaceProps): React.JSX.Element {
-  if (!hasReactContent(title)) {
-    throw new Error("Dialog requires a non-empty title.");
-  }
+}: DialogSurfaceProps): React.JSX.Element | null {
+  requireContent(title, "Dialog requires a non-empty title.");
 
   const generatedId = useId();
-
-  // The portal container provided by PanelRoot reads its root element lazily,
-  // so it is null on the very first render, before refs attach. A single
-  // post-mount render lets a dialog that starts open (defaultOpen) find it.
-  const [, retryPortalContainer] = useReducer((count: number) => count + 1, 0);
-  useLayoutEffect(() => {
-    retryPortalContainer();
-  }, []);
+  const portalReady = usePortalContainerReady();
 
   const hasDescription = hasReactContent(description);
   const descriptionId = hasDescription
@@ -94,6 +84,8 @@ function DialogSurface({
     : undefined;
   const describedBy = joinIdReferences(ariaDescribedBy, descriptionId);
   const hasActions = hasReactContent(actions);
+
+  if (!portalReady) return null;
 
   return (
     <ModalOverlay
@@ -157,11 +149,11 @@ export function AlertDialog({
   dismissable = false,
   ...props
 }: AlertDialogProps): React.JSX.Element {
-  if (!hasReactContent(actions)) {
-    throw new Error(
-      "AlertDialog requires non-empty actions: an alert dialog must give the user an explicit way out.",
-    );
-  }
+  requireContent(
+    actions,
+
+    "AlertDialog requires non-empty actions: an alert dialog must give the user an explicit way out.",
+  );
 
   return (
     <DialogSurface
