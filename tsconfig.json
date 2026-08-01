@@ -17,6 +17,7 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "ES2022",
+    "verbatimModuleSyntax": true,
     "paths": {
       "signalk-nearlcrews-ui": ["./src/index.ts"]
     },

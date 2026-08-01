@@ -1,6 +1,13 @@
 import { scopeStyles } from "./scope.js";
+import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
 export const COLLAPSIBLE_STYLES = scopeStyles(`
+.snui-accordion {
+  display: grid;
+  min-width: 0;
+  gap: var(--snui-space-3);
+}
+
 .snui-collapsible {
   border: 1px solid var(--snui-color-border);
   border-radius: var(--snui-radius-md);
@@ -36,7 +43,7 @@ export const COLLAPSIBLE_STYLES = scopeStyles(`
   border-radius: var(--snui-radius-sm);
   background: transparent;
   color: var(--snui-color-text);
-  font-weight: 700;
+  font-weight: var(--snui-font-weight-bold);
   text-align: start;
   cursor: pointer;
   transition: background-color var(--snui-transition-fast);
@@ -116,7 +123,7 @@ export const COLLAPSIBLE_STYLES = scopeStyles(`
   border-top: 1px solid var(--snui-color-border);
 }
 
-@container snui-panel (max-width: 37.5rem) {
+@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
   .snui-collapsible__heading {
     flex-basis: 100%;
   }

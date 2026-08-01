@@ -54,13 +54,13 @@ describe("PanelRoot themes", () => {
     const styles = document.head.querySelectorAll("style[data-snui-styles]");
     const style = styles[0];
 
-    expect(root).toHaveAttribute("data-snui-version", "0.4.1");
+    expect(root).toHaveAttribute("data-snui-version", "0.5.0");
     expect(root).toHaveAttribute("data-snui-root");
     expect(root?.querySelector("style")).toBeNull();
     expect(styles).toHaveLength(1);
     expect(style).toHaveAttribute("nonce", "fixture-nonce");
     expect(style?.textContent).toContain(
-      '.snui-root[data-snui-version="0.4.1"]',
+      '.snui-root[data-snui-version="0.5.0"]',
     );
     expect(style?.textContent).not.toMatch(/(^|[\s,{]):root([\s,{]|$)/m);
 
@@ -259,18 +259,17 @@ describe("PanelRoot themes", () => {
     expect(supportsNativeCssScope(window)).toBe(true);
   });
 
-  it("uses Light by default without persisting an implicit preference", () => {
+  it("uses Auto by default without persisting an implicit preference", () => {
     render(
       <PanelRoot data-testid="panel">
         <ThemeToggle />
       </PanelRoot>,
     );
 
-    expect(screen.getByTestId("panel")).toHaveAttribute(
-      "data-snui-theme",
-      "light",
-    );
-    expect(screen.getByRole("radio", { name: "Light" })).toBeChecked();
+    // Auto leaves data-snui-theme off the root, which is what lets the
+    // host-following and prefers-color-scheme rules apply.
+    expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
+    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
   });
 
@@ -320,108 +319,18 @@ describe("PanelRoot themes", () => {
     });
   });
 
-  it("migrates a valid plugin-specific legacy key once", async () => {
-    window.localStorage.setItem("cl-theme", "night");
+  it("uses Auto when the shared value is not a recognized theme", () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, "blue");
 
     render(
-      <PanelRoot data-testid="panel" legacyThemeStorageKeys={["cl-theme"]}>
-        <ThemeToggle />
-      </PanelRoot>,
-    );
-
-    expect(screen.getByTestId("panel")).toHaveAttribute(
-      "data-snui-theme",
-      "night",
-    );
-    await waitFor(() => {
-      expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("night");
-    });
-  });
-
-  it("preserves Auto while migrating a legacy preference", async () => {
-    window.localStorage.setItem("legacy-theme", "auto");
-
-    render(
-      <PanelRoot data-testid="panel" legacyThemeStorageKeys={["legacy-theme"]}>
+      <PanelRoot data-testid="panel">
         <ThemeToggle />
       </PanelRoot>,
     );
 
     expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
     expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
-    await waitFor(() => {
-      expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("auto");
-    });
-  });
-
-  it("reconciles competing legacy preferences across simultaneous roots", async () => {
-    window.localStorage.setItem("first-theme", "night");
-    window.localStorage.setItem("second-theme", "dark");
-
-    render(
-      <>
-        <PanelRoot
-          data-testid="first-panel"
-          legacyThemeStorageKeys={["first-theme"]}
-        >
-          First
-        </PanelRoot>
-        <PanelRoot
-          data-testid="second-panel"
-          legacyThemeStorageKeys={["second-theme"]}
-        >
-          Second
-        </PanelRoot>
-      </>,
-    );
-
-    await waitFor(() => {
-      expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("night");
-      expect(screen.getByTestId("first-panel")).toHaveAttribute(
-        "data-snui-theme",
-        "night",
-      );
-      expect(screen.getByTestId("second-panel")).toHaveAttribute(
-        "data-snui-theme",
-        "night",
-      );
-    });
-  });
-
-  it("uses a valid legacy preference when the shared value is invalid", async () => {
-    window.localStorage.setItem(THEME_STORAGE_KEY, "blue");
-    window.localStorage.setItem("legacy-theme", "night");
-
-    render(
-      <PanelRoot data-testid="panel" legacyThemeStorageKeys={["legacy-theme"]}>
-        <ThemeToggle />
-      </PanelRoot>,
-    );
-
-    expect(screen.getByTestId("panel")).toHaveAttribute(
-      "data-snui-theme",
-      "night",
-    );
-    await waitFor(() => {
-      expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("night");
-    });
-  });
-
-  it("ignores invalid values without persisting the Light fallback", () => {
-    window.localStorage.setItem("legacy-theme", "blue");
-
-    render(
-      <PanelRoot data-testid="panel" legacyThemeStorageKeys={["legacy-theme"]}>
-        <ThemeToggle />
-      </PanelRoot>,
-    );
-
-    expect(screen.getByTestId("panel")).toHaveAttribute(
-      "data-snui-theme",
-      "light",
-    );
-    expect(screen.getByRole("radio", { name: "Light" })).toBeChecked();
-    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("blue");
   });
 
   it("persists an explicit Light selection", async () => {
@@ -437,53 +346,40 @@ describe("PanelRoot themes", () => {
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
   });
 
-  it("synchronizes later roots when browser storage is unavailable", async () => {
+  it("synchronizes same-document panels through the theme-change event", async () => {
     const user = userEvent.setup();
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new DOMException("Storage is unavailable.", "SecurityError");
-    });
+    // The storage write fails, so the second panel can only learn the choice
+    // from the same-document broadcast.
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new DOMException("Storage is unavailable.", "SecurityError");
     });
 
-    function StorageUnavailablePanels(): React.JSX.Element {
-      const [showSecond, setShowSecond] = useState(false);
+    render(
+      <>
+        <PanelRoot data-testid="first-panel">
+          <ThemeToggle legend="First panel theme" />
+        </PanelRoot>
+        <PanelRoot data-testid="second-panel">
+          <ThemeToggle legend="Second panel theme" />
+        </PanelRoot>
+      </>,
+    );
 
-      return (
-        <>
-          <button type="button" onClick={() => setShowSecond(true)}>
-            Mount second panel
-          </button>
-          <PanelRoot data-testid="first-panel">
-            <ThemeToggle legend="First panel theme" />
-          </PanelRoot>
-          {showSecond ? (
-            <PanelRoot data-testid="second-panel">
-              <ThemeToggle legend="Second panel theme" />
-            </PanelRoot>
-          ) : null}
-        </>
+    const firstGroup = screen.getByRole("radiogroup", {
+      name: "First panel theme",
+    });
+    await user.click(within(firstGroup).getByRole("radio", { name: "Dark" }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId("first-panel")).toHaveAttribute(
+        "data-snui-theme",
+        "dark",
       );
-    }
-
-    render(<StorageUnavailablePanels />);
-
-    await user.click(screen.getByRole("radio", { name: "Dark" }));
-    expect(screen.getByTestId("first-panel")).toHaveAttribute(
-      "data-snui-theme",
-      "dark",
-    );
-    await user.click(
-      screen.getByRole("button", { name: "Mount second panel" }),
-    );
-    expect(screen.getByTestId("first-panel")).toHaveAttribute(
-      "data-snui-theme",
-      "dark",
-    );
-    expect(screen.getByTestId("second-panel")).toHaveAttribute(
-      "data-snui-theme",
-      "dark",
-    );
+      expect(screen.getByTestId("second-panel")).toHaveAttribute(
+        "data-snui-theme",
+        "dark",
+      );
+    });
     expect(
       within(
         screen.getByRole("radiogroup", { name: "Second panel theme" }),
@@ -516,7 +412,7 @@ describe("PanelRoot themes", () => {
     expect(screen.getByRole("radio", { name: "Night" })).toBeChecked();
   });
 
-  it("uses Light after storage is cleared while every root is unmounted", async () => {
+  it("uses Auto after storage is cleared while every root is unmounted", async () => {
     const user = userEvent.setup();
     const firstRoot = render(
       <PanelRoot data-testid="panel">
@@ -534,11 +430,8 @@ describe("PanelRoot themes", () => {
       </PanelRoot>,
     );
 
-    expect(screen.getByTestId("panel")).toHaveAttribute(
-      "data-snui-theme",
-      "light",
-    );
-    expect(screen.getByRole("radio", { name: "Light" })).toBeChecked();
+    expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
+    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
 
     secondRoot.unmount();
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
@@ -550,33 +443,24 @@ describe("PanelRoot themes", () => {
       </PanelRoot>,
     );
 
-    expect(screen.getByTestId("panel")).toHaveAttribute(
-      "data-snui-theme",
-      "light",
-    );
-    expect(screen.getByRole("radio", { name: "Light" })).toBeChecked();
+    expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
+    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
   });
 
-  it("retains an explicit in-memory theme after a storage write fails", async () => {
+  it("retains an explicit theme in the mounted panel when a storage write fails", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(THEME_STORAGE_KEY, "light");
     vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
       throw new DOMException("Storage is unavailable.", "SecurityError");
     });
-    const firstRoot = render(
-      <PanelRoot data-testid="panel">
-        <ThemeToggle />
-      </PanelRoot>,
-    );
-
-    await user.click(screen.getByRole("radio", { name: "Dark" }));
-    firstRoot.unmount();
 
     render(
       <PanelRoot data-testid="panel">
         <ThemeToggle />
       </PanelRoot>,
     );
+
+    await user.click(screen.getByRole("radio", { name: "Dark" }));
 
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("light");
     expect(screen.getByTestId("panel")).toHaveAttribute(
@@ -606,7 +490,7 @@ describe("PanelRoot themes", () => {
     );
   });
 
-  it("returns to Light when another tab clears local storage", async () => {
+  it("returns to Auto when another tab clears local storage", async () => {
     const user = userEvent.setup();
     render(
       <PanelRoot data-testid="panel">
@@ -625,14 +509,11 @@ describe("PanelRoot themes", () => {
       );
     });
 
-    expect(screen.getByTestId("panel")).toHaveAttribute(
-      "data-snui-theme",
-      "light",
-    );
-    expect(screen.getByRole("radio", { name: "Light" })).toBeChecked();
+    expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
+    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
   });
 
-  it("uses Light without persisting when browser storage cannot be read", () => {
+  it("uses Auto without persisting when browser storage cannot be read", () => {
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
       throw new DOMException("Storage is unavailable.", "SecurityError");
     });
@@ -644,11 +525,8 @@ describe("PanelRoot themes", () => {
       </PanelRoot>,
     );
 
-    expect(screen.getByTestId("panel")).toHaveAttribute(
-      "data-snui-theme",
-      "light",
-    );
-    expect(screen.getByRole("radio", { name: "Light" })).toBeChecked();
+    expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
+    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
     expect(setItem).not.toHaveBeenCalled();
   });
 
@@ -778,7 +656,7 @@ describe("SegmentedControl", () => {
     const rootRef = createRef<HTMLDivElement>();
     render(
       <SegmentedControl
-        rootRef={rootRef}
+        ref={rootRef}
         data-testid="display-mode"
         legend="Display mode"
         value="auto"

@@ -4,9 +4,13 @@
     "src/index.ts",
     "scripts/*.mjs",
     "fixtures/browser/main.tsx",
+    "fixtures/browser/showcase.tsx",
     "fixtures/browser/federation.tsx",
     "fixtures/browser/vite.config.ts",
-    "fixtures/federation/Panel.tsx"
+    "fixtures/consumer/consumer.tsx",
+    "fixtures/federation/Panel.tsx",
+    "tests/types/**/*.test-d.ts",
+    "tests/unit/**/*.test.{ts,tsx,mjs}"
   ],
   "project": [
     "src/**/*.{ts,tsx}",

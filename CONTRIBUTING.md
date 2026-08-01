@@ -19,6 +19,19 @@ Install Playwright browsers when needed:
 npx --no-install playwright install chromium firefox webkit
 ```
 
+## TypeScript toolchain
+
+Two TypeScript compilers are installed on purpose, through npm aliases in `devDependencies`:
+
+- `@typescript/native` is the real `typescript` package at 7.x. It provides the `tsc` binary that `npm run build` and `npm run type-check` use.
+- `typescript` is aliased to `@typescript/typescript6`, which provides the TypeScript 6 JavaScript compiler API plus a `tsc6` binary.
+
+The alias exists because tools that import the compiler API, most importantly typescript-eslint, do not yet run under TypeScript 7. Resolving the bare `typescript` specifier to the TypeScript 6 API keeps type-aware linting working while builds use the native compiler.
+
+Because type-aware lint rules evaluate under TypeScript 6 while the build evaluates under TypeScript 7, `npm run validate` runs `type-check` and `type-check:ts6`. That compares the diagnostics the two compilers report over both the root project and the build project. It does not compare emitted declarations, because only TypeScript 7 emits shipped output.
+
+Collapse this back to a single `typescript` dependency once typescript-eslint supports TypeScript 7. Verify emitted declarations are unchanged before and after that collapse.
+
 ## Change rules
 
 - Keep components presentational and independent of plugin domain state.

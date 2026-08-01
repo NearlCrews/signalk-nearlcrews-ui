@@ -1,89 +1,101 @@
 import {
-  forwardRef,
   type HTMLAttributes,
   type ReactNode,
+  type RefAttributes,
   useCallback,
-  useImperativeHandle,
+  useLayoutEffect,
   useRef,
 } from "react";
+import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { PANEL_STYLES } from "../styles/index.js";
 import { installPanelStyles } from "../styles/install.js";
 import { ThemeProvider, usePanelTheme } from "../theme/context.js";
 import { classNames } from "../utils/class-names.js";
+import { attachRef, detachRef } from "../utils/ref.js";
 import { PACKAGE_VERSION, ROOT_CLASS } from "../version.js";
 
-export interface PanelRootProps extends HTMLAttributes<HTMLDivElement> {
+export interface PanelRootProps
+  extends HTMLAttributes<HTMLDivElement>,
+    RefAttributes<HTMLDivElement> {
   readonly children: ReactNode;
-  readonly legacyThemeStorageKeys?: readonly string[];
-  readonly styleNonce?: string;
-  readonly width?: PanelWidth;
+  readonly styleNonce?: string | undefined;
+  readonly width?: PanelWidth | undefined;
 }
 
 export type PanelWidth = "standard" | "wide" | "full";
 
-const EMPTY_LEGACY_STORAGE_KEYS: readonly string[] = [];
+function PanelSurface({
+  children,
+  className,
+  ref,
+  styleNonce,
+  width = "full",
+  ...props
+}: PanelRootProps): React.JSX.Element {
+  const { theme } = usePanelTheme();
+  const rootElement = useRef<HTMLDivElement | null>(null);
 
-type PanelSurfaceProps = Omit<PanelRootProps, "legacyThemeStorageKeys">;
+  // One callback ref owns the node so the panel styles are installed and
+  // removed exactly once per mount.
+  const setRootRef = useCallback(
+    (node: HTMLDivElement | null): (() => void) | undefined => {
+      if (node === null) return undefined;
 
-const PanelSurface = forwardRef<HTMLDivElement, PanelSurfaceProps>(
-  function PanelSurface(
-    { children, className, styleNonce, width = "full", ...props },
-    ref,
-  ) {
-    const { theme } = usePanelTheme();
-    const rootElement = useRef<HTMLDivElement | null>(null);
+      rootElement.current = node;
+      const removeStyles = installPanelStyles(
+        node.ownerDocument,
+        PACKAGE_VERSION,
+        PANEL_STYLES,
+        styleNonce,
+      );
 
-    const setRootRef = useCallback(
-      (node: HTMLDivElement | null): (() => void) | undefined => {
-        if (node === null) return undefined;
+      return () => {
+        removeStyles();
+        rootElement.current = null;
+      };
+    },
+    [styleNonce],
+  );
 
-        rootElement.current = node;
-        const removeStyles = installPanelStyles(
-          node.ownerDocument,
-          PACKAGE_VERSION,
-          PANEL_STYLES,
-          styleNonce,
-        );
+  // The caller ref composes through attachRef in a layout effect, keeping the
+  // commit-phase timing the imperative handle provided, so swapping the ref
+  // does not reinstall the style element.
+  useLayoutEffect(() => {
+    const node = rootElement.current;
+    if (node === null) return undefined;
 
-        return () => {
-          removeStyles();
-          rootElement.current = null;
-        };
-      },
-      [styleNonce],
-    );
+    const releaseRef = attachRef(ref, node);
+    return () => {
+      if (releaseRef !== undefined) releaseRef();
+      else detachRef(ref);
+    };
+  }, [ref]);
 
-    useImperativeHandle(ref, () => {
-      if (rootElement.current === null) {
-        throw new Error("PanelRoot could not resolve its root element.");
-      }
-      return rootElement.current;
-    }, []);
+  // Overlay components (Dialog, Menu, Toast) portal into the panel root so
+  // scoped styles and the selected theme reach them. The container reads the
+  // root element lazily because overlays open after the commit that sets it.
+  const getPortalContainer = useCallback(() => rootElement.current, []);
 
-    return (
-      <div
-        {...props}
-        ref={setRootRef}
-        className={classNames(ROOT_CLASS, `snui-root--${width}`, className)}
-        data-snui-root=""
-        data-snui-version={PACKAGE_VERSION}
-        data-snui-theme={theme === "auto" ? undefined : theme}
-      >
+  return (
+    <div
+      {...props}
+      ref={setRootRef}
+      className={classNames(ROOT_CLASS, `snui-root--${width}`, className)}
+      data-snui-root=""
+      data-snui-version={PACKAGE_VERSION}
+      data-snui-theme={theme === "auto" ? undefined : theme}
+    >
+      <UNSAFE_PortalProvider getContainer={getPortalContainer}>
         <div className="snui-root__content">{children}</div>
-      </div>
-    );
-  },
-);
+      </UNSAFE_PortalProvider>
+    </div>
+  );
+}
 
-export const PanelRoot = forwardRef<HTMLDivElement, PanelRootProps>(
-  function PanelRoot(
-    { legacyThemeStorageKeys = EMPTY_LEGACY_STORAGE_KEYS, ...surfaceProps },
-    ref,
-  ) {
-    return (
-      <ThemeProvider legacyStorageKeys={legacyThemeStorageKeys}>
-        <PanelSurface {...surfaceProps} ref={ref} />
-      </ThemeProvider>
-    );
-  },
-);
+export function PanelRoot(props: PanelRootProps): React.JSX.Element {
+  return (
+    <ThemeProvider>
+      <PanelSurface {...props} />
+    </ThemeProvider>
+  );
+}

@@ -5,6 +5,13 @@ import { FEEDBACK_STYLES } from "./feedback.js";
 import { FORM_STYLES } from "./forms.js";
 import { FOUNDATION_STYLES } from "./foundation.js";
 import { LAYOUT_STYLES } from "./layout.js";
+import {
+  DIALOG_STYLES,
+  MENU_STYLES,
+  POPOVER_STYLES,
+  TOAST_STYLES,
+} from "./overlays.js";
+import { TABLE_STYLES } from "./table.js";
 import { TOKEN_STYLES } from "./tokens.js";
 
 export const PANEL_STYLES = [
@@ -16,4 +23,9 @@ export const PANEL_STYLES = [
   LAYOUT_STYLES,
   FEEDBACK_STYLES,
   COLLAPSIBLE_STYLES,
+  DIALOG_STYLES,
+  MENU_STYLES,
+  POPOVER_STYLES,
+  TOAST_STYLES,
+  TABLE_STYLES,
 ].join("\n");

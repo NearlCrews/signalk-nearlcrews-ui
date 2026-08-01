@@ -10,7 +10,6 @@ import {
   Checkbox,
   Cluster,
   CollapsibleSection,
-  Disclosure,
   FieldGroup,
   InlineConfirm,
   InputGroup,
@@ -50,7 +49,7 @@ function Fixture(): React.JSX.Element {
   const saveRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <PanelRoot legacyThemeStorageKeys={["fixture-theme"]}>
+    <PanelRoot>
       <Stack gap={4}>
         <Cluster justify="between" gap={4}>
           <div>
@@ -106,30 +105,33 @@ function Fixture(): React.JSX.Element {
               layout="inline"
               density="compact"
             >
-              {(controlProps) => (
-                <InputGroup density="compact">
-                  <InputGroupControl width="grow">
-                    <RangeInput
-                      {...controlProps}
-                      defaultValue={75}
-                      min={0}
-                      max={100}
-                    />
-                  </InputGroupControl>
-                  <InputGroupControl width="fixed">
-                    <NumberInput
-                      aria-label="Confidence threshold exact value"
-                      aria-describedby={controlProps["aria-describedby"]}
-                      defaultValue={75}
-                      min={0}
-                      max={100}
-                    />
-                    <InputGroupAddon data-testid="confidence-unit">
-                      %
-                    </InputGroupAddon>
-                  </InputGroupControl>
-                </InputGroup>
-              )}
+              {(controlProps) => {
+                const { descriptionId, errorId, ...rangeProps } = controlProps;
+                return (
+                  <InputGroup density="compact">
+                    <InputGroupControl width="grow">
+                      <RangeInput
+                        {...rangeProps}
+                        defaultValue={75}
+                        min={0}
+                        max={100}
+                      />
+                    </InputGroupControl>
+                    <InputGroupControl width="fixed">
+                      <NumberInput
+                        aria-label="Confidence threshold exact value"
+                        aria-describedby={controlProps["aria-describedby"]}
+                        defaultValue={75}
+                        min={0}
+                        max={100}
+                      />
+                      <InputGroupAddon data-testid="confidence-unit">
+                        %
+                      </InputGroupAddon>
+                    </InputGroupControl>
+                  </InputGroup>
+                );
+              }}
             </LabeledField>
             <FieldGroup
               legend="Provider behavior"
@@ -146,7 +148,7 @@ function Fixture(): React.JSX.Element {
                 defaultChecked
               />
             </FieldGroup>
-            <Disclosure title="Advanced settings">
+            <CollapsibleSection title="Advanced settings">
               <SegmentedControl
                 legend="Log detail"
                 value={logLevel}
@@ -157,7 +159,7 @@ function Fixture(): React.JSX.Element {
                   { value: "verbose", label: "Verbose" },
                 ]}
               />
-            </Disclosure>
+            </CollapsibleSection>
           </Stack>
         </Section>
 

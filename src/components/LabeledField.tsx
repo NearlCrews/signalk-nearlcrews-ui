@@ -18,12 +18,18 @@ export interface FieldControlProps {
   readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
   readonly "aria-errormessage"?: AriaAttributes["aria-errormessage"];
   readonly "aria-invalid"?: AriaAttributes["aria-invalid"];
+  readonly disabled?: boolean;
   readonly id?: string;
+  readonly name?: string;
   readonly required?: boolean;
 }
 
 export interface LabeledFieldControlProps extends FieldControlProps {
   readonly id: string;
+  /** Present only when the field renders description content. */
+  readonly descriptionId?: string;
+  /** Present only when the field renders error content. */
+  readonly errorId?: string;
 }
 
 export type LabeledFieldLayout = "stacked" | "inline";
@@ -39,10 +45,13 @@ export interface LabeledFieldProps
   readonly children: LabeledFieldChild;
   readonly density?: LabeledFieldDensity;
   readonly description?: ReactNode;
+  readonly disabled?: boolean;
   readonly error?: ReactNode;
   readonly errorLive?: FieldErrorLive;
   readonly label: ReactNode;
   readonly layout?: LabeledFieldLayout;
+  readonly name?: string;
+  readonly optionalLabel?: ReactNode;
   readonly required?: boolean;
 }
 
@@ -51,10 +60,13 @@ export function LabeledField({
   className,
   density = "comfortable",
   description,
+  disabled,
   error,
   errorLive = "off",
   label,
   layout = "stacked",
+  name,
+  optionalLabel,
   required = false,
   ...props
 }: LabeledFieldProps): React.JSX.Element {
@@ -70,32 +82,48 @@ export function LabeledField({
   const descriptionId = hasDescription
     ? `${generatedId}-description`
     : undefined;
-  const errorId = hasError ? `${generatedId}-error` : undefined;
+  // A live region must exist before its content arrives, so the container is
+  // mounted whenever announcements are requested and only its text varies.
+  const announcesErrors = errorLive !== "off";
+  const rendersError = hasError || announcesErrors;
+  const errorId = rendersError ? `${generatedId}-error` : undefined;
+  const referencedErrorId = hasError ? errorId : undefined;
   const describedBy = joinIdReferences(
     elementChild?.props["aria-describedby"],
     descriptionId,
-    errorId,
+    referencedErrorId,
   );
   const errorMessage = joinIdReferences(
     elementChild?.props["aria-errormessage"],
-    errorId,
+    referencedErrorId,
   );
 
-  const controlProps: LabeledFieldControlProps = {
+  const controlName = elementChild?.props.name ?? name;
+  const controlDisabled = elementChild?.props.disabled ?? disabled;
+  const injectedProps: FieldControlProps = {
     id: controlId,
     ...(describedBy === undefined ? {} : { "aria-describedby": describedBy }),
-    ...(errorId === undefined
+    ...(referencedErrorId === undefined
       ? {}
       : {
-          "aria-errormessage": errorMessage ?? errorId,
+          "aria-errormessage": errorMessage ?? referencedErrorId,
           "aria-invalid": true,
         }),
+    ...(controlName === undefined ? {} : { name: controlName }),
+    ...(controlDisabled ? { disabled: true } : {}),
     ...(required ? { required: true } : {}),
   };
   const control =
     typeof children === "function"
-      ? children(controlProps)
-      : cloneElement(children, controlProps);
+      ? children({
+          ...injectedProps,
+          id: controlId,
+          ...(descriptionId === undefined ? {} : { descriptionId }),
+          ...(referencedErrorId === undefined
+            ? {}
+            : { errorId: referencedErrorId }),
+        })
+      : cloneElement(children, injectedProps);
 
   return (
     <div
@@ -113,6 +141,10 @@ export function LabeledField({
           <span className="snui-required-mark" aria-hidden="true">
             *
           </span>
+        ) : hasReactContent(optionalLabel) ? (
+          <span className="snui-optional-mark" aria-hidden="true">
+            {optionalLabel}
+          </span>
         ) : null}
       </label>
       {hasDescription ? (
@@ -121,14 +153,14 @@ export function LabeledField({
         </div>
       ) : null}
       <div className="snui-field__control">{control}</div>
-      {hasError ? (
+      {rendersError ? (
         <div
           id={errorId}
           className="snui-field__error"
           role={announcementRole(errorLive)}
           aria-live={errorLive}
         >
-          {error}
+          {hasError ? error : null}
         </div>
       ) : null}
     </div>

@@ -1,0 +1,786 @@
+=== components/Accordion.d.ts ===
+import { type HTMLAttributes, type ReactNode } from "react";
+export interface AccordionProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+    readonly children: ReactNode;
+}
+/**
+ * Coordinates a set of collapsible sections so at most one is open. Each
+ * child stays a controlled section: opening one closes the others, and
+ * keyboard behavior remains per child.
+ */
+export declare function Accordion({ children, className, ...props }: AccordionProps): React.JSX.Element;
+
+=== components/ActionBar.d.ts ===
+import type { HTMLAttributes, ReactNode, Ref } from "react";
+export type ActionBarSticky = "bottom" | "top";
+export interface ActionBarProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+    readonly actions: ReactNode;
+    readonly status?: ReactNode;
+    readonly statusRef?: Ref<HTMLDivElement>;
+    readonly sticky?: ActionBarSticky | undefined;
+}
+export declare function ActionBar({ actions, className, status, statusRef, sticky, ...props }: ActionBarProps): React.JSX.Element;
+
+=== components/Banner.d.ts ===
+import type { HTMLAttributes, MouseEvent, ReactNode, RefAttributes, RefObject } from "react";
+import { type StatusTone } from "../utils/tone.js";
+export type BannerTone = StatusTone;
+export type BannerLive = "off" | "polite" | "assertive";
+export interface BannerProps extends Omit<HTMLAttributes<HTMLDivElement>, "aria-live" | "title">, RefAttributes<HTMLDivElement> {
+    readonly actions?: ReactNode | undefined;
+    readonly dismissFocusRef?: RefObject<HTMLElement | null> | undefined;
+    readonly dismissLabel?: string | undefined;
+    readonly live?: BannerLive | undefined;
+    readonly onDismiss?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
+    readonly title?: ReactNode | undefined;
+    readonly tone?: BannerTone | undefined;
+    readonly toneLabel?: string | undefined;
+}
+export declare function Banner({ actions, children, className, dismissFocusRef, dismissLabel, live, onDismiss, ref, role: suppliedRole, title, tone, toneLabel, ...props }: BannerProps): React.JSX.Element;
+
+=== components/Button.d.ts ===
+import { type AnchorHTMLAttributes, type ButtonHTMLAttributes, type RefAttributes } from "react";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+export type ButtonSize = "default" | "compact";
+export type ButtonShape = "default" | "pill";
+interface ButtonCommonProps {
+    readonly ariaDisabled?: boolean | undefined;
+    readonly fullWidth?: boolean | undefined;
+    readonly iconOnly?: boolean | undefined;
+    readonly loading?: boolean | undefined;
+    readonly loadingLabel?: string | undefined;
+    readonly shape?: ButtonShape | undefined;
+    readonly size?: ButtonSize | undefined;
+    readonly variant?: ButtonVariant | undefined;
+}
+export interface ButtonAsButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, RefAttributes<HTMLButtonElement>, ButtonCommonProps {
+    readonly as?: "button" | undefined;
+    readonly href?: undefined;
+}
+export interface ButtonAsAnchorProps extends AnchorHTMLAttributes<HTMLAnchorElement>, RefAttributes<HTMLAnchorElement>, ButtonCommonProps {
+    readonly as: "a";
+    readonly href: string;
+}
+export type ButtonProps = ButtonAsButtonProps | ButtonAsAnchorProps;
+export declare function Button(props: ButtonProps): React.JSX.Element;
+export {};
+
+=== components/CollapsibleSection.d.ts ===
+import { type HTMLAttributes, type ReactNode } from "react";
+import { type HeadingLevel } from "../utils/heading.js";
+export type CollapsibleMountStrategy = "lazy-retain" | "retain" | "unmount";
+export type CollapsibleSummaryPlacement = "below" | "header";
+export type CollapsibleSummaryVisibility = "always" | "collapsed";
+export interface CollapsibleSectionProps extends Omit<HTMLAttributes<HTMLElement>, "onToggle" | "title"> {
+    readonly actions?: ReactNode;
+    readonly defaultOpen?: boolean;
+    readonly disabled?: boolean;
+    readonly headingLevel?: HeadingLevel;
+    /** Hidden content stays mounted but pauses effects under "lazy-retain" and "retain". */
+    readonly mountStrategy?: CollapsibleMountStrategy;
+    readonly onOpenChange?: (open: boolean) => void;
+    readonly open?: boolean;
+    readonly summary?: ReactNode;
+    readonly summaryPlacement?: CollapsibleSummaryPlacement;
+    /** Keeps the summary rendered while open under "always". */
+    readonly summaryVisibility?: CollapsibleSummaryVisibility;
+    readonly title: ReactNode;
+}
+export declare function CollapsibleSection({ actions, "aria-labelledby": ariaLabelledBy, children, className, defaultOpen, disabled, headingLevel, mountStrategy, onOpenChange, open, summary, summaryPlacement, summaryVisibility, title, ...props }: CollapsibleSectionProps): React.JSX.Element;
+
+=== components/DataGrid.d.ts ===
+import { type AriaAttributes, type CSSProperties, type ReactElement, type ReactNode, type RefAttributes } from "react";
+import { Cell, Column, type Key, Row, type RowProps, type Selection, type SortDescriptor } from "react-aria-components";
+export type { CellProps, ColumnProps, Key, RowProps, Selection, SortDescriptor, SortDirection, } from "react-aria-components";
+export { Cell, Column, Row };
+export type DataGridDensity = "default" | "compact";
+export type DataGridSelectionMode = "none" | "single" | "multiple";
+export interface DataGridProps<TRow, TColumn = unknown> extends RefAttributes<HTMLTableElement> {
+    readonly "aria-label"?: AriaAttributes["aria-label"];
+    readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"];
+    /**
+     * Header columns as <Column> elements, or a render function when `columns`
+     * provides the column data (the RAC dynamic collection shape).
+     */
+    readonly children: ReactNode | ((column: TColumn) => ReactElement);
+    readonly className?: string;
+    /** Column data for a dynamic header; pairs with function children. */
+    readonly columns?: Iterable<TColumn>;
+    readonly defaultSelectedKeys?: "all" | Iterable<Key>;
+    readonly density?: DataGridDensity;
+    /**
+     * Replaces the default empty content entirely. Render an EmptyState (or any
+     * node) for full control over the empty table.
+     */
+    readonly emptyState?: ReactNode;
+    /** Title of the default EmptyState. */
+    readonly emptyTitle?: string;
+    readonly id?: string;
+    /** Row data. Items should expose a stable `id` or `key` for selection. */
+    readonly items: readonly TRow[];
+    readonly onSelectionChange?: ((keys: Selection) => void) | undefined;
+    /**
+     * Reports sort toggles from sortable column headers. Sorting is controlled
+     * only: RAC Table has no defaultSortDescriptor, so pair this with
+     * `sortDescriptor` and sort `items` in the consumer.
+     */
+    readonly onSortChange?: ((descriptor: SortDescriptor) => void) | undefined;
+    /** Renders one row as a <Row> with <Cell> children. */
+    readonly renderRow: (item: TRow) => ReactElement<RowProps<TRow>>;
+    readonly selectedKeys?: "all" | Iterable<Key>;
+    readonly selectionMode?: DataGridSelectionMode;
+    readonly sortDescriptor?: SortDescriptor;
+    readonly style?: CSSProperties;
+    /**
+     * Number of rows above which the body is windowed with
+     * @tanstack/react-virtual. Virtualized rows have a fixed height per density
+     * and columns size by flex (a Column `width` pins its basis); keyboard
+     * navigation reaches rendered rows, scrolling reveals the rest.
+     */
+    readonly virtualizeThreshold?: number;
+    /** Paints alternating row backgrounds. Off by default. */
+    readonly zebra?: boolean;
+}
+export declare function DataGrid<TRow, TColumn = unknown>({ "aria-label": ariaLabel, "aria-labelledby": ariaLabelledBy, children, className, columns, defaultSelectedKeys, density, emptyState, emptyTitle, id, items, onSelectionChange, onSortChange, ref, renderRow, selectedKeys, selectionMode, sortDescriptor, style, virtualizeThreshold, zebra, }: DataGridProps<TRow, TColumn>): React.JSX.Element;
+
+=== components/Dialog.d.ts ===
+import { type AriaAttributes, type CSSProperties, type ReactNode, type RefAttributes } from "react";
+import type { HeadingLevel } from "../utils/heading.js";
+export type DialogWidth = "standard" | "wide";
+export interface DialogProps extends RefAttributes<HTMLElement> {
+    /** Footer slot for the dialog actions, usually library Buttons. */
+    readonly actions?: ReactNode;
+    readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
+    readonly "aria-details"?: AriaAttributes["aria-details"];
+    readonly "aria-label"?: AriaAttributes["aria-label"];
+    readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"];
+    /** Adds a backdrop blur to the scrim behind the dialog. */
+    readonly blurScrim?: boolean;
+    readonly children?: ReactNode;
+    readonly className?: string;
+    /** Sets the initial state only. Pass `open` to control the dialog. */
+    readonly defaultOpen?: boolean;
+    readonly description?: ReactNode;
+    /** Allows dismissal through Escape and scrim presses. Defaults to true. */
+    readonly dismissable?: boolean;
+    readonly headingLevel?: HeadingLevel;
+    readonly id?: string;
+    readonly onOpenChange?: (open: boolean) => void;
+    /** Controls the dialog when set. Wins over `defaultOpen`. */
+    readonly open?: boolean;
+    readonly style?: CSSProperties;
+    readonly title: ReactNode;
+    readonly width?: DialogWidth;
+}
+export type AlertDialogProps = DialogProps;
+export declare function Dialog(props: DialogProps): React.JSX.Element;
+export declare function AlertDialog({ actions, dismissable, ...props }: AlertDialogProps): React.JSX.Element;
+
+=== components/EmptyState.d.ts ===
+import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
+export interface EmptyStateProps extends Omit<HTMLAttributes<HTMLDivElement>, "title">, RefAttributes<HTMLDivElement> {
+    readonly action?: ReactNode | undefined;
+    readonly description?: ReactNode | undefined;
+    /** Decorative only: rendered inside an aria-hidden container. */
+    readonly icon?: ReactNode | undefined;
+    /** A styled div, not a heading: consumers own the outline around it. */
+    readonly title: ReactNode;
+}
+export declare function EmptyState({ action, className, description, icon, ref, title, ...props }: EmptyStateProps): React.JSX.Element;
+
+=== components/FieldGroup.d.ts ===
+import { type FieldsetHTMLAttributes, type ReactNode, type RefAttributes } from "react";
+import type { FieldErrorLive } from "./LabeledField.js";
+export interface FieldGroupProps extends Omit<FieldsetHTMLAttributes<HTMLFieldSetElement>, "title">, RefAttributes<HTMLFieldSetElement> {
+    readonly actions?: ReactNode | undefined;
+    readonly description?: ReactNode | undefined;
+    readonly error?: ReactNode | undefined;
+    readonly errorLive?: FieldErrorLive | undefined;
+    readonly legend: ReactNode;
+}
+export declare function FieldGroup({ actions, "aria-describedby": ariaDescribedBy, children, className, description, error, errorLive, legend, ref, ...props }: FieldGroupProps): React.JSX.Element;
+
+=== components/InlineConfirm.d.ts ===
+import { type HTMLAttributes, type ReactNode, type RefAttributes, type RefObject } from "react";
+import { type HeadingLevel } from "../utils/heading.js";
+import { type ButtonVariant } from "./Button.js";
+export type InlineConfirmCancelReason = "cancel" | "escape";
+export interface InlineConfirmProps extends Omit<HTMLAttributes<HTMLElement>, "children" | "onCancel" | "title">, RefAttributes<HTMLElement> {
+    readonly busy?: boolean;
+    readonly cancelLabel?: ReactNode;
+    readonly cancelVariant?: ButtonVariant;
+    readonly confirmLabel?: ReactNode;
+    readonly confirmVariant?: Extract<ButtonVariant, "primary" | "danger">;
+    /** Sets the initial state only. Pass `open` to control the confirmation. */
+    readonly defaultOpen?: boolean;
+    readonly fallbackTitle?: ReactNode;
+    readonly headingLevel?: HeadingLevel;
+    /** Focused on open instead of the region container. */
+    readonly initialFocusRef?: RefObject<HTMLElement | null>;
+    /** Removes the region landmark and its naming when false. */
+    readonly landmark?: boolean;
+    readonly message: ReactNode;
+    readonly onCancel: (reason: InlineConfirmCancelReason) => void;
+    readonly onConfirm: () => void;
+    readonly open?: boolean;
+    /** Receives focus after close instead of the previously focused element. */
+    readonly returnFocusRef?: RefObject<HTMLElement | null>;
+    readonly title?: ReactNode;
+}
+export declare function InlineConfirm({ "aria-describedby": ariaDescribedBy, "aria-labelledby": ariaLabelledBy, busy, cancelLabel, cancelVariant, className, confirmLabel, confirmVariant, defaultOpen, fallbackTitle, headingLevel, initialFocusRef, landmark, message, onKeyDown, onCancel, onConfirm, open, ref, returnFocusRef, title, ...props }: InlineConfirmProps): React.JSX.Element | null;
+
+=== components/Inputs.d.ts ===
+import { type InputHTMLAttributes, type ReactNode, type RefAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
+import { type AnnouncementMode } from "../utils/announcement.js";
+export type TextInputType = "date" | "datetime-local" | "email" | "month" | "password" | "search" | "tel" | "text" | "time" | "url" | "week";
+export type TextInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & RefAttributes<HTMLInputElement> & {
+    readonly type?: TextInputType | undefined;
+};
+export declare function TextInput({ className, ref, type, ...props }: TextInputProps): React.JSX.Element;
+export type NumberInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & RefAttributes<HTMLInputElement>;
+export declare function NumberInput({ className, ref, ...props }: NumberInputProps): React.JSX.Element;
+export type RangeInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, "type"> & RefAttributes<HTMLInputElement>;
+export declare function RangeInput({ className, onInput, ref, ...props }: RangeInputProps): React.JSX.Element;
+export type SelectProps = SelectHTMLAttributes<HTMLSelectElement> & RefAttributes<HTMLSelectElement>;
+export declare function Select({ className, ref, ...props }: SelectProps): React.JSX.Element;
+export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & RefAttributes<HTMLTextAreaElement>;
+export declare function Textarea({ className, ref, ...props }: TextareaProps): React.JSX.Element;
+export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "children" | "type">, RefAttributes<HTMLInputElement> {
+    readonly description?: ReactNode | undefined;
+    readonly error?: ReactNode | undefined;
+    readonly errorLive?: CheckboxErrorLive | undefined;
+    /**
+     * Re-asserted after every render and after a native form reset. A reset
+     * restores checkedness from defaultChecked (or the controlled checked
+     * prop) but never touches the indeterminate IDL property, so the
+     * component re-applies this prop once the reset lands.
+     */
+    readonly indeterminate?: boolean | undefined;
+    readonly label: ReactNode;
+}
+export type CheckboxErrorLive = AnnouncementMode;
+export declare function Checkbox({ "aria-describedby": ariaDescribedBy, "aria-errormessage": ariaErrorMessage, "aria-invalid": ariaInvalid, "aria-labelledby": ariaLabelledBy, checked, className, description, error, errorLive, id, indeterminate, label, ref, required, ...props }: CheckboxProps): React.JSX.Element;
+
+=== components/LabeledField.d.ts ===
+import { type AriaAttributes, type HTMLAttributes, type ReactElement, type ReactNode } from "react";
+import { type AnnouncementMode } from "../utils/announcement.js";
+export interface FieldControlProps {
+    readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
+    readonly "aria-errormessage"?: AriaAttributes["aria-errormessage"];
+    readonly "aria-invalid"?: AriaAttributes["aria-invalid"];
+    readonly disabled?: boolean;
+    readonly id?: string;
+    readonly name?: string;
+    readonly required?: boolean;
+}
+export interface LabeledFieldControlProps extends FieldControlProps {
+    readonly id: string;
+    /** Present only when the field renders description content. */
+    readonly descriptionId?: string;
+    /** Present only when the field renders error content. */
+    readonly errorId?: string;
+}
+export type LabeledFieldLayout = "stacked" | "inline";
+export type LabeledFieldDensity = "comfortable" | "compact";
+export type FieldErrorLive = AnnouncementMode;
+export type LabeledFieldChild = ReactElement<FieldControlProps> | ((controlProps: LabeledFieldControlProps) => ReactNode);
+export interface LabeledFieldProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+    readonly children: LabeledFieldChild;
+    readonly density?: LabeledFieldDensity;
+    readonly description?: ReactNode;
+    readonly disabled?: boolean;
+    readonly error?: ReactNode;
+    readonly errorLive?: FieldErrorLive;
+    readonly label: ReactNode;
+    readonly layout?: LabeledFieldLayout;
+    readonly name?: string;
+    readonly optionalLabel?: ReactNode;
+    readonly required?: boolean;
+}
+export declare function LabeledField({ children, className, density, description, disabled, error, errorLive, label, layout, name, optionalLabel, required, ...props }: LabeledFieldProps): React.JSX.Element;
+
+=== components/Layout.d.ts ===
+import { type HTMLAttributes, type ReactNode } from "react";
+import { type AnnouncementMode } from "../utils/announcement.js";
+import { type StatusTone } from "../utils/tone.js";
+export type SpaceScale = 1 | 2 | 3 | 4 | 5 | 6;
+export type LayoutAlignment = "start" | "center" | "end" | "stretch";
+export type StackElement = "div" | "ul" | "ol" | "form" | "section" | "nav";
+export interface StackProps extends HTMLAttributes<HTMLDivElement> {
+    readonly align?: LayoutAlignment;
+    readonly as?: StackElement;
+    readonly gap?: SpaceScale;
+}
+export declare function Stack({ align, as, children, className, gap, ...props }: StackProps): React.JSX.Element;
+export type ClusterElement = "div" | "ul" | "ol" | "section" | "nav";
+export interface ClusterProps extends HTMLAttributes<HTMLDivElement> {
+    readonly align?: LayoutAlignment;
+    readonly as?: ClusterElement;
+    readonly gap?: SpaceScale;
+    readonly justify?: "start" | "center" | "end" | "between" | "around" | "evenly";
+}
+export declare function Cluster({ align, as, children, className, gap, justify, ...props }: ClusterProps): React.JSX.Element;
+export type InputGroupDensity = "comfortable" | "compact";
+export interface InputGroupProps extends HTMLAttributes<HTMLDivElement> {
+    readonly density?: InputGroupDensity;
+}
+export declare function InputGroup({ className, density, ...props }: InputGroupProps): React.JSX.Element;
+export type InputGroupControlWidth = "fixed" | "grow";
+export interface InputGroupControlProps extends HTMLAttributes<HTMLDivElement> {
+    readonly width?: InputGroupControlWidth;
+}
+export declare function InputGroupControl({ className, width, ...props }: InputGroupControlProps): React.JSX.Element;
+export type InputGroupAddonProps = HTMLAttributes<HTMLSpanElement>;
+export declare function InputGroupAddon({ className, ...props }: InputGroupAddonProps): React.JSX.Element;
+export type CardElement = "div" | "section" | "nav";
+export type CardDensity = "default" | "compact";
+export interface CardProps extends HTMLAttributes<HTMLDivElement> {
+    readonly as?: CardElement;
+    readonly density?: CardDensity;
+    readonly footer?: ReactNode;
+    readonly header?: ReactNode;
+}
+export declare function Card({ as, children, className, density, footer, header, ...props }: CardProps): React.JSX.Element;
+export type MetricGridElement = "div" | "ul" | "ol";
+export interface MetricGridProps extends HTMLAttributes<HTMLDivElement> {
+    readonly as?: MetricGridElement;
+}
+export declare function MetricGrid({ as, children, className, ...props }: MetricGridProps): React.JSX.Element;
+export interface MetricProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+    readonly detail?: ReactNode | undefined;
+    readonly label: ReactNode;
+    readonly live?: AnnouncementMode | undefined;
+    readonly tone?: StatusTone | undefined;
+    readonly toneLabel?: string | undefined;
+    readonly unit?: ReactNode | undefined;
+    readonly value: ReactNode;
+}
+export declare function Metric({ "aria-labelledby": ariaLabelledBy, className, detail, label, live, tone, toneLabel, unit, value, ...props }: MetricProps): React.JSX.Element;
+export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
+    readonly tone?: StatusTone | undefined;
+    readonly toneLabel?: string | undefined;
+}
+export declare function Badge({ children, className, tone, toneLabel, ...props }: BadgeProps): React.JSX.Element;
+
+=== components/Menu.d.ts ===
+import { type ReactNode } from "react";
+import { type ButtonSize, type ButtonVariant } from "./Button.js";
+import { type OverlayPlacement } from "./Popover.js";
+export interface MenuProps {
+    readonly children: ReactNode;
+    readonly className?: string | undefined;
+    readonly defaultOpen?: boolean | undefined;
+    /** Visible trigger label; doubles as the menu's accessible name. */
+    readonly label: ReactNode;
+    readonly onAction?: ((id: string) => void) | undefined;
+    readonly onOpenChange?: ((open: boolean) => void) | undefined;
+    readonly open?: boolean | undefined;
+    readonly placement?: OverlayPlacement | undefined;
+    readonly triggerSize?: ButtonSize | undefined;
+    readonly triggerVariant?: ButtonVariant | undefined;
+}
+export declare function Menu({ children, className, defaultOpen, label, onAction, onOpenChange, open, placement, triggerSize, triggerVariant, }: MenuProps): React.JSX.Element;
+export interface MenuItemProps {
+    readonly children: ReactNode;
+    readonly className?: string | undefined;
+    /** Danger-tone styling for irreversible or destructive actions. */
+    readonly destructive?: boolean | undefined;
+    readonly disabled?: boolean | undefined;
+    readonly id: string;
+    readonly textValue?: string | undefined;
+}
+export declare function MenuItem({ children, className, destructive, disabled, id, textValue, }: MenuItemProps): React.JSX.Element;
+export interface MenuSeparatorProps {
+    readonly className?: string | undefined;
+}
+export declare function MenuSeparator({ className, }: MenuSeparatorProps): React.JSX.Element;
+export interface MenuSectionProps {
+    readonly children: ReactNode;
+    readonly className?: string | undefined;
+    readonly title?: ReactNode | undefined;
+}
+export declare function MenuSection({ children, className, title, }: MenuSectionProps): React.JSX.Element;
+
+=== components/PanelRoot.d.ts ===
+import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
+export interface PanelRootProps extends HTMLAttributes<HTMLDivElement>, RefAttributes<HTMLDivElement> {
+    readonly children: ReactNode;
+    readonly styleNonce?: string | undefined;
+    readonly width?: PanelWidth | undefined;
+}
+export type PanelWidth = "standard" | "wide" | "full";
+export declare function PanelRoot(props: PanelRootProps): React.JSX.Element;
+
+=== components/Popover.d.ts ===
+import { type ReactElement, type ReactNode, type RefAttributes } from "react";
+import { type Placement as RACPlacement } from "react-aria-components";
+import type { ButtonProps } from "./Button.js";
+/**
+ * Logical overlay edge. The "top" and "bottom" edges align the overlay's
+ * start edge with the trigger's start edge, matching menu conventions; the
+ * RAC equivalents are "top start" and "bottom start". RAC flips the
+ * placement automatically when the overlay collides with the viewport.
+ */
+export type OverlayPlacement = "top" | "bottom" | "start" | "end";
+/** RAC placement strings behind each library {@link OverlayPlacement}. */
+export declare const OVERLAY_PLACEMENTS: Readonly<Record<OverlayPlacement, RACPlacement>>;
+export interface PopoverProps extends RefAttributes<HTMLDivElement> {
+    readonly children: ReactNode;
+    readonly className?: string | undefined;
+    readonly defaultOpen?: boolean | undefined;
+    readonly onOpenChange?: ((open: boolean) => void) | undefined;
+    readonly open?: boolean | undefined;
+    readonly placement?: OverlayPlacement | undefined;
+    /** Rendered as the popover trigger; typically a library Button. */
+    readonly trigger: ReactElement<ButtonProps>;
+    /** Fixed pixel width; "auto" sizes to the content. */
+    readonly width?: number | "auto" | undefined;
+}
+export declare function Popover({ children, className, defaultOpen, onOpenChange, open, placement, ref, trigger, width, }: PopoverProps): React.JSX.Element;
+
+=== components/Progress.d.ts ===
+import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
+import type { SemanticTone } from "../utils/tone.js";
+export type ProgressTone = SemanticTone;
+export interface ProgressProps extends Omit<HTMLAttributes<HTMLDivElement>, "children">, RefAttributes<HTMLDivElement> {
+    readonly label: ReactNode;
+    readonly max?: number | undefined;
+    readonly min?: number | undefined;
+    /** Recolors the fill. Omit for the accent fill. */
+    readonly tone?: ProgressTone | undefined;
+    /** Current value. Omit for an indeterminate indicator. */
+    readonly value?: number | undefined;
+    /** Exposed as aria-valuetext for assistive technology. */
+    readonly valueText?: string | undefined;
+}
+export declare function Progress({ className, label, max, min, ref, tone, value, valueText, ...props }: ProgressProps): React.JSX.Element;
+
+=== components/RadioGroup.d.ts ===
+import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
+import { type AnnouncementMode } from "../utils/announcement.js";
+export type RadioGroupOrientation = "horizontal" | "vertical";
+export type RadioGroupErrorLive = AnnouncementMode;
+export interface RadioGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">, RefAttributes<HTMLDivElement> {
+    readonly children: ReactNode;
+    readonly defaultValue?: string | undefined;
+    readonly description?: ReactNode;
+    readonly disabled?: boolean | undefined;
+    readonly error?: ReactNode;
+    readonly errorLive?: RadioGroupErrorLive | undefined;
+    readonly label: ReactNode;
+    /** Applied to every radio input, so native form submission and reset work. */
+    readonly name?: string | undefined;
+    readonly onChange?: ((value: string) => void) | undefined;
+    readonly orientation?: RadioGroupOrientation | undefined;
+    readonly value?: string | undefined;
+}
+export declare function RadioGroup({ "aria-describedby": ariaDescribedBy, children, className, defaultValue, description, disabled, error, errorLive, label, name, onChange, orientation, ref, value, ...props }: RadioGroupProps): React.JSX.Element;
+export interface RadioProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onClick">, RefAttributes<HTMLDivElement> {
+    readonly children: ReactNode;
+    readonly disabled?: boolean | undefined;
+    readonly value: string;
+}
+export declare function Radio({ children, className, disabled, ref, value, ...props }: RadioProps): React.JSX.Element;
+
+=== components/Section.d.ts ===
+import { type HTMLAttributes, type ReactNode } from "react";
+import { type HeadingLevel } from "../utils/heading.js";
+export interface SectionProps extends Omit<HTMLAttributes<HTMLElement>, "title"> {
+    readonly actions?: ReactNode;
+    readonly description?: ReactNode;
+    readonly headingLevel?: HeadingLevel;
+    /** Removes the region landmark naming when false. */
+    readonly landmark?: boolean;
+    readonly title: ReactNode;
+}
+export declare function Section({ actions, "aria-labelledby": ariaLabelledBy, children, className, description, headingLevel, landmark, title, ...props }: SectionProps): React.JSX.Element;
+
+=== components/SegmentedControl.d.ts ===
+import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
+export type SegmentedControlLegendVisibility = "hidden" | "visible";
+export type SegmentedControlOrientation = "horizontal" | "vertical";
+export interface SegmentedControlOption<Value extends string> {
+    readonly disabled?: boolean;
+    readonly label: ReactNode;
+    readonly value: Value;
+}
+export interface SegmentedControlProps<Value extends string> extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">, RefAttributes<HTMLDivElement> {
+    readonly defaultValue?: Value;
+    readonly disabled?: boolean;
+    readonly legend: ReactNode;
+    readonly legendVisibility?: SegmentedControlLegendVisibility;
+    /** Carries the selection into native form submission and form reset. */
+    readonly name?: string;
+    readonly onChange: (value: Value) => void;
+    readonly options: readonly SegmentedControlOption<Value>[];
+    readonly orientation?: SegmentedControlOrientation;
+    readonly value?: Value;
+}
+export declare function SegmentedControl<Value extends string>({ className, defaultValue, disabled, legend, legendVisibility, name, onChange, options, orientation, ref, value, "aria-labelledby": ariaLabelledBy, ...props }: SegmentedControlProps<Value>): React.JSX.Element;
+
+=== components/StatusIndicator.d.ts ===
+import type { HTMLAttributes, ReactNode } from "react";
+import { type AnnouncementMode } from "../utils/announcement.js";
+import { type StatusTone } from "../utils/tone.js";
+export type { StatusTone };
+export interface StatusIndicatorProps extends HTMLAttributes<HTMLSpanElement> {
+    readonly children: ReactNode;
+    readonly live?: AnnouncementMode | undefined;
+    readonly tone?: StatusTone | undefined;
+    readonly toneLabel?: string | undefined;
+}
+export declare function StatusIndicator({ children, className, live, role: suppliedRole, tone, toneLabel, ...props }: StatusIndicatorProps): React.JSX.Element;
+
+=== components/Switch.d.ts ===
+import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
+export interface SwitchProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange" | "onClick">, RefAttributes<HTMLDivElement> {
+    /**
+     * Mirrors the Checkbox naming: maps to react-aria's isSelected, and
+     * defaultChecked maps to defaultSelected.
+     */
+    readonly checked?: boolean | undefined;
+    readonly children: ReactNode;
+    readonly defaultChecked?: boolean | undefined;
+    readonly disabled?: boolean | undefined;
+    readonly onChange?: ((checked: boolean) => void) | undefined;
+}
+export declare function Switch({ checked, children, className, defaultChecked, disabled, onChange, ref, ...props }: SwitchProps): React.JSX.Element;
+
+=== components/ThemeToggle.d.ts ===
+import type { ReactNode } from "react";
+import { type ThemeChoice } from "../theme/contract.js";
+export interface ThemeToggleProps {
+    readonly choices?: readonly ThemeChoice[] | undefined;
+    readonly className?: string;
+    readonly labels?: Partial<Readonly<Record<ThemeChoice, ReactNode>>>;
+    readonly legend?: ReactNode;
+    readonly onChange?: ((theme: ThemeChoice) => void) | undefined;
+}
+export declare function ThemeToggle({ choices, className, labels, legend, onChange, }: ThemeToggleProps): React.JSX.Element;
+
+=== components/Toast.d.ts ===
+import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
+import { type AnnouncementMode } from "../utils/announcement.js";
+import { type SemanticTone } from "../utils/tone.js";
+export interface ToastContent {
+    readonly title: ReactNode;
+    readonly description?: ReactNode | undefined;
+    /** Defaults to "info". */
+    readonly tone?: SemanticTone | undefined;
+    /**
+     * Auto-dismiss delay in milliseconds. Defaults to 5000. Zero keeps the
+     * toast until it is dismissed explicitly.
+     */
+    readonly duration?: number | undefined;
+    /**
+     * Announcement mode. Defaults to assertive for the danger and warning
+     * tones, polite otherwise.
+     */
+    readonly live?: AnnouncementMode | undefined;
+    /** Overrides the localized tone name announced to assistive technology. */
+    readonly toneLabel?: string | undefined;
+}
+export interface QueuedToast<T extends ToastContent = ToastContent> {
+    readonly key: string;
+    readonly content: T;
+}
+export interface ToastQueue<T extends ToastContent = ToastContent> {
+    /** Adds a toast and returns its key. */
+    readonly enqueue: (content: T) => string;
+    /** Removes one toast. Unknown keys are ignored. */
+    readonly dismiss: (key: string) => void;
+    /** Removes every queued toast. */
+    readonly clear: () => void;
+    readonly getSnapshot: () => readonly QueuedToast<T>[];
+    readonly subscribe: (listener: () => void) => () => void;
+}
+/**
+ * Creates a framework-light toast store. The snapshot array is replaced on
+ * every mutation, so useSyncExternalStore subscribers re-render only when the
+ * queue actually changes.
+ */
+export declare function createToastQueue<T extends ToastContent = ToastContent>(): ToastQueue<T>;
+/** Shared queue for the common single-region setup. */
+export declare const toast: ToastQueue;
+export interface ToastRegionProps<T extends ToastContent = ToastContent> extends Omit<HTMLAttributes<HTMLElement>, "aria-label" | "children" | "role">, RefAttributes<HTMLElement> {
+    readonly queue: ToastQueue<T>;
+    /** Accessible name for the landmark. Defaults to "Notifications". */
+    readonly label?: string | undefined;
+    /** Accessible name for each toast's dismiss button. Defaults to "Dismiss". */
+    readonly dismissLabel?: string | undefined;
+}
+/**
+ * Renders a queue's toasts, newest first, into the nearest PanelRoot portal
+ * container so the scoped styles and theme reach them. Outside a PanelRoot
+ * the region falls back to the document body.
+ */
+export declare function ToastRegion<T extends ToastContent = ToastContent>({ className, dismissLabel, label, queue, ref, ...props }: ToastRegionProps<T>): React.JSX.Element | null;
+
+=== index.d.ts ===
+export { Accordion, type AccordionProps } from "./components/Accordion.js";
+export { ActionBar, type ActionBarProps, type ActionBarSticky, } from "./components/ActionBar.js";
+export { Banner, type BannerLive, type BannerProps, type BannerTone, } from "./components/Banner.js";
+export { Button, type ButtonAsAnchorProps, type ButtonAsButtonProps, type ButtonProps, type ButtonShape, type ButtonSize, type ButtonVariant, } from "./components/Button.js";
+export { type CollapsibleMountStrategy, CollapsibleSection, type CollapsibleSectionProps, type CollapsibleSummaryPlacement, type CollapsibleSummaryVisibility, } from "./components/CollapsibleSection.js";
+export { Cell, type CellProps, Column, type ColumnProps, DataGrid, type DataGridDensity, type DataGridProps, type DataGridSelectionMode, type Key, Row, type RowProps, type Selection, type SortDescriptor, type SortDirection, } from "./components/DataGrid.js";
+export { AlertDialog, type AlertDialogProps, Dialog, type DialogProps, type DialogWidth, } from "./components/Dialog.js";
+export { EmptyState, type EmptyStateProps, } from "./components/EmptyState.js";
+export { FieldGroup, type FieldGroupProps, } from "./components/FieldGroup.js";
+export { InlineConfirm, type InlineConfirmCancelReason, type InlineConfirmProps, } from "./components/InlineConfirm.js";
+export { Checkbox, type CheckboxErrorLive, type CheckboxProps, NumberInput, type NumberInputProps, RangeInput, type RangeInputProps, Select, type SelectProps, Textarea, type TextareaProps, TextInput, type TextInputProps, type TextInputType, } from "./components/Inputs.js";
+export { type FieldControlProps, type FieldErrorLive, LabeledField, type LabeledFieldChild, type LabeledFieldControlProps, type LabeledFieldDensity, type LabeledFieldLayout, type LabeledFieldProps, } from "./components/LabeledField.js";
+export { Badge, type BadgeProps, Card, type CardDensity, type CardElement, type CardProps, Cluster, type ClusterElement, type ClusterProps, InputGroup, InputGroupAddon, type InputGroupAddonProps, InputGroupControl, type InputGroupControlProps, type InputGroupControlWidth, type InputGroupDensity, type InputGroupProps, type LayoutAlignment, Metric, MetricGrid, type MetricGridElement, type MetricGridProps, type MetricProps, type SpaceScale, Stack, type StackElement, type StackProps, } from "./components/Layout.js";
+export { Menu, MenuItem, type MenuItemProps, type MenuProps, MenuSection, type MenuSectionProps, MenuSeparator, type MenuSeparatorProps, } from "./components/Menu.js";
+export { PanelRoot, type PanelRootProps, type PanelWidth, } from "./components/PanelRoot.js";
+export { type OverlayPlacement, Popover, type PopoverProps, } from "./components/Popover.js";
+export { Progress, type ProgressProps, type ProgressTone, } from "./components/Progress.js";
+export { Radio, RadioGroup, type RadioGroupErrorLive, type RadioGroupOrientation, type RadioGroupProps, type RadioProps, } from "./components/RadioGroup.js";
+export { Section, type SectionProps } from "./components/Section.js";
+export { SegmentedControl, type SegmentedControlLegendVisibility, type SegmentedControlOption, type SegmentedControlOrientation, type SegmentedControlProps, } from "./components/SegmentedControl.js";
+export { StatusIndicator, type StatusIndicatorProps, type StatusTone, } from "./components/StatusIndicator.js";
+export { Switch, type SwitchProps, } from "./components/Switch.js";
+export { ThemeToggle, type ThemeToggleProps, } from "./components/ThemeToggle.js";
+export { createToastQueue, type QueuedToast, type ToastContent, type ToastQueue, ToastRegion, type ToastRegionProps, toast, } from "./components/Toast.js";
+export { supportsNativeCssScope, UnsupportedBrowserError, } from "./styles/install.js";
+export { type ColorTokenName, type FoundationTokenName, PUBLIC_COLOR_TOKEN_NAMES, PUBLIC_FOUNDATION_TOKEN_NAMES, PUBLIC_TOKEN_NAMES, } from "./styles/tokens.js";
+export { type ThemeContextValue, ThemeProvider, type ThemeProviderProps, usePanelTheme, } from "./theme/context.js";
+export { THEME_CHOICES, THEME_STORAGE_KEY, type ThemeChoice, } from "./theme/contract.js";
+export type { AnnouncementMode } from "./utils/announcement.js";
+export type { HeadingLevel } from "./utils/heading.js";
+
+=== styles/collapsible.d.ts ===
+export declare const COLLAPSIBLE_STYLES: string;
+
+=== styles/components.d.ts ===
+export declare const COMPONENT_STYLES: string;
+
+=== styles/controls.d.ts ===
+export declare const CONTROL_STYLES: string;
+
+=== styles/feedback.d.ts ===
+export declare const FEEDBACK_STYLES: string;
+
+=== styles/forms.d.ts ===
+export declare const FORM_STYLES: string;
+
+=== styles/foundation.d.ts ===
+export declare const FOUNDATION_STYLES: string;
+
+=== styles/index.d.ts ===
+export declare const PANEL_STYLES: string;
+
+=== styles/install.d.ts ===
+export declare class UnsupportedBrowserError extends Error {
+    readonly feature = "CSS @scope";
+    constructor();
+}
+export declare function supportsNativeCssScope(ownerWindow?: Window | null | undefined): boolean;
+export declare function installPanelStyles(ownerDocument: Document, version: string, styles: string, nonce: string | undefined): () => void;
+
+=== styles/layout.d.ts ===
+export declare const LAYOUT_STYLES: string;
+
+=== styles/overlays.d.ts ===
+export declare const DIALOG_STYLES: string;
+export declare const MENU_STYLES: string;
+export declare const POPOVER_STYLES: string;
+export declare const TOAST_STYLES: string;
+
+=== styles/scope.d.ts ===
+/** Stops descendant rules at every nested package-version root. */
+export declare function scopeStyles(styles: string): string;
+
+=== styles/table.d.ts ===
+export declare const TABLE_STYLES: string;
+
+=== styles/tokens.d.ts ===
+export type ColorTokenName = "--snui-color-background" | "--snui-color-surface" | "--snui-color-surface-raised" | "--snui-color-interactive-hover" | "--snui-color-hover-raised" | "--snui-color-text" | "--snui-color-text-muted" | "--snui-color-border" | "--snui-color-accent-fill" | "--snui-color-accent-fill-hover" | "--snui-color-on-accent" | "--snui-color-link" | "--snui-color-link-hover" | "--snui-color-link-visited" | "--snui-color-focus" | "--snui-color-success" | "--snui-color-warning" | "--snui-color-danger" | "--snui-color-info";
+export type ThemeTokenSet = Readonly<Record<ColorTokenName, string>>;
+export declare const LIGHT_TOKENS: ThemeTokenSet;
+export declare const DARK_TOKENS: ThemeTokenSet;
+export declare const NIGHT_TOKENS: ThemeTokenSet;
+/** Inline-size breakpoint below which panels switch to their narrow layout. */
+export declare const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
+export declare const PUBLIC_FOUNDATION_TOKEN_NAMES: readonly ["--snui-font-family", "--snui-font-size", "--snui-font-size-sm", "--snui-font-size-xs", "--snui-font-weight-medium", "--snui-font-weight-semibold", "--snui-font-weight-bold", "--snui-font-weight-heavy", "--snui-line-height", "--snui-space-1", "--snui-space-2", "--snui-space-3", "--snui-space-4", "--snui-space-5", "--snui-space-6", "--snui-space-7", "--snui-space-8", "--snui-radius-sm", "--snui-radius-md", "--snui-radius-lg", "--snui-radius-pill", "--snui-control-min-height", "--snui-range-thumb-size", "--snui-range-progress-color", "--snui-range-track-color", "--snui-input-group-control-min", "--snui-input-group-control-basis", "--snui-content-width-standard", "--snui-content-width-wide", "--snui-focus-ring", "--snui-shadow-flat", "--snui-shadow-raised", "--snui-shadow-overlay", "--snui-ease-standard", "--snui-transition-fast", "--snui-transition-normal", "--snui-transition-slow", "--snui-motion-spin"];
+export type FoundationTokenName = (typeof PUBLIC_FOUNDATION_TOKEN_NAMES)[number];
+export declare const PUBLIC_COLOR_TOKEN_NAMES: readonly ColorTokenName[];
+export declare const PUBLIC_TOKEN_NAMES: readonly (ColorTokenName | FoundationTokenName)[];
+export declare const TOKEN_STYLES: string;
+
+=== theme/context.d.ts ===
+import { type ReactNode } from "react";
+import { type ThemeChoice } from "./contract.js";
+export interface ThemeContextValue {
+    readonly theme: ThemeChoice;
+    readonly setTheme: (theme: ThemeChoice) => void;
+}
+export interface ThemeProviderProps {
+    readonly children: ReactNode;
+}
+export declare function ThemeProvider({ children, }: ThemeProviderProps): React.JSX.Element;
+export declare function usePanelTheme(): ThemeContextValue;
+
+=== theme/contract.d.ts ===
+export declare const THEME_STORAGE_KEY = "signalk-nearlcrews-ui.theme.v1";
+export declare const THEME_CHOICES: readonly ["auto", "light", "dark", "night"];
+export type ThemeChoice = (typeof THEME_CHOICES)[number];
+export declare function isThemeChoice(value: unknown): value is ThemeChoice;
+
+=== utils/announcement.d.ts ===
+export type AnnouncementMode = "off" | "polite" | "assertive";
+export declare function announcementRole(mode: AnnouncementMode): "alert" | "status" | undefined;
+
+=== utils/aria.d.ts ===
+export declare function joinIdReferences(...ids: readonly (string | undefined)[]): string | undefined;
+
+=== utils/class-names.d.ts ===
+export declare function classNames(...values: readonly (string | false | null | undefined)[]): string;
+
+=== utils/heading.d.ts ===
+export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
+export declare const HEADING_ELEMENTS: {
+    readonly 1: "h1";
+    readonly 2: "h2";
+    readonly 3: "h3";
+    readonly 4: "h4";
+    readonly 5: "h5";
+    readonly 6: "h6";
+};
+
+=== utils/react-node.d.ts ===
+import { type ReactNode } from "react";
+export declare function hasReactContent(node: ReactNode): boolean;
+
+=== utils/ref.d.ts ===
+import type { Ref } from "react";
+/**
+ * Attaches a node to a caller-supplied ref and returns the cleanup that a
+ * callback ref opted into, so React 19 ref cleanup is preserved when a
+ * component composes a caller ref with its own.
+ */
+export declare function attachRef<T>(ref: Ref<T> | undefined, node: T): (() => void) | undefined;
+/** Detaches a caller-supplied ref that did not provide its own cleanup. */
+export declare function detachRef<T>(ref: Ref<T> | undefined): void;
+
+=== utils/tone.d.ts ===
+export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
+/** Tones that carry a meaning a neutral presentation cannot convey. */
+export type SemanticTone = Exclude<StatusTone, "neutral">;
+/**
+ * A glyph per semantic tone, so tone is never the only visual signal. Rendered
+ * decoratively, because the adjacent visually hidden label carries the meaning.
+ */
+export declare const TONE_GLYPHS: Readonly<Record<SemanticTone, string>>;
+/** Default accessible names for each semantic tone. Callers may override them. */
+export declare const TONE_LABELS: Readonly<Record<SemanticTone, string>>;
+export declare function isSemanticTone(tone: StatusTone): tone is SemanticTone;
+
+=== version.d.ts ===
+/** The package version used to isolate styles from other loaded versions. */
+export declare const PACKAGE_VERSION = "0.5.0";
+/** The root class is private and may change without notice. */
+export declare const ROOT_CLASS = "snui-root";
+/** The exact selector prevents styles from crossing package-version roots. */
+export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.5.0\"]";
+/** A versioned global name prevents keyframe collisions between package copies. */
+export declare const SPINNER_ANIMATION_NAME: string;

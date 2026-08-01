@@ -19,11 +19,19 @@ The following are public API and require semantic-versioning treatment:
 
 Internal class names, exact DOM nesting, and non-public token names are private implementation details.
 
-Before 1.0, breaking changes increment the minor version. After 1.0, breaking changes increment the major version. Deprecations introduced after 1.0 remain available for at least one minor release.
+Emitted declarations are part of the public contract. A change to `dist/**/*.d.ts` is a public API change even when no source signature looks different, so `npm run validate` compares the emitted declarations against `tests/declarations.baseline.txt` and fails on any difference. Accept an intended change with `npm run declarations:update`, and record it in `CHANGELOG.md` and `docs/migration.md` in the same commit.
+
+Before 1.0, breaking changes increment the minor version. After 1.0, breaking changes increment the major version.
+
+## Breaking changes
+
+During `0.x`, breaking changes ship in minor releases without a deprecation window. A removal takes effect in the release that announces it in `CHANGELOG.md`, and consumers pin exact versions so the change only reaches them on a deliberate upgrade.
+
+After 1.0, a withdrawn prop, export, token, or documented behavior is marked with a `@deprecated` tag naming its replacement and remains available for at least one minor release.
 
 ## Release path
 
-1. Update `package.json`, `src/version.ts`, `CHANGELOG.md`, compatibility documentation, and migration guidance together.
+1. Update `package.json`, `src/version.ts`, `README.md`, which pins the version in both install commands, `CHANGELOG.md`, `docs/design-contract.md`, which embeds the version in its scope example, and migration guidance together.
 2. Run `SNUI_RELEASE_APPROVED=true npm run release:check` only after explicit final approval.
 3. Commit the verified source and push `main`.
 4. Create the approved `v<version>` tag and GitHub Release from the verified commit.
@@ -45,6 +53,8 @@ Every release candidate must pass:
 - Classic and ESM Module Federation fixture builds and runtime checks
 - Changelog, compatibility table, migration-note, community-file, and package-metadata review
 - Full dependency audit and runtime-only dependency audit
+
+`npm run validate` skips the browser tests in this list, while `npm run release:check` runs them.
 
 The publish job uses npm OIDC trusted publishing with provenance. It receives `id-token: write` only after the protected `npm` environment is approved. No npm token belongs in repository or environment secrets.
 

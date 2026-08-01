@@ -1,4 +1,5 @@
 import { scopeStyles } from "./scope.js";
+import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
 export const COMPONENT_STYLES = scopeStyles(`
 .snui-section {
@@ -67,90 +68,47 @@ export const COMPONENT_STYLES = scopeStyles(`
 .snui-field__label {
   min-width: 0;
   color: var(--snui-color-text);
-  font-weight: 650;
+  font-weight: var(--snui-font-weight-semibold);
   overflow-wrap: anywhere;
 }
 
 .snui-field__description {
   min-width: 0;
   color: var(--snui-color-text-muted);
-  font-size: 0.875rem;
+  font-size: var(--snui-font-size-sm);
   overflow-wrap: anywhere;
 }
 
 .snui-field__error {
   min-width: 0;
   color: var(--snui-color-danger);
-  font-size: 0.875rem;
-  font-weight: 600;
+  font-size: var(--snui-font-size-sm);
+  font-weight: var(--snui-font-weight-medium);
   overflow-wrap: anywhere;
+}
+
+/*
+ * An announcing error region stays mounted so a screen reader observes it
+ * before the message arrives. While empty it is taken out of flow rather than
+ * hidden, because display: none would remove it from the accessibility tree.
+ */
+.snui-field__error:empty,
+.snui-checkbox__error:empty,
+.snui-field-group__error:empty,
+.snui-radio-group__error:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .snui-required-mark {
   color: var(--snui-color-danger);
-}
-
-.snui-disclosure {
-  border: 1px solid var(--snui-color-border);
-  border-radius: var(--snui-radius-md);
-  background: var(--snui-color-surface);
-}
-
-.snui-disclosure__summary {
-  display: flex;
-  min-width: 0;
-  min-height: var(--snui-control-min-height);
-  align-items: center;
-  gap: var(--snui-space-2);
-  padding: var(--snui-space-3);
-  color: var(--snui-color-text);
-  font-weight: 650;
-  cursor: pointer;
-  list-style: none;
-  transition: background-color var(--snui-transition-fast);
-}
-
-.snui-disclosure__summary:hover {
-  background: var(--snui-color-interactive-hover);
-}
-
-.snui-disclosure__summary:active {
-  background: color-mix(
-    in srgb,
-    var(--snui-color-accent-fill) 12%,
-    var(--snui-color-interactive-hover)
-  );
-}
-
-.snui-disclosure__title {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.snui-disclosure__summary::-webkit-details-marker {
-  display: none;
-}
-
-.snui-disclosure__chevron {
-  transition: transform var(--snui-transition-fast);
-}
-
-.snui-disclosure__chevron:dir(rtl) {
-  transform: scaleX(-1);
-}
-
-.snui-disclosure[open] .snui-disclosure__chevron {
-  transform: rotate(90deg);
-}
-
-.snui-disclosure[open] .snui-disclosure__chevron:dir(rtl) {
-  transform: scaleX(-1) rotate(90deg);
-}
-
-.snui-disclosure__content {
-  min-width: 0;
-  padding: 0 var(--snui-space-3) var(--snui-space-3);
-  overflow-wrap: anywhere;
 }
 
 .snui-status {
@@ -178,6 +136,36 @@ export const COMPONENT_STYLES = scopeStyles(`
 .snui-status--warning { color: var(--snui-color-warning); }
 .snui-status--danger { color: var(--snui-color-danger); }
 
+/*
+ * Each tone also gets a distinct dot shape, so the state does not depend on
+ * color alone for a sighted user who cannot distinguish the hues.
+ */
+.snui-status--info .snui-status__dot {
+  border-radius: var(--snui-radius-sm);
+}
+
+.snui-status--success .snui-status__dot {
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  border-radius: 0;
+}
+
+.snui-status--warning .snui-status__dot {
+  clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  border-radius: 0;
+}
+
+.snui-status--danger .snui-status__dot {
+  clip-path: polygon(
+    50% 0,
+    100% 25%,
+    100% 75%,
+    50% 100%,
+    0 75%,
+    0 25%
+  );
+  border-radius: 0;
+}
+
 .snui-action-bar {
   display: flex;
   min-width: 0;
@@ -194,10 +182,34 @@ export const COMPONENT_STYLES = scopeStyles(`
   backdrop-filter: blur(0.4rem);
 }
 
-.snui-action-bar--sticky {
+.snui-action-bar--sticky-bottom,
+.snui-action-bar--sticky-top {
   position: sticky;
-  z-index: 2;
+  z-index: var(--snui-z-sticky);
+}
+
+.snui-action-bar--sticky-bottom {
   bottom: 0;
+}
+
+.snui-action-bar--sticky-top {
+  top: 0;
+}
+
+/*
+ * Keep focused content clear of a sticky bar: the bar is one control height
+ * plus its vertical padding, and one more gap keeps focus rings visible.
+ */
+.snui-root:has(> .snui-action-bar--sticky-bottom) {
+  scroll-padding-block-end: calc(
+    var(--snui-control-min-height) + var(--snui-space-3) * 3
+  );
+}
+
+.snui-root:has(> .snui-action-bar--sticky-top) {
+  scroll-padding-block-start: calc(
+    var(--snui-control-min-height) + var(--snui-space-3) * 3
+  );
 }
 
 .snui-action-bar__status {
@@ -231,7 +243,7 @@ export const COMPONENT_STYLES = scopeStyles(`
   min-width: 0;
   margin: 0;
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: var(--snui-font-weight-bold);
   overflow-wrap: anywhere;
 }
 
@@ -250,7 +262,7 @@ export const COMPONENT_STYLES = scopeStyles(`
   justify-content: flex-end;
 }
 
-@container snui-panel (max-width: 37.5rem) {
+@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
   .snui-section {
     padding: var(--snui-space-3);
   }
@@ -276,10 +288,63 @@ export const COMPONENT_STYLES = scopeStyles(`
   }
 }
 
+.snui-empty-state {
+  display: grid;
+  min-width: 0;
+  justify-items: center;
+  gap: var(--snui-space-2);
+  padding: var(--snui-space-6) var(--snui-space-4);
+  text-align: center;
+}
+
+.snui-empty-state__icon {
+  color: var(--snui-color-text-muted);
+  line-height: 1;
+}
+
+.snui-empty-state__title {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--snui-color-text);
+  font-weight: var(--snui-font-weight-bold);
+  overflow-wrap: anywhere;
+}
+
+.snui-empty-state__description {
+  min-width: 0;
+  max-width: 100%;
+  color: var(--snui-color-text-muted);
+  overflow-wrap: anywhere;
+}
+
+.snui-empty-state__action {
+  margin-top: var(--snui-space-2);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  /* Reduced transparency request: the sticky bar goes fully opaque. */
+  .snui-action-bar {
+    background: var(--snui-color-surface);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+
 @media (forced-colors: active) {
   .snui-status__dot {
     border-color: CanvasText;
     background: CanvasText;
+  }
+
+  /*
+   * Forced colors flattens the warning border, which erases the
+   * confirmation's caution signal. Reconstruct it with a system color.
+   */
+  .snui-inline-confirm {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
   }
 }
 `);

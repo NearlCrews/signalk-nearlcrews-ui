@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   DARK_TOKENS,
-  HOVER_RAISED_TOKENS,
   LIGHT_TOKENS,
   NIGHT_TOKENS,
   PUBLIC_FOUNDATION_TOKEN_NAMES,
@@ -32,14 +31,13 @@ function contrastRatio(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
-const themeCases: readonly [keyof typeof HOVER_RAISED_TOKENS, ThemeTokenSet][] =
-  [
-    ["light", LIGHT_TOKENS],
-    ["dark", DARK_TOKENS],
-    ["night", NIGHT_TOKENS],
-  ];
+const themeCases: readonly [string, ThemeTokenSet][] = [
+  ["light", LIGHT_TOKENS],
+  ["dark", DARK_TOKENS],
+  ["night", NIGHT_TOKENS],
+];
 
-describe.each(themeCases)("%s theme contrast", (name, tokens) => {
+describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
   it("keeps primary and muted text above WCAG AA", () => {
     for (const surface of [
       tokens["--snui-color-background"],
@@ -140,7 +138,7 @@ describe.each(themeCases)("%s theme contrast", (name, tokens) => {
   });
 
   it("keeps hover fills readable and visibly distinct", () => {
-    const hoverRaised = HOVER_RAISED_TOKENS[name];
+    const hoverRaised = tokens["--snui-color-hover-raised"];
     expect(
       contrastRatio(tokens["--snui-color-text"], hoverRaised),
     ).toBeGreaterThanOrEqual(4.5);
@@ -169,6 +167,12 @@ it("exports the complete public foundation token surface", () => {
   expect(PUBLIC_FOUNDATION_TOKEN_NAMES).toEqual([
     "--snui-font-family",
     "--snui-font-size",
+    "--snui-font-size-sm",
+    "--snui-font-size-xs",
+    "--snui-font-weight-medium",
+    "--snui-font-weight-semibold",
+    "--snui-font-weight-bold",
+    "--snui-font-weight-heavy",
     "--snui-line-height",
     "--snui-space-1",
     "--snui-space-2",
@@ -176,13 +180,29 @@ it("exports the complete public foundation token surface", () => {
     "--snui-space-4",
     "--snui-space-5",
     "--snui-space-6",
+    "--snui-space-7",
+    "--snui-space-8",
     "--snui-radius-sm",
     "--snui-radius-md",
     "--snui-radius-lg",
+    "--snui-radius-pill",
     "--snui-control-min-height",
+    "--snui-range-thumb-size",
+    "--snui-range-progress-color",
+    "--snui-range-track-color",
+    "--snui-input-group-control-min",
+    "--snui-input-group-control-basis",
     "--snui-content-width-standard",
     "--snui-content-width-wide",
+    "--snui-focus-ring",
+    "--snui-shadow-flat",
+    "--snui-shadow-raised",
+    "--snui-shadow-overlay",
+    "--snui-ease-standard",
     "--snui-transition-fast",
+    "--snui-transition-normal",
+    "--snui-transition-slow",
+    "--snui-motion-spin",
   ]);
   expect(new Set(PUBLIC_TOKEN_NAMES).size).toBe(PUBLIC_TOKEN_NAMES.length);
 });

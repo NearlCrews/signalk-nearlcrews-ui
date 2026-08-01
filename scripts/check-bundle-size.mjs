@@ -11,7 +11,7 @@ const result = await build({
   treeShaking: true,
   write: false,
   metafile: true,
-  external: ["react", "react/jsx-runtime"],
+  external: ["react", "react/jsx-runtime", "react-dom", "react-dom/client"],
 });
 
 const output = result.outputFiles[0]?.contents;
@@ -29,7 +29,11 @@ if (bundledReactInputs.length > 0) {
 }
 
 const gzipBytes = gzipSync(output, { level: 9 }).byteLength;
-const maximumGzipBytes = 24 * 1024;
+// Budget includes react-aria-components, react-aria, react-stately, and
+// @tanstack/react-virtual, adopted for the composite widgets (Dialog, Menu,
+// Popover, RadioGroup, Switch, Progress, DataGrid). Consumer remotes still
+// tree-shake to the components they actually import.
+const maximumGzipBytes = 120 * 1024;
 
 if (gzipBytes > maximumGzipBytes) {
   throw new Error(

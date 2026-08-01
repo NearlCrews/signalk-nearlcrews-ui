@@ -6,7 +6,13 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { type AriaAttributes, createRef, Fragment, useState } from "react";
+import {
+  type AriaAttributes,
+  createRef,
+  Fragment,
+  useEffect,
+  useState,
+} from "react";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
@@ -18,7 +24,6 @@ import {
   Checkbox,
   Cluster,
   CollapsibleSection,
-  Disclosure,
   type FieldControlProps,
   FieldGroup,
   InlineConfirm,
@@ -471,20 +476,23 @@ describe("form primitives", () => {
           layout="inline"
           density="compact"
         >
-          {(controlProps) => (
-            <InputGroup>
-              <InputGroupControl width="grow">
-                <RangeInput {...controlProps} min={4} max={32} />
-              </InputGroupControl>
-              <InputGroupControl width="fixed">
-                <NumberInput
-                  aria-label="Cache limit exact value"
-                  aria-describedby={controlProps["aria-describedby"]}
-                />
-                <InputGroupAddon>GiB</InputGroupAddon>
-              </InputGroupControl>
-            </InputGroup>
-          )}
+          {(controlProps) => {
+            const { descriptionId, errorId, ...rangeProps } = controlProps;
+            return (
+              <InputGroup>
+                <InputGroupControl width="grow">
+                  <RangeInput {...rangeProps} min={4} max={32} />
+                </InputGroupControl>
+                <InputGroupControl width="fixed">
+                  <NumberInput
+                    aria-label="Cache limit exact value"
+                    aria-describedby={[descriptionId, errorId].join(" ")}
+                  />
+                  <InputGroupAddon>GiB</InputGroupAddon>
+                </InputGroupControl>
+              </InputGroup>
+            );
+          }}
         </LabeledField>
       </PanelRoot>,
     );
@@ -536,9 +544,6 @@ describe("feedback and layout primitives", () => {
     expect(() => render(<FieldGroup legend="  ">Content</FieldGroup>)).toThrow(
       "FieldGroup requires a non-empty legend.",
     );
-    expect(() => render(<Disclosure title="  ">Content</Disclosure>)).toThrow(
-      "Disclosure requires a non-empty title.",
-    );
     expect(() => render(<Section title="  ">Content</Section>)).toThrow(
       "Section requires a non-empty title.",
     );
@@ -577,7 +582,7 @@ describe("feedback and layout primitives", () => {
     );
   });
 
-  it("preserves an explicit off live-region setting", () => {
+  it("does not silence a caller-supplied alert role with aria-live", () => {
     render(
       <PanelRoot>
         <Banner role="alert" live="off">
@@ -586,7 +591,19 @@ describe("feedback and layout primitives", () => {
       </PanelRoot>,
     );
 
-    expect(screen.getByRole("alert")).toHaveAttribute("aria-live", "off");
+    // `alert` already implies an assertive live region. Emitting aria-live="off"
+    // beside it would silence the role the caller asked for.
+    expect(screen.getByRole("alert")).not.toHaveAttribute("aria-live");
+  });
+
+  it("does not pair an implied live role with a redundant aria-live", () => {
+    render(
+      <PanelRoot>
+        <Banner live="assertive">Connection failed.</Banner>
+      </PanelRoot>,
+    );
+
+    expect(screen.getByRole("alert")).not.toHaveAttribute("aria-live");
   });
 
   it("supports polite banner announcements without requiring a title", () => {
@@ -615,7 +632,6 @@ describe("feedback and layout primitives", () => {
     render(
       <PanelRoot>
         <ActionBar
-          sticky={false}
           status={<StatusIndicator>Unsaved changes</StatusIndicator>}
           actions={<Button variant="primary">Save</Button>}
         />
@@ -629,11 +645,13 @@ describe("feedback and layout primitives", () => {
   it("makes sticky positioning an explicit action-bar option", () => {
     const { container } = render(
       <PanelRoot>
-        <ActionBar sticky actions={<Button>Save</Button>} />
+        <ActionBar sticky="bottom" actions={<Button>Save</Button>} />
       </PanelRoot>,
     );
 
-    expect(container.querySelector(".snui-action-bar--sticky")).not.toBeNull();
+    expect(
+      container.querySelector(".snui-action-bar--sticky-bottom"),
+    ).not.toBeNull();
     expect(container.querySelector(".snui-action-bar__status")).toBeNull();
   });
 
@@ -645,28 +663,6 @@ describe("feedback and layout primitives", () => {
     );
 
     expect(container.querySelector(".snui-action-bar__status")).toBeNull();
-  });
-
-  it("uses native details behavior for disclosures", () => {
-    const onOpenChange = vi.fn();
-    render(
-      <PanelRoot>
-        <Disclosure title="Advanced settings" onOpenChange={onOpenChange}>
-          Advanced content
-        </Disclosure>
-      </PanelRoot>,
-    );
-
-    const details = screen.getByText("Advanced content").closest("details");
-    expect(details).not.toBeNull();
-    if (details === null) return;
-
-    details.open = true;
-    fireEvent(details, new Event("toggle"));
-    expect(onOpenChange).toHaveBeenCalledWith(true);
-    expect(details.querySelector(".snui-disclosure__title")).toHaveTextContent(
-      "Advanced settings",
-    );
   });
 
   it("labels sections by their heading", () => {
@@ -938,6 +934,47 @@ describe("feedback and layout primitives", () => {
     expect(retainedInput).toHaveValue("retained value");
   });
 
+  it("pauses retained collapsible content effects while collapsed", async () => {
+    const user = userEvent.setup();
+    const effectSpy = vi.fn();
+    const cleanupSpy = vi.fn();
+
+    function Probe(): React.JSX.Element {
+      useEffect(() => {
+        effectSpy();
+        return cleanupSpy;
+      }, []);
+      return <span>Probe content</span>;
+    }
+
+    render(
+      <PanelRoot>
+        <CollapsibleSection title="Sensor details" mountStrategy="retain">
+          <Probe />
+        </CollapsibleSection>
+      </PanelRoot>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Sensor details" });
+    const contentTarget = (): HTMLElement | null =>
+      document.getElementById(toggle.getAttribute("aria-controls") ?? "");
+    expect(contentTarget()).not.toBeNull();
+    expect(effectSpy).not.toHaveBeenCalled();
+
+    await user.click(toggle);
+    expect(effectSpy).toHaveBeenCalledTimes(1);
+    expect(cleanupSpy).not.toHaveBeenCalled();
+
+    await user.click(toggle);
+    expect(cleanupSpy).toHaveBeenCalledTimes(1);
+    expect(effectSpy).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Probe content")).not.toBeVisible();
+    expect(contentTarget()).not.toBeNull();
+
+    await user.click(toggle);
+    expect(effectSpy).toHaveBeenCalledTimes(2);
+  });
+
   it("renders shared rhythm and metric presentation primitives", () => {
     const { container } = render(
       <PanelRoot>
@@ -1039,7 +1076,10 @@ describe("buttons and confirmation", () => {
 
     rerender(renderButton(true));
 
-    const button = screen.getByRole("button", { name: "Working: Save" });
+    // The accessible name stays stable across the busy transition; busy state
+    // is conveyed as a description plus aria-busy.
+    const button = screen.getByRole("button", { name: "Save" });
+    expect(button).toHaveAccessibleDescription("Working");
     expect(button).toBe(idleButton);
     expect(button).toBeEnabled();
     expect(button).toHaveAttribute("aria-disabled", "true");
@@ -1062,9 +1102,9 @@ describe("buttons and confirmation", () => {
       </PanelRoot>,
     );
 
-    expect(
-      screen.getByRole("button", { name: "Saving: Save settings" }),
-    ).toHaveAttribute("aria-busy", "true");
+    const button = screen.getByRole("button", { name: "Save settings" });
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toHaveAccessibleDescription("Saving");
   });
 
   it("keeps aria-disabled buttons focusable while suppressing activation", async () => {
@@ -1139,11 +1179,16 @@ describe("buttons and confirmation", () => {
       </PanelRoot>,
     );
 
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
     const confirmation = screen.getByRole("region", {
       name: "Confirm action",
     });
+    // Focus lands on the described container so the message is conveyed on
+    // open, rather than on Cancel, which would announce only the button.
+    expect(confirmation).toHaveFocus();
     expect(confirmation).toHaveAccessibleName("Confirm action");
+    expect(confirmation).toHaveAccessibleDescription(
+      "This removes the cached source.",
+    );
 
     await user.keyboard("{Escape}");
     expect(onCancel).toHaveBeenCalledOnce();
@@ -1197,7 +1242,9 @@ describe("buttons and confirmation", () => {
     });
     expect(confirmation).toHaveFocus();
     expect(confirmation).toHaveAttribute("aria-busy", "true");
-    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    expect(cancel).toHaveAttribute("aria-disabled", "true");
+    expect(cancel).toBeEnabled();
   });
 
   it("does not steal focus when busy changes after focus leaves", async () => {
@@ -1244,7 +1291,9 @@ describe("buttons and confirmation", () => {
       </PanelRoot>,
     );
 
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    expect(
+      screen.getByRole("region", { name: "Confirm action" }),
+    ).toHaveFocus();
     const outsideAction = screen.getByRole("button", {
       name: "Outside action",
     });
@@ -1261,7 +1310,8 @@ describe("buttons and confirmation", () => {
     expect(outsideAction).toHaveFocus();
   });
 
-  it("moves focus to the region when an internal action becomes busy", () => {
+  it("keeps an internal action focused when it becomes busy", async () => {
+    const user = userEvent.setup();
     const props = {
       message: "Resetting.",
       onCancel: vi.fn(),
@@ -1273,19 +1323,24 @@ describe("buttons and confirmation", () => {
       </PanelRoot>,
     );
 
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    await user.click(cancel);
+    expect(cancel).toHaveFocus();
+
     rerender(
       <PanelRoot>
         <InlineConfirm {...props} open busy />
       </PanelRoot>,
     );
 
-    expect(
-      screen.getByRole("region", { name: "Confirm action" }),
-    ).toHaveFocus();
+    // Busy blocks activation through aria-disabled, so the control stays in the
+    // tab order and focus is never destroyed and chased.
+    expect(cancel).toHaveFocus();
+    expect(cancel).toHaveAttribute("aria-disabled", "true");
+    expect(cancel).toBeEnabled();
   });
 
-  it("tracks internal focus across document realms", () => {
+  it("focuses the confirmation inside its own document realm", () => {
     const iframe = document.createElement("iframe");
     document.body.append(iframe);
     const ownerDocument = iframe.contentDocument;
@@ -1298,26 +1353,20 @@ describe("buttons and confirmation", () => {
       onCancel: vi.fn(),
       onConfirm: vi.fn(),
     } as const;
-    const { rerender, unmount } = render(
+    const { unmount } = render(
       <PanelRoot>
         <InlineConfirm {...props} open />
       </PanelRoot>,
       { container },
     );
 
-    const cancel = within(container).getByRole("button", { name: "Cancel" });
-    cancel.focus();
-    cancel.blur();
-    rerender(
-      <PanelRoot>
-        <InlineConfirm {...props} open busy />
-      </PanelRoot>,
-    );
-
     const confirmation = within(container).getByRole("region", {
       name: "Confirm action",
     });
+    // Focus resolves through the rendered node's owner document, not the
+    // top-level one, so a panel inside an iframe still manages its own focus.
     expect(ownerDocument.activeElement).toBe(confirmation);
+    expect(document.activeElement).not.toBe(confirmation);
 
     unmount();
     iframe.remove();
@@ -1344,8 +1393,8 @@ describe("buttons and confirmation", () => {
     ).toBeVisible();
   });
 
-  it("accepts localized confirmation labels, native attributes, and a root ref", () => {
-    const rootRef = createRef<HTMLElement>();
+  it("accepts localized confirmation labels, native attributes, and a ref", () => {
+    const ref = createRef<HTMLElement>();
     const confirmationProps = {
       fallbackTitle: "Confirmer l’action",
       cancelLabel: "Annuler",
@@ -1359,7 +1408,7 @@ describe("buttons and confirmation", () => {
         <InlineConfirm
           {...confirmationProps}
           open
-          rootRef={rootRef}
+          ref={ref}
           data-testid="localized-confirmation"
           aria-labelledby="confirmation-context"
           aria-describedby="confirmation-guidance"
@@ -1369,13 +1418,13 @@ describe("buttons and confirmation", () => {
       </PanelRoot>,
     );
 
-    expect(rootRef.current).toBe(screen.getByTestId("localized-confirmation"));
+    expect(ref.current).toBe(screen.getByTestId("localized-confirmation"));
     expect(
       screen.getByRole("region", {
         name: "Safety check Confirmer l’action",
       }),
     ).toBeVisible();
-    expect(rootRef.current).toHaveAccessibleDescription(
+    expect(ref.current).toHaveAccessibleDescription(
       "Review before continuing. Cette action est permanente.",
     );
     expect(screen.getByRole("button", { name: "Annuler" })).toBeVisible();
@@ -1383,10 +1432,10 @@ describe("buttons and confirmation", () => {
 
     rerender(
       <PanelRoot>
-        <InlineConfirm {...confirmationProps} open={false} rootRef={rootRef} />
+        <InlineConfirm {...confirmationProps} open={false} ref={ref} />
       </PanelRoot>,
     );
-    expect(rootRef.current).toBeNull();
+    expect(ref.current).toBeNull();
   });
 
   it("supports an explicit confirmation heading level", () => {

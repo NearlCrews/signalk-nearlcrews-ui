@@ -1,4 +1,5 @@
 import { scopeStyles } from "./scope.js";
+import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
 export const FORM_STYLES = scopeStyles(`
 .snui-field__control {
@@ -35,9 +36,6 @@ export const FORM_STYLES = scopeStyles(`
 }
 
 .snui-input-group {
-  --snui-input-group-control-min: 7rem;
-  --snui-input-group-control-basis: 12rem;
-
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
@@ -90,6 +88,10 @@ export const FORM_STYLES = scopeStyles(`
   white-space: nowrap;
 }
 
+.snui-optional-mark {
+  color: var(--snui-color-text-muted);
+}
+
 .snui-field-group {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -109,7 +111,7 @@ export const FORM_STYLES = scopeStyles(`
   min-width: 0;
   padding: 0;
   color: var(--snui-color-text);
-  font-weight: 700;
+  font-weight: var(--snui-font-weight-bold);
   overflow-wrap: anywhere;
 }
 
@@ -140,12 +142,20 @@ export const FORM_STYLES = scopeStyles(`
   margin-top: var(--snui-space-3);
 }
 
+.snui-field-group__error {
+  min-width: 0;
+  color: var(--snui-color-danger);
+  font-size: var(--snui-font-size-sm);
+  font-weight: var(--snui-font-weight-medium);
+  overflow-wrap: anywhere;
+}
+
 .snui-field-group:disabled > .snui-field-group__legend,
 .snui-field-group:disabled > .snui-field-group__description {
   opacity: 0.68;
 }
 
-@container snui-panel (max-width: 37.5rem) {
+@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
   .snui-field--inline {
     grid-template-columns: minmax(0, 1fr);
     column-gap: 0;

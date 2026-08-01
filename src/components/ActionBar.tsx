@@ -3,12 +3,14 @@ import type { HTMLAttributes, ReactNode, Ref } from "react";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
 
+export type ActionBarSticky = "bottom" | "top";
+
 export interface ActionBarProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   readonly actions: ReactNode;
   readonly status?: ReactNode;
   readonly statusRef?: Ref<HTMLDivElement>;
-  readonly sticky?: boolean;
+  readonly sticky?: ActionBarSticky | undefined;
 }
 
 export function ActionBar({
@@ -16,7 +18,7 @@ export function ActionBar({
   className,
   status,
   statusRef,
-  sticky = false,
+  sticky,
   ...props
 }: ActionBarProps): React.JSX.Element {
   return (
@@ -24,7 +26,7 @@ export function ActionBar({
       {...props}
       className={classNames(
         "snui-action-bar",
-        sticky && "snui-action-bar--sticky",
+        sticky !== undefined && `snui-action-bar--sticky-${sticky}`,
         className,
       )}
     >

@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/signalk-nearlcrews-ui.svg)](https://www.npmjs.com/package/signalk-nearlcrews-ui)
 [![npm downloads](https://img.shields.io/npm/dm/signalk-nearlcrews-ui.svg)](https://www.npmjs.com/package/signalk-nearlcrews-ui)
 [![CI](https://github.com/NearlCrews/signalk-nearlcrews-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/NearlCrews/signalk-nearlcrews-ui/actions/workflows/ci.yml)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/LICENSE)
 [![React](https://img.shields.io/badge/react-%3E%3D19.2%20%3C20-149eca.svg)](https://react.dev/)
 
 `signalk-nearlcrews-ui` provides accessible, theme-aware React primitives for NearlCrews Signal K administration panels. It standardizes common panel behavior without taking ownership of plugin data, Signal K APIs, units, validation, or save workflows.
@@ -14,10 +14,21 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or marketplace package. The initial API may change during the `0.x` series, so consumers should pin an exact version.
 
+## What's new in 0.5.0
+
+This release significantly expands the component library and modernizes its React 19.2 foundations. The `Disclosure` component has been removed (merged into `CollapsibleSection`), and several APIs have changed. See the adoption note in the docs directory before upgrading.
+
+- **Composite widgets**: Added `Accordion`, `DataGrid`, `Dialog`, `EmptyState`, `Menu`, `Popover`, `RadioGroup`, `Switch`, and `ToastRegion`, built on React Aria Components for robust accessibility and keyboard behavior.
+- **Form and field upgrades**: `SegmentedControl` supports form participation, uncontrolled mode, and vertical layout. `LabeledField` injects `name` and `disabled`, and supports optional markers. `RangeInput` and `Checkbox` natively synchronize their fill and indeterminate states after a form reset.
+- **Modernized internals**: Components use React 19.2 `<Activity>` to pause effects in collapsed content, and `useEffectEvent` for stable event handlers. Zero `forwardRef` or `useImperativeHandle` shims remain; refs compose cleanly.
+- **Theme and token enhancements**: `ThemeToggle` supports restricting choices, and the night theme provides red-preserving elevations. Token scales for z-index, motion, and typography are now public API.
+- **Forced colors and contrast**: State distinctions for buttons, banners, badges, and invalid controls survive in forced-colors mode, and `prefers-contrast: more` strengthens borders and focus outlines.
+
 ## Compatibility
 
 | Package | React        | JavaScript | Remote output                            | Browser verification                                      | Signal K boundary                                                              |
 | ------- | ------------ | ---------- | ---------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `0.5.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.4.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.3.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.2.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
@@ -44,7 +55,7 @@ The repository builds real production Webpack remotes in classic global and ESM 
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.4.1
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.5.0
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball:
@@ -52,7 +63,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.4.1.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.5.0.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while continuing to share React with the Signal K Admin host.
@@ -74,7 +85,7 @@ import {
 
 export function PluginConfigurationPanel() {
   return (
-    <PanelRoot legacyThemeStorageKeys={["my-plugin-theme"]}>
+    <PanelRoot>
       <Stack gap={4}>
         <ThemeToggle />
         <Section title="Connection">
@@ -104,19 +115,53 @@ The host must supply the nonce through its own trusted bootstrap. Do not read it
 
 ## Components
 
-- `PanelRoot` provides scoped styles, theme state, and legacy preference migration.
-- `ThemeToggle` selects Auto, Light, Dark, or Night and accepts per-instance labels for localization.
-- `Button` supplies primary, secondary, ghost, and danger presentation, plus compact and pill options. `ariaDisabled` keeps a control focusable while suppressing activation at a list boundary. A loading button uses the same focus-preserving behavior and accepts `loadingLabel` for its accessible state name.
-- `SegmentedControl` implements a single-choice radio group with roving focus, Home, End, and direction-aware arrow keys.
-- `LabeledField`, `InputGroup`, `InputGroupControl`, `InputGroupAddon`, `TextInput`, `NumberInput`, `RangeInput`, `Select`, `Textarea`, and `Checkbox` provide accessible form structure. Render-prop fields identify the primary labeled control while allowing paired inputs, unit suffixes, and adjacent actions. Fields and checkboxes accept validation messages and opt-in live announcement modes. `TextInput` covers text, email, password, search, tel, url, date, time, and datetime-local entry. `Checkbox` drives the native mixed state through `indeterminate`, and `RangeInput` shows a filled progress track in every supported engine.
-- `FieldGroup` provides a native fieldset and legend with description, action, and disabled support.
-- `Section`, `Disclosure`, and `CollapsibleSection` provide semantic content grouping. `CollapsibleSection` supports controlled or uncontrolled state, heading navigation, below-content or header-trailing collapsed summaries, sibling actions, retained, lazily retained, or unmounted content, and focus restoration.
-- `Banner` and `StatusIndicator` provide text-backed feedback that does not rely on color alone. Banners accept actions, dismissal, a post-dismissal focus destination, localized severity text, and consumer-selected roles such as `note`.
-- `Stack`, `Cluster`, `Card`, `MetricGrid`, `Metric`, and `Badge` standardize rhythm and presentational status shells while leaving status interpretation local. Each metric is a named semantic group.
-- `ActionBar` lays out consumer-owned state and actions. Pass `statusRef` to move focus to the status after save or discard disables the initiating control.
-- `InlineConfirm` replaces blocking browser confirmations with a named, focus-managed inline region that supports Escape. Set `headingLevel` to preserve the surrounding heading hierarchy.
+- `PanelRoot` provides scoped styles and theme state.
+- `ThemeToggle` selects Auto, Light, Dark, or Night and accepts per-instance labels for localization. `choices` limits the offered themes, and `onChange` reports each selection.
+- `Button` supplies primary, secondary, ghost, and danger presentation, plus compact and pill options. `as="a"` renders an anchor form with a required `href`, `fullWidth` stretches the control to its container, and `iconOnly` squares it for icon content with a required accessible name. `ariaDisabled` keeps a control focusable while suppressing activation at a list boundary. A loading button uses the same focus-preserving behavior and accepts `loadingLabel` for its accessible state name.
+- `SegmentedControl` implements a single-choice radio group with roving focus, Home, End, and direction-aware arrow keys. It runs controlled through `value` or uncontrolled through `defaultValue`, lays out horizontally or vertically through `orientation`, shows its legend through `legendVisibility`, and carries the selection into native form submission and reset through `name`.
+- `RadioGroup` and `Radio` provide a native radio group with label, description, validation messages with opt-in live announcement, and horizontal or vertical orientation. `name` applies to every radio input so native form submission and reset work.
+- `Switch` toggles a single setting and mirrors the `Checkbox` naming: `checked` and `defaultChecked` map to the selected state.
+- `LabeledField`, `InputGroup`, `InputGroupControl`, `InputGroupAddon`, `TextInput`, `NumberInput`, `RangeInput`, `Select`, `Textarea`, and `Checkbox` provide accessible form structure. Render-prop fields identify the primary labeled control while allowing paired inputs, unit suffixes, and adjacent actions, and the render-prop control props carry `descriptionId` and `errorId` so paired controls can reference field text directly. Fields forward `name` and `disabled` to their control, and `optionalLabel` marks optional fields beside the required marker. Fields and checkboxes accept validation messages and opt-in live announcement modes. `TextInput` covers text, email, password, search, tel, url, date, time, datetime-local, month, and week entry. `Checkbox` drives the native mixed state through `indeterminate`, and `RangeInput` shows a filled progress track in every supported engine.
+- `FieldGroup` provides a native fieldset and legend with description, action, validation error, and disabled support.
+- `Section` and `CollapsibleSection` provide semantic content grouping. `CollapsibleSection` wraps the native details element: controlled or uncontrolled state, heading navigation, below-content or header-trailing summaries that stay visible while open through `summaryVisibility`, sibling actions, retained, lazily retained, or unmounted content through `mountStrategy`, and focus restoration.
+- `Accordion` coordinates `CollapsibleSection` children so at most one section stays open at a time.
+- `Banner` and `StatusIndicator` provide text-backed feedback that does not rely on color alone. Banners span the neutral tone plus the semantic tones, and accept actions, dismissal, a post-dismissal focus destination, localized severity text, and consumer-selected roles such as `note`. `StatusIndicator` varies its dot shape per tone and accepts `live` for opt-in announcements, and both accept `toneLabel` to localize the announced severity.
+- `Progress` reports determinate or indeterminate progress with a required label, an optional tone, and `valueText` for assistive technology.
+- `ToastRegion` renders queued toasts into the panel's portal container. `createToastQueue` builds a queue, the shared `toast` queue covers the common single-region setup, and each toast carries a tone, an auto-dismiss delay, and an announcement mode.
+- `Stack`, `Cluster`, `Card`, `MetricGrid`, `Metric`, and `Badge` standardize rhythm and presentational status shells while leaving status interpretation local. `Stack`, `Cluster`, `Card`, and `MetricGrid` accept `as` to render a semantic element, and `Card` adds compact density and header and footer slots. Each metric is a named semantic group. `Metric` and `Badge` render a tone glyph for non-neutral tones and accept `toneLabel`. `Metric` also accepts a `unit` suffix beside the value and `live` for opt-in announcements.
+- `DataGrid` renders an accessible grid with sortable headers, single or multiple selection, compact density, zebra striping, an `EmptyState`-backed empty view, and windowed rows above a virtualization threshold. Sorting is controlled: pair `onSortChange` with `sortDescriptor` and sort `items` in the consumer. `Column`, `Row`, and `Cell` are re-exported from react-aria-components for its collection API.
+- `EmptyState` presents an empty view with a decorative icon, a title, a description, and an action. The title is a styled div, not a heading, so consumers own the surrounding outline.
+- `ActionBar` lays out consumer-owned state and actions, and `sticky` pins it to the top or bottom of its scroll container. Pass `statusRef` to move focus to the status after save or discard disables the initiating control.
+- `InlineConfirm` replaces blocking browser confirmations with a named, focus-managed inline region that supports Escape and announces its message on open. It runs controlled through `open` or uncontrolled through `defaultOpen`. Set `headingLevel` to preserve the surrounding heading hierarchy, `landmark={false}` to drop the region landmark, and `initialFocusRef` and `returnFocusRef` to steer focus on open and close.
+- `Dialog` renders a modal surface with a scrim, focus management, Escape and scrim dismissal, a title and description, and an actions footer. It supports controlled or uncontrolled open state and a standard or wide width.
+- `AlertDialog` shares the `Dialog` API and renders with the `alertdialog` role for confirmations that demand acknowledgement.
+- `Menu` pairs a `Button` trigger with a popover list of `MenuItem` actions, grouped by `MenuSection` and divided by `MenuSeparator`, with destructive styling for irreversible actions.
+- `Popover` anchors free-form overlay content to a trigger with logical placement, collision flipping, and an optional fixed width.
 
-`LabeledField` children must accept and forward `id`, `required`, `aria-describedby`, `aria-errormessage`, and `aria-invalid`. The exported `FieldControlProps` interface defines that contract for custom controls. Required field labels, checkbox labels, legends, section titles, disclosure titles, collapsible titles, and metric labels must contain rendered, non-whitespace content.
+`LabeledField` children must accept and forward `id`, `required`, `aria-describedby`, `aria-errormessage`, and `aria-invalid`. The exported `FieldControlProps` interface defines that contract for custom controls. Required field labels, checkbox labels, radio group labels, legends, section titles, collapsible titles, and metric labels must contain rendered, non-whitespace content.
+
+### Refs
+
+Refs are ordinary props. Each component below forwards to the native element named, and supports object refs, callback refs, and React 19 callback-ref cleanup.
+
+| Component          | Ref element           | Prop  |
+| ------------------ | --------------------- | ----- |
+| `Button`           | `HTMLButtonElement`   | `ref` |
+| `Banner`           | `HTMLDivElement`      | `ref` |
+| `FieldGroup`       | `HTMLFieldSetElement` | `ref` |
+| `TextInput`        | `HTMLInputElement`    | `ref` |
+| `NumberInput`      | `HTMLInputElement`    | `ref` |
+| `RangeInput`       | `HTMLInputElement`    | `ref` |
+| `Select`           | `HTMLSelectElement`   | `ref` |
+| `Textarea`         | `HTMLTextAreaElement` | `ref` |
+| `Checkbox`         | `HTMLInputElement`    | `ref` |
+| `PanelRoot`        | `HTMLDivElement`      | `ref` |
+| `SegmentedControl` | `HTMLDivElement`      | `ref` |
+| `InlineConfirm`    | `HTMLElement`         | `ref` |
+
+Every component takes a plain `ref`. `Banner` additionally accepts `dismissFocusRef`, which names where focus should land after dismissal rather than exposing the banner itself.
+
+Every user-visible default string is overridable for localization: `Button.loadingLabel`, `Banner.dismissLabel`, `Banner.toneLabel`, `InlineConfirm.cancelLabel`, `InlineConfirm.confirmLabel`, `InlineConfirm.fallbackTitle`, `ThemeToggle.legend`, and `toneLabel` on `Badge`, `Metric`, and `StatusIndicator`.
 
 Persistent validation text defaults to `errorLive="off"`. Use `polite` or `assertive` only when a newly inserted message must be announced after an interaction:
 
@@ -167,7 +212,7 @@ For a composite field, spread the render-prop contract onto the primary control 
 </LabeledField>
 ```
 
-All color, spacing, radius, typography, control-size, content-width, and transition tokens listed in [the design contract](docs/design-contract.md) are public CSS API. `PUBLIC_TOKEN_NAMES` exposes the same names to tooling. Override tokens through `PanelRoot.style` so the values stay attached to the versioned root instead of depending on private classes or DOM nesting:
+All color, spacing, radius, typography, control-size, content-width, and transition tokens listed in [the design contract](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/design-contract.md) are public CSS API. `PUBLIC_TOKEN_NAMES` exposes the same names to tooling. Override tokens through `PanelRoot.style` so the values stay attached to the versioned root instead of depending on private classes or DOM nesting:
 
 ```tsx
 <PanelRoot
@@ -184,16 +229,26 @@ All color, spacing, radius, typography, control-size, content-width, and transit
 
 An inline token override applies in every selected theme. Use it only when that behavior is intentional and verify contrast in Light, Dark, and Night.
 
+## Showcase
+
+The repository ships a fixture page that renders every exported component. The top of that page in each theme:
+
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.5.0/docs/screenshots/showcase-light.png)
+
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.5.0/docs/screenshots/showcase-dark.png)
+
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.5.0/docs/screenshots/showcase-night.png)
+
+The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
+
 ## Theme preference
 
-The shared preference key is `signalk-nearlcrews-ui.theme.v1`. During a page session, independently bundled panel roots share the current explicit or migrated choice in memory. On first resolution, `PanelRoot` uses this order:
+The shared preference key is `signalk-nearlcrews-ui.theme.v1`, the only storage key the package reads or writes. On first resolution, `PanelRoot` uses this order:
 
 1. Read the shared key when it contains a valid value.
-2. Otherwise, read the first valid key in `legacyThemeStorageKeys`.
-3. Copy the migrated preference to the shared key.
-4. Otherwise, use Light without writing an implicit preference.
+2. Otherwise, use Auto without writing an implicit preference. Auto leaves `data-snui-theme` off the root, which is what allows the host-following and `prefers-color-scheme` rules to apply, so a fresh panel inside a dark Signal K Admin renders dark.
 
-Selecting a theme writes the shared key. If that write fails, the selection remains shared in memory for the page session but is not durable. Existing valid values, including Auto, otherwise remain authoritative. Auto follows explicit Bootstrap or CoreUI host themes, legacy `.dark-mode`, and then the operating-system color preference. The Night theme uses a red-preserving palette inside the panel. It does not recolor Signal K host chrome or surrounding page gutters, so a host that needs full-surface night adaptation must coordinate those surfaces separately.
+Selecting a theme writes the shared key and broadcasts the choice to panels in the same document, while open panels in other tabs follow the browser storage event. If the write fails, the selection remains current in the mounted panels for the page session but is not durable. Existing valid values, including Auto, otherwise remain authoritative. Auto follows explicit Bootstrap or CoreUI host themes, legacy `.dark-mode`, and then the operating-system color preference. The Night theme uses a red-preserving palette inside the panel. It does not recolor Signal K host chrome or surrounding page gutters, so a host that needs full-surface night adaptation must coordinate those surfaces separately.
 
 ## Package boundary
 
@@ -206,7 +261,7 @@ Keep these concerns in each plugin:
 - Domain validation and provider behavior
 - Plugin-specific tables, cards, and workflows
 
-See [the design contract](docs/design-contract.md), [the migration guide](docs/migration.md), and [the release policy](docs/release-policy.md) for the complete rules.
+See [the design contract](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/design-contract.md), [the migration guide](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/migration.md), and [the release policy](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/release-policy.md) for the complete rules.
 
 ## Development
 
@@ -218,7 +273,9 @@ npm run test:browser
 
 Development supports Node 22.22.2 or newer in the Node 22 release line, Node 24.15.0 or newer in the Node 24 release line, or Node 26. npm 12.0.1 is preferred, and npm 11.16 or newer remains accepted during the transition. These are source-tooling requirements and do not impose a Node runtime on consumers of the browser bundle.
 
-`npm run validate` runs Biome formatting and linting, Prettier documentation formatting, type-aware ESLint rules, Knip dead-code analysis, TypeScript checks, unit coverage, full and runtime dependency audits, compilation, packed-package validation, bundle-size and React-externalization checks, and classic and ESM Module Federation fixture builds.
+`npm run validate` runs Biome formatting and linting, Prettier documentation formatting, type-aware ESLint rules, Knip dead-code analysis, TypeScript checks under both installed compilers, unit coverage including type-level tests, full and runtime dependency audits, compilation, packed-package validation, an emitted-declaration comparison against the committed baseline, a consumer type check against the packed artifact, bundle-size and React-externalization checks, and classic and ESM Module Federation fixture builds.
+
+Two TypeScript compilers are installed on purpose. See the TypeScript toolchain section of `CONTRIBUTING.md` in the repository for why, and for the condition that collapses them back to one.
 
 Biome owns JavaScript, TypeScript, JSON, and HTML formatting and supplies the fast recommended lint layer. Prettier is intentionally limited to Markdown and YAML, which Biome does not yet support. Type-aware ESLint remains for project-aware TypeScript, React Hooks, and JSX accessibility rules that are not equivalent to Biome's syntax-aware checks. Knip independently verifies the repository dependency and export graph.
 

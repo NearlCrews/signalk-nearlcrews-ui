@@ -1,4 +1,5 @@
 import { scopeStyles } from "./scope.js";
+import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
 export const FOUNDATION_STYLES = scopeStyles(`
 :scope,
@@ -9,6 +10,8 @@ export const FOUNDATION_STYLES = scopeStyles(`
 }
 
 :scope {
+  /* The containing block for portaled overlays (toasts, menus, dialogs). */
+  position: relative;
   width: 100%;
   max-width: none;
   margin-inline: auto;
@@ -39,6 +42,70 @@ input,
 select,
 textarea {
   font: inherit;
+}
+
+/*
+ * Host applications ship global element styles that reach unclassed markup a
+ * consumer renders inside a panel. Signal K Admin bundles Bootstrap Reboot,
+ * whose legend, heading, and block margins visibly change panel content. These
+ * rules make a panel render the same in every host. Package components carry
+ * their own classes, so they are unaffected.
+ */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin: 0;
+  font-weight: var(--snui-font-weight-semibold);
+  line-height: 1.3;
+}
+
+h1 { font-size: 1.5rem; }
+h2 { font-size: 1.25rem; }
+h3 { font-size: 1.125rem; }
+h4,
+h5,
+h6 { font-size: 1rem; }
+
+p,
+ul,
+ol,
+dl,
+dd,
+figure,
+blockquote {
+  margin: 0;
+}
+
+legend {
+  width: auto;
+  padding: 0;
+  float: none;
+  margin-bottom: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+fieldset {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  margin: 0;
+}
+
+hr {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--snui-color-border);
+  margin: 0;
+  color: inherit;
+  opacity: 1;
+}
+
+table {
+  border-collapse: collapse;
 }
 
 a:any-link {
@@ -76,6 +143,17 @@ input[type="range"] {
   cursor: not-allowed;
 }
 
+@media (prefers-contrast: more) {
+  /* Stronger contrast request: boundaries and focus take the text color. */
+  :scope {
+    --snui-color-border: var(--snui-color-text);
+  }
+
+  :focus-visible {
+    outline-width: 3px;
+  }
+}
+
 .snui-visually-hidden {
   position: absolute !important;
   width: 1px !important;
@@ -88,17 +166,25 @@ input[type="range"] {
   border: 0 !important;
 }
 
-@container snui-panel (max-width: 37.5rem) {
+@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
   .snui-root__content {
     padding: var(--snui-space-3);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  /*
+   * Scoped to elements this package styles. A blanket universal reset would
+   * also suppress motion a consumer deliberately kept inside the panel, which
+   * it could then only restore with an !important declaration.
+   */
   :scope,
-  *,
-  *::before,
-  *::after {
+  [class^="snui-"],
+  [class*=" snui-"],
+  [class^="snui-"]::before,
+  [class*=" snui-"]::before,
+  [class^="snui-"]::after,
+  [class*=" snui-"]::after {
     scroll-behavior: auto !important;
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;

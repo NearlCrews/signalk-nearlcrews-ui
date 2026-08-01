@@ -3,8 +3,62 @@
 All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+## [0.5.0] - 2026-08-01
 
-## [Unreleased]
+This release introduces major composite widgets, modernizes React 19.2 foundations, and changes public APIs.
+
+### Breaking
+
+- `Disclosure` is removed and merged into `CollapsibleSection` (which gains `summaryVisibility`).
+- `legacyThemeStorageKeys` and the volatile cross-version theme channel are removed. Theme resolves from a single key.
+- `InlineConfirm` renames `rootRef` to `ref` and passes a reason (`"escape"` or `"cancel"`) to `onCancel`.
+- `SegmentedControl` renames `rootRef` to `ref`, makes `value` optional (adding `defaultValue`), and scopes arrow keys by orientation.
+- `ActionBar` changes `sticky` from a boolean to `"bottom"` | `"top"`.
+- `BannerTone` is replaced by `StatusTone`, adding a `neutral` tone.
+- `Button` props are now a discriminated union requiring `href` when `as="a"`.
+- `CollapsibleSection` retain strategies pause effects using `<Activity mode="hidden">`.
+- Every component that accepts a ref now declares it as an ordinary `ref` prop instead of wrapping in `forwardRef`. Emitted declarations change from `ForwardRefExoticComponent` to plain functions.
+- An unresolved theme preference now resolves to Auto instead of Light. A fresh panel follows the host and the operating system rather than pinning itself to Light.
+- `Button` no longer rewrites its accessible name while loading.
+- `InlineConfirm` cancel now blocks activation through `aria-disabled` instead of `disabled`, so it keeps focus while busy.
+- `Banner` no longer emits `aria-live` alongside a role that already implies a live region.
+
+### Added
+
+- `Accordion`, `DataGrid`, `Dialog`, `AlertDialog`, `EmptyState`, `Menu`, `Popover`, `RadioGroup`, `Switch`, and `ToastRegion` components, built on React Aria Components.
+- `as`, `fullWidth`, and `iconOnly` props on `Button`.
+- `name`, `disabled`, and `optionalLabel` on `LabeledField`, plus `descriptionId` and `errorId` for render-prop consumers.
+- `error` and `errorLive` on `FieldGroup`.
+- `month` and `week` types for `TextInput`.
+- `live` announcement option for `StatusIndicator` and `Metric`.
+- Polymorphic `as` rendering for `Stack`, `Cluster`, `Card`, and `MetricGrid`.
+- `around` and `evenly` justify options for `Cluster`.
+- `density`, `header`, and `footer` slots for `Card`.
+- `unit` suffix slot for `Metric`.
+- `choices` restriction and `onChange` observer for `ThemeToggle`.
+- `defaultOpen`, `initialFocusRef`, `returnFocusRef`, `cancelVariant`, `scroll-into-view`, and `aria-keyshortcuts` on `InlineConfirm`.
+- Landmark opt-out (`landmark={false}`) for `Section` and `InlineConfirm`.
+- Public token scales for z-index, motion, and typography, plus per-theme dark and night elevation shadows.
+
+### Fixed
+
+- `RangeInput` left a stale fill after a native form reset. It now resynchronizes.
+- `Checkbox` left a stale indeterminate state after a native form reset. It now resynchronizes.
+- `Button` leaked `onKeyDown` activation to consumers while blocked by `ariaDisabled` or `loading`.
+- `SegmentedControl` probed `getComputedStyle` on every keydown; it now uses `element.matches(":-dir(rtl)")`.
+- `InlineConfirm` reattached a caller-supplied `ref` on every commit. A callback ref now attaches once per mount.
+- Validation live regions are now mounted before their content arrives, ensuring reliable announcements.
+- Forced colors erased the distinction between valid and invalid text inputs, checkboxes, and ranges. Invalid controls now carry a dashed outline.
+- Night tone tokens were near-isoluminant, with danger and info at 1.00:1 against each other.
+- Host global styles, including the Bootstrap Reboot that Signal K Admin bundles, reached unclassed consumer markup inside a panel and changed legend, heading, and block spacing.
+- The reduced-motion reset applied to all consumer content through a universal selector, so a consumer could only preserve an essential animation with an `!important` declaration.
+- Optional public props now admit `undefined`, so consumers compiling with `exactOptionalPropertyTypes` can pass a computed optional value.
+
+### Changed
+
+- ESLint uses `recommended-latest` to surface React Compiler diagnostics.
+- Bundle size budget raised to 120 kB to accommodate React Aria Components composite widgets.
+- The default font stack no longer names `Inter`, which the package does not ship and the host does not load.
 
 ## [0.4.1] - 2026-07-27
 
@@ -91,7 +145,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.2.0...v0.3.0

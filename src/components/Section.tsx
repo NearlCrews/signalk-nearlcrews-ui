@@ -10,6 +10,8 @@ export interface SectionProps
   readonly actions?: ReactNode;
   readonly description?: ReactNode;
   readonly headingLevel?: HeadingLevel;
+  /** Removes the region landmark naming when false. */
+  readonly landmark?: boolean;
   readonly title: ReactNode;
 }
 
@@ -20,6 +22,7 @@ export function Section({
   className,
   description,
   headingLevel = 2,
+  landmark = true,
   title,
   ...props
 }: SectionProps): React.JSX.Element {
@@ -34,7 +37,9 @@ export function Section({
     <section
       {...props}
       className={classNames("snui-section", className)}
-      aria-labelledby={joinIdReferences(ariaLabelledBy, titleId)}
+      aria-labelledby={
+        landmark ? joinIdReferences(ariaLabelledBy, titleId) : undefined
+      }
     >
       <header className="snui-section__header">
         <div className="snui-section__heading-group">

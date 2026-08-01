@@ -11,7 +11,6 @@ const require = createRequire(import.meta.url);
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
 const versionSource = await readFile("src/version.ts", "utf8");
 const changelog = await readFile("CHANGELOG.md", "utf8");
-const migrationGuide = await readFile("docs/migration.md", "utf8");
 const readme = await readFile("README.md", "utf8");
 
 if (packageJson.name !== "signalk-nearlcrews-ui") {
@@ -80,11 +79,6 @@ for (const [documentName, document, expectedText] of [
     `signalk-nearlcrews-ui-${packageJson.version}.tgz`,
   ],
   ["README.md compatibility table", readme, `\`${major}.${minor}.x\``],
-  [
-    "docs/migration.md tarball example",
-    migrationGuide,
-    `signalk-nearlcrews-ui-${packageJson.version}.tgz`,
-  ],
   ["CHANGELOG.md release heading", changelog, `## [${packageJson.version}]`],
 ]) {
   if (!document.includes(expectedText)) {

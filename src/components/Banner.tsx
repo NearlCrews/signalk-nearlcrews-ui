@@ -1,71 +1,67 @@
-import {
-  forwardRef,
-  type HTMLAttributes,
-  type MouseEvent,
-  type ReactNode,
-  type RefObject,
+import type {
+  HTMLAttributes,
+  MouseEvent,
+  ReactNode,
+  RefAttributes,
+  RefObject,
 } from "react";
 
+import { announcementRole } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
+import {
+  isSemanticTone,
+  type StatusTone,
+  TONE_GLYPHS,
+  TONE_LABELS,
+} from "../utils/tone.js";
+import { Button } from "./Button.js";
 
-export type BannerTone = "info" | "success" | "warning" | "danger";
+export type BannerTone = StatusTone;
 export type BannerLive = "off" | "polite" | "assertive";
 
 export interface BannerProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, "aria-live" | "title"> {
-  readonly actions?: ReactNode;
-  readonly dismissFocusRef?: RefObject<HTMLElement | null>;
-  readonly dismissLabel?: string;
-  readonly live?: BannerLive;
-  readonly onDismiss?: (event: MouseEvent<HTMLButtonElement>) => void;
-  readonly title?: ReactNode;
-  readonly tone?: BannerTone;
-  readonly toneLabel?: string;
+  extends Omit<HTMLAttributes<HTMLDivElement>, "aria-live" | "title">,
+    RefAttributes<HTMLDivElement> {
+  readonly actions?: ReactNode | undefined;
+  readonly dismissFocusRef?: RefObject<HTMLElement | null> | undefined;
+  readonly dismissLabel?: string | undefined;
+  readonly live?: BannerLive | undefined;
+  readonly onDismiss?:
+    | ((event: MouseEvent<HTMLButtonElement>) => void)
+    | undefined;
+  readonly title?: ReactNode | undefined;
+  readonly tone?: BannerTone | undefined;
+  readonly toneLabel?: string | undefined;
 }
 
-const TONE_LABELS: Readonly<Record<BannerTone, string>> = {
-  info: "Information",
-  success: "Success",
-  warning: "Warning",
-  danger: "Error",
-};
-
-const TONE_ICONS: Readonly<Record<BannerTone, string>> = {
-  info: "i",
-  success: "✓",
-  warning: "!",
-  danger: "×",
-};
-
-export const Banner = forwardRef<HTMLDivElement, BannerProps>(function Banner(
-  {
-    actions,
-    children,
-    className,
-    dismissFocusRef,
-    dismissLabel = "Dismiss",
-    live,
-    onDismiss,
-    role: suppliedRole,
-    title,
-    tone = "info",
-    toneLabel = TONE_LABELS[tone],
-    ...props
-  },
+export function Banner({
+  actions,
+  children,
+  className,
+  dismissFocusRef,
+  dismissLabel = "Dismiss",
+  live,
+  onDismiss,
   ref,
-): React.JSX.Element {
+  role: suppliedRole,
+  title,
+  tone = "info",
+  toneLabel,
+  ...props
+}: BannerProps): React.JSX.Element {
   const effectiveLive = live ?? "off";
-  const role =
-    suppliedRole ??
-    (effectiveLive === "assertive"
-      ? "alert"
-      : effectiveLive === "polite"
-        ? "status"
-        : undefined);
+  const role = suppliedRole ?? announcementRole(effectiveLive);
+  // `alert` and `status` already imply a live region. Emitting `aria-live`
+  // beside them double speaks on some screen readers, and an explicit "off"
+  // would silence a role the caller asked for.
+  const ariaLive = role === undefined ? live : undefined;
   const hasActions = hasReactContent(actions) || onDismiss !== undefined;
   const effectiveDismissLabel = dismissLabel.trim() || "Dismiss";
-  const effectiveToneLabel = toneLabel.trim() || TONE_LABELS[tone];
+  const semantic = isSemanticTone(tone);
+  const effectiveToneLabel = semantic
+    ? (toneLabel?.trim() ?? "") || TONE_LABELS[tone]
+    : undefined;
 
   return (
     <div
@@ -73,14 +69,18 @@ export const Banner = forwardRef<HTMLDivElement, BannerProps>(function Banner(
       ref={ref}
       className={classNames("snui-banner", `snui-banner--${tone}`, className)}
       role={role}
-      aria-live={live}
+      aria-live={ariaLive}
     >
       <div className="snui-banner__content">
-        <span className="snui-banner__tone-icon" aria-hidden="true">
-          {TONE_ICONS[tone]}
-        </span>
+        {semantic ? (
+          <span className="snui-banner__tone-icon" aria-hidden="true">
+            {TONE_GLYPHS[tone]}
+          </span>
+        ) : null}
         <div className="snui-banner__text">
-          <span className="snui-visually-hidden">{effectiveToneLabel}. </span>
+          {effectiveToneLabel === undefined ? null : (
+            <span className="snui-visually-hidden">{effectiveToneLabel}. </span>
+          )}
           {hasReactContent(title) ? (
             <div className="snui-banner__title">
               {title}
@@ -94,9 +94,9 @@ export const Banner = forwardRef<HTMLDivElement, BannerProps>(function Banner(
         <div className="snui-banner__actions">
           {actions}
           {onDismiss !== undefined ? (
-            <button
-              type="button"
-              className="snui-banner__dismiss"
+            <Button
+              variant="ghost"
+              size="compact"
               onClick={(event) => {
                 onDismiss(event);
                 if (dismissFocusRef !== undefined) {
@@ -105,10 +105,10 @@ export const Banner = forwardRef<HTMLDivElement, BannerProps>(function Banner(
               }}
             >
               {effectiveDismissLabel}
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}
     </div>
   );
-});
+}

@@ -1,4 +1,5 @@
 import { scopeStyles } from "./scope.js";
+import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
 export const FEEDBACK_STYLES = scopeStyles(`
 .snui-banner {
@@ -22,7 +23,7 @@ export const FEEDBACK_STYLES = scopeStyles(`
 
 .snui-banner__title {
   margin: 0 0 var(--snui-space-1);
-  font-weight: 700;
+  font-weight: var(--snui-font-weight-bold);
 }
 
 .snui-banner__tone-icon {
@@ -34,8 +35,8 @@ export const FEEDBACK_STYLES = scopeStyles(`
   border: 2px solid currentColor;
   border-radius: 50%;
   color: var(--snui-color-info);
-  font-size: 0.8125rem;
-  font-weight: 800;
+  font-size: var(--snui-font-size-xs);
+  font-weight: var(--snui-font-weight-heavy);
   line-height: 1;
 }
 
@@ -69,43 +70,25 @@ export const FEEDBACK_STYLES = scopeStyles(`
   gap: var(--snui-space-2);
 }
 
-.snui-banner__dismiss {
-  display: inline-flex;
-  min-width: 0;
-  min-height: var(--snui-control-min-height);
-  max-width: 100%;
-  align-items: center;
-  padding: var(--snui-space-1) var(--snui-space-3);
-  border: 1px solid currentColor;
-  border-radius: var(--snui-radius-sm);
-  background: transparent;
-  color: var(--snui-color-text);
-  font-weight: 650;
-  text-align: center;
-  overflow-wrap: anywhere;
-  cursor: pointer;
-  transition:
-    background-color var(--snui-transition-fast),
-    transform var(--snui-transition-fast);
-}
-
-.snui-banner__dismiss:hover {
-  background: var(--snui-color-hover-raised);
-}
-
-.snui-banner__dismiss:active {
-  background: color-mix(
-    in srgb,
-    var(--snui-color-accent-fill) 12%,
-    var(--snui-color-hover-raised)
-  );
-  transform: translateY(1px);
-}
-
-@container snui-panel (max-width: 37.5rem) {
+@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
   .snui-banner {
     align-items: stretch;
     flex-direction: column;
+  }
+}
+
+@media (forced-colors: active) {
+  /*
+   * Forced colors flattens the tone bar to the same system color as the
+   * rest of the border, which weakens the severity signal. Reconstruct the
+   * leading bar with ButtonText against CanvasText so it stays distinct.
+   */
+  .snui-banner {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    border-inline-start-color: ButtonText;
+    background: Canvas;
+    color: CanvasText;
   }
 }
 `);

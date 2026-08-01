@@ -153,6 +153,14 @@ export default defineConfig({
     ),
     __ESM_REMOTE_URL__: JSON.stringify("/federation-assets/esm/remoteEntry.js"),
   },
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(import.meta.dirname, "index.html"),
+        showcase: resolve(import.meta.dirname, "showcase.html"),
+      },
+    },
+  },
   server: {
     fs: {
       allow: [repositoryRoot],

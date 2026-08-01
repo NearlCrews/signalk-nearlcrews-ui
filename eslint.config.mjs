@@ -1,4 +1,5 @@
 import eslint from "@eslint/js";
+// The mainstream eslint-plugin-jsx-a11y peer range caps at ESLint 9 and this repo uses ESLint 10, so the fork is required until mainstream supports 10.
 import jsxA11y from "eslint-plugin-jsx-a11y-x";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
@@ -7,8 +8,10 @@ import tseslint from "typescript-eslint";
 export default tseslint.config(
   {
     ignores: [
+      ".remember/**",
       "coverage/**",
       "dist/**",
+      "fixtures/browser/dist/**",
       "fixtures/federation/**/dist/**",
       "node_modules/**",
       "playwright-report/**",
@@ -38,7 +41,10 @@ export default tseslint.config(
     },
     rules: {
       ...jsxA11y.configs.recommended.rules,
-      ...reactHooks.configs.flat.recommended.rules,
+      // recommended-latest carries the React Compiler diagnostics (purity,
+      // immutability, refs, set-state-in-render, and friends); keep this preset
+      // name pinned so the compiler coverage survives plugin upgrades.
+      ...reactHooks.configs.flat["recommended-latest"].rules,
       "@typescript-eslint/consistent-type-exports": "error",
       "@typescript-eslint/consistent-type-imports": [
         "error",

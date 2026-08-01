@@ -5,6 +5,7 @@ export type ColorTokenName =
   | "--snui-color-surface"
   | "--snui-color-surface-raised"
   | "--snui-color-interactive-hover"
+  | "--snui-color-hover-raised"
   | "--snui-color-text"
   | "--snui-color-text-muted"
   | "--snui-color-border"
@@ -27,6 +28,7 @@ export const LIGHT_TOKENS: ThemeTokenSet = {
   "--snui-color-surface": "#ffffff",
   "--snui-color-surface-raised": "#ffffff",
   "--snui-color-interactive-hover": "#eef2f7",
+  "--snui-color-hover-raised": "#eef2f7",
   "--snui-color-text": "#18202c",
   "--snui-color-text-muted": "#596273",
   "--snui-color-border": "#7c8797",
@@ -48,6 +50,7 @@ export const DARK_TOKENS: ThemeTokenSet = {
   "--snui-color-surface": "#181d29",
   "--snui-color-surface-raised": "#202737",
   "--snui-color-interactive-hover": "#202737",
+  "--snui-color-hover-raised": "#313847",
   "--snui-color-text": "#f5f7fa",
   "--snui-color-text-muted": "#b3bac7",
   "--snui-color-border": "#667085",
@@ -69,6 +72,7 @@ export const NIGHT_TOKENS: ThemeTokenSet = {
   "--snui-color-surface": "#100000",
   "--snui-color-surface-raised": "#190000",
   "--snui-color-interactive-hover": "#330000",
+  "--snui-color-hover-raised": "#3d0a0a",
   "--snui-color-text": "#ff7878",
   "--snui-color-text-muted": "#d75b5b",
   "--snui-color-border": "#ad4040",
@@ -91,25 +95,39 @@ function renderTokenBlock(tokens: ThemeTokenSet): string {
     .join("\n");
 }
 
-/** Private hover fill for controls resting on raised surfaces. */
-export const HOVER_RAISED_TOKENS: Readonly<
-  Record<"light" | "dark" | "night", string>
-> = {
-  light: "#eef2f7",
-  dark: "#313847",
-  night: "#3d0a0a",
-};
+/*
+ * Elevation is per theme: a shadow tuned for light surfaces is nearly
+ * invisible on dark ones, so Dark and Night carry stronger alphas.
+ */
+const LIGHT_SHADOW_BLOCK = `  --snui-shadow-flat: none;
+  --snui-shadow-raised: 0 0.125rem 0.5rem rgb(15 23 42 / 14%);
+  --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(15 23 42 / 22%);`;
+const DARK_SHADOW_BLOCK = `  --snui-shadow-flat: none;
+  --snui-shadow-raised: 0 0.125rem 0.5rem rgb(0 0 0 / 50%);
+  --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(0 0 0 / 65%);`;
+const NIGHT_SHADOW_BLOCK = `  --snui-shadow-flat: none;
+  --snui-shadow-raised: 0 0.125rem 0.5rem rgb(90 0 0 / 28%);
+  --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(90 0 0 / 42%);`;
 
 const LIGHT_BLOCK = `${renderTokenBlock(LIGHT_TOKENS)}
-  --snui-color-hover-raised: ${HOVER_RAISED_TOKENS.light};`;
+${LIGHT_SHADOW_BLOCK}`;
 const DARK_BLOCK = `${renderTokenBlock(DARK_TOKENS)}
-  --snui-color-hover-raised: ${HOVER_RAISED_TOKENS.dark};`;
+${DARK_SHADOW_BLOCK}`;
 const NIGHT_BLOCK = `${renderTokenBlock(NIGHT_TOKENS)}
-  --snui-color-hover-raised: ${HOVER_RAISED_TOKENS.night};`;
+${NIGHT_SHADOW_BLOCK}`;
+
+/** Inline-size breakpoint below which panels switch to their narrow layout. */
+export const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
 
 export const PUBLIC_FOUNDATION_TOKEN_NAMES = [
   "--snui-font-family",
   "--snui-font-size",
+  "--snui-font-size-sm",
+  "--snui-font-size-xs",
+  "--snui-font-weight-medium",
+  "--snui-font-weight-semibold",
+  "--snui-font-weight-bold",
+  "--snui-font-weight-heavy",
   "--snui-line-height",
   "--snui-space-1",
   "--snui-space-2",
@@ -117,13 +135,29 @@ export const PUBLIC_FOUNDATION_TOKEN_NAMES = [
   "--snui-space-4",
   "--snui-space-5",
   "--snui-space-6",
+  "--snui-space-7",
+  "--snui-space-8",
   "--snui-radius-sm",
   "--snui-radius-md",
   "--snui-radius-lg",
+  "--snui-radius-pill",
   "--snui-control-min-height",
+  "--snui-range-thumb-size",
+  "--snui-range-progress-color",
+  "--snui-range-track-color",
+  "--snui-input-group-control-min",
+  "--snui-input-group-control-basis",
   "--snui-content-width-standard",
   "--snui-content-width-wide",
+  "--snui-focus-ring",
+  "--snui-shadow-flat",
+  "--snui-shadow-raised",
+  "--snui-shadow-overlay",
+  "--snui-ease-standard",
   "--snui-transition-fast",
+  "--snui-transition-normal",
+  "--snui-transition-slow",
+  "--snui-motion-spin",
 ] as const;
 
 export type FoundationTokenName =
@@ -144,8 +178,14 @@ export const PUBLIC_TOKEN_NAMES: readonly (
 export const TOKEN_STYLES = `
 ${ROOT_SELECTOR} {
 ${LIGHT_BLOCK}
-  --snui-font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --snui-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --snui-font-size: 0.9375rem;
+  --snui-font-size-sm: 0.875rem;
+  --snui-font-size-xs: 0.8125rem;
+  --snui-font-weight-medium: 600;
+  --snui-font-weight-semibold: 650;
+  --snui-font-weight-bold: 700;
+  --snui-font-weight-heavy: 800;
   --snui-line-height: 1.5;
   --snui-space-1: 0.25rem;
   --snui-space-2: 0.5rem;
@@ -153,15 +193,30 @@ ${LIGHT_BLOCK}
   --snui-space-4: 1rem;
   --snui-space-5: 1.5rem;
   --snui-space-6: 2rem;
+  --snui-space-7: 2.5rem;
+  --snui-space-8: 3rem;
   --snui-radius-sm: 0.375rem;
   --snui-radius-md: 0.625rem;
   --snui-radius-lg: 0.875rem;
+  --snui-radius-pill: 999px;
   --snui-control-min-height: 2.5rem;
+  --snui-range-thumb-size: 1.5rem;
+  --snui-range-progress-color: var(--snui-color-accent-fill);
+  --snui-range-track-color: var(--snui-color-border);
+  --snui-input-group-control-min: 7rem;
+  --snui-input-group-control-basis: 12rem;
   --snui-content-width-standard: 72rem;
   --snui-content-width-wide: 96rem;
   --snui-focus-ring: 0 0 0 3px color-mix(in srgb, var(--snui-color-focus) 38%, transparent);
-  --snui-shadow-raised: 0 0.125rem 0.5rem rgb(15 23 42 / 14%);
+  --snui-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --snui-transition-fast: 140ms ease;
+  --snui-transition-normal: 240ms var(--snui-ease-standard);
+  --snui-transition-slow: 360ms var(--snui-ease-standard);
+  --snui-motion-spin: 0.8s;
+  --snui-z-sticky: 2;
+  --snui-z-overlay: 100;
+  --snui-z-modal: 200;
+  --snui-z-toast: 300;
   color-scheme: light;
 }
 
@@ -198,12 +253,12 @@ ${DARK_BLOCK}
 ${ROOT_SELECTOR}[data-snui-theme="night"] {
 ${NIGHT_BLOCK}
   color-scheme: dark;
-  --snui-shadow-raised: 0 0.125rem 0.5rem rgb(90 0 0 / 28%);
 }
 
 @media (any-pointer: coarse) {
   ${ROOT_SELECTOR} {
     --snui-control-min-height: 2.75rem;
+    --snui-range-thumb-size: 2.75rem;
   }
 }
 `;

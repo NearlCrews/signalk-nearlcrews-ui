@@ -1,7 +1,9 @@
 import {
+  Activity,
   type HTMLAttributes,
   type ReactNode,
   useEffect,
+  useEffectEvent,
   useId,
   useRef,
   useState,
@@ -13,6 +15,7 @@ import { hasReactContent } from "../utils/react-node.js";
 
 export type CollapsibleMountStrategy = "lazy-retain" | "retain" | "unmount";
 export type CollapsibleSummaryPlacement = "below" | "header";
+export type CollapsibleSummaryVisibility = "always" | "collapsed";
 
 export interface CollapsibleSectionProps
   extends Omit<HTMLAttributes<HTMLElement>, "onToggle" | "title"> {
@@ -20,11 +23,14 @@ export interface CollapsibleSectionProps
   readonly defaultOpen?: boolean;
   readonly disabled?: boolean;
   readonly headingLevel?: HeadingLevel;
+  /** Hidden content stays mounted but pauses effects under "lazy-retain" and "retain". */
   readonly mountStrategy?: CollapsibleMountStrategy;
   readonly onOpenChange?: (open: boolean) => void;
   readonly open?: boolean;
   readonly summary?: ReactNode;
   readonly summaryPlacement?: CollapsibleSummaryPlacement;
+  /** Keeps the summary rendered while open under "always". */
+  readonly summaryVisibility?: CollapsibleSummaryVisibility;
   readonly title: ReactNode;
 }
 
@@ -41,6 +47,7 @@ export function CollapsibleSection({
   open,
   summary,
   summaryPlacement = "below",
+  summaryVisibility = "collapsed",
   title,
   ...props
 }: CollapsibleSectionProps): React.JSX.Element {
@@ -53,38 +60,33 @@ export function CollapsibleSection({
   const titleId = `${generatedId}-title`;
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const effectiveOpen = open ?? internalOpen;
-  const [mountState, setMountState] = useState({
-    hasOpened: effectiveOpen,
-    observedOpen: effectiveOpen,
-  });
+  const [hasOpened, setHasOpened] = useState(effectiveOpen);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const focusWasInside = useRef(false);
   const Heading = HEADING_ELEMENTS[headingLevel];
 
-  let hasOpened = mountState.hasOpened;
-  if (mountState.observedOpen !== effectiveOpen) {
-    hasOpened = hasOpened || effectiveOpen;
-    setMountState({ hasOpened, observedOpen: effectiveOpen });
+  // Latch first-open for lazy-retain: guarded render-phase adjustment, so the
+  // content mounts in the same commit that first opens the section.
+  if (effectiveOpen && !hasOpened) {
+    setHasOpened(true);
   }
+
+  const trackFocus = useEffectEvent((event: FocusEvent): void => {
+    const ownerWindow = contentRef.current?.ownerDocument.defaultView;
+    focusWasInside.current =
+      ownerWindow !== null &&
+      ownerWindow !== undefined &&
+      event.target instanceof ownerWindow.Node &&
+      (contentRef.current?.contains(event.target) ?? false);
+  });
 
   useEffect(() => {
     const ownerDocument = contentRef.current?.ownerDocument;
-    const ownerWindow = ownerDocument?.defaultView;
-    if (
-      ownerDocument === undefined ||
-      ownerWindow === null ||
-      ownerWindow === undefined ||
-      !effectiveOpen
-    ) {
+    if (ownerDocument === undefined || !effectiveOpen) {
       return undefined;
     }
 
-    const trackFocus = (event: FocusEvent): void => {
-      focusWasInside.current =
-        event.target instanceof ownerWindow.Node &&
-        (contentRef.current?.contains(event.target) ?? false);
-    };
     ownerDocument.addEventListener("focusin", trackFocus);
     return () => ownerDocument.removeEventListener("focusin", trackFocus);
   }, [effectiveOpen]);
@@ -111,11 +113,13 @@ export function CollapsibleSection({
     onOpenChange?.(nextOpen);
   };
 
-  const renderChildren =
+  const childrenMounted =
     mountStrategy === "retain" ||
     effectiveOpen ||
     (mountStrategy === "lazy-retain" && hasOpened);
-  const renderSummary = !effectiveOpen && hasReactContent(summary);
+  const renderSummary =
+    hasReactContent(summary) &&
+    (summaryVisibility === "always" || !effectiveOpen);
 
   return (
     <section
@@ -162,7 +166,15 @@ export function CollapsibleSection({
         className="snui-collapsible__content"
         hidden={!effectiveOpen}
       >
-        {renderChildren ? children : null}
+        {childrenMounted ? (
+          mountStrategy === "unmount" ? (
+            children
+          ) : (
+            <Activity mode={effectiveOpen ? "visible" : "hidden"}>
+              {children}
+            </Activity>
+          )
+        ) : null}
       </div>
     </section>
   );
