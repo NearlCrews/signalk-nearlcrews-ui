@@ -13,14 +13,17 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readFileSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { runNpmPack } from "./lib/npm-pack.mjs";
 
+const require = createRequire(import.meta.url);
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureDirectory = join(repositoryRoot, "fixtures", "consumer");
 
@@ -72,9 +75,29 @@ try {
   // resolve to the packed artifact rather than walking up to the repository.
   cpSync(fixtureDirectory, workspace, { recursive: true });
 
+  // The .bin entry is a shell script on POSIX and a .cmd shim on Windows,
+  // neither of which spawns portably without a shell. Running the compiler's
+  // own Node entry point through process.execPath works on every runner.
+  const compilerPackageJsonPath = require.resolve(
+    "@typescript/native/package.json",
+  );
+  const compilerBin = JSON.parse(readFileSync(compilerPackageJsonPath, "utf8"))
+    .bin?.tsc;
+
+  if (typeof compilerBin !== "string" || compilerBin.length === 0) {
+    throw new Error(
+      "@typescript/native package.json does not declare bin.tsc.",
+    );
+  }
+
   const typeCheck = spawnSync(
-    join(repositoryRoot, "node_modules", ".bin", "tsc"),
-    ["--noEmit", "--project", join(workspace, "tsconfig.json")],
+    process.execPath,
+    [
+      resolve(dirname(compilerPackageJsonPath), compilerBin),
+      "--noEmit",
+      "--project",
+      join(workspace, "tsconfig.json"),
+    ],
     { cwd: workspace, encoding: "utf8" },
   );
 
