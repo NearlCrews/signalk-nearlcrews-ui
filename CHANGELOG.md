@@ -3,6 +3,7 @@
 All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [0.5.0] - 2026-08-01
 
 This release introduces major composite widgets, modernizes React 19.2 foundations, and changes public APIs.
@@ -59,6 +60,7 @@ This release introduces major composite widgets, modernizes React 19.2 foundatio
 - ESLint uses `recommended-latest` to surface React Compiler diagnostics.
 - Bundle size budget raised to 120 kB to accommodate React Aria Components composite widgets.
 - The default font stack no longer names `Inter`, which the package does not ship and the host does not load.
+- Shared panel behavior moved into single primitives: overlay portal readiness, field error regions, live-region roles, tone labels, ref composition, and reduced-motion detection. Repeated style declarations are emitted from one source, and the overlay stylesheet is split into per-component modules. The emitted declarations for these internal modules changed; the package entry point `dist/index.d.ts` and all 156 exported names are unchanged.
 
 ## [0.4.1] - 2026-07-27
 

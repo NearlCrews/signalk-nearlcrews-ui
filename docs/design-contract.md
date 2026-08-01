@@ -10,6 +10,8 @@ The React package may own:
 - Accessible names, focus states, and keyboard interaction
 - General-purpose form controls and layout
 - Presentational feedback and confirmation surfaces
+- Anchored and modal overlays: menus, popovers, dialogs, and notifications
+- Generic tabular data display
 - Coarse-pointer sizing, responsive behavior, reduced motion, and forced-colors behavior
 
 The React package must not own:
@@ -91,8 +93,7 @@ Consumers may override public tokens through the native `style` prop on `PanelRo
 - Status must include visible text or another non-color cue. `Badge` and `Metric` render a tone glyph, and `StatusIndicator` renders a per-tone dot shape, so tone never depends on color alone. Consumers may localize the announcement with `toneLabel`.
 - Banners include a visible severity symbol as well as screen-reader severity text. Consumers may localize the text with `toneLabel`.
 - Single-choice segmented controls use radio-group semantics, roving focus, arrow keys, Home, and End.
-- Horizontal segmented-control arrows follow document direction, and disclosure carets mirror in right-to-left layouts.
-- Disclosures use native details and summary behavior.
+- Horizontal segmented-control arrows follow document direction, and collapsible carets mirror in right-to-left layouts.
 - Collapsible sections expose a named region and real heading, keep header summaries and actions outside the toggle, restore focus when focused content closes, and preserve the `aria-controls` target while collapsed.
 - Persistent banners are not live regions unless the consumer explicitly requests polite or assertive announcements.
 - Persistent field and checkbox errors default to `aria-live="off"`. Consumers opt in to polite or assertive announcements when validation changes after an interaction. When announcements are requested, the region is mounted before its content arrives, because a live region created together with its message is not announced reliably.
@@ -128,7 +129,7 @@ Host applications ship global element styles that reach unclassed markup a consu
 
 Desktop controls have a compact 40-pixel minimum height. A device with any coarse pointer uses 44 pixels. Square and icon-only targets meet the same floor in both width and height. The range thumb opts out of native rendering, so it scales with this contract through `--snui-range-thumb-size` rather than relying on the user-agent target-size exception. Panels must reflow without horizontal page overflow at 320 CSS pixels, and action groups may wrap when space is limited. Responsive component rules use the `PanelRoot` inline size instead of the browser viewport, so a narrow embedded panel reflows correctly in a wide host window.
 
-`PanelRoot` is full width by default. `width="standard"` caps content at `--snui-content-width-standard`, and `width="wide"` caps it at `--snui-content-width-wide`. `Stack` is the sole owner of external vertical rhythm between shared surfaces, `Cluster` owns wrapping inline rhythm, and plugin-specific tables and workflow layouts remain local.
+`PanelRoot` is full width by default. `width="standard"` caps content at `--snui-content-width-standard`, and `width="wide"` caps it at `--snui-content-width-wide`. `Stack` is the sole owner of external vertical rhythm between shared surfaces, `Cluster` owns wrapping inline rhythm, and `DataGrid` owns generic tabular presentation. Plugin-specific workflow layouts, and the row data and sorting a grid displays, remain local.
 
 ## Compatibility
 
