@@ -11,6 +11,11 @@ export default tseslint.config(
       ".remember/**",
       "coverage/**",
       "dist/**",
+      // Compiled against the packed tarball by check-consumer-types.mjs, with
+      // its own tsconfig and no path mapping, so it sits outside every project
+      // here. Type-aware rules would read the import as `any` whenever dist is
+      // absent, which is every fresh checkout.
+      "fixtures/consumer/**",
       "fixtures/browser/dist/**",
       "fixtures/federation/**/dist/**",
       "node_modules/**",
