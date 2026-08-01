@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -166,6 +167,24 @@ try {
   }
 
   const attwEntryPoint = resolve(dirname(attwPackageJsonPath), attwBin);
+
+  // publint packs by spawning a bare `npm`, which resolves to whatever npm the
+  // PATH offers. A runner whose bundled npm predates this package's
+  // devEngines range refuses to run that subprocess, so publint cannot pack at
+  // all. It lints the tarball packed above instead, which the repository
+  // helper produced through process.execPath and npm_execpath.
+  const publintEntryPoint = resolve(
+    dirname(require.resolve("publint")),
+    "cli.js",
+  );
+
+  if (!existsSync(publintEntryPoint)) {
+    throw new Error("publint does not ship a CLI beside its entry point.");
+  }
+
+  execFileSync(process.execPath, [publintEntryPoint, "run", tarballPath], {
+    stdio: "inherit",
+  });
 
   execFileSync(
     process.execPath,
