@@ -1,0 +1,15 @@
+/* Page chrome shared by the fixture and showcase entry points. The page
+   background tracks the panel theme so screenshots have no light seam around
+   a dark or night panel. */
+body {
+  margin: 0;
+  background: #dfe4ea;
+}
+
+body:has([data-snui-theme="dark"]) {
+  background: #10131c;
+}
+
+body:has([data-snui-theme="night"]) {
+  background: #050000;
+}

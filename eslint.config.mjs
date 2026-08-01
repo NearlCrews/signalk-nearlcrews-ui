@@ -58,6 +58,13 @@ export default tseslint.config(
         "error",
         { checksVoidReturn: { attributes: false } },
       ],
+      // Destructuring a key out so the rest spread omits it is how a caller
+      // keeps a non-DOM prop off an element; the named binding is the point,
+      // not an oversight.
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { ignoreRestSiblings: true },
+      ],
     },
   },
   {

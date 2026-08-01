@@ -19,6 +19,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runNpmPack } from "./lib/npm-pack.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureDirectory = join(repositoryRoot, "fixtures", "consumer");
@@ -32,11 +33,12 @@ const workspace = mkdtempSync(join(tmpdir(), "snui-consumer-"));
 try {
   // `--ignore-scripts` is required: `prepack` runs `validate`, which calls this
   // script, so packing with lifecycle scripts enabled would recurse.
-  const tarball = execFileSync(
-    "npm",
-    ["pack", "--silent", "--ignore-scripts", "--pack-destination", workspace],
-    { cwd: repositoryRoot, encoding: "utf8" },
-  )
+  const tarball = runNpmPack([
+    "--silent",
+    "--ignore-scripts",
+    "--pack-destination",
+    workspace,
+  ])
     .trim()
     .split("\n")
     .at(-1);
