@@ -337,10 +337,6 @@ test("supports action-bearing collapsible status content", async ({ page }) => {
   await expectNoAxeViolations(page);
 });
 
-test.beforeEach(({ page }) => {
-  page.on('console', msg => console.log('PAGE LOG:', msg.text()));
-});
-
 test.skip("provides hover and active feedback for raw action controls", async ({
   page,
 }) => {
@@ -351,8 +347,6 @@ test.skip("provides hover and active feedback for raw action controls", async ({
     page.getByRole("button", { name: "Provider status and metrics" }),
     page.getByRole("button", { name: "Advanced settings" }),
   ]) {
-    const name = await control.textContent();
-    console.log("Checking", name);
     const initialBackground = await control.evaluate(
       (element) => getComputedStyle(element).backgroundColor,
     );
@@ -373,11 +367,7 @@ test.skip("provides hover and active feedback for raw action controls", async ({
     await expect
       .poll(() =>
         control.evaluate(
-          (element) => {
-            const bg = getComputedStyle(element).backgroundColor;
-            console.log("Down bg for", name, bg);
-            return bg;
-          }
+          (element) => getComputedStyle(element).backgroundColor,
         ),
       )
       .not.toBe(hoverBackground);

@@ -3,12 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { Button, Checkbox, PanelRoot, RangeInput } from "../../src/index.js";
-
-function formOf(control: HTMLElement): HTMLFormElement {
-  const form = control.closest("form");
-  if (form === null) throw new Error("Control did not join its form.");
-  return form;
-}
+import { formOf } from "../helpers.js";
 
 describe("RangeInput form reset", () => {
   it("resyncs the range fill after a native form reset", async () => {

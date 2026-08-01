@@ -11,12 +11,7 @@ import {
   RadioGroup,
   Switch,
 } from "../../src/index.js";
-
-function formOf(control: HTMLElement): HTMLFormElement {
-  const form = control.closest("form");
-  if (form === null) throw new Error("Control did not join its form.");
-  return form;
-}
+import { formOf } from "../helpers.js";
 
 describe("RadioGroup", () => {
   it("requires a non-empty label", () => {

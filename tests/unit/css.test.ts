@@ -70,11 +70,9 @@ function componentClassTokens(): {
   return { literals, prefixes };
 }
 
-function stylesheetClasses(): Set<string> {
+function stylesheetClasses(css: string = PANEL_STYLES): Set<string> {
   return new Set(
-    [...PANEL_STYLES.matchAll(/\.(snui-[a-z0-9_-]+)/g)].map(
-      (match) => match[1] ?? "",
-    ),
+    [...css.matchAll(/\.(snui-[a-z0-9_-]+)/g)].map((match) => match[1] ?? ""),
   );
 }
 
@@ -95,13 +93,7 @@ describe("stylesheet validity", () => {
       minify: false,
     });
     const output = Buffer.from(second.code).toString("utf8");
-    const sourceClasses = stylesheetClasses();
-    const outputClasses = new Set(
-      [...output.matchAll(/\.(snui-[a-z0-9_-]+)/g)].map(
-        (match) => match[1] ?? "",
-      ),
-    );
-    expect(outputClasses).toEqual(sourceClasses);
+    expect(stylesheetClasses(output)).toEqual(stylesheetClasses());
     for (const token of PUBLIC_TOKEN_NAMES) {
       expect(output).toContain(`${token}:`);
     }

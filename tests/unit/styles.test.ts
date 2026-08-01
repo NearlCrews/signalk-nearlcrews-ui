@@ -11,11 +11,7 @@ describe("versioned keyframes", () => {
   });
 
   it("defines every keyframe the stylesheet animates", () => {
-    const defined = new Set(
-      [...PANEL_STYLES.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)].map(
-        (match) => match[1],
-      ),
-    );
+    const declared = new Set(defined(PANEL_STYLES));
     const references = [...PANEL_STYLES.matchAll(/animation:\s*([^;]+);/g)].map(
       (match) => match[1] ?? "",
     );
@@ -27,7 +23,7 @@ describe("versioned keyframes", () => {
       const named = shorthand
         .trim()
         .split(/\s+/)
-        .some((token) => defined.has(token));
+        .some((token) => declared.has(token));
       expect(named, `no @keyframes backs "${shorthand.trim()}"`).toBe(true);
     }
   });
