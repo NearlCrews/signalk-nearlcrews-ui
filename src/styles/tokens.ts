@@ -179,11 +179,16 @@ export const PUBLIC_FOUNDATION_TOKEN_NAMES = [
   "--snui-shadow-flat",
   "--snui-shadow-raised",
   "--snui-shadow-overlay",
+  "--snui-color-scrim",
   "--snui-ease-standard",
   "--snui-transition-fast",
   "--snui-transition-normal",
   "--snui-transition-slow",
   "--snui-motion-spin",
+  "--snui-z-sticky",
+  "--snui-z-overlay",
+  "--snui-z-modal",
+  "--snui-z-toast",
 ] as const;
 
 export type FoundationTokenName =

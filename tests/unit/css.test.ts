@@ -163,6 +163,9 @@ function definedTokens(body: string): Set<string> {
   );
 }
 
+/** Tokens the token stylesheet defines without exposing them as public API. */
+const PRIVATE_TOKEN_NAMES: Record<string, true> = {};
+
 describe("theme token blocks", () => {
   const THEME_SELECTORS = [
     `${ROOT_SELECTOR}[data-snui-theme="light"]`,
@@ -199,6 +202,23 @@ describe("theme token blocks", () => {
       expect(
         overridden === 0 || overridden === blocks.length,
         `${token} is overridden in ${String(overridden)} of ${String(blocks.length)} theme blocks; a partial override silently falls back to the base value`,
+      ).toBe(true);
+    }
+  });
+
+  it("lists every defined token as public or explicitly private", () => {
+    const publicNames = new Set<string>(PUBLIC_TOKEN_NAMES);
+    const defined = new Set([
+      ...definedTokens(ruleBody(TOKEN_STYLES, ROOT_SELECTOR)),
+      ...THEME_SELECTORS.flatMap((selector) => [
+        ...definedTokens(ruleBody(TOKEN_STYLES, selector)),
+      ]),
+    ]);
+    for (const token of [...defined].sort()) {
+      if (PRIVATE_TOKEN_NAMES[token] === true) continue;
+      expect(
+        publicNames.has(token),
+        `${token} is defined by the token stylesheet but is neither in PUBLIC_TOKEN_NAMES nor explicitly private`,
       ).toBe(true);
     }
   });

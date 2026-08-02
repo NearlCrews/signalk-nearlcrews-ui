@@ -198,11 +198,16 @@ it("exports the complete public foundation token surface", () => {
     "--snui-shadow-flat",
     "--snui-shadow-raised",
     "--snui-shadow-overlay",
+    "--snui-color-scrim",
     "--snui-ease-standard",
     "--snui-transition-fast",
     "--snui-transition-normal",
     "--snui-transition-slow",
     "--snui-motion-spin",
+    "--snui-z-sticky",
+    "--snui-z-overlay",
+    "--snui-z-modal",
+    "--snui-z-toast",
   ]);
   expect(new Set(PUBLIC_TOKEN_NAMES).size).toBe(PUBLIC_TOKEN_NAMES.length);
 });
