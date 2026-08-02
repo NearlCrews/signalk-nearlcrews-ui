@@ -1,5 +1,10 @@
 import { SPINNER_ANIMATION_NAME, versionedAnimationName } from "../version.js";
-import { FIELD_ERROR_DECLARATIONS } from "./fragments.js";
+import {
+  DISABLED_DECLARATIONS,
+  FIELD_ERROR_DECLARATIONS,
+  focusRingDeclarations,
+  PRESSED_FILL_DECLARATION,
+} from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 
 const PROGRESS_INDETERMINATE_ANIMATION =
@@ -76,11 +81,7 @@ ${scopeStyles(`
 
 .snui-button--secondary:not(:disabled):not([aria-disabled="true"]):active,
 .snui-button--ghost:not(:disabled):not([aria-disabled="true"]):active {
-  background: color-mix(
-    in srgb,
-    var(--snui-color-accent-fill) 12%,
-    var(--snui-color-interactive-hover)
-  );
+${PRESSED_FILL_DECLARATION}
 }
 
 .snui-button--ghost {
@@ -412,9 +413,7 @@ ${FIELD_ERROR_DECLARATIONS}
 }
 
 .snui-radio__button[data-focus-visible] .snui-radio__control {
-  outline: 2px solid var(--snui-color-focus);
-  outline-offset: 2px;
-  box-shadow: var(--snui-focus-ring);
+${focusRingDeclarations("2px", true)}
 }
 
 .snui-radio__button[data-invalid] .snui-radio__control {
@@ -422,8 +421,7 @@ ${FIELD_ERROR_DECLARATIONS}
 }
 
 .snui-radio__button[data-disabled] {
-  cursor: not-allowed;
-  opacity: 0.58;
+${DISABLED_DECLARATIONS}
 }
 
 .snui-radio__label {
@@ -484,14 +482,11 @@ ${FIELD_ERROR_DECLARATIONS}
 }
 
 .snui-switch__button[data-focus-visible] .snui-switch__track {
-  outline: 2px solid var(--snui-color-focus);
-  outline-offset: 2px;
-  box-shadow: var(--snui-focus-ring);
+${focusRingDeclarations("2px", true)}
 }
 
 .snui-switch__button[data-disabled] {
-  cursor: not-allowed;
-  opacity: 0.58;
+${DISABLED_DECLARATIONS}
 }
 
 .snui-switch__label {
@@ -621,11 +616,7 @@ ${FIELD_ERROR_DECLARATIONS}
 }
 
 .snui-segmented__option:not(:disabled):not([aria-checked="true"]):active {
-  background: color-mix(
-    in srgb,
-    var(--snui-color-accent-fill) 12%,
-    var(--snui-color-interactive-hover)
-  );
+${PRESSED_FILL_DECLARATION}
 }
 
 .snui-segmented__option[aria-checked="true"] {
@@ -642,8 +633,7 @@ ${FIELD_ERROR_DECLARATIONS}
 .snui-input:disabled,
 .snui-range:disabled,
 .snui-segmented:not([aria-disabled="true"]) .snui-segmented__option:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
+${DISABLED_DECLARATIONS}
 }
 
 .snui-button[aria-disabled="true"] {
@@ -657,8 +647,7 @@ ${FIELD_ERROR_DECLARATIONS}
 
 .snui-checkbox:has(.snui-checkbox__input:disabled),
 .snui-segmented[aria-disabled="true"] {
-  cursor: not-allowed;
-  opacity: 0.58;
+${DISABLED_DECLARATIONS}
 }
 
 .snui-checkbox:has(.snui-checkbox__input:disabled) .snui-checkbox__input,

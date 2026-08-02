@@ -23,9 +23,10 @@ export declare function ActionBar({ actions, className, status, statusRef, stick
 
 === components/Banner.d.ts ===
 import type { HTMLAttributes, MouseEvent, ReactNode, RefAttributes, RefObject } from "react";
+import { type AnnouncementMode } from "../utils/announcement.js";
 import { type StatusTone } from "../utils/tone.js";
 export type BannerTone = StatusTone;
-export type BannerLive = "off" | "polite" | "assertive";
+export type BannerLive = AnnouncementMode;
 export interface BannerProps extends Omit<HTMLAttributes<HTMLDivElement>, "aria-live" | "title">, RefAttributes<HTMLDivElement> {
     readonly actions?: ReactNode | undefined;
     readonly dismissFocusRef?: RefObject<HTMLElement | null> | undefined;
@@ -116,7 +117,11 @@ export interface DataGridProps<TRow, TColumn = unknown> extends RefAttributes<HT
     /** Title of the default EmptyState. */
     readonly emptyTitle?: string;
     readonly id?: string;
-    /** Row data. Items should expose a stable `id` or `key` for selection. */
+    /**
+     * Row data. Items should expose a stable `id` or `key` for selection.
+     * Without one, virtualized rows key by index, so sorting or filtering a
+     * large grid remounts the visible rows instead of moving them.
+     */
     readonly items: readonly TRow[];
     readonly onSelectionChange?: ((keys: Selection) => void) | undefined;
     /**
@@ -146,8 +151,9 @@ export declare function DataGrid<TRow, TColumn = unknown>({ "aria-label": ariaLa
 === components/Dialog.d.ts ===
 import { type AriaAttributes, type CSSProperties, type ReactNode, type RefAttributes } from "react";
 import type { HeadingLevel } from "../utils/heading.js";
+import { type OverlayOpenState } from "./overlay-placement.js";
 export type DialogWidth = "standard" | "wide";
-export interface DialogProps extends RefAttributes<HTMLElement> {
+export interface DialogProps extends RefAttributes<HTMLElement>, OverlayOpenState {
     /** Footer slot for the dialog actions, usually library Buttons. */
     readonly actions?: ReactNode;
     readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
@@ -158,16 +164,11 @@ export interface DialogProps extends RefAttributes<HTMLElement> {
     readonly blurScrim?: boolean;
     readonly children?: ReactNode;
     readonly className?: string;
-    /** Sets the initial state only. Pass `open` to control the dialog. */
-    readonly defaultOpen?: boolean;
     readonly description?: ReactNode;
     /** Allows dismissal through Escape and scrim presses. Defaults to true. */
     readonly dismissable?: boolean;
     readonly headingLevel?: HeadingLevel;
     readonly id?: string;
-    readonly onOpenChange?: (open: boolean) => void;
-    /** Controls the dialog when set. Wins over `defaultOpen`. */
-    readonly open?: boolean;
     readonly style?: CSSProperties;
     readonly title: ReactNode;
     readonly width?: DialogWidth;
@@ -385,16 +386,13 @@ export declare function Badge({ children, className, tone, toneLabel, ...props }
 === components/Menu.d.ts ===
 import type { ReactNode } from "react";
 import { type ButtonSize, type ButtonVariant } from "./Button.js";
-import { type OverlayPlacement } from "./overlay-placement.js";
-export interface MenuProps {
+import { type OverlayOpenState, type OverlayPlacement } from "./overlay-placement.js";
+export interface MenuProps extends OverlayOpenState {
     readonly children: ReactNode;
     readonly className?: string | undefined;
-    readonly defaultOpen?: boolean | undefined;
     /** Visible trigger label; doubles as the menu's accessible name. */
     readonly label: ReactNode;
     readonly onAction?: ((id: string) => void) | undefined;
-    readonly onOpenChange?: ((open: boolean) => void) | undefined;
-    readonly open?: boolean | undefined;
     readonly placement?: OverlayPlacement | undefined;
     readonly triggerSize?: ButtonSize | undefined;
     readonly triggerVariant?: ButtonVariant | undefined;
@@ -434,13 +432,10 @@ export declare function PanelRoot(props: PanelRootProps): React.JSX.Element;
 === components/Popover.d.ts ===
 import type { ReactElement, ReactNode, RefAttributes } from "react";
 import type { ButtonProps } from "./Button.js";
-import { type OverlayPlacement } from "./overlay-placement.js";
-export interface PopoverProps extends RefAttributes<HTMLDivElement> {
+import { type OverlayOpenState, type OverlayPlacement } from "./overlay-placement.js";
+export interface PopoverProps extends RefAttributes<HTMLDivElement>, OverlayOpenState {
     readonly children: ReactNode;
     readonly className?: string | undefined;
-    readonly defaultOpen?: boolean | undefined;
-    readonly onOpenChange?: ((open: boolean) => void) | undefined;
-    readonly open?: boolean | undefined;
     readonly placement?: OverlayPlacement | undefined;
     /** Rendered as the popover trigger; typically a library Button. */
     readonly trigger: ReactElement<ButtonProps>;
@@ -522,7 +517,7 @@ export interface SegmentedControlProps<Value extends string> extends Omit<HTMLAt
     readonly legendVisibility?: SegmentedControlLegendVisibility;
     /** Carries the selection into native form submission and form reset. */
     readonly name?: string;
-    readonly onChange: (value: Value) => void;
+    readonly onChange?: ((value: Value) => void) | undefined;
     readonly options: readonly SegmentedControlOption<Value>[];
     readonly orientation?: SegmentedControlOrientation;
     readonly value?: Value;
@@ -596,7 +591,10 @@ export interface QueuedToast<T extends ToastContent = ToastContent> {
     readonly content: T;
 }
 export interface ToastQueue<T extends ToastContent = ToastContent> {
-    /** Adds a toast and returns its key. */
+    /**
+     * Adds a toast and returns its key. The queue holds at most five toasts;
+     * when it is full the oldest toast drops to make room.
+     */
     readonly enqueue: (content: T) => string;
     /** Removes one toast. Unknown keys are ignored. */
     readonly dismiss: (key: string) => void;
@@ -627,6 +625,16 @@ export interface ToastRegionProps<T extends ToastContent = ToastContent> extends
  */
 export declare function ToastRegion<T extends ToastContent = ToastContent>({ className, dismissLabel, label, queue, ref, ...props }: ToastRegionProps<T>): React.JSX.Element | null;
 
+=== components/ToneAnnouncement.d.ts ===
+/**
+ * Announces a resolved tone label to assistive technology as one sentence.
+ * Shared by every tone-badged component so the announcement wording cannot
+ * drift per component. Render nothing when there is no label to announce.
+ */
+export declare function ToneAnnouncement({ label, }: {
+    readonly label: string | undefined;
+}): React.JSX.Element | null;
+
 === components/overlay-placement.d.ts ===
 import type { Placement as RACPlacement } from "react-aria-components";
 /**
@@ -638,6 +646,25 @@ import type { Placement as RACPlacement } from "react-aria-components";
 export type OverlayPlacement = "top" | "bottom" | "start" | "end";
 /** The react-aria placement behind each library {@link OverlayPlacement}. */
 export declare const OVERLAY_PLACEMENTS: Readonly<Record<OverlayPlacement, RACPlacement>>;
+/** Open-state props shared by every overlay component. */
+export interface OverlayOpenState {
+    /** Controls the overlay when set. Wins over `defaultOpen`. */
+    readonly open?: boolean | undefined;
+    /** Sets the initial state only. Pass `open` to control the overlay. */
+    readonly defaultOpen?: boolean | undefined;
+    /** Reports open-state changes. */
+    readonly onOpenChange?: ((open: boolean) => void) | undefined;
+}
+/**
+ * Maps the library open-state props onto the react-aria trigger props.
+ * Controlled `open` becomes `isOpen`; an undefined prop is omitted entirely
+ * so the trigger stays uncontrolled under exactOptionalPropertyTypes.
+ */
+export declare function overlayOpenProps({ open, defaultOpen, onOpenChange, }: OverlayOpenState): {
+    readonly isOpen?: boolean;
+    readonly defaultOpen?: boolean;
+    readonly onOpenChange?: (isOpen: boolean) => void;
+};
 
 === index.d.ts ===
 export { Accordion, type AccordionProps } from "./components/Accordion.js";
@@ -654,7 +681,7 @@ export { Checkbox, type CheckboxErrorLive, type CheckboxProps, NumberInput, type
 export { type FieldControlProps, type FieldErrorLive, LabeledField, type LabeledFieldChild, type LabeledFieldControlProps, type LabeledFieldDensity, type LabeledFieldLayout, type LabeledFieldProps, } from "./components/LabeledField.js";
 export { Badge, type BadgeProps, Card, type CardDensity, type CardElement, type CardProps, Cluster, type ClusterElement, type ClusterProps, InputGroup, InputGroupAddon, type InputGroupAddonProps, InputGroupControl, type InputGroupControlProps, type InputGroupControlWidth, type InputGroupDensity, type InputGroupProps, type LayoutAlignment, Metric, MetricGrid, type MetricGridElement, type MetricGridProps, type MetricProps, type SpaceScale, Stack, type StackElement, type StackProps, } from "./components/Layout.js";
 export { Menu, MenuItem, type MenuItemProps, type MenuProps, MenuSection, type MenuSectionProps, MenuSeparator, type MenuSeparatorProps, } from "./components/Menu.js";
-export type { OverlayPlacement } from "./components/overlay-placement.js";
+export type { OverlayOpenState, OverlayPlacement, } from "./components/overlay-placement.js";
 export { PanelRoot, type PanelRootProps, type PanelWidth, } from "./components/PanelRoot.js";
 export { Popover, type PopoverProps } from "./components/Popover.js";
 export { Progress, type ProgressProps, type ProgressTone, } from "./components/Progress.js";
@@ -671,6 +698,7 @@ export { type ThemeContextValue, ThemeProvider, type ThemeProviderProps, usePane
 export { THEME_CHOICES, THEME_STORAGE_KEY, type ThemeChoice, } from "./theme/contract.js";
 export type { AnnouncementMode } from "./utils/announcement.js";
 export type { HeadingLevel } from "./utils/heading.js";
+export type { SemanticTone } from "./utils/tone.js";
 
 === styles/collapsible.d.ts ===
 export declare const COLLAPSIBLE_STYLES: string;
@@ -720,6 +748,15 @@ export declare const OVERLAY_TRANSITION_DECLARATIONS: string;
  */
 export declare const FORCED_COLORS_OUTLINE_DECLARATIONS: string;
 /**
+ * The focus ring every interactive element paints. Inset rings (offset -2px)
+ * suit rows and menu items; outset rings with the soft shadow suit controls.
+ */
+export declare function focusRingDeclarations(offset: "-2px" | "2px", shadow: boolean): string;
+/** Disabled presentation shared by every control. */
+export declare const DISABLED_DECLARATIONS: string;
+/** Pressed-state tint painted over the interactive hover fill. */
+export declare const PRESSED_FILL_DECLARATION = "  background: color-mix(in srgb, var(--snui-color-accent-fill) 12%, var(--snui-color-interactive-hover));";
+/**
  * Gives each tone a distinct dot shape, so a state never depends on color
  * alone for someone who cannot distinguish the hues. The block owns the tone
  * modifier and the dot element, so indicators and toasts share one set of
@@ -765,6 +802,12 @@ export declare const DARK_TOKENS: ThemeTokenSet;
 export declare const NIGHT_TOKENS: ThemeTokenSet;
 /** Inline-size breakpoint below which panels switch to their narrow layout. */
 export declare const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
+/**
+ * Duration of --snui-transition-fast in milliseconds. Exit timers that must
+ * outlive the fast transition read this so the number cannot drift from the
+ * token.
+ */
+export declare const TRANSITION_FAST_MS = 140;
 /**
  * Fixed data-grid row heights in pixels, per density. Virtualized rows are
  * absolutely positioned by pixel offset, so the CSS rule and the virtualizer's
@@ -824,6 +867,8 @@ export declare function liveRegionProps(mode: AnnouncementMode | undefined, supp
  */
 export declare function hasAccessibleName(label: string | undefined, labelledBy: string | undefined): boolean;
 export declare function joinIdReferences(...ids: readonly (string | undefined)[]): string | undefined;
+/** Id of the description element a field renders, when it renders one. */
+export declare function resolveDescriptionId(idBase: string, hasDescription: boolean): string | undefined;
 
 === utils/class-names.d.ts ===
 export declare function classNames(...values: readonly (string | false | null | undefined)[]): string;
@@ -859,6 +904,18 @@ export declare const HEADING_ELEMENTS: {
     readonly 6: "h6";
 };
 
+=== utils/labels.d.ts ===
+/**
+ * Shared defaults for the accessible names of built-in actions, so every
+ * component ships the same label with the same blank-falls-back behavior.
+ */
+/** Default accessible name announced while a button is loading. */
+export declare const DEFAULT_LOADING_LABEL = "Working";
+/** Default accessible name for a dismiss button. */
+export declare const DEFAULT_DISMISS_LABEL = "Dismiss";
+/** Trims a caller-supplied label, falling back when it is missing or blank. */
+export declare function resolveLabel(label: string | undefined, fallback: string): string;
+
 === utils/motion.d.ts ===
 /**
  * Reports the user's reduced-motion preference for a given view.
@@ -870,6 +927,7 @@ export declare const HEADING_ELEMENTS: {
 export declare function prefersReducedMotion(view: unknown): boolean;
 
 === utils/portal.d.ts ===
+export { UNSAFE_PortalProvider, useUNSAFE_PortalContext, } from "react-aria/PortalProvider";
 /**
  * Defers an overlay by one commit so it mounts against a resolved portal
  * container.
@@ -927,11 +985,11 @@ export declare function resolveToneLabel(tone: SemanticTone, toneLabel: string |
 
 === version.d.ts ===
 /** The package version used to isolate styles from other loaded versions. */
-export declare const PACKAGE_VERSION = "0.5.0";
+export declare const PACKAGE_VERSION = "0.6.0";
 /** The root class is private and may change without notice. */
 export declare const ROOT_CLASS = "snui-root";
 /** The exact selector prevents styles from crossing package-version roots. */
-export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.5.0\"]";
+export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.6.0\"]";
 /** A versioned global name prevents keyframe collisions between package copies. */
 export declare function versionedAnimationName(suffix: string): string;
 export declare const SPINNER_ANIMATION_NAME: string;

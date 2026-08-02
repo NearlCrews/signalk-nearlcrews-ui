@@ -1,3 +1,4 @@
+import { focusRingDeclarations } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { DATA_GRID_ROW_HEIGHTS, remLength } from "./tokens.js";
 
@@ -46,9 +47,7 @@ export const TABLE_STYLES = scopeStyles(`
 }
 
 .snui-data-grid__header th[data-focus-visible] {
-  outline: 2px solid var(--snui-color-focus);
-  outline-offset: -2px;
-  box-shadow: var(--snui-focus-ring);
+${focusRingDeclarations("-2px", true)}
 }
 
 /* Sort state pairs the glyph with aria-sort, never the glyph alone. */
@@ -101,8 +100,7 @@ export const TABLE_STYLES = scopeStyles(`
 }
 
 .snui-data-grid__body tr[data-focus-visible] {
-  outline: 2px solid var(--snui-color-focus);
-  outline-offset: -2px;
+${focusRingDeclarations("-2px", false)}
 }
 
 .snui-data-grid--zebra .snui-data-grid__body tr:nth-of-type(even):not([data-selected]):not([data-hovered]) {
@@ -121,8 +119,8 @@ export const TABLE_STYLES = scopeStyles(`
 /*
  * Virtualized grids restyle the table as stacked blocks with absolutely
  * positioned rows, the same structure RAC's own table virtualizer produces.
- * Explicit roles on the grid, row groups, rows, and cells keep the
- * accessibility tree intact while table layout is off. Rows are a fixed
+ * DataGrid.tsx stamps explicit rowgroup, row, and gridcell roles so the
+ * accessibility tree survives the lost table layout. Rows are a fixed
  * height per density and the pixel offsets in DataGrid.tsx must match.
  */
 .snui-data-grid--virtualized .snui-data-grid__table {

@@ -15,18 +15,17 @@ import { requireContent } from "../utils/react-node.js";
 import { Button, type ButtonSize, type ButtonVariant } from "./Button.js";
 import {
   OVERLAY_PLACEMENTS,
+  type OverlayOpenState,
   type OverlayPlacement,
+  overlayOpenProps,
 } from "./overlay-placement.js";
 
-export interface MenuProps {
+export interface MenuProps extends OverlayOpenState {
   readonly children: ReactNode;
   readonly className?: string | undefined;
-  readonly defaultOpen?: boolean | undefined;
   /** Visible trigger label; doubles as the menu's accessible name. */
   readonly label: ReactNode;
   readonly onAction?: ((id: string) => void) | undefined;
-  readonly onOpenChange?: ((open: boolean) => void) | undefined;
-  readonly open?: boolean | undefined;
   readonly placement?: OverlayPlacement | undefined;
   readonly triggerSize?: ButtonSize | undefined;
   readonly triggerVariant?: ButtonVariant | undefined;
@@ -46,18 +45,13 @@ export function Menu({
 }: MenuProps): React.JSX.Element {
   requireContent(
     label,
-
     "Menu requires a non-empty label to name its trigger button.",
   );
 
   const portalReady = usePortalContainerReady();
 
   return (
-    <MenuTrigger
-      {...(open === undefined ? {} : { isOpen: open })}
-      {...(defaultOpen === undefined ? {} : { defaultOpen })}
-      {...(onOpenChange === undefined ? {} : { onOpenChange })}
-    >
+    <MenuTrigger {...overlayOpenProps({ open, defaultOpen, onOpenChange })}>
       <Pressable>
         <Button
           {...(triggerSize === undefined ? {} : { size: triggerSize })}

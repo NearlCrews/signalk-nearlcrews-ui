@@ -2,8 +2,16 @@ import { createElement, Fragment } from "react";
 import { describe, expect, it } from "vitest";
 
 import { announcementRole } from "../../src/utils/announcement.js";
-import { joinIdReferences } from "../../src/utils/aria.js";
+import {
+  joinIdReferences,
+  resolveDescriptionId,
+} from "../../src/utils/aria.js";
 import { classNames } from "../../src/utils/class-names.js";
+import {
+  DEFAULT_DISMISS_LABEL,
+  DEFAULT_LOADING_LABEL,
+  resolveLabel,
+} from "../../src/utils/labels.js";
 import { hasReactContent } from "../../src/utils/react-node.js";
 import {
   isSemanticTone,
@@ -34,6 +42,27 @@ describe("tone tables", () => {
       expect(TONE_GLYPHS[tone].trim().length).toBeGreaterThan(0);
       expect(TONE_LABELS[tone].trim().length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("resolveLabel", () => {
+  it("trims caller labels and falls back on missing or blank input", () => {
+    expect(resolveLabel(" Dismiss panel ", DEFAULT_DISMISS_LABEL)).toBe(
+      "Dismiss panel",
+    );
+    expect(resolveLabel(undefined, DEFAULT_DISMISS_LABEL)).toBe(
+      DEFAULT_DISMISS_LABEL,
+    );
+    expect(resolveLabel("   ", DEFAULT_LOADING_LABEL)).toBe(
+      DEFAULT_LOADING_LABEL,
+    );
+  });
+});
+
+describe("resolveDescriptionId", () => {
+  it("derives the description id only when a description renders", () => {
+    expect(resolveDescriptionId("field-1", true)).toBe("field-1-description");
+    expect(resolveDescriptionId("field-1", false)).toBeUndefined();
   });
 });
 

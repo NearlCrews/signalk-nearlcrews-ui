@@ -5,13 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   EmptyState,
-  PanelRoot,
   Progress,
   Radio,
   RadioGroup,
   Switch,
 } from "../../src/index.js";
-import { formOf } from "../helpers.js";
+import { formOf, panel, renderInPanel } from "../helpers.js";
 
 describe("RadioGroup", () => {
   it("requires a non-empty label", () => {
@@ -36,13 +35,11 @@ describe("RadioGroup", () => {
 
   it("selects radios uncontrolled from defaultValue", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <RadioGroup label="Mode" defaultValue="sail">
-          <Radio value="sail">Sail</Radio>
-          <Radio value="motor">Motor</Radio>
-        </RadioGroup>
-      </PanelRoot>,
+    renderInPanel(
+      <RadioGroup label="Mode" defaultValue="sail">
+        <Radio value="sail">Sail</Radio>
+        <Radio value="motor">Motor</Radio>
+      </RadioGroup>,
     );
 
     const sail = screen.getByRole("radio", { name: "Sail" });
@@ -58,13 +55,11 @@ describe("RadioGroup", () => {
   it("keeps controlled selection and reports changes", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
-      <PanelRoot>
-        <RadioGroup label="Mode" value="sail" onChange={onChange}>
-          <Radio value="sail">Sail</Radio>
-          <Radio value="motor">Motor</Radio>
-        </RadioGroup>
-      </PanelRoot>,
+    renderInPanel(
+      <RadioGroup label="Mode" value="sail" onChange={onChange}>
+        <Radio value="sail">Sail</Radio>
+        <Radio value="motor">Motor</Radio>
+      </RadioGroup>,
     );
 
     const motor = screen.getByRole("radio", { name: "Motor" });
@@ -77,15 +72,13 @@ describe("RadioGroup", () => {
 
   it("carries name=value through native form submission", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <form>
-          <RadioGroup label="Mode" name="mode" defaultValue="sail">
-            <Radio value="sail">Sail</Radio>
-            <Radio value="motor">Motor</Radio>
-          </RadioGroup>
-        </form>
-      </PanelRoot>,
+    renderInPanel(
+      <form>
+        <RadioGroup label="Mode" name="mode" defaultValue="sail">
+          <Radio value="sail">Sail</Radio>
+          <Radio value="motor">Motor</Radio>
+        </RadioGroup>
+      </form>,
     );
 
     const motor = screen.getByRole("radio", { name: "Motor" });
@@ -98,15 +91,13 @@ describe("RadioGroup", () => {
 
   it("restores defaultValue after a native form reset", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <form>
-          <RadioGroup label="Mode" name="mode" defaultValue="sail">
-            <Radio value="sail">Sail</Radio>
-            <Radio value="motor">Motor</Radio>
-          </RadioGroup>
-        </form>
-      </PanelRoot>,
+    renderInPanel(
+      <form>
+        <RadioGroup label="Mode" name="mode" defaultValue="sail">
+          <Radio value="sail">Sail</Radio>
+          <Radio value="motor">Motor</Radio>
+        </RadioGroup>
+      </form>,
     );
 
     const sail = screen.getByRole("radio", { name: "Sail" });
@@ -121,17 +112,15 @@ describe("RadioGroup", () => {
   });
 
   it("associates description and error with the group and defaults errorLive to off", () => {
-    render(
-      <PanelRoot>
-        <RadioGroup
-          label="Mode"
-          description="Propulsion choice"
-          error="Pick a mode"
-          defaultValue="sail"
-        >
-          <Radio value="sail">Sail</Radio>
-        </RadioGroup>
-      </PanelRoot>,
+    renderInPanel(
+      <RadioGroup
+        label="Mode"
+        description="Propulsion choice"
+        error="Pick a mode"
+        defaultValue="sail"
+      >
+        <Radio value="sail">Sail</Radio>
+      </RadioGroup>,
     );
 
     const group = screen.getByRole("radiogroup", { name: "Mode" });
@@ -148,18 +137,17 @@ describe("RadioGroup", () => {
   });
 
   it("mounts an announcing error region before content arrives", () => {
-    const { rerender } = render(
-      <PanelRoot>
-        <RadioGroup label="Mode" errorLive="polite">
-          <Radio value="sail">Sail</Radio>
-        </RadioGroup>
-      </PanelRoot>,
+    const { rerender } = renderInPanel(
+      <RadioGroup label="Mode" errorLive="polite">
+        <Radio value="sail">Sail</Radio>
+      </RadioGroup>,
     );
 
     const region = document.querySelector(".snui-radio-group__error");
     expect(region).not.toBeNull();
-    expect(region).toHaveAttribute("aria-live", "polite");
+    // A roled live region does not also carry aria-live.
     expect(region).toHaveAttribute("role", "status");
+    expect(region).not.toHaveAttribute("aria-live");
     expect(region?.textContent).toBe("");
     // The region is not referenced until it carries a message.
     expect(
@@ -167,11 +155,11 @@ describe("RadioGroup", () => {
     ).not.toHaveAttribute("aria-describedby");
 
     rerender(
-      <PanelRoot>
+      panel(
         <RadioGroup label="Mode" errorLive="polite" error="Pick a mode">
           <Radio value="sail">Sail</Radio>
-        </RadioGroup>
-      </PanelRoot>,
+        </RadioGroup>,
+      ),
     );
     expect(region?.textContent).toBe("Pick a mode");
     expect(
@@ -182,15 +170,15 @@ describe("RadioGroup", () => {
   });
 
   it("reflects orientation on the group", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <RadioGroup label="Horizontal mode" orientation="horizontal">
           <Radio value="a">Alpha</Radio>
         </RadioGroup>
         <RadioGroup label="Vertical mode">
           <Radio value="b">Beta</Radio>
         </RadioGroup>
-      </PanelRoot>,
+      </>,
     );
 
     expect(
@@ -204,12 +192,10 @@ describe("RadioGroup", () => {
   it("disables every radio when the group is disabled", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
-      <PanelRoot>
-        <RadioGroup label="Mode" disabled onChange={onChange}>
-          <Radio value="sail">Sail</Radio>
-        </RadioGroup>
-      </PanelRoot>,
+    renderInPanel(
+      <RadioGroup label="Mode" disabled onChange={onChange}>
+        <Radio value="sail">Sail</Radio>
+      </RadioGroup>,
     );
 
     const sail = screen.getByRole("radio", { name: "Sail" });
@@ -219,15 +205,13 @@ describe("RadioGroup", () => {
   });
 
   it("disables a single radio", () => {
-    render(
-      <PanelRoot>
-        <RadioGroup label="Mode">
-          <Radio value="sail">Sail</Radio>
-          <Radio value="motor" disabled>
-            Motor
-          </Radio>
-        </RadioGroup>
-      </PanelRoot>,
+    renderInPanel(
+      <RadioGroup label="Mode">
+        <Radio value="sail">Sail</Radio>
+        <Radio value="motor" disabled>
+          Motor
+        </Radio>
+      </RadioGroup>,
     );
 
     expect(screen.getByRole("radio", { name: "Motor" })).toBeDisabled();
@@ -236,12 +220,10 @@ describe("RadioGroup", () => {
 
   it("forwards the group ref to the root element", () => {
     const ref = createRef<HTMLDivElement>();
-    render(
-      <PanelRoot>
-        <RadioGroup label="Mode" ref={ref}>
-          <Radio value="sail">Sail</Radio>
-        </RadioGroup>
-      </PanelRoot>,
+    renderInPanel(
+      <RadioGroup label="Mode" ref={ref}>
+        <Radio value="sail">Sail</Radio>
+      </RadioGroup>,
     );
 
     expect(ref.current?.tagName).toBe("DIV");
@@ -250,14 +232,12 @@ describe("RadioGroup", () => {
 
   it("forwards the radio ref to its root element", () => {
     const ref = createRef<HTMLDivElement>();
-    render(
-      <PanelRoot>
-        <RadioGroup label="Mode">
-          <Radio value="sail" ref={ref}>
-            Sail
-          </Radio>
-        </RadioGroup>
-      </PanelRoot>,
+    renderInPanel(
+      <RadioGroup label="Mode">
+        <Radio value="sail" ref={ref}>
+          Sail
+        </Radio>
+      </RadioGroup>,
     );
 
     expect(ref.current?.tagName).toBe("DIV");
@@ -274,11 +254,7 @@ describe("Switch", () => {
 
   it("toggles uncontrolled from defaultChecked", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Switch defaultChecked>Autopilot</Switch>
-      </PanelRoot>,
-    );
+    renderInPanel(<Switch defaultChecked>Autopilot</Switch>);
 
     const toggle = screen.getByRole("switch", { name: "Autopilot" });
     expect(toggle).toBeChecked();
@@ -289,12 +265,10 @@ describe("Switch", () => {
   it("keeps controlled checked and reports changes", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
-      <PanelRoot>
-        <Switch checked onChange={onChange}>
-          Autopilot
-        </Switch>
-      </PanelRoot>,
+    renderInPanel(
+      <Switch checked onChange={onChange}>
+        Autopilot
+      </Switch>,
     );
 
     const toggle = screen.getByRole("switch", { name: "Autopilot" });
@@ -306,12 +280,10 @@ describe("Switch", () => {
   it("does not toggle while disabled", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(
-      <PanelRoot>
-        <Switch disabled onChange={onChange}>
-          Autopilot
-        </Switch>
-      </PanelRoot>,
+    renderInPanel(
+      <Switch disabled onChange={onChange}>
+        Autopilot
+      </Switch>,
     );
 
     const toggle = screen.getByRole("switch", { name: "Autopilot" });
@@ -322,11 +294,7 @@ describe("Switch", () => {
 
   it("forwards the ref to the root element", () => {
     const ref = createRef<HTMLDivElement>();
-    render(
-      <PanelRoot>
-        <Switch ref={ref}>Autopilot</Switch>
-      </PanelRoot>,
-    );
+    renderInPanel(<Switch ref={ref}>Autopilot</Switch>);
 
     expect(ref.current?.tagName).toBe("DIV");
     expect(ref.current?.classList.contains("snui-switch")).toBe(true);
@@ -341,11 +309,7 @@ describe("Progress", () => {
   });
 
   it("exposes a determinate value with default bounds", () => {
-    render(
-      <PanelRoot>
-        <Progress label="Synchronizing" value={40} />
-      </PanelRoot>,
-    );
+    renderInPanel(<Progress label="Synchronizing" value={40} />);
 
     const bar = screen.getByRole("progressbar", { name: "Synchronizing" });
     expect(bar).toHaveAttribute("aria-valuenow", "40");
@@ -356,16 +320,14 @@ describe("Progress", () => {
   });
 
   it("honors custom bounds and passes valueText to aria-valuetext", () => {
-    render(
-      <PanelRoot>
-        <Progress
-          label="Upload"
-          value={3}
-          min={0}
-          max={10}
-          valueText="3 of 10 waypoints"
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <Progress
+        label="Upload"
+        value={3}
+        min={0}
+        max={10}
+        valueText="3 of 10 waypoints"
+      />,
     );
 
     const bar = screen.getByRole("progressbar", { name: "Upload" });
@@ -377,12 +339,12 @@ describe("Progress", () => {
   });
 
   it("clamps the fill when the value leaves the bounds", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Progress label="Over" value={140} />
         <Progress label="Under" value={-5} />
         <Progress label="Flat" value={10} min={10} max={10} />
-      </PanelRoot>,
+      </>,
     );
 
     const over = screen.getByRole("progressbar", { name: "Over" });
@@ -400,11 +362,7 @@ describe("Progress", () => {
   });
 
   it("omits aria-valuenow when indeterminate", () => {
-    render(
-      <PanelRoot>
-        <Progress label="Connecting" />
-      </PanelRoot>,
-    );
+    renderInPanel(<Progress label="Connecting" />);
 
     const bar = screen.getByRole("progressbar", { name: "Connecting" });
     expect(bar).not.toHaveAttribute("aria-valuenow");
@@ -415,11 +373,7 @@ describe("Progress", () => {
   });
 
   it("applies the tone class", () => {
-    render(
-      <PanelRoot>
-        <Progress label="Depth alarm" value={80} tone="danger" />
-      </PanelRoot>,
-    );
+    renderInPanel(<Progress label="Depth alarm" value={80} tone="danger" />);
 
     const bar = screen.getByRole("progressbar", { name: "Depth alarm" });
     expect(bar.classList.contains("snui-progress--tone-danger")).toBe(true);
@@ -427,11 +381,7 @@ describe("Progress", () => {
 
   it("forwards the ref to the root element", () => {
     const ref = createRef<HTMLDivElement>();
-    render(
-      <PanelRoot>
-        <Progress label="Synchronizing" value={10} ref={ref} />
-      </PanelRoot>,
-    );
+    renderInPanel(<Progress label="Synchronizing" value={10} ref={ref} />);
 
     expect(ref.current?.tagName).toBe("DIV");
     expect(ref.current).toBe(
@@ -448,15 +398,13 @@ describe("EmptyState", () => {
   });
 
   it("renders icon, description, and action", () => {
-    render(
-      <PanelRoot>
-        <EmptyState
-          icon={<span data-testid="icon">*</span>}
-          title="No waypoints"
-          description="Create a waypoint to see it here."
-          action={<button type="button">New waypoint</button>}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <EmptyState
+        icon={<span data-testid="icon">*</span>}
+        title="No waypoints"
+        description="Create a waypoint to see it here."
+        action={<button type="button">New waypoint</button>}
+      />,
     );
 
     expect(screen.getByText("No waypoints")).toBeInTheDocument();
@@ -475,11 +423,7 @@ describe("EmptyState", () => {
   });
 
   it("omits icon, description, and action when absent", () => {
-    const { container } = render(
-      <PanelRoot>
-        <EmptyState title="Nothing here" />
-      </PanelRoot>,
-    );
+    const { container } = renderInPanel(<EmptyState title="Nothing here" />);
 
     expect(screen.getByText("Nothing here")).toBeInTheDocument();
     expect(
@@ -495,11 +439,7 @@ describe("EmptyState", () => {
 
   it("forwards the ref to the root element", () => {
     const ref = createRef<HTMLDivElement>();
-    render(
-      <PanelRoot>
-        <EmptyState title="Nothing here" ref={ref} />
-      </PanelRoot>,
-    );
+    renderInPanel(<EmptyState title="Nothing here" ref={ref} />);
 
     expect(ref.current?.tagName).toBe("DIV");
     expect(ref.current?.classList.contains("snui-empty-state")).toBe(true);

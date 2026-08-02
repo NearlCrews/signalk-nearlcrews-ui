@@ -5,7 +5,7 @@ import {
   useId,
 } from "react";
 
-import { joinIdReferences } from "../utils/aria.js";
+import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { resolveFieldError } from "../utils/field-error.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
@@ -38,9 +38,7 @@ export function FieldGroup({
 
   const generatedId = useId();
   const hasDescription = hasReactContent(description);
-  const descriptionId = hasDescription
-    ? `${generatedId}-description`
-    : undefined;
+  const descriptionId = resolveDescriptionId(generatedId, hasDescription);
   const hasError = hasReactContent(error);
   const { errorId, referencedErrorId, rendersError } = resolveFieldError(
     generatedId,
@@ -58,6 +56,12 @@ export function FieldGroup({
         descriptionId,
         referencedErrorId,
       )}
+      {...(referencedErrorId === undefined
+        ? {}
+        : {
+            "aria-errormessage": referencedErrorId,
+            "aria-invalid": true,
+          })}
     >
       <legend className="snui-field-group__legend">{legend}</legend>
       {hasDescription ? (

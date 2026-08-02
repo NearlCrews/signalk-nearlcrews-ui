@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -9,31 +9,27 @@ import {
   MenuItem,
   MenuSection,
   MenuSeparator,
-  PanelRoot,
   Popover,
 } from "../../src/index.js";
+import { panel, renderInPanel } from "../helpers.js";
 
 describe("Menu", () => {
   it("throws when the label is empty", () => {
     expect(() =>
-      render(
-        <PanelRoot>
-          <Menu label="  ">
-            <MenuItem id="open">Open</MenuItem>
-          </Menu>
-        </PanelRoot>,
+      renderInPanel(
+        <Menu label="  ">
+          <MenuItem id="open">Open</MenuItem>
+        </Menu>,
       ),
     ).toThrow("Menu requires a non-empty label to name its trigger button.");
   });
 
   it("opens on click and portals the menu into the panel root", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Menu label="File">
-          <MenuItem id="open">Open</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="File">
+        <MenuItem id="open">Open</MenuItem>
+      </Menu>,
     );
 
     const trigger = screen.getByRole("button", { name: "File" });
@@ -52,12 +48,10 @@ describe("Menu", () => {
 
   it("closes on Escape and restores focus to the trigger", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Menu label="File">
-          <MenuItem id="open">Open</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="File">
+        <MenuItem id="open">Open</MenuItem>
+      </Menu>,
     );
 
     const trigger = screen.getByRole("button", { name: "File" });
@@ -74,13 +68,13 @@ describe("Menu", () => {
 
   it("closes on outside press", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Menu label="File">
           <MenuItem id="open">Open</MenuItem>
         </Menu>
         <p>Outside content</p>
-      </PanelRoot>,
+      </>,
     );
 
     await user.click(screen.getByRole("button", { name: "File" }));
@@ -93,13 +87,11 @@ describe("Menu", () => {
   it("dispatches onAction with the item id and closes", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();
-    render(
-      <PanelRoot>
-        <Menu label="Edit" onAction={onAction}>
-          <MenuItem id="copy">Copy</MenuItem>
-          <MenuItem id="paste">Paste</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="Edit" onAction={onAction}>
+        <MenuItem id="copy">Copy</MenuItem>
+        <MenuItem id="paste">Paste</MenuItem>
+      </Menu>,
     );
 
     await user.click(screen.getByRole("button", { name: "Edit" }));
@@ -113,12 +105,10 @@ describe("Menu", () => {
   it("activates the focused item with Enter from the keyboard", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();
-    render(
-      <PanelRoot>
-        <Menu label="Edit" onAction={onAction}>
-          <MenuItem id="copy">Copy</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="Edit" onAction={onAction}>
+        <MenuItem id="copy">Copy</MenuItem>
+      </Menu>,
     );
 
     screen.getByRole("button", { name: "Edit" }).focus();
@@ -131,12 +121,10 @@ describe("Menu", () => {
 
   it("works without an onAction handler", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Menu label="View">
-          <MenuItem id="zoom">Zoom</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="View">
+        <MenuItem id="zoom">Zoom</MenuItem>
+      </Menu>,
     );
 
     await user.click(screen.getByRole("button", { name: "View" }));
@@ -146,15 +134,13 @@ describe("Menu", () => {
 
   it("marks destructive items with the danger class", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Menu label="Crew">
-          <MenuItem id="rename">Rename</MenuItem>
-          <MenuItem id="remove" destructive>
-            Remove
-          </MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="Crew">
+        <MenuItem id="rename">Rename</MenuItem>
+        <MenuItem id="remove" destructive>
+          Remove
+        </MenuItem>
+      </Menu>,
     );
 
     await user.click(screen.getByRole("button", { name: "Crew" }));
@@ -171,16 +157,14 @@ describe("Menu", () => {
   it("does not activate disabled items and skips them in keyboard navigation", async () => {
     const user = userEvent.setup();
     const onAction = vi.fn();
-    render(
-      <PanelRoot>
-        <Menu label="Go" onAction={onAction}>
-          <MenuItem id="first">First</MenuItem>
-          <MenuItem id="second" disabled>
-            Second
-          </MenuItem>
-          <MenuItem id="third">Third</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="Go" onAction={onAction}>
+        <MenuItem id="first">First</MenuItem>
+        <MenuItem id="second" disabled>
+          Second
+        </MenuItem>
+        <MenuItem id="third">Third</MenuItem>
+      </Menu>,
     );
 
     screen.getByRole("button", { name: "Go" }).focus();
@@ -200,14 +184,12 @@ describe("Menu", () => {
 
   it("focuses an item by typing its first letter", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Menu label="Jump">
-          <MenuItem id="alpha">Alpha</MenuItem>
-          <MenuItem id="bravo">Bravo</MenuItem>
-          <MenuItem id="delta">Delta</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="Jump">
+        <MenuItem id="alpha">Alpha</MenuItem>
+        <MenuItem id="bravo">Bravo</MenuItem>
+        <MenuItem id="delta">Delta</MenuItem>
+      </Menu>,
     );
 
     screen.getByRole("button", { name: "Jump" }).focus();
@@ -219,17 +201,15 @@ describe("Menu", () => {
 
   it("uses an explicit textValue for typeahead when children are elements", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Menu label="Jump">
-          <MenuItem id="alpha">
-            <span>Alpha</span>
-          </MenuItem>
-          <MenuItem id="delta" textValue="Delta">
-            <span>Delta with icon</span>
-          </MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="Jump">
+        <MenuItem id="alpha">
+          <span>Alpha</span>
+        </MenuItem>
+        <MenuItem id="delta" textValue="Delta">
+          <span>Delta with icon</span>
+        </MenuItem>
+      </Menu>,
     );
 
     screen.getByRole("button", { name: "Jump" }).focus();
@@ -243,18 +223,16 @@ describe("Menu", () => {
 
   it("renders sections with titled groups and separators", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Menu label="View">
-          <MenuSection title="Panels">
-            <MenuItem id="charts">Charts</MenuItem>
-          </MenuSection>
-          <MenuSeparator />
-          <MenuSection>
-            <MenuItem id="reset">Reset layout</MenuItem>
-          </MenuSection>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="View">
+        <MenuSection title="Panels">
+          <MenuItem id="charts">Charts</MenuItem>
+        </MenuSection>
+        <MenuSeparator />
+        <MenuSection>
+          <MenuItem id="reset">Reset layout</MenuItem>
+        </MenuSection>
+      </Menu>,
     );
 
     await user.click(screen.getByRole("button", { name: "View" }));
@@ -271,15 +249,15 @@ describe("Menu", () => {
 
   it("defaults to bottom placement and maps explicit placements", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Menu label="Below">
           <MenuItem id="one">One</MenuItem>
         </Menu>
         <Menu label="Aside" placement="end">
           <MenuItem id="two">Two</MenuItem>
         </Menu>
-      </PanelRoot>,
+      </>,
     );
 
     await user.click(screen.getByRole("button", { name: "Below" }));
@@ -295,12 +273,10 @@ describe("Menu", () => {
   });
 
   it("passes variant and size through to the trigger button", () => {
-    render(
-      <PanelRoot>
-        <Menu label="File" triggerVariant="primary" triggerSize="compact">
-          <MenuItem id="open">Open</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="File" triggerVariant="primary" triggerSize="compact">
+        <MenuItem id="open">Open</MenuItem>
+      </Menu>,
     );
 
     expect(screen.getByRole("button", { name: "File" })).toHaveClass(
@@ -312,12 +288,10 @@ describe("Menu", () => {
   it("supports controlled open state", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    const { rerender } = render(
-      <PanelRoot>
-        <Menu label="File" open={false} onOpenChange={onOpenChange}>
-          <MenuItem id="open">Open</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    const { rerender } = renderInPanel(
+      <Menu label="File" open={false} onOpenChange={onOpenChange}>
+        <MenuItem id="open">Open</MenuItem>
+      </Menu>,
     );
 
     expect(screen.queryByRole("menu")).toBeNull();
@@ -327,22 +301,20 @@ describe("Menu", () => {
     expect(screen.queryByRole("menu")).toBeNull();
 
     rerender(
-      <PanelRoot>
+      panel(
         <Menu label="File" open onOpenChange={onOpenChange}>
           <MenuItem id="open">Open</MenuItem>
-        </Menu>
-      </PanelRoot>,
+        </Menu>,
+      ),
     );
     expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 
   it("opens from defaultOpen", () => {
-    render(
-      <PanelRoot>
-        <Menu label="File" defaultOpen>
-          <MenuItem id="open">Open</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="File" defaultOpen>
+        <MenuItem id="open">Open</MenuItem>
+      </Menu>,
     );
 
     expect(screen.getByRole("menu")).toBeInTheDocument();
@@ -350,12 +322,10 @@ describe("Menu", () => {
 
   it("merges a consumer className onto the menu list", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Menu label="File" className="plugin-menu">
-          <MenuItem id="open">Open</MenuItem>
-        </Menu>
-      </PanelRoot>,
+    renderInPanel(
+      <Menu label="File" className="plugin-menu">
+        <MenuItem id="open">Open</MenuItem>
+      </Menu>,
     );
 
     await user.click(screen.getByRole("button", { name: "File" }));
@@ -367,12 +337,10 @@ describe("Popover", () => {
   it("opens on trigger click and forwards ref to the popover element", async () => {
     const user = userEvent.setup();
     const ref = createRef<HTMLDivElement>();
-    render(
-      <PanelRoot>
-        <Popover ref={ref} trigger={<Button>Details</Button>}>
-          <p>Depth details</p>
-        </Popover>
-      </PanelRoot>,
+    renderInPanel(
+      <Popover ref={ref} trigger={<Button>Details</Button>}>
+        <p>Depth details</p>
+      </Popover>,
     );
 
     const trigger = screen.getByRole("button", { name: "Details" });
@@ -387,12 +355,10 @@ describe("Popover", () => {
 
   it("closes on Escape and restores focus to the trigger", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Popover trigger={<Button>Details</Button>}>
-          <p>Depth details</p>
-        </Popover>
-      </PanelRoot>,
+    renderInPanel(
+      <Popover trigger={<Button>Details</Button>}>
+        <p>Depth details</p>
+      </Popover>,
     );
 
     const trigger = screen.getByRole("button", { name: "Details" });
@@ -409,13 +375,13 @@ describe("Popover", () => {
 
   it("closes on outside press", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Popover trigger={<Button>Details</Button>}>
           <p>Depth details</p>
         </Popover>
         <p>Outside content</p>
-      </PanelRoot>,
+      </>,
     );
 
     await user.click(screen.getByRole("button", { name: "Details" }));
@@ -428,16 +394,14 @@ describe("Popover", () => {
   it("opens from defaultOpen and reports close requests", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    render(
-      <PanelRoot>
-        <Popover
-          defaultOpen
-          onOpenChange={onOpenChange}
-          trigger={<Button>Info</Button>}
-        >
-          <p>Hint text</p>
-        </Popover>
-      </PanelRoot>,
+    renderInPanel(
+      <Popover
+        defaultOpen
+        onOpenChange={onOpenChange}
+        trigger={<Button>Info</Button>}
+      >
+        <p>Hint text</p>
+      </Popover>,
     );
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -450,16 +414,14 @@ describe("Popover", () => {
   it("supports controlled open state", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    const { rerender } = render(
-      <PanelRoot>
-        <Popover
-          onOpenChange={onOpenChange}
-          open={false}
-          trigger={<Button>Info</Button>}
-        >
-          <p>Hint text</p>
-        </Popover>
-      </PanelRoot>,
+    const { rerender } = renderInPanel(
+      <Popover
+        onOpenChange={onOpenChange}
+        open={false}
+        trigger={<Button>Info</Button>}
+      >
+        <p>Hint text</p>
+      </Popover>,
     );
 
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -469,27 +431,25 @@ describe("Popover", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
 
     rerender(
-      <PanelRoot>
+      panel(
         <Popover
           onOpenChange={onOpenChange}
           open
           trigger={<Button>Info</Button>}
         >
           <p>Hint text</p>
-        </Popover>
-      </PanelRoot>,
+        </Popover>,
+      ),
     );
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("maps placement to the RAC placement axis", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Popover placement="top" trigger={<Button>Info</Button>}>
-          <p>Hint text</p>
-        </Popover>
-      </PanelRoot>,
+    renderInPanel(
+      <Popover placement="top" trigger={<Button>Info</Button>}>
+        <p>Hint text</p>
+      </Popover>,
     );
 
     await user.click(screen.getByRole("button", { name: "Info" }));
@@ -498,12 +458,10 @@ describe("Popover", () => {
 
   it("applies a fixed pixel width through a CSS variable", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Popover trigger={<Button>Info</Button>} width={240}>
-          <p>Hint text</p>
-        </Popover>
-      </PanelRoot>,
+    renderInPanel(
+      <Popover trigger={<Button>Info</Button>} width={240}>
+        <p>Hint text</p>
+      </Popover>,
     );
 
     await user.click(screen.getByRole("button", { name: "Info" }));
@@ -514,12 +472,10 @@ describe("Popover", () => {
 
   it("merges a consumer className onto the popover", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Popover className="plugin-popover" trigger={<Button>Info</Button>}>
-          <p>Hint text</p>
-        </Popover>
-      </PanelRoot>,
+    renderInPanel(
+      <Popover className="plugin-popover" trigger={<Button>Info</Button>}>
+        <p>Hint text</p>
+      </Popover>,
     );
 
     await user.click(screen.getByRole("button", { name: "Info" }));

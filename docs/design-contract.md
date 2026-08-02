@@ -108,14 +108,14 @@ Consumers may override public tokens through the native `style` prop on `PanelRo
 - High-contrast requests through `prefers-contrast: more` strengthen control borders to the text color and widen focus outlines to 3 pixels.
 - Reduced-transparency requests through `prefers-reduced-transparency: reduce` replace the translucent sticky action bar with an opaque surface and remove its backdrop blur.
 - A roled live region does not also carry `aria-live`, because the pairing double speaks on some screen readers and an explicit `off` would silence a caller-supplied role.
-- Focus indicators use `--snui-color-focus`, a visible 2-pixel outline with a 2-pixel offset, and at least 3:1 contrast against adjacent surfaces. Night preserves this through tokens rather than a theme-name check, and its indicators are never thinner or dimmer than another theme's.
+- Focus indicators use `--snui-color-focus`, a visible 2-pixel outline with at least 3:1 contrast against adjacent surfaces. Controls take a 2-pixel outset ring with a soft shadow; dense rows and menu items take an inset ring so the outline is not clipped by neighboring rows. Night preserves this through tokens rather than a theme-name check, and its indicators are never thinner or dimmer than another theme's.
 
 ## Styling isolation
 
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.5.0"])
+@scope (.snui-root[data-snui-version="0.6.0"])
   to ([data-snui-version]) {
   /* component rules */
 }

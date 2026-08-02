@@ -20,6 +20,7 @@ import {
   Textarea,
   TextInput,
 } from "../../src/index.js";
+import { renderInPanel } from "../helpers.js";
 
 /**
  * Every component that exposes a ref, with the element type it must resolve to.
@@ -142,7 +143,7 @@ function renderCase(
 ): ReturnType<typeof render> {
   const element = testCase.render(ref);
   if (testCase.standalone === true) return render(element);
-  return render(<PanelRoot>{element}</PanelRoot>);
+  return renderInPanel(element);
 }
 
 describe("ref forwarding", () => {
@@ -243,16 +244,14 @@ describe("named root refs", () => {
 
   it("InlineConfirm releases its ref when it closes", () => {
     const ref = createRef<HTMLElement>();
-    const view = render(
-      <PanelRoot>
-        <InlineConfirm
-          ref={ref}
-          open
-          message="Delete this source?"
-          onCancel={() => undefined}
-          onConfirm={() => undefined}
-        />
-      </PanelRoot>,
+    const view = renderInPanel(
+      <InlineConfirm
+        ref={ref}
+        open
+        message="Delete this source?"
+        onCancel={() => undefined}
+        onConfirm={() => undefined}
+      />,
     );
 
     expect(ref.current).not.toBeNull();

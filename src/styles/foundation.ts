@@ -1,4 +1,7 @@
-import { visuallyHiddenDeclarations } from "./fragments.js";
+import {
+  focusRingDeclarations,
+  visuallyHiddenDeclarations,
+} from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
@@ -134,9 +137,7 @@ input[type="range"] {
 }
 
 :focus-visible {
-  outline: 2px solid var(--snui-color-focus);
-  outline-offset: 2px;
-  box-shadow: var(--snui-focus-ring);
+${focusRingDeclarations("2px", true)}
 }
 
 [disabled],

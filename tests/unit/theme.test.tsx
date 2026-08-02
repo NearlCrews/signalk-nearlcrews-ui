@@ -9,7 +9,6 @@ import {
 import userEvent from "@testing-library/user-event";
 import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-
 import {
   PanelRoot,
   SegmentedControl,
@@ -18,6 +17,7 @@ import {
   type ThemeChoice,
   ThemeToggle,
 } from "../../src/index.js";
+import { PACKAGE_VERSION } from "../../src/version.js";
 
 describe("PanelRoot themes", () => {
   it("uses full width by default and offers bounded width options", () => {
@@ -54,13 +54,13 @@ describe("PanelRoot themes", () => {
     const styles = document.head.querySelectorAll("style[data-snui-styles]");
     const style = styles[0];
 
-    expect(root).toHaveAttribute("data-snui-version", "0.5.0");
+    expect(root).toHaveAttribute("data-snui-version", PACKAGE_VERSION);
     expect(root).toHaveAttribute("data-snui-root");
     expect(root?.querySelector("style")).toBeNull();
     expect(styles).toHaveLength(1);
     expect(style).toHaveAttribute("nonce", "fixture-nonce");
     expect(style?.textContent).toContain(
-      '.snui-root[data-snui-version="0.5.0"]',
+      `.snui-root[data-snui-version="${PACKAGE_VERSION}"]`,
     );
     expect(style?.textContent).not.toMatch(/(^|[\s,{]):root([\s,{]|$)/m);
 
@@ -488,6 +488,33 @@ describe("PanelRoot themes", () => {
       "data-snui-theme",
       "night",
     );
+  });
+
+  it("ignores an unrecognized shared value delivered by the storage event", async () => {
+    const user = userEvent.setup();
+    render(
+      <PanelRoot data-testid="panel">
+        <ThemeToggle />
+      </PanelRoot>,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "Dark" }));
+    // Another library version sharing the key writes a value this version
+    // does not recognize; the mounted panel keeps its explicit theme. The
+    // event carries no newValue, so the handler re-reads storage and finds
+    // the unrecognized value there.
+    window.localStorage.setItem(THEME_STORAGE_KEY, "blue");
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", { key: THEME_STORAGE_KEY }),
+      );
+    });
+
+    expect(screen.getByTestId("panel")).toHaveAttribute(
+      "data-snui-theme",
+      "dark",
+    );
+    expect(screen.getByRole("radio", { name: "Dark" })).toBeChecked();
   });
 
   it("returns to Auto when another tab clears local storage", async () => {

@@ -1,3 +1,7 @@
+import {
+  DISABLED_DECLARATIONS,
+  PRESSED_FILL_DECLARATION,
+} from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
@@ -54,16 +58,11 @@ export const COLLAPSIBLE_STYLES = scopeStyles(`
 }
 
 .snui-collapsible__toggle:not(:disabled):active {
-  background: color-mix(
-    in srgb,
-    var(--snui-color-accent-fill) 12%,
-    var(--snui-color-interactive-hover)
-  );
+${PRESSED_FILL_DECLARATION}
 }
 
 .snui-collapsible__toggle:disabled {
-  cursor: not-allowed;
-  opacity: 0.58;
+${DISABLED_DECLARATIONS}
 }
 
 .snui-collapsible__title {

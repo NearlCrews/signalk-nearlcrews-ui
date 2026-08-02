@@ -1,3 +1,5 @@
+import { resolveLabel } from "./labels.js";
+
 export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
 
 /** Tones that carry a meaning a neutral presentation cannot convey. */
@@ -35,5 +37,5 @@ export function resolveToneLabel(
   tone: SemanticTone,
   toneLabel: string | undefined,
 ): string {
-  return (toneLabel?.trim() ?? "") || TONE_LABELS[tone];
+  return resolveLabel(toneLabel, TONE_LABELS[tone]);
 }

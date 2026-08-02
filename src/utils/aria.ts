@@ -15,3 +15,11 @@ export function joinIdReferences(
   const value = ids.filter((id) => id !== undefined && id.length > 0).join(" ");
   return value.length > 0 ? value : undefined;
 }
+
+/** Id of the description element a field renders, when it renders one. */
+export function resolveDescriptionId(
+  idBase: string,
+  hasDescription: boolean,
+): string | undefined {
+  return hasDescription ? `${idBase}-description` : undefined;
+}

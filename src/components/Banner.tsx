@@ -6,8 +6,12 @@ import type {
   RefObject,
 } from "react";
 
-import { liveRegionProps } from "../utils/announcement.js";
+import {
+  type AnnouncementMode,
+  liveRegionProps,
+} from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
+import { DEFAULT_DISMISS_LABEL, resolveLabel } from "../utils/labels.js";
 import { hasReactContent } from "../utils/react-node.js";
 import {
   isSemanticTone,
@@ -16,9 +20,10 @@ import {
   TONE_GLYPHS,
 } from "../utils/tone.js";
 import { Button } from "./Button.js";
+import { ToneAnnouncement } from "./ToneAnnouncement.js";
 
 export type BannerTone = StatusTone;
-export type BannerLive = "off" | "polite" | "assertive";
+export type BannerLive = AnnouncementMode;
 
 export interface BannerProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "aria-live" | "title">,
@@ -40,7 +45,7 @@ export function Banner({
   children,
   className,
   dismissFocusRef,
-  dismissLabel = "Dismiss",
+  dismissLabel = DEFAULT_DISMISS_LABEL,
   live,
   onDismiss,
   ref,
@@ -52,7 +57,10 @@ export function Banner({
 }: BannerProps): React.JSX.Element {
   const region = liveRegionProps(live, suppliedRole);
   const hasActions = hasReactContent(actions) || onDismiss !== undefined;
-  const effectiveDismissLabel = dismissLabel.trim() || "Dismiss";
+  const effectiveDismissLabel = resolveLabel(
+    dismissLabel,
+    DEFAULT_DISMISS_LABEL,
+  );
   const semantic = isSemanticTone(tone);
   const effectiveToneLabel = semantic
     ? resolveToneLabel(tone, toneLabel)
@@ -73,9 +81,7 @@ export function Banner({
           </span>
         ) : null}
         <div className="snui-banner__text">
-          {effectiveToneLabel === undefined ? null : (
-            <span className="snui-visually-hidden">{effectiveToneLabel}. </span>
-          )}
+          <ToneAnnouncement label={effectiveToneLabel} />
           {hasReactContent(title) ? (
             <div className="snui-banner__title">
               {title}

@@ -31,7 +31,7 @@ describe("segmented control generics", () => {
 
   it("flows the value type into onChange and options", () => {
     expectTypeOf<SegmentedControlProps<Mode>["onChange"]>().toEqualTypeOf<
-      (value: Mode) => void
+      ((value: Mode) => void) | undefined
     >();
     expectTypeOf<SegmentedControlProps<Mode>["options"]>().toEqualTypeOf<
       readonly SegmentedControlOption<Mode>[]

@@ -11,15 +11,21 @@ import {
   Modal,
   ModalOverlay,
 } from "react-aria-components";
-import { joinIdReferences } from "../utils/aria.js";
+import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import type { HeadingLevel } from "../utils/heading.js";
 import { usePortalContainerReady } from "../utils/portal.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
+import {
+  type OverlayOpenState,
+  overlayOpenProps,
+} from "./overlay-placement.js";
 
 export type DialogWidth = "standard" | "wide";
 
-export interface DialogProps extends RefAttributes<HTMLElement> {
+export interface DialogProps
+  extends RefAttributes<HTMLElement>,
+    OverlayOpenState {
   /** Footer slot for the dialog actions, usually library Buttons. */
   readonly actions?: ReactNode;
   readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
@@ -30,16 +36,11 @@ export interface DialogProps extends RefAttributes<HTMLElement> {
   readonly blurScrim?: boolean;
   readonly children?: ReactNode;
   readonly className?: string;
-  /** Sets the initial state only. Pass `open` to control the dialog. */
-  readonly defaultOpen?: boolean;
   readonly description?: ReactNode;
   /** Allows dismissal through Escape and scrim presses. Defaults to true. */
   readonly dismissable?: boolean;
   readonly headingLevel?: HeadingLevel;
   readonly id?: string;
-  readonly onOpenChange?: (open: boolean) => void;
-  /** Controls the dialog when set. Wins over `defaultOpen`. */
-  readonly open?: boolean;
   readonly style?: CSSProperties;
   readonly title: ReactNode;
   readonly width?: DialogWidth;
@@ -79,9 +80,7 @@ function DialogSurface({
   const portalReady = usePortalContainerReady();
 
   const hasDescription = hasReactContent(description);
-  const descriptionId = hasDescription
-    ? `${generatedId}-description`
-    : undefined;
+  const descriptionId = resolveDescriptionId(generatedId, hasDescription);
   const describedBy = joinIdReferences(ariaDescribedBy, descriptionId);
   const hasActions = hasReactContent(actions);
 
@@ -92,9 +91,7 @@ function DialogSurface({
       className={classNames("snui-scrim", blurScrim && "snui-scrim--blur")}
       isDismissable={dismissable}
       isKeyboardDismissDisabled={!dismissable}
-      {...(open === undefined ? {} : { isOpen: open })}
-      {...(defaultOpen === undefined ? {} : { defaultOpen })}
-      {...(onOpenChange === undefined ? {} : { onOpenChange })}
+      {...overlayOpenProps({ open, defaultOpen, onOpenChange })}
     >
       <Modal className="snui-dialog-frame">
         <AriaDialog
@@ -151,7 +148,6 @@ export function AlertDialog({
 }: AlertDialogProps): React.JSX.Element {
   requireContent(
     actions,
-
     "AlertDialog requires non-empty actions: an alert dialog must give the user an explicit way out.",
   );
 

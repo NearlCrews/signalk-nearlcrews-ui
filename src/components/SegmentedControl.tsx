@@ -44,7 +44,7 @@ export interface SegmentedControlProps<Value extends string>
   readonly legendVisibility?: SegmentedControlLegendVisibility;
   /** Carries the selection into native form submission and form reset. */
   readonly name?: string;
-  readonly onChange: (value: Value) => void;
+  readonly onChange?: ((value: Value) => void) | undefined;
   readonly options: readonly SegmentedControlOption<Value>[];
   readonly orientation?: SegmentedControlOrientation;
   readonly value?: Value;
@@ -99,7 +99,7 @@ export function SegmentedControl<Value extends string>({
 
   const select = (nextValue: Value): void => {
     if (value === undefined) setInternalValue(nextValue);
-    onChange(nextValue);
+    onChange?.(nextValue);
   };
 
   const moveSelection = (

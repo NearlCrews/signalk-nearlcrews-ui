@@ -7,7 +7,7 @@ import {
   useId,
 } from "react";
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { joinIdReferences } from "../utils/aria.js";
+import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { resolveFieldError } from "../utils/field-error.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
@@ -76,9 +76,7 @@ export function LabeledField({
   const controlId = elementChild?.props.id ?? `${generatedId}-control`;
   const hasDescription = hasReactContent(description);
   const hasError = hasReactContent(error);
-  const descriptionId = hasDescription
-    ? `${generatedId}-description`
-    : undefined;
+  const descriptionId = resolveDescriptionId(generatedId, hasDescription);
   const { errorId, referencedErrorId, rendersError } = resolveFieldError(
     generatedId,
     hasError,

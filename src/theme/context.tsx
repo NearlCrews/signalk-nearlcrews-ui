@@ -31,7 +31,12 @@ function readStorage(key: string): StoredTheme {
 
   try {
     const value = window.localStorage.getItem(key);
-    return isThemeChoice(value) ? value : null;
+    // An absent key is a genuine clear, so the panel returns to "auto". A
+    // present but unrecognized value comes from a different library version
+    // sharing the key and is ignored: resetting to "auto" here would fight
+    // the theme the other panel just wrote.
+    if (value === null) return null;
+    return isThemeChoice(value) ? value : undefined;
   } catch {
     return undefined;
   }

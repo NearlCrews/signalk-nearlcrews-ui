@@ -10,6 +10,7 @@ import {
   resolveToneLabel,
   type StatusTone,
 } from "../utils/tone.js";
+import { ToneAnnouncement } from "./ToneAnnouncement.js";
 
 export type { StatusTone };
 
@@ -46,9 +47,9 @@ export function StatusIndicator({
       aria-live={region["aria-live"]}
     >
       <span className="snui-status__dot" aria-hidden="true" />
-      {trimmedToneLabel === "" || effectiveToneLabel === undefined ? null : (
-        <span className="snui-visually-hidden">{effectiveToneLabel}. </span>
-      )}
+      <ToneAnnouncement
+        label={trimmedToneLabel === "" ? undefined : effectiveToneLabel}
+      />
       <span>{children}</span>
     </span>
   );

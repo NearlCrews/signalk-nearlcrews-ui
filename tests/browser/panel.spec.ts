@@ -171,7 +171,7 @@ test("keeps library styling inside the panel root", async ({
     nestedButton.textContent = "Nested version";
     const reentryRoot = document.createElement("div");
     reentryRoot.className = "snui-root";
-    reentryRoot.dataset.snuiVersion = "0.5.0";
+    reentryRoot.dataset.snuiVersion = root.dataset.snuiVersion ?? "";
     reentryRoot.dataset.snuiTheme = "night";
     const reentryButton = document.createElement("button");
     reentryButton.id = "reentry-version-button";

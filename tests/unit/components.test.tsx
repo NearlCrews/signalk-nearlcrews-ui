@@ -43,6 +43,7 @@ import {
   Textarea,
   TextInput,
 } from "../../src/index.js";
+import { panel, renderInPanel } from "../helpers.js";
 
 describe("form primitives", () => {
   it("exports the complete native aria-invalid type", () => {
@@ -52,17 +53,15 @@ describe("form primitives", () => {
   });
 
   it("connects labels, descriptions, errors, and required state", () => {
-    render(
-      <PanelRoot>
-        <LabeledField
-          label="Server URL"
-          description="Use the Signal K server address."
-          error="A server URL is required."
-          required
-        >
-          <TextInput />
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField
+        label="Server URL"
+        description="Use the Signal K server address."
+        error="A server URL is required."
+        required
+      >
+        <TextInput />
+      </LabeledField>,
     );
 
     const input = screen.getByRole("textbox", { name: /Server URL/ });
@@ -74,13 +73,11 @@ describe("form primitives", () => {
   });
 
   it("renders a self-labeled checkbox with a description", () => {
-    render(
-      <PanelRoot>
-        <Checkbox
-          label="Enable provider"
-          description="Starts the optional data provider."
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <Checkbox
+        label="Enable provider"
+        description="Starts the optional data provider."
+      />,
     );
 
     const checkbox = screen.getByRole("checkbox", { name: "Enable provider" });
@@ -91,10 +88,8 @@ describe("form primitives", () => {
 
   it("reflects and updates the indeterminate checkbox state", () => {
     const checkboxRef = createRef<HTMLInputElement>();
-    const { rerender } = render(
-      <PanelRoot>
-        <Checkbox ref={checkboxRef} label="Enable provider" indeterminate />
-      </PanelRoot>,
+    const { rerender } = renderInPanel(
+      <Checkbox ref={checkboxRef} label="Enable provider" indeterminate />,
     );
 
     const checkbox = screen.getByRole("checkbox", { name: "Enable provider" });
@@ -102,13 +97,13 @@ describe("form primitives", () => {
     expect(checkboxRef.current).toBe(checkbox);
 
     rerender(
-      <PanelRoot>
+      panel(
         <Checkbox
           ref={checkboxRef}
           label="Enable provider"
           indeterminate={false}
-        />
-      </PanelRoot>,
+        />,
+      ),
     );
     expect(checkbox).not.toBePartiallyChecked();
   });
@@ -142,15 +137,15 @@ describe("form primitives", () => {
   });
 
   it("accepts date and time text input types", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <LabeledField label="Maintenance date">
           <TextInput type="date" />
         </LabeledField>
         <LabeledField label="Maintenance time">
           <TextInput type="time" />
         </LabeledField>
-      </PanelRoot>,
+      </>,
     );
 
     expect(screen.getByLabelText("Maintenance date")).toHaveAttribute(
@@ -165,16 +160,14 @@ describe("form primitives", () => {
 
   it("tracks the filled range progress across input and prop updates", () => {
     const rangeRef = createRef<HTMLInputElement>();
-    const { rerender } = render(
-      <PanelRoot>
-        <RangeInput
-          ref={rangeRef}
-          aria-label="Depth alarm"
-          min={0}
-          max={200}
-          defaultValue={50}
-        />
-      </PanelRoot>,
+    const { rerender } = renderInPanel(
+      <RangeInput
+        ref={rangeRef}
+        aria-label="Depth alarm"
+        min={0}
+        max={200}
+        defaultValue={50}
+      />,
     );
 
     const range = screen.getByRole("slider", { name: "Depth alarm" });
@@ -185,7 +178,7 @@ describe("form primitives", () => {
     expect(range.style.getPropertyValue("--snui-range-progress")).toBe("75%");
 
     rerender(
-      <PanelRoot>
+      panel(
         <RangeInput
           ref={rangeRef}
           aria-label="Depth alarm"
@@ -193,15 +186,15 @@ describe("form primitives", () => {
           max={100}
           value={80}
           onChange={() => undefined}
-        />
-      </PanelRoot>,
+        />,
+      ),
     );
     expect(range.style.getPropertyValue("--snui-range-progress")).toBe("80%");
   });
 
   it("fills range progress from browser defaults and guards invalid bounds", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <RangeInput aria-label="Volume" defaultValue={50} />
         <RangeInput
           aria-label="Broken bounds"
@@ -209,7 +202,7 @@ describe("form primitives", () => {
           max="high"
           defaultValue={5}
         />
-      </PanelRoot>,
+      </>,
     );
 
     const volume = screen.getByRole("slider", { name: "Volume" });
@@ -220,16 +213,14 @@ describe("form primitives", () => {
   });
 
   it("restores range progress when a controlled owner rejects input", async () => {
-    render(
-      <PanelRoot>
-        <RangeInput
-          aria-label="Locked threshold"
-          min={0}
-          max={200}
-          value={50}
-          onChange={() => undefined}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <RangeInput
+        aria-label="Locked threshold"
+        min={0}
+        max={200}
+        value={50}
+        onChange={() => undefined}
+      />,
     );
 
     const range = screen.getByRole("slider", { name: "Locked threshold" });
@@ -243,14 +234,12 @@ describe("form primitives", () => {
   });
 
   it("associates checkbox errors without announcing persistent validation", () => {
-    render(
-      <PanelRoot>
-        <Checkbox
-          label="Enable provider"
-          description="Starts the optional data provider."
-          error="Accept the provider terms first."
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <Checkbox
+        label="Enable provider"
+        description="Starts the optional data provider."
+        error="Accept the provider terms first."
+      />,
     );
 
     const checkbox = screen.getByRole("checkbox", { name: "Enable provider" });
@@ -266,8 +255,8 @@ describe("form primitives", () => {
   });
 
   it("supports opt-in field and checkbox error announcements", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <LabeledField
           label="Server URL"
           error="The server URL is invalid."
@@ -280,7 +269,7 @@ describe("form primitives", () => {
           error="The provider cannot be enabled."
           errorLive="assertive"
         />
-      </PanelRoot>,
+      </>,
     );
 
     expect(screen.getByRole("status")).toHaveTextContent(
@@ -293,27 +282,21 @@ describe("form primitives", () => {
 
   it("rejects whitespace-only field and checkbox labels", () => {
     expect(() =>
-      render(
-        <PanelRoot>
-          <LabeledField label="  ">
-            <TextInput />
-          </LabeledField>
-        </PanelRoot>,
+      renderInPanel(
+        <LabeledField label="  ">
+          <TextInput />
+        </LabeledField>,
       ),
     ).toThrow("LabeledField requires a non-empty label.");
 
-    expect(() =>
-      render(
-        <PanelRoot>
-          <Checkbox label={"\t"} />
-        </PanelRoot>,
-      ),
-    ).toThrow("Checkbox requires a non-empty label.");
+    expect(() => renderInPanel(<Checkbox label={"\t"} />)).toThrow(
+      "Checkbox requires a non-empty label.",
+    );
   });
 
   it("merges checkbox label and description references supplied by callers", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <span id="external-label">Provider state</span>
         <span id="external-description">Required by this plugin.</span>
         <Checkbox
@@ -322,7 +305,7 @@ describe("form primitives", () => {
           aria-labelledby="external-label"
           aria-describedby="external-description"
         />
-      </PanelRoot>,
+      </>,
     );
 
     const checkbox = screen.getByRole("checkbox", {
@@ -334,12 +317,10 @@ describe("form primitives", () => {
   });
 
   it("treats null field help and errors as absent", () => {
-    render(
-      <PanelRoot>
-        <LabeledField label="Server URL" description={null} error={false}>
-          <TextInput />
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField label="Server URL" description={null} error={false}>
+        <TextInput />
+      </LabeledField>,
     );
 
     const input = screen.getByRole("textbox", { name: "Server URL" });
@@ -349,12 +330,10 @@ describe("form primitives", () => {
   });
 
   it("preserves the complete native aria-invalid value set", () => {
-    render(
-      <PanelRoot>
-        <LabeledField label="Server URL">
-          <TextInput aria-invalid="grammar" />
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField label="Server URL">
+        <TextInput aria-invalid="grammar" />
+      </LabeledField>,
     );
 
     expect(screen.getByRole("textbox", { name: "Server URL" })).toHaveAttribute(
@@ -364,8 +343,8 @@ describe("form primitives", () => {
   });
 
   it("treats empty arrays and fragments as absent content", () => {
-    const { container } = render(
-      <PanelRoot>
+    const { container } = renderInPanel(
+      <>
         <LabeledField
           label="Server URL"
           description={[]}
@@ -381,7 +360,7 @@ describe("form primitives", () => {
         <Section title="Status" description={<Fragment key="empty" />}>
           Ready
         </Section>
-      </PanelRoot>,
+      </>,
     );
 
     const input = screen.getByRole("textbox", { name: "Server URL" });
@@ -391,19 +370,17 @@ describe("form primitives", () => {
   });
 
   it("recognizes renderable content nested inside fragments", () => {
-    render(
-      <PanelRoot>
-        <LabeledField
-          label="Server URL"
-          description={
-            <Fragment key="outer">
-              <Fragment key="inner">Server address</Fragment>
-            </Fragment>
-          }
-        >
-          <TextInput />
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField
+        label="Server URL"
+        description={
+          <Fragment key="outer">
+            <Fragment key="inner">Server address</Fragment>
+          </Fragment>
+        }
+      >
+        <TextInput />
+      </LabeledField>,
     );
 
     expect(
@@ -413,12 +390,10 @@ describe("form primitives", () => {
 
   it("preserves native number-input behavior", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <LabeledField label="Interval">
-          <NumberInput min={1} max={60} />
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField label="Interval">
+        <NumberInput min={1} max={60} />
+      </LabeledField>,
     );
 
     const input = screen.getByRole("spinbutton", { name: "Interval" });
@@ -427,12 +402,10 @@ describe("form primitives", () => {
   });
 
   it("preserves native range-input semantics", () => {
-    render(
-      <PanelRoot>
-        <LabeledField label="Confidence">
-          <RangeInput min={0} max={100} defaultValue={50} />
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField label="Confidence">
+        <RangeInput min={0} max={100} defaultValue={50} />
+      </LabeledField>,
     );
 
     expect(screen.getByRole("slider", { name: "Confidence" })).toHaveValue(
@@ -441,8 +414,8 @@ describe("form primitives", () => {
   });
 
   it("supports typed text modes, selects, and textareas", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <LabeledField label="API key">
           <TextInput type="password" />
         </LabeledField>
@@ -455,7 +428,7 @@ describe("form primitives", () => {
         <LabeledField label="Notes">
           <Textarea defaultValue="Ready" />
         </LabeledField>
-      </PanelRoot>,
+      </>,
     );
 
     expect(screen.getByLabelText("API key")).toHaveAttribute(
@@ -467,34 +440,32 @@ describe("form primitives", () => {
   });
 
   it("labels the primary control in a composite inline field", () => {
-    const { container } = render(
-      <PanelRoot>
-        <LabeledField
-          label="Cache limit"
-          description="Whole GiB"
-          error="Choose at least 4 GiB."
-          layout="inline"
-          density="compact"
-        >
-          {(controlProps) => {
-            const { descriptionId, errorId, ...rangeProps } = controlProps;
-            return (
-              <InputGroup>
-                <InputGroupControl width="grow">
-                  <RangeInput {...rangeProps} min={4} max={32} />
-                </InputGroupControl>
-                <InputGroupControl width="fixed">
-                  <NumberInput
-                    aria-label="Cache limit exact value"
-                    aria-describedby={[descriptionId, errorId].join(" ")}
-                  />
-                  <InputGroupAddon>GiB</InputGroupAddon>
-                </InputGroupControl>
-              </InputGroup>
-            );
-          }}
-        </LabeledField>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <LabeledField
+        label="Cache limit"
+        description="Whole GiB"
+        error="Choose at least 4 GiB."
+        layout="inline"
+        density="compact"
+      >
+        {(controlProps) => {
+          const { descriptionId, errorId, ...rangeProps } = controlProps;
+          return (
+            <InputGroup>
+              <InputGroupControl width="grow">
+                <RangeInput {...rangeProps} min={4} max={32} />
+              </InputGroupControl>
+              <InputGroupControl width="fixed">
+                <NumberInput
+                  aria-label="Cache limit exact value"
+                  aria-describedby={[descriptionId, errorId].join(" ")}
+                />
+                <InputGroupAddon>GiB</InputGroupAddon>
+              </InputGroupControl>
+            </InputGroup>
+          );
+        }}
+      </LabeledField>,
     );
 
     const slider = screen.getByRole("slider", { name: /Cache limit/ });
@@ -519,17 +490,15 @@ describe("form primitives", () => {
   });
 
   it("groups related controls with a semantic legend and description", () => {
-    render(
-      <PanelRoot>
-        <FieldGroup
-          legend="Notifications"
-          description="Choose the alerts to publish."
-          actions={<Button>All</Button>}
-          disabled
-        >
-          <Checkbox label="Wind" />
-        </FieldGroup>
-      </PanelRoot>,
+    renderInPanel(
+      <FieldGroup
+        legend="Notifications"
+        description="Choose the alerts to publish."
+        actions={<Button>All</Button>}
+        disabled
+      >
+        <Checkbox label="Wind" />
+      </FieldGroup>,
     );
 
     const group = screen.getByRole("group", { name: "Notifications" });
@@ -556,12 +525,10 @@ describe("feedback and layout primitives", () => {
   });
 
   it("announces only banners explicitly marked as live", () => {
-    render(
-      <PanelRoot>
-        <Banner tone="danger" live="assertive" title="Connection failed">
-          Check the server address.
-        </Banner>
-      </PanelRoot>,
+    renderInPanel(
+      <Banner tone="danger" live="assertive" title="Connection failed">
+        Check the server address.
+      </Banner>,
     );
 
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -570,10 +537,8 @@ describe("feedback and layout primitives", () => {
   });
 
   it("does not interrupt users for persistent danger content", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Banner tone="danger">The provider is unavailable.</Banner>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Banner tone="danger">The provider is unavailable.</Banner>,
     );
 
     expect(screen.queryByRole("alert")).toBeNull();
@@ -583,12 +548,10 @@ describe("feedback and layout primitives", () => {
   });
 
   it("does not silence a caller-supplied alert role with aria-live", () => {
-    render(
-      <PanelRoot>
-        <Banner role="alert" live="off">
-          Connection failed.
-        </Banner>
-      </PanelRoot>,
+    renderInPanel(
+      <Banner role="alert" live="off">
+        Connection failed.
+      </Banner>,
     );
 
     // `alert` already implies an assertive live region. Emitting aria-live="off"
@@ -597,21 +560,13 @@ describe("feedback and layout primitives", () => {
   });
 
   it("does not pair an implied live role with a redundant aria-live", () => {
-    render(
-      <PanelRoot>
-        <Banner live="assertive">Connection failed.</Banner>
-      </PanelRoot>,
-    );
+    renderInPanel(<Banner live="assertive">Connection failed.</Banner>);
 
     expect(screen.getByRole("alert")).not.toHaveAttribute("aria-live");
   });
 
   it("supports polite banner announcements without requiring a title", () => {
-    render(
-      <PanelRoot>
-        <Banner live="polite">Catalog refresh completed.</Banner>
-      </PanelRoot>,
-    );
+    renderInPanel(<Banner live="polite">Catalog refresh completed.</Banner>);
 
     expect(screen.getByRole("status")).toHaveTextContent(
       "Information. Catalog refresh completed.",
@@ -619,23 +574,17 @@ describe("feedback and layout primitives", () => {
   });
 
   it("renders visible status text alongside its decorative marker", () => {
-    render(
-      <PanelRoot>
-        <StatusIndicator tone="success">Connected</StatusIndicator>
-      </PanelRoot>,
-    );
+    renderInPanel(<StatusIndicator tone="success">Connected</StatusIndicator>);
 
     expect(screen.getByText("Connected")).toBeVisible();
   });
 
   it("keeps action state and actions presentational", () => {
-    render(
-      <PanelRoot>
-        <ActionBar
-          status={<StatusIndicator>Unsaved changes</StatusIndicator>}
-          actions={<Button variant="primary">Save</Button>}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <ActionBar
+        status={<StatusIndicator>Unsaved changes</StatusIndicator>}
+        actions={<Button variant="primary">Save</Button>}
+      />,
     );
 
     expect(screen.getByText("Unsaved changes")).toBeVisible();
@@ -643,10 +592,8 @@ describe("feedback and layout primitives", () => {
   });
 
   it("makes sticky positioning an explicit action-bar option", () => {
-    const { container } = render(
-      <PanelRoot>
-        <ActionBar sticky="bottom" actions={<Button>Save</Button>} />
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <ActionBar sticky="bottom" actions={<Button>Save</Button>} />,
     );
 
     expect(
@@ -656,35 +603,31 @@ describe("feedback and layout primitives", () => {
   });
 
   it("does not create an action-bar status wrapper for false content", () => {
-    const { container } = render(
-      <PanelRoot>
-        <ActionBar status={false} actions={<Button>Save</Button>} />
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <ActionBar status={false} actions={<Button>Save</Button>} />,
     );
 
     expect(container.querySelector(".snui-action-bar__status")).toBeNull();
   });
 
   it("labels sections by their heading", () => {
-    render(
-      <PanelRoot>
-        <Section title="Connection" description="Server connection settings">
-          Content
-        </Section>
-      </PanelRoot>,
+    renderInPanel(
+      <Section title="Connection" description="Server connection settings">
+        Content
+      </Section>,
     );
 
     expect(screen.getByRole("region", { name: "Connection" })).toBeVisible();
   });
 
   it("merges consumer and generated section label references", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <span id="consumer-section-context">Provider configuration</span>
         <Section aria-labelledby="consumer-section-context" title="Connection">
           Content
         </Section>
-      </PanelRoot>,
+      </>,
     );
 
     expect(
@@ -698,11 +641,7 @@ describe("feedback and layout primitives", () => {
   });
 
   it("does not require a section description", () => {
-    render(
-      <PanelRoot>
-        <Section title="Status">Ready</Section>
-      </PanelRoot>,
-    );
+    renderInPanel(<Section title="Status">Ready</Section>);
 
     expect(screen.getByRole("region", { name: "Status" })).toHaveTextContent(
       "Ready",
@@ -710,12 +649,10 @@ describe("feedback and layout primitives", () => {
   });
 
   it("supports an explicit section heading level", () => {
-    render(
-      <PanelRoot>
-        <Section title="Nested settings" headingLevel={3}>
-          Ready
-        </Section>
-      </PanelRoot>,
+    renderInPanel(
+      <Section title="Nested settings" headingLevel={3}>
+        Ready
+      </Section>,
     );
 
     expect(
@@ -724,15 +661,13 @@ describe("feedback and layout primitives", () => {
   });
 
   it("renders section descriptions in a block-safe container", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Section
-          title="Status"
-          description={<div data-testid="nested-block">Ready</div>}
-        >
-          Content
-        </Section>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Section
+        title="Status"
+        description={<div data-testid="nested-block">Ready</div>}
+      >
+        Content
+      </Section>,
     );
 
     expect(screen.getByTestId("nested-block")).toBeVisible();
@@ -744,18 +679,16 @@ describe("feedback and layout primitives", () => {
   it("supports banner actions, dismissal, and persistent-note semantics", async () => {
     const user = userEvent.setup();
     const onDismiss = vi.fn();
-    render(
-      <PanelRoot>
-        <Banner
-          role="note"
-          title="Provider unavailable"
-          actions={<Button>Retry</Button>}
-          onDismiss={onDismiss}
-          dismissLabel="Hide notice"
-        >
-          Check the optional provider.
-        </Banner>
-      </PanelRoot>,
+    renderInPanel(
+      <Banner
+        role="note"
+        title="Provider unavailable"
+        actions={<Button>Retry</Button>}
+        onDismiss={onDismiss}
+        dismissLabel="Hide notice"
+      >
+        Check the optional provider.
+      </Banner>,
     );
 
     expect(screen.getByRole("note")).toHaveTextContent("Provider unavailable");
@@ -797,12 +730,10 @@ describe("feedback and layout primitives", () => {
   });
 
   it("falls back to a named banner dismissal for blank labels", () => {
-    render(
-      <PanelRoot>
-        <Banner onDismiss={() => undefined} dismissLabel={" \t "}>
-          Provider notice
-        </Banner>
-      </PanelRoot>,
+    renderInPanel(
+      <Banner onDismiss={() => undefined} dismissLabel={" \t "}>
+        Provider notice
+      </Banner>,
     );
 
     expect(screen.getByRole("button", { name: "Dismiss" })).toBeVisible();
@@ -905,15 +836,10 @@ describe("feedback and layout primitives", () => {
 
   it("lazily mounts collapsible content and retains its state", async () => {
     const user = userEvent.setup();
-    const { container } = render(
-      <PanelRoot>
-        <CollapsibleSection
-          title="Advanced settings"
-          mountStrategy="lazy-retain"
-        >
-          <TextInput aria-label="Provider token" />
-        </CollapsibleSection>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <CollapsibleSection title="Advanced settings" mountStrategy="lazy-retain">
+        <TextInput aria-label="Provider token" />
+      </CollapsibleSection>,
     );
 
     const toggle = screen.getByRole("button", { name: "Advanced settings" });
@@ -947,12 +873,10 @@ describe("feedback and layout primitives", () => {
       return <span>Probe content</span>;
     }
 
-    render(
-      <PanelRoot>
-        <CollapsibleSection title="Sensor details" mountStrategy="retain">
-          <Probe />
-        </CollapsibleSection>
-      </PanelRoot>,
+    renderInPanel(
+      <CollapsibleSection title="Sensor details" mountStrategy="retain">
+        <Probe />
+      </CollapsibleSection>,
     );
 
     const toggle = screen.getByRole("button", { name: "Sensor details" });
@@ -976,24 +900,22 @@ describe("feedback and layout primitives", () => {
   });
 
   it("renders shared rhythm and metric presentation primitives", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Stack gap={3}>
-          <Cluster justify="between">
-            <Badge tone="success">Ready</Badge>
-          </Cluster>
-          <Card>
-            <MetricGrid>
-              <Metric
-                label="Updates"
-                value="12"
-                detail="Since startup"
-                tone="info"
-              />
-            </MetricGrid>
-          </Card>
-        </Stack>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Stack gap={3}>
+        <Cluster justify="between">
+          <Badge tone="success">Ready</Badge>
+        </Cluster>
+        <Card>
+          <MetricGrid>
+            <Metric
+              label="Updates"
+              value="12"
+              detail="Since startup"
+              tone="info"
+            />
+          </MetricGrid>
+        </Card>
+      </Stack>,
     );
 
     expect(container.querySelector(".snui-stack--gap-3")).not.toBeNull();
@@ -1009,20 +931,18 @@ describe("feedback and layout primitives", () => {
   });
 
   it("groups multiple section actions in their own layout wrapper", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Section
-          title="Sources"
-          actions={
-            <>
-              <Button>Add</Button>
-              <Button>Refresh</Button>
-            </>
-          }
-        >
-          Ready
-        </Section>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Section
+        title="Sources"
+        actions={
+          <>
+            <Button>Add</Button>
+            <Button>Refresh</Button>
+          </>
+        }
+      >
+        Ready
+      </Section>,
     );
 
     const actions = container.querySelector(".snui-section__actions");
@@ -1035,13 +955,11 @@ describe("feedback and layout primitives", () => {
 
 describe("buttons and confirmation", () => {
   it("groups consumer icons and labels inside the button content slot", () => {
-    render(
-      <PanelRoot>
-        <Button>
-          <span aria-hidden="true">+</span>
-          <span>Add source</span>
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button>
+        <span aria-hidden="true">+</span>
+        <span>Add source</span>
+      </Button>,
     );
 
     const button = screen.getByRole("button", { name: "Add source" });
@@ -1094,12 +1012,10 @@ describe("buttons and confirmation", () => {
   });
 
   it("localizes a loading button with an explicit accessible label", () => {
-    render(
-      <PanelRoot>
-        <Button loading loadingLabel="Saving" aria-label="Save settings">
-          Save
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button loading loadingLabel="Saving" aria-label="Save settings">
+        Save
+      </Button>,
     );
 
     const button = screen.getByRole("button", { name: "Save settings" });
@@ -1110,12 +1026,10 @@ describe("buttons and confirmation", () => {
   it("keeps aria-disabled buttons focusable while suppressing activation", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
-    render(
-      <PanelRoot>
-        <Button ariaDisabled onClick={onClick} size="compact" shape="pill">
-          Move up
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button ariaDisabled onClick={onClick} size="compact" shape="pill">
+        Move up
+      </Button>,
     );
 
     const button = screen.getByRole("button", { name: "Move up" });
@@ -1133,14 +1047,12 @@ describe("buttons and confirmation", () => {
 
   it("provides a programmatic action-status focus target", () => {
     const statusRef = createRef<HTMLDivElement>();
-    render(
-      <PanelRoot>
-        <ActionBar
-          statusRef={statusRef}
-          status="Configuration saved"
-          actions={<Button>Save</Button>}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <ActionBar
+        statusRef={statusRef}
+        status="Configuration saved"
+        actions={<Button>Save</Button>}
+      />,
     );
 
     statusRef.current?.focus();
@@ -1152,8 +1064,8 @@ describe("buttons and confirmation", () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
     const onConfirm = vi.fn();
-    const { rerender } = render(
-      <PanelRoot>
+    const { rerender } = renderInPanel(
+      <>
         <Button>Delete source</Button>
         <InlineConfirm
           open={false}
@@ -1161,22 +1073,24 @@ describe("buttons and confirmation", () => {
           onCancel={onCancel}
           onConfirm={onConfirm}
         />
-      </PanelRoot>,
+      </>,
     );
 
     const trigger = screen.getByRole("button", { name: "Delete source" });
     await user.click(trigger);
 
     rerender(
-      <PanelRoot>
-        <Button>Delete source</Button>
-        <InlineConfirm
-          open
-          message="This removes the cached source."
-          onCancel={onCancel}
-          onConfirm={onConfirm}
-        />
-      </PanelRoot>,
+      panel(
+        <>
+          <Button>Delete source</Button>
+          <InlineConfirm
+            open
+            message="This removes the cached source."
+            onCancel={onCancel}
+            onConfirm={onConfirm}
+          />
+        </>,
+      ),
     );
 
     const confirmation = screen.getByRole("region", {
@@ -1194,15 +1108,17 @@ describe("buttons and confirmation", () => {
     expect(onCancel).toHaveBeenCalledOnce();
 
     rerender(
-      <PanelRoot>
-        <Button>Delete source</Button>
-        <InlineConfirm
-          open={false}
-          message="This removes the cached source."
-          onCancel={onCancel}
-          onConfirm={onConfirm}
-        />
-      </PanelRoot>,
+      panel(
+        <>
+          <Button>Delete source</Button>
+          <InlineConfirm
+            open={false}
+            message="This removes the cached source."
+            onCancel={onCancel}
+            onConfirm={onConfirm}
+          />
+        </>,
+      ),
     );
 
     expect(screen.getByRole("button", { name: "Delete source" })).toHaveFocus();
@@ -1210,8 +1126,8 @@ describe("buttons and confirmation", () => {
 
   it("focuses the confirmation container when it opens busy", async () => {
     const user = userEvent.setup();
-    const { rerender } = render(
-      <PanelRoot>
+    const { rerender } = renderInPanel(
+      <>
         <Button>Start reset</Button>
         <InlineConfirm
           open={false}
@@ -1219,22 +1135,24 @@ describe("buttons and confirmation", () => {
           onCancel={vi.fn()}
           onConfirm={vi.fn()}
         />
-      </PanelRoot>,
+      </>,
     );
 
     await user.click(screen.getByRole("button", { name: "Start reset" }));
     rerender(
-      <PanelRoot>
-        <Button>Start reset</Button>
-        <InlineConfirm
-          open
-          busy
-          title={null}
-          message="Resetting."
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+      panel(
+        <>
+          <Button>Start reset</Button>
+          <InlineConfirm
+            open
+            busy
+            title={null}
+            message="Resetting."
+            onCancel={vi.fn()}
+            onConfirm={vi.fn()}
+          />
+        </>,
+      ),
     );
 
     const confirmation = screen.getByRole("region", {
@@ -1254,11 +1172,11 @@ describe("buttons and confirmation", () => {
       onCancel: vi.fn(),
       onConfirm: vi.fn(),
     } as const;
-    const { rerender } = render(
-      <PanelRoot>
+    const { rerender } = renderInPanel(
+      <>
         <Button>Outside action</Button>
         <InlineConfirm {...props} open />
-      </PanelRoot>,
+      </>,
     );
 
     const outsideAction = screen.getByRole("button", {
@@ -1268,10 +1186,12 @@ describe("buttons and confirmation", () => {
     expect(outsideAction).toHaveFocus();
 
     rerender(
-      <PanelRoot>
-        <Button>Outside action</Button>
-        <InlineConfirm {...props} open busy />
-      </PanelRoot>,
+      panel(
+        <>
+          <Button>Outside action</Button>
+          <InlineConfirm {...props} open busy />
+        </>,
+      ),
     );
 
     expect(outsideAction).toHaveFocus();
@@ -1284,11 +1204,11 @@ describe("buttons and confirmation", () => {
       onCancel: vi.fn(),
       onConfirm: vi.fn(),
     } as const;
-    const { rerender } = render(
-      <PanelRoot>
+    const { rerender } = renderInPanel(
+      <>
         <Button>Outside action</Button>
         <InlineConfirm {...props} open />
-      </PanelRoot>,
+      </>,
     );
 
     expect(
@@ -1301,10 +1221,12 @@ describe("buttons and confirmation", () => {
     expect(outsideAction).toHaveFocus();
 
     rerender(
-      <PanelRoot>
-        <Button>Outside action</Button>
-        <InlineConfirm {...props} open={false} />
-      </PanelRoot>,
+      panel(
+        <>
+          <Button>Outside action</Button>
+          <InlineConfirm {...props} open={false} />
+        </>,
+      ),
     );
 
     expect(outsideAction).toHaveFocus();
@@ -1317,21 +1239,13 @@ describe("buttons and confirmation", () => {
       onCancel: vi.fn(),
       onConfirm: vi.fn(),
     } as const;
-    const { rerender } = render(
-      <PanelRoot>
-        <InlineConfirm {...props} open />
-      </PanelRoot>,
-    );
+    const { rerender } = renderInPanel(<InlineConfirm {...props} open />);
 
     const cancel = screen.getByRole("button", { name: "Cancel" });
     await user.click(cancel);
     expect(cancel).toHaveFocus();
 
-    rerender(
-      <PanelRoot>
-        <InlineConfirm {...props} open busy />
-      </PanelRoot>,
-    );
+    rerender(panel(<InlineConfirm {...props} open busy />));
 
     // Busy blocks activation through aria-disabled, so the control stays in the
     // tab order and focus is never destroyed and chased.
@@ -1373,16 +1287,14 @@ describe("buttons and confirmation", () => {
   });
 
   it("falls back to a named confirmation for an empty fragment title", () => {
-    render(
-      <PanelRoot>
-        <InlineConfirm
-          open
-          title={<Fragment key="empty-title" />}
-          message="Confirm this action."
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <InlineConfirm
+        open
+        title={<Fragment key="empty-title" />}
+        message="Confirm this action."
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     );
 
     expect(
@@ -1403,8 +1315,8 @@ describe("buttons and confirmation", () => {
       onCancel: vi.fn(),
       onConfirm: vi.fn(),
     } as const;
-    const { rerender } = render(
-      <PanelRoot>
+    const { rerender } = renderInPanel(
+      <>
         <InlineConfirm
           {...confirmationProps}
           open
@@ -1415,7 +1327,7 @@ describe("buttons and confirmation", () => {
         />
         <span id="confirmation-context">Safety check</span>
         <span id="confirmation-guidance">Review before continuing.</span>
-      </PanelRoot>,
+      </>,
     );
 
     expect(ref.current).toBe(screen.getByTestId("localized-confirmation"));
@@ -1431,25 +1343,21 @@ describe("buttons and confirmation", () => {
     expect(screen.getByRole("button", { name: "Confirmer" })).toBeVisible();
 
     rerender(
-      <PanelRoot>
-        <InlineConfirm {...confirmationProps} open={false} ref={ref} />
-      </PanelRoot>,
+      panel(<InlineConfirm {...confirmationProps} open={false} ref={ref} />),
     );
     expect(ref.current).toBeNull();
   });
 
   it("supports an explicit confirmation heading level", () => {
-    render(
-      <PanelRoot>
-        <InlineConfirm
-          open
-          headingLevel={4}
-          title="Remove source?"
-          message="Confirm this action."
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <InlineConfirm
+        open
+        headingLevel={4}
+        title="Remove source?"
+        message="Confirm this action."
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     );
 
     expect(

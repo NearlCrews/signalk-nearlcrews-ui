@@ -1,5 +1,13 @@
 import { useLayoutEffect, useReducer } from "react";
 
+// The UNSAFE portal API is upstream's explicit no-stability marker, so every
+// consumer reaches it through this one module: an upstream rename or removal
+// touches a single file.
+export {
+  UNSAFE_PortalProvider,
+  useUNSAFE_PortalContext,
+} from "react-aria/PortalProvider";
+
 /**
  * Defers an overlay by one commit so it mounts against a resolved portal
  * container.

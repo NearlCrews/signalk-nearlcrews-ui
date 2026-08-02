@@ -1,6 +1,9 @@
 import {
+  DISABLED_DECLARATIONS,
   FORCED_COLORS_OUTLINE_DECLARATIONS,
+  focusRingDeclarations,
   OVERLAY_TRANSITION_DECLARATIONS,
+  PRESSED_FILL_DECLARATION,
   RAISED_OVERLAY_DECLARATIONS,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
@@ -44,21 +47,15 @@ ${OVERLAY_TRANSITION_DECLARATIONS}
 }
 
 .snui-menu__item[data-focus-visible] {
-  outline: 2px solid var(--snui-color-focus);
-  outline-offset: -2px;
+${focusRingDeclarations("-2px", false)}
 }
 
 .snui-menu__item[data-pressed] {
-  background: color-mix(
-    in srgb,
-    var(--snui-color-accent-fill) 12%,
-    var(--snui-color-interactive-hover)
-  );
+${PRESSED_FILL_DECLARATION}
 }
 
 .snui-menu__item[data-disabled] {
-  cursor: not-allowed;
-  opacity: 0.58;
+${DISABLED_DECLARATIONS}
 }
 
 .snui-menu__item--destructive {

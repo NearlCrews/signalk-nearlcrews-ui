@@ -12,7 +12,7 @@ export const DIALOG_STYLES = scopeStyles(`
   align-items: center;
   justify-content: center;
   padding: var(--snui-space-4);
-  background: rgb(15 23 42 / 45%);
+  background: var(--snui-color-scrim);
   inset: 0;
   opacity: 1;
   transition: opacity var(--snui-transition-fast);

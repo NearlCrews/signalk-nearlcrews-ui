@@ -16,13 +16,12 @@ import {
   THEME_STORAGE_KEY,
   ThemeToggle,
 } from "../../src/index.js";
+import { renderInPanel } from "../helpers.js";
 
 describe("chrome primitives", () => {
   it("renders a neutral banner without a tone glyph or label", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Banner tone="neutral">Stored values stay in SI units.</Banner>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Banner tone="neutral">Stored values stay in SI units.</Banner>,
     );
 
     const banner = container.querySelector(".snui-banner--neutral");
@@ -33,12 +32,10 @@ describe("chrome primitives", () => {
   });
 
   it("ignores a tone label on a neutral banner", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Banner tone="neutral" toneLabel="Notice">
-          Plain note.
-        </Banner>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Banner tone="neutral" toneLabel="Notice">
+        Plain note.
+      </Banner>,
     );
 
     const banner = container.querySelector(".snui-banner--neutral");
@@ -49,10 +46,8 @@ describe("chrome primitives", () => {
   it("drives banner dismissal through the ghost compact button contract", async () => {
     const user = userEvent.setup();
     const onDismiss = vi.fn();
-    const { container } = render(
-      <PanelRoot>
-        <Banner onDismiss={onDismiss}>Provider notice</Banner>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Banner onDismiss={onDismiss}>Provider notice</Banner>,
     );
 
     const dismiss = screen.getByRole("button", { name: "Dismiss" });
@@ -68,12 +63,10 @@ describe("chrome primitives", () => {
   });
 
   it("turns a status indicator into a polite live region on request", () => {
-    render(
-      <PanelRoot>
-        <StatusIndicator tone="success" live="polite">
-          Connected
-        </StatusIndicator>
-      </PanelRoot>,
+    renderInPanel(
+      <StatusIndicator tone="success" live="polite">
+        Connected
+      </StatusIndicator>,
     );
 
     const status = screen.getByRole("status");
@@ -82,23 +75,21 @@ describe("chrome primitives", () => {
   });
 
   it("turns a status indicator into an assertive live region on request", () => {
-    render(
-      <PanelRoot>
-        <StatusIndicator tone="danger" live="assertive">
-          Offline
-        </StatusIndicator>
-      </PanelRoot>,
+    renderInPanel(
+      <StatusIndicator tone="danger" live="assertive">
+        Offline
+      </StatusIndicator>,
     );
 
     expect(screen.getByRole("alert")).toHaveTextContent("Error. Offline");
   });
 
   it("stays presentational without a live mode and honors an explicit off", () => {
-    const { container } = render(
-      <PanelRoot>
+    const { container } = renderInPanel(
+      <>
         <StatusIndicator>Idle</StatusIndicator>
         <StatusIndicator live="off">Muted</StatusIndicator>
-      </PanelRoot>,
+      </>,
     );
 
     expect(screen.queryByRole("status")).toBeNull();
@@ -110,20 +101,18 @@ describe("chrome primitives", () => {
   });
 
   it("keeps a caller-supplied role on a status indicator", () => {
-    render(
-      <PanelRoot>
-        <StatusIndicator role="note" live="polite">
-          Connected
-        </StatusIndicator>
-      </PanelRoot>,
+    renderInPanel(
+      <StatusIndicator role="note" live="polite">
+        Connected
+      </StatusIndicator>,
     );
 
     expect(screen.getByRole("note")).not.toHaveAttribute("aria-live");
   });
 
   it("renders layout primitives on semantic elements with list items wrapped", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Stack as="ul" data-testid="stack-list">
           <span>First</span>
           <span>Second</span>
@@ -138,7 +127,7 @@ describe("chrome primitives", () => {
           <Metric label="Depth" value="12" />
           <Metric label="Wind" value="8" />
         </MetricGrid>
-      </PanelRoot>,
+      </>,
     );
 
     const stack = screen.getByTestId("stack-list");
@@ -159,13 +148,13 @@ describe("chrome primitives", () => {
   });
 
   it("defaults layout primitives to div and supports form stacks", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Stack data-testid="plain-stack">Plain</Stack>
         <Stack as="form" data-testid="form-stack" aria-label="Settings">
           Fields
         </Stack>
-      </PanelRoot>,
+      </>,
     );
 
     expect(screen.getByTestId("plain-stack").tagName).toBe("DIV");
@@ -173,15 +162,15 @@ describe("chrome primitives", () => {
   });
 
   it("supports space distribution justify options on clusters", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Cluster justify="around" data-testid="around">
           A
         </Cluster>
         <Cluster justify="evenly" data-testid="evenly">
           B
         </Cluster>
-      </PanelRoot>,
+      </>,
     );
 
     expect(screen.getByTestId("around")).toHaveClass(
@@ -193,12 +182,10 @@ describe("chrome primitives", () => {
   });
 
   it("supports compact density and header plus footer slots on cards", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Card density="compact" header="Engine" footer="Updated just now">
-          Revolution content
-        </Card>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Card density="compact" header="Engine" footer="Updated just now">
+        Revolution content
+      </Card>,
     );
 
     const card = container.querySelector(".snui-card");
@@ -212,12 +199,10 @@ describe("chrome primitives", () => {
   });
 
   it("renders default card density without slot wrappers for empty slots", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Card header={null} footer="">
-          Body
-        </Card>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Card header={null} footer="">
+        Body
+      </Card>,
     );
 
     const card = container.querySelector(".snui-card");
@@ -227,10 +212,8 @@ describe("chrome primitives", () => {
   });
 
   it("renders the metric unit as a muted suffix on the value", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Metric label="Depth" value="12.4" unit="m" />
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Metric label="Depth" value="12.4" unit="m" />,
     );
 
     const value = container.querySelector(".snui-metric__value");
@@ -239,10 +222,8 @@ describe("chrome primitives", () => {
   });
 
   it("announces metric values through a polite live region", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Metric label="Depth" value="12.4" live="polite" />
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Metric label="Depth" value="12.4" live="polite" />,
     );
 
     const status = screen.getByRole("status");
@@ -255,11 +236,11 @@ describe("chrome primitives", () => {
   });
 
   it("keeps metric values inert without a live mode", () => {
-    const { container } = render(
-      <PanelRoot>
+    const { container } = renderInPanel(
+      <>
         <Metric label="Depth" value="12.4" />
         <Metric label="Wind" value="8" live="off" />
-      </PanelRoot>,
+      </>,
     );
 
     const values = container.querySelectorAll(".snui-metric__value");
@@ -270,11 +251,7 @@ describe("chrome primitives", () => {
   });
 
   it("restricts theme choices to the requested subset", () => {
-    render(
-      <PanelRoot>
-        <ThemeToggle choices={["light", "dark"]} />
-      </PanelRoot>,
-    );
+    renderInPanel(<ThemeToggle choices={["light", "dark"]} />);
 
     expect(screen.getByRole("radio", { name: "Light" })).toBeVisible();
     expect(screen.getByRole("radio", { name: "Dark" })).toBeVisible();
@@ -304,8 +281,8 @@ describe("chrome primitives", () => {
   });
 
   it("pins action bars to the requested edge only", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <ActionBar
           sticky="bottom"
           data-testid="bottom-bar"
@@ -317,7 +294,7 @@ describe("chrome primitives", () => {
           actions={<Button>Save</Button>}
         />
         <ActionBar data-testid="plain-bar" actions={<Button>Save</Button>} />
-      </PanelRoot>,
+      </>,
     );
 
     expect(screen.getByTestId("bottom-bar")).toHaveClass(
@@ -330,10 +307,8 @@ describe("chrome primitives", () => {
   });
 
   it("adds scroll padding so a sticky action bar never covers focused content", () => {
-    render(
-      <PanelRoot>
-        <ActionBar sticky="bottom" actions={<Button>Save</Button>} />
-      </PanelRoot>,
+    renderInPanel(
+      <ActionBar sticky="bottom" actions={<Button>Save</Button>} />,
     );
 
     const styles = document.head.querySelector("style[data-snui-styles]");

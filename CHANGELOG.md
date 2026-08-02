@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-08-02
+
+### Fixed
+
+- Virtualized `DataGrid` rows kept only `aria-rowindex`, so real browsers dropped row, row group, and gridcell roles once the virtualized grid restyled table layout. Explicit roles are now stamped on row groups, header and body rows, and cells.
+- A mounted panel reset to Auto when another document wrote an unrecognized value to the shared theme key, as a plugin on a different library version can. Unrecognized values are now ignored, and only a genuine clear returns the panel to Auto.
+- `FieldError` emitted `role` alongside `aria-live`, double announcing on some screen readers. It now emits exactly one of the pair, matching the design contract.
+- `FieldGroup` wired a group error only through `aria-describedby`. The fieldset now also carries `aria-errormessage` and `aria-invalid` while an error is present, matching `RadioGroup` and `LabeledField`.
+- A toast's live region wrapped the whole card, so the dismiss button's accessible name joined the announcement. The region now scopes to the toast text.
+- Toast queues grew without bound when sticky toasts (`duration: 0`) piled up. A queue now holds at most five toasts and drops the oldest beyond that.
+
+### Added
+
+- `SemanticTone` and `OverlayOpenState` are exported from the package root, so the `ToastContent` tone slot and the shared overlay open-state props can be named directly.
+- `--snui-color-scrim` token, resolved per theme, so Dark and Night dialogs no longer sit on the light-theme scrim color.
+
+### Changed
+
+- `SegmentedControlProps.onChange` is now optional, matching `RadioGroup`, `Switch`, and `Checkbox`.
+- `Menu`, `Dialog`, and `Popover` open-state props now share the exported `OverlayOpenState` interface, and the `Dialog` trio admits explicit `undefined` like every other optional public prop.
+- `BannerLive` is now an alias of `AnnouncementMode`; the union is unchanged.
+- Label defaults, tone announcements, overlay open-state props, and description-id resolution moved into shared helpers, and focus-ring, disabled, and pressed-fill declarations into shared style fragments, replacing per-component copies.
+
 ## [0.5.0] - 2026-08-01
 
 This release introduces major composite widgets, modernizes React 19.2 foundations, and changes public APIs.
@@ -147,7 +170,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.3.0...v0.4.0

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,24 +7,22 @@ import {
   Accordion,
   CollapsibleSection,
   InlineConfirm,
-  PanelRoot,
   Section,
 } from "../../src/index.js";
+import { panel, renderInPanel } from "../helpers.js";
 
-describe("merged disclosure contract", () => {
+describe("merged collapsible contract", () => {
   it("opens uncontrolled from defaultOpen and reports toggle changes", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    render(
-      <PanelRoot>
-        <CollapsibleSection
-          title="Advanced settings"
-          defaultOpen
-          onOpenChange={onOpenChange}
-        >
-          <span>Advanced content</span>
-        </CollapsibleSection>
-      </PanelRoot>,
+    renderInPanel(
+      <CollapsibleSection
+        title="Advanced settings"
+        defaultOpen
+        onOpenChange={onOpenChange}
+      >
+        <span>Advanced content</span>
+      </CollapsibleSection>,
     );
 
     const toggle = screen.getByRole("button", { name: "Advanced settings" });
@@ -44,12 +42,10 @@ describe("merged disclosure contract", () => {
 describe("collapsible summary visibility", () => {
   it("hides the summary while open by default", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <CollapsibleSection title="Details" summary="3 checks healthy">
-          Content
-        </CollapsibleSection>
-      </PanelRoot>,
+    renderInPanel(
+      <CollapsibleSection title="Details" summary="3 checks healthy">
+        Content
+      </CollapsibleSection>,
     );
 
     expect(screen.getByText("3 checks healthy")).toBeVisible();
@@ -59,16 +55,14 @@ describe("collapsible summary visibility", () => {
 
   it("keeps the summary visible while open under always", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <CollapsibleSection
-          title="Details"
-          summary="3 checks healthy"
-          summaryVisibility="always"
-        >
-          Content
-        </CollapsibleSection>
-      </PanelRoot>,
+    renderInPanel(
+      <CollapsibleSection
+        title="Details"
+        summary="3 checks healthy"
+        summaryVisibility="always"
+      >
+        Content
+      </CollapsibleSection>,
     );
 
     expect(screen.getByText("3 checks healthy")).toBeVisible();
@@ -80,17 +74,15 @@ describe("collapsible summary visibility", () => {
 describe("accordion coordination", () => {
   it("keeps at most one section open", async () => {
     const user = userEvent.setup();
-    render(
-      <PanelRoot>
-        <Accordion>
-          <CollapsibleSection title="First">
-            <span>First content</span>
-          </CollapsibleSection>
-          <CollapsibleSection title="Second">
-            <span>Second content</span>
-          </CollapsibleSection>
-        </Accordion>
-      </PanelRoot>,
+    renderInPanel(
+      <Accordion>
+        <CollapsibleSection title="First">
+          <span>First content</span>
+        </CollapsibleSection>
+        <CollapsibleSection title="Second">
+          <span>Second content</span>
+        </CollapsibleSection>
+      </Accordion>,
     );
 
     const first = screen.getByRole("button", { name: "First" });
@@ -115,15 +107,13 @@ describe("accordion coordination", () => {
   });
 
   it("honors a child defaultOpen as the initial open section", () => {
-    render(
-      <PanelRoot>
-        <Accordion>
-          <CollapsibleSection title="First">First content</CollapsibleSection>
-          <CollapsibleSection title="Second" defaultOpen>
-            Second content
-          </CollapsibleSection>
-        </Accordion>
-      </PanelRoot>,
+    renderInPanel(
+      <Accordion>
+        <CollapsibleSection title="First">First content</CollapsibleSection>
+        <CollapsibleSection title="Second" defaultOpen>
+          Second content
+        </CollapsibleSection>
+      </Accordion>,
     );
 
     expect(screen.getByRole("button", { name: "First" })).toHaveAttribute(
@@ -139,15 +129,13 @@ describe("accordion coordination", () => {
   it("composes the child's own onOpenChange", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    render(
-      <PanelRoot>
-        <Accordion>
-          <CollapsibleSection title="First" onOpenChange={onOpenChange}>
-            First content
-          </CollapsibleSection>
-          <CollapsibleSection title="Second">Second content</CollapsibleSection>
-        </Accordion>
-      </PanelRoot>,
+    renderInPanel(
+      <Accordion>
+        <CollapsibleSection title="First" onOpenChange={onOpenChange}>
+          First content
+        </CollapsibleSection>
+        <CollapsibleSection title="Second">Second content</CollapsibleSection>
+      </Accordion>,
     );
 
     await user.click(screen.getByRole("button", { name: "First" }));
@@ -156,12 +144,10 @@ describe("accordion coordination", () => {
 
   it("rejects children that are not collapsible sections", () => {
     expect(() =>
-      render(
-        <PanelRoot>
-          <Accordion>
-            <div>Not a section</div>
-          </Accordion>
-        </PanelRoot>,
+      renderInPanel(
+        <Accordion>
+          <div>Not a section</div>
+        </Accordion>,
       ),
     ).toThrow("Accordion accepts only CollapsibleSection children.");
   });
@@ -183,15 +169,13 @@ describe("inline confirmation upgrades", () => {
   it("supports uncontrolled use through defaultOpen and closes on cancel", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
-    render(
-      <PanelRoot>
-        <InlineConfirm
-          defaultOpen
-          message="This removes the cached source."
-          onCancel={onCancel}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <InlineConfirm
+        defaultOpen
+        message="This removes the cached source."
+        onCancel={onCancel}
+        onConfirm={vi.fn()}
+      />,
     );
 
     expect(
@@ -206,15 +190,13 @@ describe("inline confirmation upgrades", () => {
   it("closes an uncontrolled confirmation on confirm", async () => {
     const user = userEvent.setup();
     const onConfirm = vi.fn();
-    render(
-      <PanelRoot>
-        <InlineConfirm
-          defaultOpen
-          message="This removes the cached source."
-          onCancel={vi.fn()}
-          onConfirm={onConfirm}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <InlineConfirm
+        defaultOpen
+        message="This removes the cached source."
+        onCancel={vi.fn()}
+        onConfirm={onConfirm}
+      />,
     );
 
     await user.click(screen.getByRole("button", { name: "Confirm" }));
@@ -223,29 +205,27 @@ describe("inline confirmation upgrades", () => {
   });
 
   it("keeps open controlled when provided alongside defaultOpen", () => {
-    const { rerender } = render(
-      <PanelRoot>
-        <InlineConfirm
-          open={false}
-          defaultOpen
-          message="This removes the cached source."
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+    const { rerender } = renderInPanel(
+      <InlineConfirm
+        open={false}
+        defaultOpen
+        message="This removes the cached source."
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     );
     expect(screen.queryByRole("region")).toBeNull();
 
     rerender(
-      <PanelRoot>
+      panel(
         <InlineConfirm
           open
           defaultOpen={false}
           message="This removes the cached source."
           onCancel={vi.fn()}
           onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+        />,
+      ),
     );
     expect(
       screen.getByRole("region", { name: "Confirm action" }),
@@ -255,15 +235,13 @@ describe("inline confirmation upgrades", () => {
   it("reports escape as the cancel reason", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
-    render(
-      <PanelRoot>
-        <InlineConfirm
-          open
-          message="This removes the cached source."
-          onCancel={onCancel}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <InlineConfirm
+        open
+        message="This removes the cached source."
+        onCancel={onCancel}
+        onConfirm={vi.fn()}
+      />,
     );
 
     await user.keyboard("{Escape}");
@@ -271,16 +249,14 @@ describe("inline confirmation upgrades", () => {
   });
 
   it("advertises the Escape shortcut and styles the cancel action", () => {
-    render(
-      <PanelRoot>
-        <InlineConfirm
-          open
-          cancelVariant="ghost"
-          message="This removes the cached source."
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <InlineConfirm
+        open
+        cancelVariant="ghost"
+        message="This removes the cached source."
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     );
 
     expect(
@@ -293,20 +269,18 @@ describe("inline confirmation upgrades", () => {
 
   it("focuses the requested element on open instead of the container", () => {
     const initialFocusRef = createRef<HTMLButtonElement>();
-    render(
-      <PanelRoot>
-        <InlineConfirm
-          open
-          initialFocusRef={initialFocusRef}
-          message={
-            <button ref={initialFocusRef} type="button">
-              Review details
-            </button>
-          }
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <InlineConfirm
+        open
+        initialFocusRef={initialFocusRef}
+        message={
+          <button ref={initialFocusRef} type="button">
+            Review details
+          </button>
+        }
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     );
 
     expect(initialFocusRef.current).toHaveFocus();
@@ -320,13 +294,13 @@ describe("inline confirmation upgrades", () => {
       onConfirm: vi.fn(),
       returnFocusRef,
     } as const;
-    const { rerender } = render(
-      <PanelRoot>
+    const { rerender } = renderInPanel(
+      <>
         <button ref={returnFocusRef} type="button">
           Source settings
         </button>
         <InlineConfirm {...props} open />
-      </PanelRoot>,
+      </>,
     );
 
     expect(
@@ -334,12 +308,14 @@ describe("inline confirmation upgrades", () => {
     ).toHaveFocus();
 
     rerender(
-      <PanelRoot>
-        <button ref={returnFocusRef} type="button">
-          Source settings
-        </button>
-        <InlineConfirm {...props} open={false} />
-      </PanelRoot>,
+      panel(
+        <>
+          <button ref={returnFocusRef} type="button">
+            Source settings
+          </button>
+          <InlineConfirm {...props} open={false} />
+        </>,
+      ),
     );
 
     expect(returnFocusRef.current).toHaveFocus();
@@ -350,15 +326,13 @@ describe("inline confirmation upgrades", () => {
     Element.prototype.scrollIntoView = scrollIntoView;
     stubMatchMedia(false);
 
-    render(
-      <PanelRoot>
-        <InlineConfirm
-          open
-          message="This removes the cached source."
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <InlineConfirm
+        open
+        message="This removes the cached source."
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     );
 
     expect(scrollIntoView).toHaveBeenCalledWith({
@@ -372,15 +346,13 @@ describe("inline confirmation upgrades", () => {
     Element.prototype.scrollIntoView = scrollIntoView;
     stubMatchMedia(true);
 
-    render(
-      <PanelRoot>
-        <InlineConfirm
-          open
-          message="This removes the cached source."
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+    renderInPanel(
+      <InlineConfirm
+        open
+        message="This removes the cached source."
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     );
 
     expect(scrollIntoView).toHaveBeenCalledWith({
@@ -390,17 +362,15 @@ describe("inline confirmation upgrades", () => {
   });
 
   it("drops the region landmark and its naming when landmark is false", () => {
-    const { container } = render(
-      <PanelRoot>
-        <InlineConfirm
-          open
-          landmark={false}
-          title="Reset configuration?"
-          message="This removes the cached source."
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <InlineConfirm
+        open
+        landmark={false}
+        title="Reset configuration?"
+        message="This removes the cached source."
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
     );
 
     expect(screen.queryByRole("region")).toBeNull();
@@ -415,12 +385,10 @@ describe("inline confirmation upgrades", () => {
 
 describe("section landmark opt-out", () => {
   it("keeps the section element and heading without region naming", () => {
-    const { container } = render(
-      <PanelRoot>
-        <Section title="Connection" landmark={false}>
-          Content
-        </Section>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <Section title="Connection" landmark={false}>
+        Content
+      </Section>,
     );
 
     expect(screen.queryByRole("region")).toBeNull();
@@ -431,8 +399,8 @@ describe("section landmark opt-out", () => {
   });
 
   it("drops consumer label references when landmark is false", () => {
-    const { container } = render(
-      <PanelRoot>
+    const { container } = renderInPanel(
+      <>
         <span id="consumer-context">Provider configuration</span>
         <Section
           aria-labelledby="consumer-context"
@@ -441,7 +409,7 @@ describe("section landmark opt-out", () => {
         >
           Content
         </Section>
-      </PanelRoot>,
+      </>,
     );
 
     expect(screen.queryByRole("region")).toBeNull();

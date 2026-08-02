@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,18 +7,16 @@ import {
   LabeledField,
   type LabeledFieldControlProps,
   NumberInput,
-  PanelRoot,
   TextInput,
 } from "../../src/index.js";
+import { panel, renderInPanel } from "../helpers.js";
 
 describe("LabeledField control injection", () => {
   it("injects name, disabled, and required into an element child", () => {
-    render(
-      <PanelRoot>
-        <LabeledField label="Server URL" name="serverUrl" disabled required>
-          <TextInput />
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField label="Server URL" name="serverUrl" disabled required>
+        <TextInput />
+      </LabeledField>,
     );
 
     const input = screen.getByRole("textbox", { name: /Server URL/ });
@@ -28,12 +26,10 @@ describe("LabeledField control injection", () => {
   });
 
   it("keeps name and disabled already set on an element child", () => {
-    render(
-      <PanelRoot>
-        <LabeledField label="Server URL" name="outerName" disabled>
-          <TextInput name="innerName" disabled={false} />
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField label="Server URL" name="outerName" disabled>
+        <TextInput name="innerName" disabled={false} />
+      </LabeledField>,
     );
 
     const input = screen.getByRole("textbox", { name: /Server URL/ });
@@ -43,15 +39,13 @@ describe("LabeledField control injection", () => {
 
   it("injects name and disabled through the render-prop contract", () => {
     let received: LabeledFieldControlProps | undefined;
-    render(
-      <PanelRoot>
-        <LabeledField label="Cache limit" name="cacheLimit" disabled>
-          {(controlProps) => {
-            received = controlProps;
-            return <NumberInput {...controlProps} aria-label="Cache limit" />;
-          }}
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField label="Cache limit" name="cacheLimit" disabled>
+        {(controlProps) => {
+          received = controlProps;
+          return <NumberInput {...controlProps} aria-label="Cache limit" />;
+        }}
+      </LabeledField>,
     );
 
     const input = screen.getByRole("spinbutton", { name: "Cache limit" });
@@ -63,8 +57,8 @@ describe("LabeledField control injection", () => {
 
   it("exposes region ids only when the matching content exists", () => {
     const seen: LabeledFieldControlProps[] = [];
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <LabeledField label="Plain">
           {(controlProps) => {
             seen.push(controlProps);
@@ -81,7 +75,7 @@ describe("LabeledField control injection", () => {
             return <TextInput id={controlProps.id} />;
           }}
         </LabeledField>
-      </PanelRoot>,
+      </>,
     );
 
     expect(seen[0]?.descriptionId).toBeUndefined();
@@ -102,15 +96,13 @@ describe("LabeledField control injection", () => {
 
   it("withholds the error id while only live announcements are requested", () => {
     let received: LabeledFieldControlProps | undefined;
-    render(
-      <PanelRoot>
-        <LabeledField label="Server URL" errorLive="polite">
-          {(controlProps) => {
-            received = controlProps;
-            return <TextInput id={controlProps.id} />;
-          }}
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField label="Server URL" errorLive="polite">
+        {(controlProps) => {
+          received = controlProps;
+          return <TextInput id={controlProps.id} />;
+        }}
+      </LabeledField>,
     );
 
     expect(received?.errorId).toBeUndefined();
@@ -118,27 +110,25 @@ describe("LabeledField control injection", () => {
   });
 
   it("lets composite children wire secondary controls to the region ids", () => {
-    render(
-      <PanelRoot>
-        <LabeledField
-          label="Cache limit"
-          description="Whole GiB"
-          error="Choose at least 4 GiB."
-        >
-          {(controlProps) => {
-            const { descriptionId, errorId, ...inputProps } = controlProps;
-            return (
-              <>
-                <TextInput {...inputProps} />
-                <NumberInput
-                  aria-label="Cache limit exact value"
-                  aria-describedby={[descriptionId, errorId].join(" ")}
-                />
-              </>
-            );
-          }}
-        </LabeledField>
-      </PanelRoot>,
+    renderInPanel(
+      <LabeledField
+        label="Cache limit"
+        description="Whole GiB"
+        error="Choose at least 4 GiB."
+      >
+        {(controlProps) => {
+          const { descriptionId, errorId, ...inputProps } = controlProps;
+          return (
+            <>
+              <TextInput {...inputProps} />
+              <NumberInput
+                aria-label="Cache limit exact value"
+                aria-describedby={[descriptionId, errorId].join(" ")}
+              />
+            </>
+          );
+        }}
+      </LabeledField>,
     );
 
     expect(
@@ -149,12 +139,10 @@ describe("LabeledField control injection", () => {
 
 describe("LabeledField optional marker", () => {
   it("renders a muted optional marker when the field is not required", () => {
-    const { container } = render(
-      <PanelRoot>
-        <LabeledField label="Nickname" optionalLabel="(optional)">
-          <TextInput />
-        </LabeledField>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <LabeledField label="Nickname" optionalLabel="(optional)">
+        <TextInput />
+      </LabeledField>,
     );
 
     const marker = container.querySelector(".snui-optional-mark");
@@ -166,12 +154,10 @@ describe("LabeledField optional marker", () => {
   });
 
   it("suppresses the optional marker when the field is required", () => {
-    const { container } = render(
-      <PanelRoot>
-        <LabeledField label="Server URL" required optionalLabel="(optional)">
-          <TextInput />
-        </LabeledField>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <LabeledField label="Server URL" required optionalLabel="(optional)">
+        <TextInput />
+      </LabeledField>,
     );
 
     expect(container.querySelector(".snui-optional-mark")).toBeNull();
@@ -181,12 +167,10 @@ describe("LabeledField optional marker", () => {
   });
 
   it("omits the marker for empty optional content", () => {
-    const { container } = render(
-      <PanelRoot>
-        <LabeledField label="Nickname" optionalLabel={null}>
-          <TextInput />
-        </LabeledField>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <LabeledField label="Nickname" optionalLabel={null}>
+        <TextInput />
+      </LabeledField>,
     );
 
     expect(container.querySelector(".snui-optional-mark")).toBeNull();
@@ -195,16 +179,14 @@ describe("LabeledField optional marker", () => {
 
 describe("FieldGroup group error", () => {
   it("associates a group error with the fieldset without announcing it", () => {
-    render(
-      <PanelRoot>
-        <FieldGroup
-          legend="Notifications"
-          description="Choose the alerts to publish."
-          error="Select at least one alert."
-        >
-          <Checkbox label="Wind" />
-        </FieldGroup>
-      </PanelRoot>,
+    renderInPanel(
+      <FieldGroup
+        legend="Notifications"
+        description="Choose the alerts to publish."
+        error="Select at least one alert."
+      >
+        <Checkbox label="Wind" />
+      </FieldGroup>,
     );
 
     const group = screen.getByRole("group", { name: "Notifications" });
@@ -215,36 +197,37 @@ describe("FieldGroup group error", () => {
     expect(error).toHaveClass("snui-field-group__error");
     expect(error).not.toHaveAttribute("role");
     expect(error).toHaveAttribute("aria-live", "off");
+    expect(group).toHaveAttribute("aria-errormessage", error.id);
+    expect(group).toHaveAttribute("aria-invalid", "true");
   });
 
   it("mounts an announcing region before group error content arrives", () => {
-    const { container, rerender } = render(
-      <PanelRoot>
-        <FieldGroup legend="Notifications" errorLive="polite">
-          <Checkbox label="Wind" />
-        </FieldGroup>
-      </PanelRoot>,
+    const { container, rerender } = renderInPanel(
+      <FieldGroup legend="Notifications" errorLive="polite">
+        <Checkbox label="Wind" />
+      </FieldGroup>,
     );
 
     const region = container.querySelector(".snui-field-group__error");
     expect(region).not.toBeNull();
+    // A roled live region does not also carry aria-live.
     expect(region).toHaveAttribute("role", "status");
-    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).not.toHaveAttribute("aria-live");
     expect(region).toBeEmptyDOMElement();
     expect(
       screen.getByRole("group", { name: "Notifications" }),
     ).not.toHaveAccessibleDescription();
 
     rerender(
-      <PanelRoot>
+      panel(
         <FieldGroup
           legend="Notifications"
           errorLive="polite"
           error="Select at least one alert."
         >
           <Checkbox label="Wind" />
-        </FieldGroup>
-      </PanelRoot>,
+        </FieldGroup>,
+      ),
     );
 
     expect(region).toHaveTextContent("Select at least one alert.");
@@ -256,15 +239,15 @@ describe("FieldGroup group error", () => {
 
 describe("TextInput calendar types", () => {
   it("accepts month and week input types", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <LabeledField label="Maintenance month">
           <TextInput type="month" />
         </LabeledField>
         <LabeledField label="Maintenance week">
           <TextInput type="week" />
         </LabeledField>
-      </PanelRoot>,
+      </>,
     );
 
     expect(screen.getByLabelText("Maintenance month")).toHaveAttribute(

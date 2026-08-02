@@ -67,6 +67,31 @@ export const FORCED_COLORS_OUTLINE_DECLARATIONS = [
   "    outline-offset: -2px;",
 ].join("\n");
 
+/**
+ * The focus ring every interactive element paints. Inset rings (offset -2px)
+ * suit rows and menu items; outset rings with the soft shadow suit controls.
+ */
+export function focusRingDeclarations(
+  offset: "-2px" | "2px",
+  shadow: boolean,
+): string {
+  return [
+    "  outline: 2px solid var(--snui-color-focus);",
+    `  outline-offset: ${offset};`,
+    ...(shadow ? ["  box-shadow: var(--snui-focus-ring);"] : []),
+  ].join("\n");
+}
+
+/** Disabled presentation shared by every control. */
+export const DISABLED_DECLARATIONS = [
+  "  cursor: not-allowed;",
+  "  opacity: 0.58;",
+].join("\n");
+
+/** Pressed-state tint painted over the interactive hover fill. */
+export const PRESSED_FILL_DECLARATION =
+  "  background: color-mix(in srgb, var(--snui-color-accent-fill) 12%, var(--snui-color-interactive-hover));";
+
 /** Dot shape per semantic tone, keyed by the tone modifier. */
 const TONE_DOT_SHAPES: readonly (readonly [string, string])[] = [
   ["info", "  border-radius: var(--snui-radius-sm);"],

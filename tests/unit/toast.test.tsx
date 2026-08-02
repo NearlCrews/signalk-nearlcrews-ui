@@ -1,15 +1,23 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  type RenderResult,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   createToastQueue,
-  PanelRoot,
   type ToastContent,
   type ToastQueue,
   ToastRegion,
   type ToastRegionProps,
   toast,
 } from "../../src/index.js";
+import { TRANSITION_FAST_MS } from "../../src/styles/tokens.js";
+import { renderInPanel } from "../helpers.js";
 
 function at<T>(items: readonly T[], index: number): T {
   const item = items[index];
@@ -25,15 +33,11 @@ function flush(): void {
   });
 }
 
-function renderInPanel(
+function renderToastRegion(
   queue: ToastQueue,
   props?: Omit<ToastRegionProps, "queue">,
-): ReturnType<typeof render> {
-  const result = render(
-    <PanelRoot>
-      <ToastRegion queue={queue} {...props} />
-    </PanelRoot>,
-  );
+): RenderResult {
+  const result = renderInPanel(<ToastRegion queue={queue} {...props} />);
   // The region resolves its portal container one tick after mount.
   flush();
   return result;
@@ -53,6 +57,23 @@ function advance(ms: number): void {
   act(() => {
     vi.advanceTimersByTime(ms);
   });
+}
+
+// The exit timer outlives the fast transition by ten milliseconds.
+const EXIT_MS = TRANSITION_FAST_MS + 10;
+
+// The live region is the text container; hover, focus, and exit state live
+// on the card that wraps it.
+function toastCards(role: "alert" | "status"): HTMLElement[] {
+  return screen.getAllByRole(role).map((region) => {
+    const card = region.closest(".snui-toast");
+    if (card === null) throw new Error("expected a toast card");
+    return card as HTMLElement;
+  });
+}
+
+function toastCard(role: "alert" | "status"): HTMLElement {
+  return at(toastCards(role), 0);
 }
 
 beforeEach(() => {
@@ -138,7 +159,7 @@ describe("createToastQueue", () => {
 describe("ToastRegion", () => {
   it("renders enqueued toasts inside the panel root portal", () => {
     const queue = createToastQueue();
-    const { container } = renderInPanel(queue);
+    const { container } = renderToastRegion(queue);
     enqueue(queue, { title: "Waypoints synced", description: "12 sent" });
 
     const region = screen.getByRole("region", { name: "Notifications" });
@@ -153,7 +174,7 @@ describe("ToastRegion", () => {
 
   it("renders newest first", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "First" });
     enqueue(queue, { title: "Second" });
 
@@ -165,133 +186,161 @@ describe("ToastRegion", () => {
 
   it("auto-dismisses after the default duration with an exit transition", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Synced" });
 
-    expect(screen.getByRole("status")).not.toHaveAttribute("data-exiting");
+    expect(toastCard("status")).not.toHaveAttribute("data-exiting");
     advance(4999);
-    expect(screen.getByRole("status")).not.toHaveAttribute("data-exiting");
+    expect(toastCard("status")).not.toHaveAttribute("data-exiting");
     advance(1);
-    expect(screen.getByRole("status")).toHaveAttribute("data-exiting", "true");
-    advance(150);
+    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
+    advance(EXIT_MS);
     expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("honors a custom duration", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Synced", duration: 250 });
 
     advance(249);
-    expect(screen.getByRole("status")).not.toHaveAttribute("data-exiting");
+    expect(toastCard("status")).not.toHaveAttribute("data-exiting");
     advance(1);
-    expect(screen.getByRole("status")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
   });
 
   it("keeps a duration of zero sticky until dismissed", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Anchor alarm", tone: "danger", duration: 0 });
 
-    const card = screen.getByRole("alert");
+    const card = toastCard("alert");
     fireEvent.pointerOver(card);
     advance(60000);
     fireEvent.pointerOut(card);
     advance(60000);
-    expect(screen.getByRole("alert")).toBeInTheDocument();
+    expect(toastCard("alert")).toBeInTheDocument();
 
     fireEvent.click(within(card).getByRole("button", { name: "Dismiss" }));
-    advance(150);
+    advance(EXIT_MS);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("pauses auto-dismiss while hovered and resumes with the remaining time", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Synced", duration: 1000 });
-    const card = screen.getByRole("status");
+    const card = toastCard("status");
 
     advance(400);
     fireEvent.pointerOver(card);
     advance(10000);
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(toastCard("status")).toBeInTheDocument();
 
     fireEvent.pointerOut(card);
     advance(599);
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(toastCard("status")).toBeInTheDocument();
     advance(1);
-    expect(screen.getByRole("status")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
   });
 
   it("pauses auto-dismiss while focused and resumes after blur", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Synced", duration: 1000 });
-    const card = screen.getByRole("status");
+    const card = toastCard("status");
 
     advance(300);
     fireEvent.focusIn(card);
     advance(10000);
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(toastCard("status")).toBeInTheDocument();
 
     fireEvent.focusOut(card);
     advance(699);
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(toastCard("status")).toBeInTheDocument();
     advance(1);
-    expect(screen.getByRole("status")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
   });
 
   it("stays paused until both hover and focus release", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Synced", duration: 1000 });
-    const card = screen.getByRole("status");
+    const card = toastCard("status");
 
     fireEvent.pointerOver(card);
     fireEvent.focusIn(card);
     fireEvent.pointerOut(card);
     advance(10000);
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(toastCard("status")).toBeInTheDocument();
 
     fireEvent.focusOut(card);
     advance(999);
-    expect(screen.getByRole("status")).toBeInTheDocument();
+    expect(toastCard("status")).toBeInTheDocument();
     advance(1);
-    expect(screen.getByRole("status")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
   });
 
   it("dismisses a single toast from its button and keeps the rest", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "First" });
     enqueue(queue, { title: "Second" });
 
-    const newest = at(screen.getAllByRole("status"), 0);
+    const newest = at(toastCards("status"), 0);
     fireEvent.click(within(newest).getByRole("button", { name: "Dismiss" }));
     expect(newest).toHaveAttribute("data-exiting", "true");
     expect(screen.getByText("First")).toBeInTheDocument();
 
-    advance(150);
+    advance(EXIT_MS);
     expect(screen.queryByText("Second")).toBeNull();
     expect(screen.getByText("First")).toBeInTheDocument();
   });
 
   it("ignores a repeated dismiss while exiting", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Synced" });
 
     const button = screen.getByRole("button", { name: "Dismiss" });
     fireEvent.click(button);
     fireEvent.click(button);
-    expect(screen.getByRole("status")).toHaveAttribute("data-exiting", "true");
-    advance(150);
+    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
+    advance(EXIT_MS);
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("drops the oldest toast when the queue is full", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    for (const title of ["One", "Two", "Three", "Four", "Five"]) {
+      enqueue(queue, { title, duration: 0 });
+    }
+    enqueue(queue, { title: "Six", duration: 0 });
+
+    expect(screen.getAllByRole("status")).toHaveLength(5);
+    expect(screen.queryByText("One")).toBeNull();
+    expect(screen.getByText("Six")).toBeInTheDocument();
+  });
+
+  it("keeps the dismiss button outside the live region", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    enqueue(queue, { title: "Scoped", duration: 0 });
+
+    const region = screen.getByRole("status");
+    expect(region).toHaveTextContent("Scoped");
+    expect(within(region).queryByRole("button")).toBeNull();
+    expect(
+      within(at(toastCards("status"), 0)).getByRole("button", {
+        name: "Dismiss",
+      }),
+    ).toBeInTheDocument();
   });
 
   it("maps tones to live region roles without duplicating aria-live", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Failed", tone: "danger" });
     enqueue(queue, { title: "Low oil", tone: "warning" });
     enqueue(queue, { title: "Saved", tone: "success" });
@@ -309,11 +358,11 @@ describe("ToastRegion", () => {
 
   it("honors an explicit live override", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Quiet", tone: "danger", live: "off" });
     enqueue(queue, { title: "Gentle failure", tone: "danger", live: "polite" });
 
-    const quiet = screen.getByText("Quiet").closest(".snui-toast");
+    const quiet = screen.getByText("Quiet").closest(".snui-toast__text");
     expect(quiet).not.toBeNull();
     expect(quiet).not.toHaveAttribute("role");
     expect(quiet).toHaveAttribute("aria-live", "off");
@@ -324,12 +373,12 @@ describe("ToastRegion", () => {
 
   it("localizes the dismiss label and falls back when blank", () => {
     const queue = createToastQueue();
-    renderInPanel(queue, { dismissLabel: "Cerrar" });
+    renderToastRegion(queue, { dismissLabel: "Cerrar" });
     enqueue(queue, { title: "Guardado" });
     expect(screen.getByRole("button", { name: "Cerrar" })).toBeInTheDocument();
 
     const blank = createToastQueue();
-    renderInPanel(blank, { dismissLabel: "  ", label: "Avisos" });
+    renderToastRegion(blank, { dismissLabel: "  ", label: "Avisos" });
     enqueue(blank, { title: "Hecho" });
     expect(screen.getByRole("button", { name: "Dismiss" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Avisos" })).toBeInTheDocument();
@@ -337,7 +386,7 @@ describe("ToastRegion", () => {
 
   it("localizes the tone label and falls back when blank", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Guardado", tone: "success", toneLabel: "Listo" });
     enqueue(queue, { title: "Stored", tone: "success", toneLabel: " " });
 
@@ -347,7 +396,7 @@ describe("ToastRegion", () => {
 
   it("clears every toast at once", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "First" });
     enqueue(queue, { title: "Second" });
     act(() => {
@@ -359,11 +408,11 @@ describe("ToastRegion", () => {
   it("keeps multiple regions and queues isolated", () => {
     const first = createToastQueue();
     const second = createToastQueue();
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <ToastRegion queue={first} label="Engine" />
         <ToastRegion queue={second} label="Network" />
-      </PanelRoot>,
+      </>,
     );
     flush();
 
@@ -382,7 +431,7 @@ describe("ToastRegion", () => {
   });
 
   it("serves the shared toast queue", () => {
-    renderInPanel(toast);
+    renderToastRegion(toast);
     enqueue(toast, { title: "Shared notice" });
     expect(screen.getByText("Shared notice")).toBeInTheDocument();
   });
@@ -403,7 +452,7 @@ describe("ToastRegion", () => {
       matches: query === "(prefers-reduced-motion: reduce)",
     }));
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     enqueue(queue, { title: "Synced" });
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
@@ -413,14 +462,14 @@ describe("ToastRegion", () => {
 
   it("rejects a whitespace-only region label", () => {
     const queue = createToastQueue();
-    expect(() => renderInPanel(queue, { label: "  " })).toThrow(
+    expect(() => renderToastRegion(queue, { label: "  " })).toThrow(
       "ToastRegion requires a non-empty label.",
     );
   });
 
   it("rejects a whitespace-only toast title", () => {
     const queue = createToastQueue();
-    renderInPanel(queue);
+    renderToastRegion(queue);
     expect(() => {
       act(() => {
         queue.enqueue({ title: "  " });

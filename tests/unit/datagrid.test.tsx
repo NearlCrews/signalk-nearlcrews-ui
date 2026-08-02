@@ -19,6 +19,7 @@ import {
   type Selection,
   type SortDescriptor,
 } from "../../src/index.js";
+import { renderInPanel } from "../helpers.js";
 
 interface Boat {
   readonly id: string;
@@ -56,17 +57,15 @@ function boatColumns(): ReactElement {
 }
 
 function renderGrid(props: Partial<DataGridProps<Boat>> = {}): RenderResult {
-  return render(
-    <PanelRoot>
-      <DataGrid
-        aria-label="Boats"
-        items={BOATS}
-        renderRow={renderBoatRow}
-        {...props}
-      >
-        {boatColumns()}
-      </DataGrid>
-    </PanelRoot>,
+  return renderInPanel(
+    <DataGrid
+      aria-label="Boats"
+      items={BOATS}
+      renderRow={renderBoatRow}
+      {...props}
+    >
+      {boatColumns()}
+    </DataGrid>,
   );
 }
 
@@ -110,12 +109,10 @@ describe("DataGrid", () => {
   describe("accessible name", () => {
     it("throws when neither aria-label nor aria-labelledby resolves", () => {
       expect(() =>
-        render(
-          <PanelRoot>
-            <DataGrid items={BOATS} renderRow={renderBoatRow}>
-              {boatColumns()}
-            </DataGrid>
-          </PanelRoot>,
+        renderInPanel(
+          <DataGrid items={BOATS} renderRow={renderBoatRow}>
+            {boatColumns()}
+          </DataGrid>,
         ),
       ).toThrow(
         "DataGrid requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
@@ -127,8 +124,8 @@ describe("DataGrid", () => {
     });
 
     it("accepts aria-labelledby as the accessible name", () => {
-      render(
-        <PanelRoot>
+      renderInPanel(
+        <>
           <h2 id="grid-heading">Fleet</h2>
           <DataGrid
             aria-labelledby="grid-heading"
@@ -137,7 +134,7 @@ describe("DataGrid", () => {
           >
             {boatColumns()}
           </DataGrid>
-        </PanelRoot>,
+        </>,
       );
 
       expect(screen.getByRole("grid", { name: "Fleet" })).toBeInTheDocument();
@@ -161,17 +158,15 @@ describe("DataGrid", () => {
     });
 
     it("supports a dynamic header through columns and function children", () => {
-      render(
-        <PanelRoot>
-          <DataGrid
-            aria-label="Boats"
-            columns={[{ key: "name" }, { key: "depth" }]}
-            items={BOATS}
-            renderRow={renderBoatRow}
-          >
-            {(column) => <Column id={column.key}>{column.key}</Column>}
-          </DataGrid>
-        </PanelRoot>,
+      renderInPanel(
+        <DataGrid
+          aria-label="Boats"
+          columns={[{ key: "name" }, { key: "depth" }]}
+          items={BOATS}
+          renderRow={renderBoatRow}
+        >
+          {(column) => <Column id={column.key}>{column.key}</Column>}
+        </DataGrid>,
       );
 
       expect(
@@ -205,17 +200,15 @@ describe("DataGrid", () => {
       const warn = vi
         .spyOn(console, "warn")
         .mockImplementation(() => undefined);
-      render(
-        <PanelRoot>
-          <DataGrid aria-label="Boats" items={BOATS} renderRow={renderBoatRow}>
-            <Column id="name" width={120}>
-              Name
-            </Column>
-            <Column id="depth" width="20%">
-              Depth
-            </Column>
-          </DataGrid>
-        </PanelRoot>,
+      renderInPanel(
+        <DataGrid aria-label="Boats" items={BOATS} renderRow={renderBoatRow}>
+          <Column id="name" width={120}>
+            Name
+          </Column>
+          <Column id="depth" width="20%">
+            Depth
+          </Column>
+        </DataGrid>,
       );
 
       expect(
@@ -525,6 +518,39 @@ describe("DataGrid", () => {
       });
     });
 
+    it("stamps the roles that lost table layout would otherwise drop", () => {
+      mockScrollRegion();
+      const { container } = renderGrid({
+        items: fleet,
+        virtualizeThreshold: 10,
+      });
+
+      expect(container.querySelector("thead")).toHaveAttribute(
+        "role",
+        "rowgroup",
+      );
+      expect(container.querySelector("tbody")).toHaveAttribute(
+        "role",
+        "rowgroup",
+      );
+      for (const row of container.querySelectorAll("tr")) {
+        expect(row).toHaveAttribute("role", "row");
+      }
+      const cells = [...container.querySelectorAll("td")];
+      expect(cells.length).toBeGreaterThan(0);
+      const rowheaders = cells.filter(
+        (cell) => cell.getAttribute("role") === "rowheader",
+      );
+      const gridcells = cells.filter(
+        (cell) => cell.getAttribute("role") === "gridcell",
+      );
+      // RAC stamps rowheader on the row-header column; every other cell is a
+      // gridcell. No cell may carry a third value or none.
+      expect(rowheaders.length).toBeGreaterThan(0);
+      expect(gridcells.length).toBeGreaterThan(0);
+      expect(rowheaders.length + gridcells.length).toBe(cells.length);
+    });
+
     it("sizes the body to the full virtual height per density", () => {
       mockScrollRegion();
       const { container } = renderGrid({
@@ -542,21 +568,19 @@ describe("DataGrid", () => {
       const anonymous = Array.from({ length: 20 }, (_, index) => ({
         name: `Anon ${String(index)}`,
       }));
-      const { container } = render(
-        <PanelRoot>
-          <DataGrid
-            aria-label="Anonymous"
-            items={anonymous}
-            renderRow={(item) => (
-              <Row>
-                <Cell>{item.name}</Cell>
-              </Row>
-            )}
-            virtualizeThreshold={10}
-          >
-            <Column id="name">Name</Column>
-          </DataGrid>
-        </PanelRoot>,
+      const { container } = renderInPanel(
+        <DataGrid
+          aria-label="Anonymous"
+          items={anonymous}
+          renderRow={(item) => (
+            <Row>
+              <Cell>{item.name}</Cell>
+            </Row>
+          )}
+          virtualizeThreshold={10}
+        >
+          <Column id="name">Name</Column>
+        </DataGrid>,
       );
 
       expect(bodyRows(container).length).toBeGreaterThan(0);
@@ -579,15 +603,13 @@ describe("DataGrid", () => {
 
   describe("grid semantics", () => {
     it("honors an explicit isRowHeader instead of defaulting the first column", () => {
-      const { container } = render(
-        <PanelRoot>
-          <DataGrid aria-label="Boats" items={BOATS} renderRow={renderBoatRow}>
-            <Column id="name">Name</Column>
-            <Column id="depth" isRowHeader>
-              Depth
-            </Column>
-          </DataGrid>
-        </PanelRoot>,
+      const { container } = renderInPanel(
+        <DataGrid aria-label="Boats" items={BOATS} renderRow={renderBoatRow}>
+          <Column id="name">Name</Column>
+          <Column id="depth" isRowHeader>
+            Depth
+          </Column>
+        </DataGrid>,
       );
 
       const firstRow = rowAt(container, 0);

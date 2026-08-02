@@ -73,7 +73,11 @@ export interface DataGridProps<TRow, TColumn = unknown>
   /** Title of the default EmptyState. */
   readonly emptyTitle?: string;
   readonly id?: string;
-  /** Row data. Items should expose a stable `id` or `key` for selection. */
+  /**
+   * Row data. Items should expose a stable `id` or `key` for selection.
+   * Without one, virtualized rows key by index, so sorting or filtering a
+   * large grid remounts the visible rows instead of moving them.
+   */
   readonly items: readonly TRow[];
   readonly onSelectionChange?: ((keys: Selection) => void) | undefined;
   /**
@@ -295,10 +299,20 @@ export function DataGrid<TRow, TColumn = unknown>({
           // RAC strips consumer aria-rowindex from Row props (it owns row
           // indices, but only stamps them under its own Virtualizer), and
           // its collection commits rows in an internal pass, so the ref
-          // callback stamps the index exactly when each row mounts.
+          // callback stamps the index exactly when each row mounts. The row
+          // role rides along: table layout is off in virtualized mode, so
+          // the implicit tr role is gone in real browsers.
           ref: (node: HTMLTableRowElement | null) => {
             if (node !== null) {
+              node.setAttribute("role", "row");
               node.setAttribute("aria-rowindex", String(rowIndex));
+              // Gridcell roles ride the same mount: RAC stamps only
+              // rowheader cells, so the rest need theirs explicitly.
+              for (const cell of node.cells) {
+                if (!cell.hasAttribute("role")) {
+                  cell.setAttribute("role", "gridcell");
+                }
+              }
             }
             return attachRef(consumerRef, node);
           },
@@ -342,7 +356,11 @@ export function DataGrid<TRow, TColumn = unknown>({
 
   // RAC only stamps aria-rowcount under its own Virtualizer; mirror it here
   // so windowed rows keep an honest screen-reader row count. React never
-  // renders this attribute, so there is no reconciliation conflict.
+  // renders this attribute, so there is no reconciliation conflict. The
+  // rowgroup and header-row roles ride the same cadence: virtualized mode
+  // restyles the table as stacked blocks, which drops those implicit roles
+  // in real browsers. Body rows and cells stamp their own roles at mount
+  // through the row ref callback above.
   useLayoutEffect(() => {
     const grid = gridRef.current;
     if (grid === null) {
@@ -353,6 +371,11 @@ export function DataGrid<TRow, TColumn = unknown>({
         "aria-rowcount",
         String(items.length + HEADER_ROW_COUNT),
       );
+      grid.querySelector("thead")?.setAttribute("role", "rowgroup");
+      grid.querySelector("tbody")?.setAttribute("role", "rowgroup");
+      for (const headerRow of grid.querySelectorAll("thead tr")) {
+        headerRow.setAttribute("role", "row");
+      }
     } else {
       grid.removeAttribute("aria-rowcount");
     }

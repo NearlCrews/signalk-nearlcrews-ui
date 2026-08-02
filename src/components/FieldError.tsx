@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import {
   type AnnouncementMode,
-  announcementRole,
+  liveRegionProps,
 } from "../utils/announcement.js";
 
 interface FieldErrorProps {
@@ -28,12 +28,15 @@ export function FieldError({
   id,
   live,
 }: FieldErrorProps): React.JSX.Element {
+  // A roled live region does not also carry aria-live; liveRegionProps emits
+  // exactly one of the pair.
+  const region = liveRegionProps(live);
   return (
     <Element
       id={id}
       className={className}
-      role={announcementRole(live)}
-      aria-live={live}
+      role={region.role}
+      aria-live={region["aria-live"]}
     >
       {hasError ? error : null}
     </Element>

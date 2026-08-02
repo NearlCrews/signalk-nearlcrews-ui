@@ -6,11 +6,11 @@ import {
   useLayoutEffect,
   useRef,
 } from "react";
-import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { PANEL_STYLES } from "../styles/index.js";
 import { installPanelStyles } from "../styles/install.js";
 import { ThemeProvider, usePanelTheme } from "../theme/context.js";
 import { classNames } from "../utils/class-names.js";
+import { UNSAFE_PortalProvider } from "../utils/portal.js";
 import { composeRef } from "../utils/ref.js";
 import { PACKAGE_VERSION, ROOT_CLASS } from "../version.js";
 

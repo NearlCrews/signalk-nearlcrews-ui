@@ -8,16 +8,20 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { useUNSAFE_PortalContext } from "react-aria/PortalProvider";
 import { createPortal } from "react-dom";
 
+import { TRANSITION_FAST_MS } from "../styles/tokens.js";
 import {
   type AnnouncementMode,
   liveRegionProps,
 } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
+import { DEFAULT_DISMISS_LABEL, resolveLabel } from "../utils/labels.js";
 import { prefersReducedMotion } from "../utils/motion.js";
-import { usePortalContainerReady } from "../utils/portal.js";
+import {
+  usePortalContainerReady,
+  useUNSAFE_PortalContext,
+} from "../utils/portal.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import {
   resolveToneLabel,
@@ -25,12 +29,25 @@ import {
   TONE_GLYPHS,
 } from "../utils/tone.js";
 import { Button } from "./Button.js";
+import { ToneAnnouncement } from "./ToneAnnouncement.js";
 
 /** Default auto-dismiss delay in milliseconds. */
 const DEFAULT_TOAST_DURATION_MS = 5000;
 
-/** Matches the toast exit transition in the overlay styles. */
-const TOAST_EXIT_DURATION_MS = 150;
+/**
+ * Maximum queued toasts. Sticky toasts (duration zero) never time out, so
+ * without a cap a chatty caller grows the queue, the mounted DOM, and the
+ * subscriber notification cost without bound. Beyond the cap the oldest
+ * toast drops to make room.
+ */
+const MAX_QUEUED_TOASTS = 5;
+
+/**
+ * The exit timer must outlive the exit transition, which runs on the fast
+ * transition token; a small buffer keeps the card mounted until it is fully
+ * transparent.
+ */
+const TOAST_EXIT_DURATION_MS = TRANSITION_FAST_MS + 10;
 
 /** Browser timer handle returned by window.setTimeout. */
 type TimerId = number;
@@ -60,7 +77,10 @@ export interface QueuedToast<T extends ToastContent = ToastContent> {
 }
 
 export interface ToastQueue<T extends ToastContent = ToastContent> {
-  /** Adds a toast and returns its key. */
+  /**
+   * Adds a toast and returns its key. The queue holds at most five toasts;
+   * when it is full the oldest toast drops to make room.
+   */
   readonly enqueue: (content: T) => string;
   /** Removes one toast. Unknown keys are ignored. */
   readonly dismiss: (key: string) => void;
@@ -91,7 +111,10 @@ export function createToastQueue<
     enqueue: (content) => {
       nextToastKey += 1;
       const key = `snui-toast-${String(nextToastKey)}`;
-      snapshot = [...snapshot, { key, content }];
+      snapshot = [
+        ...snapshot.slice(-(MAX_QUEUED_TOASTS - 1)),
+        { key, content },
+      ];
       emit();
       return key;
     },
@@ -219,7 +242,10 @@ function ToastCard<T extends ToastContent>({
 
   const region = liveRegionProps(live);
   const effectiveToneLabel = resolveToneLabel(tone, content.toneLabel);
-  const effectiveDismissLabel = (dismissLabel?.trim() ?? "") || "Dismiss";
+  const effectiveDismissLabel = resolveLabel(
+    dismissLabel,
+    DEFAULT_DISMISS_LABEL,
+  );
 
   return (
     // Pointer and focus handlers only pause the auto-dismiss countdown; the
@@ -227,8 +253,6 @@ function ToastCard<T extends ToastContent>({
     // biome-ignore lint/a11y/noStaticElementInteractions: hover and focus pause auto-dismiss, they do not make the card interactive
     <div
       className={classNames("snui-toast", `snui-toast--${tone}`)}
-      role={region.role}
-      aria-live={region["aria-live"]}
       data-exiting={exiting || undefined}
       onPointerEnter={() => {
         setPaused("hover", true);
@@ -247,10 +271,14 @@ function ToastCard<T extends ToastContent>({
         <span className="snui-toast__tone-dot" />
         <span className="snui-toast__tone-glyph">{TONE_GLYPHS[tone]}</span>
       </span>
-      <div className="snui-toast__text">
+      <div
+        className="snui-toast__text"
+        role={region.role}
+        aria-live={region["aria-live"]}
+      >
         {contentReady ? (
           <>
-            <span className="snui-visually-hidden">{effectiveToneLabel}. </span>
+            <ToneAnnouncement label={effectiveToneLabel} />
             <div className="snui-toast__title">{content.title}</div>
             {hasReactContent(content.description) ? (
               <div className="snui-toast__description">
@@ -304,6 +332,20 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
   }
 
   const toasts = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
+  // Newest first, without copying the snapshot on every render.
+  const cards: React.JSX.Element[] = [];
+  for (let index = toasts.length - 1; index >= 0; index -= 1) {
+    const item = toasts[index];
+    if (item === undefined) continue;
+    cards.push(
+      <ToastCard
+        key={item.key}
+        item={item}
+        queue={queue}
+        dismissLabel={dismissLabel}
+      />,
+    );
+  }
   const { getContainer } = useUNSAFE_PortalContext();
 
   // The portal container reads the panel root lazily, so it only resolves
@@ -322,14 +364,7 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
       className={classNames("snui-toast-region", className)}
       aria-label={effectiveLabel}
     >
-      {[...toasts].reverse().map((item) => (
-        <ToastCard
-          key={item.key}
-          item={item}
-          queue={queue}
-          dismissLabel={dismissLabel}
-        />
-      ))}
+      {cards}
     </section>,
     container,
   );

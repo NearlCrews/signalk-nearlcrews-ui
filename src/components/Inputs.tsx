@@ -10,7 +10,7 @@ import {
   useRef,
 } from "react";
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { joinIdReferences } from "../utils/aria.js";
+import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { resolveFieldError } from "../utils/field-error.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
@@ -258,7 +258,7 @@ export function Checkbox({
   const labelId = `${controlId}-label`;
   const hasDescription = hasReactContent(description);
   const hasError = hasReactContent(error);
-  const descriptionId = hasDescription ? `${controlId}-description` : undefined;
+  const descriptionId = resolveDescriptionId(controlId, hasDescription);
   const { errorId, referencedErrorId, rendersError } = resolveFieldError(
     controlId,
     hasError,

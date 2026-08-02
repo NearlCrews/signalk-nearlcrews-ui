@@ -19,6 +19,7 @@ import {
   type StatusTone,
   TONE_GLYPHS,
 } from "../utils/tone.js";
+import { ToneAnnouncement } from "./ToneAnnouncement.js";
 
 export type SpaceScale = 1 | 2 | 3 | 4 | 5 | 6;
 export type LayoutAlignment = "start" | "center" | "end" | "stretch";
@@ -276,9 +277,7 @@ export function Metric({
             {TONE_GLYPHS[tone]}
           </span>
         ) : null}
-        {effectiveToneLabel === undefined ? null : (
-          <span className="snui-visually-hidden">{effectiveToneLabel}. </span>
-        )}
+        <ToneAnnouncement label={effectiveToneLabel} />
         {value}
         {hasReactContent(unit) ? (
           <>
@@ -321,9 +320,7 @@ export function Badge({
           {TONE_GLYPHS[tone]}
         </span>
       ) : null}
-      {effectiveToneLabel === undefined ? null : (
-        <span className="snui-visually-hidden">{effectiveToneLabel}. </span>
-      )}
+      <ToneAnnouncement label={effectiveToneLabel} />
       {children}
     </span>
   );

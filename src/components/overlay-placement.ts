@@ -17,3 +17,34 @@ export const OVERLAY_PLACEMENTS: Readonly<
   start: "start",
   top: "top start",
 };
+
+/** Open-state props shared by every overlay component. */
+export interface OverlayOpenState {
+  /** Controls the overlay when set. Wins over `defaultOpen`. */
+  readonly open?: boolean | undefined;
+  /** Sets the initial state only. Pass `open` to control the overlay. */
+  readonly defaultOpen?: boolean | undefined;
+  /** Reports open-state changes. */
+  readonly onOpenChange?: ((open: boolean) => void) | undefined;
+}
+
+/**
+ * Maps the library open-state props onto the react-aria trigger props.
+ * Controlled `open` becomes `isOpen`; an undefined prop is omitted entirely
+ * so the trigger stays uncontrolled under exactOptionalPropertyTypes.
+ */
+export function overlayOpenProps({
+  open,
+  defaultOpen,
+  onOpenChange,
+}: OverlayOpenState): {
+  readonly isOpen?: boolean;
+  readonly defaultOpen?: boolean;
+  readonly onOpenChange?: (isOpen: boolean) => void;
+} {
+  return {
+    ...(open === undefined ? {} : { isOpen: open }),
+    ...(defaultOpen === undefined ? {} : { defaultOpen }),
+    ...(onOpenChange === undefined ? {} : { onOpenChange }),
+  };
+}

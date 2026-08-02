@@ -16,17 +16,17 @@ import {
   PanelRoot,
   type PanelRootProps,
 } from "../../src/index.js";
+import { renderInPanel } from "../helpers.js";
 
 function renderDialog(
   props: Omit<DialogProps, "children" | "title"> = {},
   panelProps?: Omit<PanelRootProps, "children">,
 ): RenderResult {
-  return render(
-    <PanelRoot {...panelProps}>
-      <Dialog title="Connection settings" {...props}>
-        <p>Dialog body</p>
-      </Dialog>
-    </PanelRoot>,
+  return renderInPanel(
+    <Dialog title="Connection settings" {...props}>
+      <p>Dialog body</p>
+    </Dialog>,
+    panelProps,
   );
 }
 
@@ -95,13 +95,9 @@ describe("Dialog", () => {
   });
 
   it("throws when the title is empty", () => {
-    expect(() =>
-      render(
-        <PanelRoot>
-          <Dialog title="  ">Body</Dialog>
-        </PanelRoot>,
-      ),
-    ).toThrow("Dialog requires a non-empty title.");
+    expect(() => renderInPanel(<Dialog title="  ">Body</Dialog>)).toThrow(
+      "Dialog requires a non-empty title.",
+    );
   });
 
   it("closes on Escape by default", async () => {
@@ -285,16 +281,14 @@ describe("Dialog", () => {
 
 describe("AlertDialog", () => {
   it("renders with the alertdialog role", () => {
-    render(
-      <PanelRoot>
-        <AlertDialog
-          title="Discard route?"
-          defaultOpen
-          actions={<Button variant="danger">Discard</Button>}
-        >
-          <p>This cannot be undone.</p>
-        </AlertDialog>
-      </PanelRoot>,
+    renderInPanel(
+      <AlertDialog
+        title="Discard route?"
+        defaultOpen
+        actions={<Button variant="danger">Discard</Button>}
+      >
+        <p>This cannot be undone.</p>
+      </AlertDialog>,
     );
 
     expect(
@@ -304,12 +298,10 @@ describe("AlertDialog", () => {
 
   it("throws when actions are empty", () => {
     expect(() =>
-      render(
-        <PanelRoot>
-          <AlertDialog title="Discard route?">
-            <p>This cannot be undone.</p>
-          </AlertDialog>
-        </PanelRoot>,
+      renderInPanel(
+        <AlertDialog title="Discard route?">
+          <p>This cannot be undone.</p>
+        </AlertDialog>,
       ),
     ).toThrow(
       "AlertDialog requires non-empty actions: an alert dialog must give the user an explicit way out.",
@@ -319,17 +311,15 @@ describe("AlertDialog", () => {
   it("is not dismissable by default", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    const { container } = render(
-      <PanelRoot>
-        <AlertDialog
-          title="Discard route?"
-          defaultOpen
-          onOpenChange={onOpenChange}
-          actions={<Button variant="danger">Discard</Button>}
-        >
-          <p>This cannot be undone.</p>
-        </AlertDialog>
-      </PanelRoot>,
+    const { container } = renderInPanel(
+      <AlertDialog
+        title="Discard route?"
+        defaultOpen
+        onOpenChange={onOpenChange}
+        actions={<Button variant="danger">Discard</Button>}
+      >
+        <p>This cannot be undone.</p>
+      </AlertDialog>,
     );
 
     await user.keyboard("{Escape}");
@@ -341,17 +331,15 @@ describe("AlertDialog", () => {
 
   it("forwards the ref to the alertdialog element", () => {
     const ref = createRef<HTMLElement>();
-    render(
-      <PanelRoot>
-        <AlertDialog
-          title="Discard route?"
-          defaultOpen
-          ref={ref}
-          actions={<Button variant="danger">Discard</Button>}
-        >
-          <p>This cannot be undone.</p>
-        </AlertDialog>
-      </PanelRoot>,
+    renderInPanel(
+      <AlertDialog
+        title="Discard route?"
+        defaultOpen
+        ref={ref}
+        actions={<Button variant="danger">Discard</Button>}
+      >
+        <p>This cannot be undone.</p>
+      </AlertDialog>,
     );
 
     expect(ref.current).toBe(screen.getByRole("alertdialog"));

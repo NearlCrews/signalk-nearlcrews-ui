@@ -14,20 +14,21 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or marketplace package. The initial API may change during the `0.x` series, so consumers should pin an exact version.
 
-## What's new in 0.5.0
+## What's new in 0.6.0
 
-This release significantly expands the component library and modernizes its React 19.2 foundations. The `Disclosure` component has been removed (merged into `CollapsibleSection`), and several APIs have changed. See the adoption note in the docs directory before upgrading.
+This release fixes accessibility and theme-synchronization defects found after 0.5.0 and makes a small backward-compatible API addition. Upgrading requires no code changes.
 
-- **Composite widgets**: Added `Accordion`, `DataGrid`, `Dialog`, `EmptyState`, `Menu`, `Popover`, `RadioGroup`, `Switch`, and `ToastRegion`, built on React Aria Components for robust accessibility and keyboard behavior.
-- **Form and field upgrades**: `SegmentedControl` supports form participation, uncontrolled mode, and vertical layout. `LabeledField` injects `name` and `disabled`, and supports optional markers. `RangeInput` and `Checkbox` natively synchronize their fill and indeterminate states after a form reset.
-- **Modernized internals**: Components use React 19.2 `<Activity>` to pause effects in collapsed content, and `useEffectEvent` for stable event handlers. Zero `forwardRef` or `useImperativeHandle` shims remain; refs compose cleanly.
-- **Theme and token enhancements**: `ThemeToggle` supports restricting choices, and the night theme provides red-preserving elevations. Token scales for z-index, motion, and typography are now public API.
-- **Forced colors and contrast**: State distinctions for buttons, banners, badges, and invalid controls survive in forced-colors mode, and `prefers-contrast: more` strengthens borders and focus outlines.
+- **Virtualized grid accessibility**: Windowed `DataGrid` rows now stamp explicit row, row group, and gridcell roles, so the grid keeps its accessibility tree in real browsers when table layout is restyled.
+- **Theme synchronization**: A panel ignores unrecognized values written to the shared theme key by another library version instead of resetting to Auto. Only a genuine clear returns it to Auto.
+- **Live-region contract**: `FieldError` and `Toast` emit exactly one of `role` or `aria-live`, the toast live region scopes to the toast text so the dismiss button stays out of the announcement, and a `FieldGroup` fieldset now carries `aria-errormessage` and `aria-invalid` while a group error is present.
+- **Bounded toasts**: A toast queue holds at most five toasts and drops the oldest beyond that, so sticky toasts cannot grow the DOM without bound.
+- **Compatible API additions**: `SemanticTone` is exported from the package root, `SegmentedControl` `onChange` is now optional, `Menu`, `Dialog`, and `Popover` open-state props share the exported `OverlayOpenState` interface, and a `--snui-color-scrim` token resolves the dialog scrim per theme.
 
 ## Compatibility
 
 | Package | React        | JavaScript | Remote output                            | Browser verification                                      | Signal K boundary                                                              |
 | ------- | ------------ | ---------- | ---------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `0.6.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.5.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.4.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.3.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
@@ -55,7 +56,7 @@ The repository builds real production Webpack remotes in classic global and ESM 
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.5.0
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.6.0
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball:
@@ -63,7 +64,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.5.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.6.0.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while continuing to share React with the Signal K Admin host.
@@ -127,7 +128,7 @@ The host must supply the nonce through its own trusted bootstrap. Do not read it
 - `Accordion` coordinates `CollapsibleSection` children so at most one section stays open at a time.
 - `Banner` and `StatusIndicator` provide text-backed feedback that does not rely on color alone. Banners span the neutral tone plus the semantic tones, and accept actions, dismissal, a post-dismissal focus destination, localized severity text, and consumer-selected roles such as `note`. `StatusIndicator` varies its dot shape per tone and accepts `live` for opt-in announcements, and both accept `toneLabel` to localize the announced severity.
 - `Progress` reports determinate or indeterminate progress with a required label, an optional tone, and `valueText` for assistive technology.
-- `ToastRegion` renders queued toasts into the panel's portal container. `createToastQueue` builds a queue, the shared `toast` queue covers the common single-region setup, and each toast carries a tone, an auto-dismiss delay, and an announcement mode.
+- `ToastRegion` renders queued toasts into the panel's portal container. `createToastQueue` builds a queue, the shared `toast` queue covers the common single-region setup, and each toast carries a tone, an auto-dismiss delay, and an announcement mode. A queue holds at most five toasts and drops the oldest beyond that, so sticky toasts cannot grow the DOM without bound.
 - `Stack`, `Cluster`, `Card`, `MetricGrid`, `Metric`, and `Badge` standardize rhythm and presentational status shells while leaving status interpretation local. `Stack`, `Cluster`, `Card`, and `MetricGrid` accept `as` to render a semantic element, and `Card` adds compact density and header and footer slots. Each metric is a named semantic group. `Metric` and `Badge` render a tone glyph for non-neutral tones and accept `toneLabel`. `Metric` also accepts a `unit` suffix beside the value and `live` for opt-in announcements.
 - `DataGrid` renders an accessible grid with sortable headers, single or multiple selection, compact density, zebra striping, an `EmptyState`-backed empty view, and windowed rows above a virtualization threshold. Sorting is controlled: pair `onSortChange` with `sortDescriptor` and sort `items` in the consumer. `Column`, `Row`, and `Cell` are re-exported from react-aria-components for its collection API.
 - `EmptyState` presents an empty view with a decorative icon, a title, a description, and an action. The title is a styled div, not a heading, so consumers own the surrounding outline.
@@ -233,11 +234,11 @@ An inline token override applies in every selected theme. Use it only when that 
 
 The repository ships a fixture page that renders every exported component. The top of that page in each theme:
 
-![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.5.0/docs/screenshots/showcase-light.png)
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.0/docs/screenshots/showcase-light.png)
 
-![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.5.0/docs/screenshots/showcase-dark.png)
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.0/docs/screenshots/showcase-dark.png)
 
-![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.5.0/docs/screenshots/showcase-night.png)
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.0/docs/screenshots/showcase-night.png)
 
 The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
 

@@ -15,15 +15,16 @@ import { usePortalContainerReady } from "../utils/portal.js";
 import type { ButtonProps } from "./Button.js";
 import {
   OVERLAY_PLACEMENTS,
+  type OverlayOpenState,
   type OverlayPlacement,
+  overlayOpenProps,
 } from "./overlay-placement.js";
 
-export interface PopoverProps extends RefAttributes<HTMLDivElement> {
+export interface PopoverProps
+  extends RefAttributes<HTMLDivElement>,
+    OverlayOpenState {
   readonly children: ReactNode;
   readonly className?: string | undefined;
-  readonly defaultOpen?: boolean | undefined;
-  readonly onOpenChange?: ((open: boolean) => void) | undefined;
-  readonly open?: boolean | undefined;
   readonly placement?: OverlayPlacement | undefined;
   /** Rendered as the popover trigger; typically a library Button. */
   readonly trigger: ReactElement<ButtonProps>;
@@ -45,11 +46,7 @@ export function Popover({
   const portalReady = usePortalContainerReady();
 
   return (
-    <DialogTrigger
-      {...(open === undefined ? {} : { isOpen: open })}
-      {...(defaultOpen === undefined ? {} : { defaultOpen })}
-      {...(onOpenChange === undefined ? {} : { onOpenChange })}
-    >
+    <DialogTrigger {...overlayOpenProps({ open, defaultOpen, onOpenChange })}>
       {/*
        * Pressable's types only admit host elements, but its runtime contract
        * is a child that forwards injected props and ref, which the library

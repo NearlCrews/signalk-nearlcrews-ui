@@ -127,7 +127,10 @@ export {
   MenuSeparator,
   type MenuSeparatorProps,
 } from "./components/Menu.js";
-export type { OverlayPlacement } from "./components/overlay-placement.js";
+export type {
+  OverlayOpenState,
+  OverlayPlacement,
+} from "./components/overlay-placement.js";
 export {
   PanelRoot,
   type PanelRootProps,
@@ -201,3 +204,4 @@ export {
 } from "./theme/contract.js";
 export type { AnnouncementMode } from "./utils/announcement.js";
 export type { HeadingLevel } from "./utils/heading.js";
+export type { SemanticTone } from "./utils/tone.js";

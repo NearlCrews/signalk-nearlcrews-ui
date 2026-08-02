@@ -96,18 +96,22 @@ function renderTokenBlock(tokens: ThemeTokenSet): string {
 }
 
 /*
- * Elevation is per theme: a shadow tuned for light surfaces is nearly
- * invisible on dark ones, so Dark and Night carry stronger alphas.
+ * Elevation and the dialog scrim are per theme: a shadow or scrim tuned for
+ * light surfaces is nearly invisible on dark ones, so Dark and Night carry
+ * stronger alphas and each theme's scrim shares its shadow color.
  */
 const LIGHT_SHADOW_BLOCK = `  --snui-shadow-flat: none;
   --snui-shadow-raised: 0 0.125rem 0.5rem rgb(15 23 42 / 14%);
-  --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(15 23 42 / 22%);`;
+  --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(15 23 42 / 22%);
+  --snui-color-scrim: rgb(15 23 42 / 45%);`;
 const DARK_SHADOW_BLOCK = `  --snui-shadow-flat: none;
   --snui-shadow-raised: 0 0.125rem 0.5rem rgb(0 0 0 / 50%);
-  --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(0 0 0 / 65%);`;
+  --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(0 0 0 / 65%);
+  --snui-color-scrim: rgb(0 0 0 / 45%);`;
 const NIGHT_SHADOW_BLOCK = `  --snui-shadow-flat: none;
   --snui-shadow-raised: 0 0.125rem 0.5rem rgb(90 0 0 / 28%);
-  --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(90 0 0 / 42%);`;
+  --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(90 0 0 / 42%);
+  --snui-color-scrim: rgb(90 0 0 / 45%);`;
 
 const LIGHT_BLOCK = `${renderTokenBlock(LIGHT_TOKENS)}
 ${LIGHT_SHADOW_BLOCK}`;
@@ -118,6 +122,13 @@ ${NIGHT_SHADOW_BLOCK}`;
 
 /** Inline-size breakpoint below which panels switch to their narrow layout. */
 export const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
+
+/**
+ * Duration of --snui-transition-fast in milliseconds. Exit timers that must
+ * outlive the fast transition read this so the number cannot drift from the
+ * token.
+ */
+export const TRANSITION_FAST_MS = 140;
 
 /**
  * Fixed data-grid row heights in pixels, per density. Virtualized rows are
@@ -224,7 +235,7 @@ ${LIGHT_BLOCK}
   --snui-content-width-wide: 96rem;
   --snui-focus-ring: 0 0 0 3px color-mix(in srgb, var(--snui-color-focus) 38%, transparent);
   --snui-ease-standard: cubic-bezier(0.2, 0, 0, 1);
-  --snui-transition-fast: 140ms ease;
+  --snui-transition-fast: ${String(TRANSITION_FAST_MS)}ms ease;
   --snui-transition-normal: 240ms var(--snui-ease-standard);
   --snui-transition-slow: 360ms var(--snui-ease-standard);
   --snui-motion-spin: 0.8s;

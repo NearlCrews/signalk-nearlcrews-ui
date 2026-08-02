@@ -21,7 +21,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { runNpmPack } from "./lib/npm-pack.mjs";
+import { parseNpmPackResult, runNpmPack } from "./lib/npm-pack.mjs";
 
 const require = createRequire(import.meta.url);
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -35,20 +35,18 @@ const workspace = mkdtempSync(join(tmpdir(), "snui-consumer-"));
 
 try {
   // `--ignore-scripts` is required: `prepack` runs `validate`, which calls this
-  // script, so packing with lifecycle scripts enabled would recurse.
-  const tarball = runNpmPack([
-    "--silent",
+  // script, so packing with lifecycle scripts enabled would recurse. `--json`
+  // keeps the tarball name out of stdout scraping.
+  const output = runNpmPack([
+    "--json",
     "--ignore-scripts",
     "--pack-destination",
     workspace,
-  ])
-    .trim()
-    .split("\n")
-    .at(-1);
-
-  if (tarball === undefined || tarball === "") {
-    throw new Error("npm pack did not report a tarball name.");
-  }
+  ]);
+  const packageName = JSON.parse(
+    readFileSync(join(repositoryRoot, "package.json"), "utf8"),
+  ).name;
+  const tarball = parseNpmPackResult(output, packageName).filename;
 
   const modules = join(workspace, "node_modules");
   mkdirSync(modules, { recursive: true });

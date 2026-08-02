@@ -38,6 +38,8 @@ export function Accordion({
   });
 
   const [openIndex, setOpenIndex] = useState<number | null>(() => {
+    // Only one section is open at a time, so the first defaultOpen wins and
+    // any later ones are ignored.
     const initial = sections.findIndex(
       (section) => section.props.defaultOpen === true,
     );

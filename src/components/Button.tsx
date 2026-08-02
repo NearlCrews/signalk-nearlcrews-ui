@@ -11,6 +11,7 @@ import {
 
 import { hasAccessibleName, joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { DEFAULT_LOADING_LABEL, resolveLabel } from "../utils/labels.js";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
 export type ButtonSize = "default" | "compact";
@@ -93,7 +94,10 @@ function useButtonState({
     nativeAriaDisabled === true ||
     nativeAriaDisabled === "true";
   const blocksActivation = isAriaDisabled || loading;
-  const effectiveLoadingLabel = loadingLabel.trim() || "Working";
+  const effectiveLoadingLabel = resolveLabel(
+    loadingLabel,
+    DEFAULT_LOADING_LABEL,
+  );
   const loadingId = useId();
 
   return {
@@ -191,7 +195,7 @@ function NativeButton({
   fullWidth = false,
   iconOnly = false,
   loading = false,
-  loadingLabel = "Working",
+  loadingLabel = DEFAULT_LOADING_LABEL,
   onClick,
   onKeyDown,
   ref,
@@ -246,7 +250,7 @@ function AnchorButton({
   href,
   iconOnly = false,
   loading = false,
-  loadingLabel = "Working",
+  loadingLabel = DEFAULT_LOADING_LABEL,
   onClick,
   onKeyDown,
   ref,
