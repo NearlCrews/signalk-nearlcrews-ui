@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-08-02
+
+### Fixed
+
+- `--snui-color-scrim` was emitted by every theme block but missing from `PUBLIC_TOKEN_NAMES`, so the scrim token introduced in 0.6.0 never appeared in token enumeration.
+- The z-index scale (`--snui-z-sticky`, `--snui-z-overlay`, `--snui-z-modal`, and `--snui-z-toast`) was declared public in 0.5.0 but entered neither `PUBLIC_TOKEN_NAMES` nor the design contract. All five tokens are now listed in both, `FoundationTokenName` includes them, and a stylesheet coverage test fails when a defined token is neither public nor explicitly private.
+
 ## [0.6.0] - 2026-08-02
 
 ### Fixed
@@ -170,7 +177,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.0...v0.4.1

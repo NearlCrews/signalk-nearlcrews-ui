@@ -77,9 +77,11 @@ These foundation token names are also public API:
 - `--snui-content-width-wide`
 - `--snui-focus-ring`
 - `--snui-shadow-flat`, `--snui-shadow-raised`, and `--snui-shadow-overlay`
+- `--snui-color-scrim`
 - `--snui-ease-standard`
 - `--snui-transition-fast`, `--snui-transition-normal`, and `--snui-transition-slow`
 - `--snui-motion-spin`
+- `--snui-z-sticky`, `--snui-z-overlay`, `--snui-z-modal`, and `--snui-z-toast`
 
 Token values may change in a compatible release to fix contrast, browser behavior, or theme consistency. Removing or renaming a public token is breaking.
 
@@ -115,7 +117,7 @@ Consumers may override public tokens through the native `style` prop on `PanelRo
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.6.0"])
+@scope (.snui-root[data-snui-version="0.6.1"])
   to ([data-snui-version]) {
   /* component rules */
 }

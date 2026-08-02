@@ -819,7 +819,7 @@ export declare const DATA_GRID_ROW_HEIGHTS: {
 };
 /** Renders a pixel height as the rem length the stylesheet uses. */
 export declare function remLength(pixels: number): string;
-export declare const PUBLIC_FOUNDATION_TOKEN_NAMES: readonly ["--snui-font-family", "--snui-font-size", "--snui-font-size-sm", "--snui-font-size-xs", "--snui-font-weight-medium", "--snui-font-weight-semibold", "--snui-font-weight-bold", "--snui-font-weight-heavy", "--snui-line-height", "--snui-space-1", "--snui-space-2", "--snui-space-3", "--snui-space-4", "--snui-space-5", "--snui-space-6", "--snui-space-7", "--snui-space-8", "--snui-radius-sm", "--snui-radius-md", "--snui-radius-lg", "--snui-radius-pill", "--snui-control-min-height", "--snui-range-thumb-size", "--snui-range-progress-color", "--snui-range-track-color", "--snui-input-group-control-min", "--snui-input-group-control-basis", "--snui-content-width-standard", "--snui-content-width-wide", "--snui-focus-ring", "--snui-shadow-flat", "--snui-shadow-raised", "--snui-shadow-overlay", "--snui-ease-standard", "--snui-transition-fast", "--snui-transition-normal", "--snui-transition-slow", "--snui-motion-spin"];
+export declare const PUBLIC_FOUNDATION_TOKEN_NAMES: readonly ["--snui-font-family", "--snui-font-size", "--snui-font-size-sm", "--snui-font-size-xs", "--snui-font-weight-medium", "--snui-font-weight-semibold", "--snui-font-weight-bold", "--snui-font-weight-heavy", "--snui-line-height", "--snui-space-1", "--snui-space-2", "--snui-space-3", "--snui-space-4", "--snui-space-5", "--snui-space-6", "--snui-space-7", "--snui-space-8", "--snui-radius-sm", "--snui-radius-md", "--snui-radius-lg", "--snui-radius-pill", "--snui-control-min-height", "--snui-range-thumb-size", "--snui-range-progress-color", "--snui-range-track-color", "--snui-input-group-control-min", "--snui-input-group-control-basis", "--snui-content-width-standard", "--snui-content-width-wide", "--snui-focus-ring", "--snui-shadow-flat", "--snui-shadow-raised", "--snui-shadow-overlay", "--snui-color-scrim", "--snui-ease-standard", "--snui-transition-fast", "--snui-transition-normal", "--snui-transition-slow", "--snui-motion-spin", "--snui-z-sticky", "--snui-z-overlay", "--snui-z-modal", "--snui-z-toast"];
 export type FoundationTokenName = (typeof PUBLIC_FOUNDATION_TOKEN_NAMES)[number];
 export declare const PUBLIC_COLOR_TOKEN_NAMES: readonly ColorTokenName[];
 export declare const PUBLIC_TOKEN_NAMES: readonly (ColorTokenName | FoundationTokenName)[];
@@ -985,11 +985,11 @@ export declare function resolveToneLabel(tone: SemanticTone, toneLabel: string |
 
 === version.d.ts ===
 /** The package version used to isolate styles from other loaded versions. */
-export declare const PACKAGE_VERSION = "0.6.0";
+export declare const PACKAGE_VERSION = "0.6.1";
 /** The root class is private and may change without notice. */
 export declare const ROOT_CLASS = "snui-root";
 /** The exact selector prevents styles from crossing package-version roots. */
-export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.6.0\"]";
+export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.6.1\"]";
 /** A versioned global name prevents keyframe collisions between package copies. */
 export declare function versionedAnimationName(suffix: string): string;
 export declare const SPINNER_ANIMATION_NAME: string;

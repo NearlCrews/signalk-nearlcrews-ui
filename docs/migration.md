@@ -15,6 +15,12 @@ Adopt one plugin at a time. Wrap the panel in `PanelRoot`, replace local theme t
 - The [README](../README.md) documents installation, the component inventory, theming, and the package boundary.
 - The [design contract](design-contract.md) records the stable theme, token, accessibility, and isolation behavior consumers may rely on.
 
+## Changes in 0.6.1
+
+These changes are backward compatible. No consuming code requires modification.
+
+- `PUBLIC_TOKEN_NAMES` and `FoundationTokenName` now include `--snui-color-scrim` and the z-index scale (`--snui-z-sticky`, `--snui-z-overlay`, `--snui-z-modal`, and `--snui-z-toast`). The emitted declarations grow by these five names, and no existing name changed.
+
 ## Changes in 0.6.0
 
 These changes are backward compatible. No consuming code requires modification.

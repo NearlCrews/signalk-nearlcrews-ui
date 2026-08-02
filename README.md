@@ -14,15 +14,11 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or marketplace package. The initial API may change during the `0.x` series, so consumers should pin an exact version.
 
-## What's new in 0.6.0
+## What's new in 0.6.1
 
-This release fixes accessibility and theme-synchronization defects found after 0.5.0 and makes a small backward-compatible API addition. Upgrading requires no code changes.
+This release corrects the public token enumeration. Upgrading requires no code changes.
 
-- **Virtualized grid accessibility**: Windowed `DataGrid` rows now stamp explicit row, row group, and gridcell roles, so the grid keeps its accessibility tree in real browsers when table layout is restyled.
-- **Theme synchronization**: A panel ignores unrecognized values written to the shared theme key by another library version instead of resetting to Auto. Only a genuine clear returns it to Auto.
-- **Live-region contract**: `FieldError` and `Toast` emit exactly one of `role` or `aria-live`, the toast live region scopes to the toast text so the dismiss button stays out of the announcement, and a `FieldGroup` fieldset now carries `aria-errormessage` and `aria-invalid` while a group error is present.
-- **Bounded toasts**: A toast queue holds at most five toasts and drops the oldest beyond that, so sticky toasts cannot grow the DOM without bound.
-- **Compatible API additions**: `SemanticTone` is exported from the package root, `SegmentedControl` `onChange` is now optional, `Menu`, `Dialog`, and `Popover` open-state props share the exported `OverlayOpenState` interface, and a `--snui-color-scrim` token resolves the dialog scrim per theme.
+- **Complete token enumeration**: `PUBLIC_TOKEN_NAMES` now includes `--snui-color-scrim` and the z-index scale (`--snui-z-sticky`, `--snui-z-overlay`, `--snui-z-modal`, and `--snui-z-toast`). All five are emitted by the stylesheet and were missing from the list, so token enumeration never saw them. The design contract names them, and a stylesheet coverage test now fails when a defined token is neither public nor explicitly private.
 
 ## Compatibility
 
@@ -56,7 +52,7 @@ The repository builds real production Webpack remotes in classic global and ESM 
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.6.0
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.6.1
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball:
@@ -64,7 +60,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.6.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.6.1.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while continuing to share React with the Signal K Admin host.
@@ -234,11 +230,11 @@ An inline token override applies in every selected theme. Use it only when that 
 
 The repository ships a fixture page that renders every exported component. The top of that page in each theme:
 
-![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.0/docs/screenshots/showcase-light.png)
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.1/docs/screenshots/showcase-light.png)
 
-![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.0/docs/screenshots/showcase-dark.png)
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.1/docs/screenshots/showcase-dark.png)
 
-![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.0/docs/screenshots/showcase-night.png)
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.1/docs/screenshots/showcase-night.png)
 
 The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
 
