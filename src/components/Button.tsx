@@ -181,6 +181,23 @@ function guardKeyDown<TElement>(
   };
 }
 
+const SAFE_ANCHOR_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
+
+function safeAnchorHref(href: string): string | undefined {
+  const trimmedHref = href.trim();
+  if (trimmedHref.length === 0) return undefined;
+
+  try {
+    const parsed = new URL(
+      trimmedHref,
+      "https://signalk-nearlcrews-ui.invalid/",
+    );
+    return SAFE_ANCHOR_PROTOCOLS.has(parsed.protocol) ? trimmedHref : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function NativeButton({
   "aria-busy": ariaBusy,
   "aria-describedby": ariaDescribedBy,
@@ -276,15 +293,18 @@ function AnchorButton({
     size,
     variant,
   });
+  const safeHref = safeAnchorHref(href);
+  const blocksActivation = state.blocksActivation || safeHref === undefined;
 
   return (
     <Component
       {...anchorProps}
       {...state.dom}
       ref={ref}
-      href={href}
-      onClick={guardClick(state.blocksActivation, onClick)}
-      onKeyDown={guardKeyDown(state.blocksActivation, onKeyDown)}
+      href={safeHref}
+      aria-disabled={blocksActivation || undefined}
+      onClick={guardClick(blocksActivation, onClick)}
+      onKeyDown={guardKeyDown(blocksActivation, onKeyDown)}
     />
   );
 }

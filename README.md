@@ -14,11 +14,12 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or marketplace package. The initial API may change during the `0.x` series, so consumers should pin an exact version.
 
-## What's new in 0.6.1
+## What's new in 0.6.2
 
-This release corrects the public token enumeration. Upgrading requires no code changes.
+This release hardens anchor-form buttons and documents the Accordion child-order contract. Upgrading requires no code changes for consumers that use ordinary web, mail, telephone, fragment, query, or relative links.
 
-- **Complete token enumeration**: `PUBLIC_TOKEN_NAMES` now includes `--snui-color-scrim` and the z-index scale (`--snui-z-sticky`, `--snui-z-overlay`, `--snui-z-modal`, and `--snui-z-toast`). All five are emitted by the stylesheet and were missing from the list, so token enumeration never saw them. The design contract names them, and a stylesheet coverage test now fails when a defined token is neither public nor explicitly private.
+- **Safer anchor buttons**: `Button as="a"` makes dangerous and unknown URL schemes inert while preserving safe relative and absolute destinations.
+- **Explicit Accordion contract**: API documentation now states that Accordion child order must remain stable after the first render because open state is positional.
 
 ## Compatibility
 
@@ -52,7 +53,7 @@ The repository builds real production Webpack remotes in classic global and ESM 
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.6.1
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.6.2
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball:
@@ -60,7 +61,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.6.1.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.6.2.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while continuing to share React with the Signal K Admin host.
@@ -114,7 +115,7 @@ The host must supply the nonce through its own trusted bootstrap. Do not read it
 
 - `PanelRoot` provides scoped styles and theme state.
 - `ThemeToggle` selects Auto, Light, Dark, or Night and accepts per-instance labels for localization. `choices` limits the offered themes, and `onChange` reports each selection.
-- `Button` supplies primary, secondary, ghost, and danger presentation, plus compact and pill options. `as="a"` renders an anchor form with a required `href`, `fullWidth` stretches the control to its container, and `iconOnly` squares it for icon content with a required accessible name. `ariaDisabled` keeps a control focusable while suppressing activation at a list boundary. A loading button uses the same focus-preserving behavior and accepts `loadingLabel` for its accessible state name.
+- `Button` supplies primary, secondary, ghost, and danger presentation, plus compact and pill options. `as="a"` renders an anchor form with a required safe `href`: HTTP, HTTPS, mail, telephone, fragment, query, and relative destinations are supported, while dangerous or unknown schemes are made inert. `fullWidth` stretches the control to its container, and `iconOnly` squares it for icon content with a required accessible name. `ariaDisabled` keeps a control focusable while suppressing activation at a list boundary. A loading button uses the same focus-preserving behavior and accepts `loadingLabel` for its accessible state name.
 - `SegmentedControl` implements a single-choice radio group with roving focus, Home, End, and direction-aware arrow keys. It runs controlled through `value` or uncontrolled through `defaultValue`, lays out horizontally or vertically through `orientation`, shows its legend through `legendVisibility`, and carries the selection into native form submission and reset through `name`.
 - `RadioGroup` and `Radio` provide a native radio group with label, description, validation messages with opt-in live announcement, and horizontal or vertical orientation. `name` applies to every radio input so native form submission and reset work.
 - `Switch` toggles a single setting and mirrors the `Checkbox` naming: `checked` and `defaultChecked` map to the selected state.
@@ -230,11 +231,11 @@ An inline token override applies in every selected theme. Use it only when that 
 
 The repository ships a fixture page that renders every exported component. The top of that page in each theme:
 
-![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.1/docs/screenshots/showcase-light.png)
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.2/docs/screenshots/showcase-light.png)
 
-![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.1/docs/screenshots/showcase-dark.png)
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.2/docs/screenshots/showcase-dark.png)
 
-![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.1/docs/screenshots/showcase-night.png)
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.6.2/docs/screenshots/showcase-night.png)
 
 The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
 

@@ -21,6 +21,11 @@ export interface AccordionProps
  * Coordinates a set of collapsible sections so at most one is open. Each
  * child stays a controlled section: opening one closes the others, and
  * keyboard behavior remains per child.
+ *
+ * @remarks
+ * Keep child order stable after the first render. The accordion tracks the
+ * open section by its position, so inserting, removing, or reordering children
+ * can transfer the open state to a different section.
  */
 export function Accordion({
   children,

@@ -7,6 +7,11 @@ export interface AccordionProps extends Omit<HTMLAttributes<HTMLDivElement>, "ch
  * Coordinates a set of collapsible sections so at most one is open. Each
  * child stays a controlled section: opening one closes the others, and
  * keyboard behavior remains per child.
+ *
+ * @remarks
+ * Keep child order stable after the first render. The accordion tracks the
+ * open section by its position, so inserting, removing, or reordering children
+ * can transfer the open state to a different section.
  */
 export declare function Accordion({ children, className, ...props }: AccordionProps): React.JSX.Element;
 
@@ -985,11 +990,11 @@ export declare function resolveToneLabel(tone: SemanticTone, toneLabel: string |
 
 === version.d.ts ===
 /** The package version used to isolate styles from other loaded versions. */
-export declare const PACKAGE_VERSION = "0.6.1";
+export declare const PACKAGE_VERSION = "0.6.2";
 /** The root class is private and may change without notice. */
 export declare const ROOT_CLASS = "snui-root";
 /** The exact selector prevents styles from crossing package-version roots. */
-export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.6.1\"]";
+export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.6.2\"]";
 /** A versioned global name prevents keyframe collisions between package copies. */
 export declare function versionedAnimationName(suffix: string): string;
 export declare const SPINNER_ANIMATION_NAME: string;

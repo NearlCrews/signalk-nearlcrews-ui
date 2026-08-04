@@ -35,6 +35,58 @@ describe("Button anchors", () => {
     );
   });
 
+  it.each([
+    "#details",
+    "../docs/guide.html",
+    "?panel=details",
+    "https://example.com/docs",
+    "http://example.com/docs",
+    "mailto:crew@example.com",
+    "tel:+15551234567",
+  ])("preserves the safe href %s", (href) => {
+    render(
+      <PanelRoot>
+        <Button as="a" href={href}>
+          Details
+        </Button>
+      </PanelRoot>,
+    );
+
+    expect(screen.getByRole("link", { name: "Details" })).toHaveAttribute(
+      "href",
+      href,
+    );
+  });
+
+  it.each([
+    "javascript:alert(1)",
+    "java\nscript:alert(1)",
+    "data:text/html,unsafe",
+    "vbscript:msgbox(1)",
+    "custom:payload",
+    "   ",
+  ])("makes the unsafe href %s inert", async (href) => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const { container } = render(
+      <PanelRoot>
+        <Button as="a" href={href} onClick={onClick}>
+          Unsafe
+        </Button>
+      </PanelRoot>,
+    );
+
+    const anchor = container.querySelector("a");
+    expect(anchor).not.toBeNull();
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      throw new Error("Button did not render an anchor element.");
+    }
+    expect(anchor).not.toHaveAttribute("href");
+    expect(anchor).toHaveAttribute("aria-disabled", "true");
+    await user.click(anchor);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it("forwards the ref to the anchor element", () => {
     const ref = createRef<HTMLAnchorElement>();
     render(

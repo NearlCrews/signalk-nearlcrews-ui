@@ -15,6 +15,18 @@ Adopt one plugin at a time. Wrap the panel in `PanelRoot`, replace local theme t
 - The [README](../README.md) documents installation, the component inventory, theming, and the package boundary.
 - The [design contract](design-contract.md) records the stable theme, token, accessibility, and isolation behavior consumers may rely on.
 
+## Changes in 0.6.2
+
+These changes are backward compatible for consumers that use ordinary web,
+mail, telephone, fragment, query, or relative links.
+
+- Anchor-form `Button` controls make dangerous and unknown URL schemes inert.
+  Existing HTTP, HTTPS, mail, telephone, fragment, query, and relative
+  destinations continue to work.
+- `Accordion` documentation now makes its existing static-child-order contract
+  explicit. Keep child order stable after the first render because open state is
+  tracked by position.
+
 ## Changes in 0.6.1
 
 These changes are backward compatible. No consuming code requires modification.

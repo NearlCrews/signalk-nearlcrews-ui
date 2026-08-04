@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.2] - 2026-08-04
+
+### Fixed
+
+- Anchor-form buttons now make dangerous and unknown URL schemes inert while preserving HTTP, HTTPS, mail, telephone, fragment, query, and relative destinations.
+
+### Changed
+
+- Accordion API documentation now states that child order must remain stable after the first render because open state is positional.
+- Refreshed compatible development dependencies.
+
 ## [0.6.1] - 2026-08-02
 
 ### Fixed
@@ -177,7 +188,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.2...HEAD
+[0.6.2]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.4.1...v0.5.0
