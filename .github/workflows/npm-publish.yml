@@ -16,7 +16,7 @@ concurrency:
 jobs:
   verify:
     name: Verify release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     outputs:
       dist-tag: ${{ steps.package.outputs.dist-tag }}
@@ -97,7 +97,16 @@ jobs:
       - name: Run release checks
         env:
           SNUI_RELEASE_APPROVED: "true"
+          SNUI_SNAPSHOT_VARIANT: ubuntu24-x64
         run: npm run release:check
+      - name: Upload browser report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: playwright-report-release
+          path: playwright-report/
+          retention-days: 14
+          if-no-files-found: warn
       - name: Pack verified package
         run: |
           mkdir package
