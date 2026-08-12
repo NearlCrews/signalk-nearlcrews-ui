@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { BROWSER_URL } from "./fixtures/browser/browser-server.js";
 
 const snapshotVariant = process.env.SNUI_SNAPSHOT_VARIANT ?? process.arch;
 
@@ -11,13 +12,13 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: "http://127.0.0.1:4173",
+    baseURL: BROWSER_URL,
     trace: "on-first-retry",
   },
   webServer: {
     command: "vite --config fixtures/browser/vite.config.ts",
-    url: "http://127.0.0.1:4173",
-    reuseExistingServer: !process.env.CI,
+    url: BROWSER_URL,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [

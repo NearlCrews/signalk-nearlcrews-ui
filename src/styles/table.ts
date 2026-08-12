@@ -1,6 +1,5 @@
 import { focusRingDeclarations } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { DATA_GRID_ROW_HEIGHTS, remLength } from "./tokens.js";
 
 export const TABLE_STYLES = scopeStyles(`
 .snui-data-grid {
@@ -20,7 +19,8 @@ export const TABLE_STYLES = scopeStyles(`
   font: inherit;
 }
 
-.snui-data-grid__header th {
+.snui-data-grid__header :is(th, [role="columnheader"]) {
+  box-sizing: border-box;
   position: sticky;
   top: 0;
   z-index: var(--snui-z-sticky);
@@ -34,56 +34,57 @@ export const TABLE_STYLES = scopeStyles(`
   text-align: start;
 }
 
-.snui-data-grid__header th[data-allows-sorting] {
+.snui-data-grid__header :is(th, [role="columnheader"])[data-allows-sorting] {
   cursor: pointer;
 }
 
-.snui-data-grid__header th[data-allows-sorting][data-hovered] {
+.snui-data-grid__header :is(th, [role="columnheader"])[data-allows-sorting][data-hovered] {
   background: var(--snui-color-interactive-hover);
 }
 
-.snui-data-grid__header th[data-allows-sorting][data-pressed] {
+.snui-data-grid__header :is(th, [role="columnheader"])[data-allows-sorting][data-pressed] {
   background: var(--snui-color-interactive-hover);
 }
 
-.snui-data-grid__header th[data-focus-visible] {
+.snui-data-grid__header :is(th, [role="columnheader"])[data-focus-visible] {
 ${focusRingDeclarations("-2px", true)}
 }
 
 /* Sort state pairs the glyph with aria-sort, never the glyph alone. */
-.snui-data-grid__header th[data-allows-sorting]::after {
+.snui-data-grid__header :is(th, [role="columnheader"])[data-allows-sorting]::after {
   content: "\\21C5";
   margin-inline-start: var(--snui-space-2);
   color: var(--snui-color-text-muted);
   font-size: 0.75em;
 }
 
-.snui-data-grid__header th[data-sort-direction="ascending"]::after {
+.snui-data-grid__header :is(th, [role="columnheader"])[data-sort-direction="ascending"]::after {
   content: "\\25B2";
   color: var(--snui-color-accent-fill);
 }
 
-.snui-data-grid__header th[data-sort-direction="descending"]::after {
+.snui-data-grid__header :is(th, [role="columnheader"])[data-sort-direction="descending"]::after {
   content: "\\25BC";
   color: var(--snui-color-accent-fill);
 }
 
-.snui-data-grid__body td {
+.snui-data-grid__body :is(td, [role="rowheader"], [role="gridcell"]) {
+  box-sizing: border-box;
   padding: var(--snui-space-2) var(--snui-space-3);
   border-bottom: 1px solid var(--snui-color-border);
   min-width: 6rem;
   overflow-wrap: anywhere;
 }
 
-.snui-data-grid__body tr[data-selection-mode] {
+.snui-data-grid__body [role="row"][data-selection-mode] {
   cursor: pointer;
 }
 
-.snui-data-grid__body tr[data-selection-mode][data-hovered] {
+.snui-data-grid__body [role="row"][data-selection-mode][data-hovered] {
   background: var(--snui-color-interactive-hover);
 }
 
-.snui-data-grid__body tr[data-selected] {
+.snui-data-grid__body [role="row"][data-selected] {
   background: color-mix(
     in srgb,
     var(--snui-color-accent-fill) 12%,
@@ -91,7 +92,7 @@ ${focusRingDeclarations("-2px", true)}
   );
 }
 
-.snui-data-grid__body tr[data-selected][data-hovered] {
+.snui-data-grid__body [role="row"][data-selected][data-hovered] {
   background: color-mix(
     in srgb,
     var(--snui-color-accent-fill) 18%,
@@ -99,75 +100,68 @@ ${focusRingDeclarations("-2px", true)}
   );
 }
 
-.snui-data-grid__body tr[data-focus-visible] {
+.snui-data-grid__body [role="row"][data-focus-visible] {
 ${focusRingDeclarations("-2px", false)}
 }
 
-.snui-data-grid--zebra .snui-data-grid__body tr:nth-of-type(even):not([data-selected]):not([data-hovered]) {
+.snui-data-grid--zebra:not(.snui-data-grid--virtualized) .snui-data-grid__body > tr:nth-of-type(even):not([data-selected]):not([data-hovered]),
+.snui-data-grid--zebra.snui-data-grid--virtualized .snui-data-grid__body [role="row"][data-snui-zebra-odd]:not([data-selected]):not([data-hovered]) {
   background: var(--snui-color-surface-raised);
 }
 
-.snui-data-grid--compact .snui-data-grid__header th,
-.snui-data-grid--compact .snui-data-grid__body td {
+.snui-data-grid--compact .snui-data-grid__header :is(th, [role="columnheader"]),
+.snui-data-grid--compact .snui-data-grid__body :is(td, [role="rowheader"], [role="gridcell"]) {
   padding: var(--snui-space-1) var(--snui-space-2);
 }
 
-.snui-data-grid--compact .snui-data-grid__header th {
+.snui-data-grid--compact .snui-data-grid__header :is(th, [role="columnheader"]) {
   height: auto;
 }
 
-/*
- * Virtualized grids restyle the table as stacked blocks with absolutely
- * positioned rows, the same structure RAC's own table virtualizer produces.
- * DataGrid.tsx stamps explicit rowgroup, row, and gridcell roles so the
- * accessibility tree survives the lost table layout. Rows are a fixed
- * height per density and the pixel offsets in DataGrid.tsx must match.
- */
+.snui-data-grid--virtualized {
+  overflow: hidden;
+}
+
+/* React Aria owns virtual row measurement, positioning, and ARIA metadata. */
 .snui-data-grid--virtualized .snui-data-grid__table {
+  position: relative;
   display: block;
-  min-width: max-content;
+  width: 100%;
+  height: 100%;
+  max-height: inherit;
+  overflow: auto;
+  border-collapse: initial;
 }
 
 .snui-data-grid--virtualized .snui-data-grid__header {
-  display: block;
-  position: sticky;
-  top: 0;
-  z-index: var(--snui-z-sticky);
+  width: 100%;
 }
 
-.snui-data-grid--virtualized .snui-data-grid__header tr {
+.snui-data-grid--virtualized .snui-data-grid__header [role="columnheader"] {
   display: flex;
-}
-
-.snui-data-grid--virtualized .snui-data-grid__header th {
-  display: flex;
-  flex: 1 1 0;
   align-items: center;
-  height: var(--snui-control-min-height);
+  width: 100%;
+  height: 100%;
 }
 
 .snui-data-grid--virtualized .snui-data-grid__body {
-  display: block;
-  position: relative;
-}
-
-.snui-data-grid--virtualized .snui-data-grid__row {
-  position: absolute;
-  top: 0;
-  inset-inline-start: 0;
-  display: flex;
   width: 100%;
-  height: ${remLength(DATA_GRID_ROW_HEIGHTS.default)};
 }
 
-.snui-data-grid--compact.snui-data-grid--virtualized .snui-data-grid__row {
-  height: ${remLength(DATA_GRID_ROW_HEIGHTS.compact)};
+.snui-data-grid--virtualized .snui-data-grid__body [role="row"] {
+  width: 100%;
+  min-height: var(--snui-control-min-height);
 }
 
-.snui-data-grid--virtualized .snui-data-grid__row td {
+.snui-data-grid--compact.snui-data-grid--virtualized .snui-data-grid__body [role="row"] {
+  min-height: calc(var(--snui-control-min-height) - var(--snui-space-3));
+}
+
+.snui-data-grid--virtualized .snui-data-grid__body :is([role="rowheader"], [role="gridcell"]) {
   display: flex;
-  flex: 1 1 0;
   align-items: center;
+  width: 100%;
+  height: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -178,26 +172,26 @@ ${focusRingDeclarations("-2px", false)}
    * Forced colors flattens the tint, so reconstruct selection and focus with
    * system colors. aria-selected remains the programmatic cue.
    */
-  .snui-data-grid__body tr[data-selected] {
+  .snui-data-grid__body [role="row"][data-selected] {
     background: Highlight;
   }
 
-  .snui-data-grid__body tr[data-selected],
-  .snui-data-grid__body tr[data-selected] td {
+  .snui-data-grid__body [role="row"][data-selected],
+  .snui-data-grid__body [role="row"][data-selected] :is([role="rowheader"], [role="gridcell"]) {
     color: HighlightText;
   }
 
-  .snui-data-grid__body tr[data-selected][data-hovered] {
+  .snui-data-grid__body [role="row"][data-selected][data-hovered] {
     background: Highlight;
   }
 
-  .snui-data-grid__body tr[data-focus-visible],
-  .snui-data-grid__header th[data-focus-visible] {
+  .snui-data-grid__body [role="row"][data-focus-visible],
+  .snui-data-grid__header [role="columnheader"][data-focus-visible] {
     outline-color: Highlight;
   }
 
-  .snui-data-grid__header th[data-allows-sorting]::after,
-  .snui-data-grid__header th[data-sort-direction]::after {
+  .snui-data-grid__header [role="columnheader"][data-allows-sorting]::after,
+  .snui-data-grid__header [role="columnheader"][data-sort-direction]::after {
     color: CanvasText;
   }
 }

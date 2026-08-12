@@ -82,6 +82,13 @@ for (const [format, files, stats] of [
   ) {
     throw new Error(`${format} fixture did not consume host-shared React.`);
   }
+  if (
+    !moduleNames.some((name) =>
+      name.startsWith("consume shared module (default) react-dom@"),
+    )
+  ) {
+    throw new Error(`${format} fixture did not consume host-shared ReactDOM.`);
+  }
 
   const bundledReactModules = moduleNames.filter((name) =>
     /node_modules[\\/]react(?:-dom)?[\\/]/.test(name),

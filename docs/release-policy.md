@@ -31,12 +31,15 @@ After 1.0, a withdrawn prop, export, token, or documented behavior is marked wit
 
 ## Release path
 
-1. Update `package.json`, `src/version.ts`, `README.md`, which pins the version in both install commands, `CHANGELOG.md`, `docs/design-contract.md`, which embeds the version in its scope example, and migration guidance together.
+1. Update `package.json`, `src/version.ts`, `README.md` (including both pinned install commands), `CHANGELOG.md`, `docs/design-contract.md` (including its versioned scope example), and `docs/migration.md` together.
 2. Run `SNUI_RELEASE_APPROVED=true npm run release:check` only after explicit final approval.
-3. Commit the verified source and push `main`.
-4. Create the approved `v<version>` tag and GitHub Release from the verified commit.
-5. Let `.github/workflows/npm-publish.yml` verify the tag, rebuild and test the source, preserve one tarball, and publish that exact tarball through the protected `npm` environment.
-6. Verify npm version, dist-tag, provenance, packed files, and repository links.
+3. Commit the verified source, merge it through the protected `main` branch, and record the exact resulting commit.
+4. Wait for that exact commit's required CI and CodeQL checks, including every supported Node line, x64 and ARM64 browser tests, Windows package validation, workflow lint, and both CodeQL analyses.
+5. Confirm that no `.github/workflows/npm-publish.yml` run is queued, in progress, or waiting for environment approval. Do not publish another GitHub Release until the existing publication run completes.
+6. Create the approved annotated `v<version>` tag and GitHub Release from that exact commit.
+7. Let `.github/workflows/npm-publish.yml` verify the tag and registry ordering, rebuild and test the source, stamp the release commit as `gitHead`, preserve one tarball, and publish that exact tarball through the protected `npm` environment.
+8. Confirm that the publication workflow completed successfully and was not canceled. If GitHub replaced a pending run, rerun that canceled workflow after the active run completes and before publishing another GitHub Release.
+9. Verify npm version, dist-tag, integrity, provenance, `gitHead`, packed files, repository links, and a clean consumer install.
 
 Prerelease versions publish under `next`. Stable versions publish under `latest`. Never reuse, mutate, or unpublish a released version as a normal correction path.
 
@@ -56,7 +59,7 @@ Every release candidate must pass:
 
 `npm run validate` skips the browser tests in this list, while `npm run release:check` runs them.
 
-The publish job uses npm OIDC trusted publishing with provenance. It receives `id-token: write` only after the protected `npm` environment is approved. No npm token belongs in repository or environment secrets.
+The publish job uses npm OIDC trusted publishing with provenance. It receives `id-token: write` only after the protected `npm` environment is approved. Release workflows are serialized, reject an existing version or a stable version that would move `latest` backward, and publish only the tarball verified in the preceding job. GitHub retains at most one pending run in a concurrency group, so the release path checks that the queue is empty before publishing another GitHub Release and checks for canceled publication runs afterward. No npm token belongs in repository or environment secrets.
 
 The first publication must establish the package before npm can accept its trusted-publisher configuration. Follow the one-time bootstrap and repository checklist in [repository setup](repository-setup.md). All later publications use the GitHub Release workflow and OIDC.
 

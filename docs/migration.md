@@ -6,14 +6,71 @@ Adopt one plugin at a time. Wrap the panel in `PanelRoot`, replace local theme t
 
 ## Current conventions
 
-- Theme preference persists under one shared storage key, `signalk-nearlcrews-ui.theme.v1`. An explicit Auto, Light, Dark, or Night selection is written to that key. An unresolved preference stays Auto and writes nothing, leaving `data-snui-theme` off the root so host-following and `prefers-color-scheme` rules apply. Panels on different library versions share the key, so a value this version does not recognize is ignored rather than treated as a clear; only an absent key returns a mounted panel to Auto.
+- Theme preference persists under one shared storage key, `signalk-nearlcrews-ui.theme.v1`. An explicit Auto, System, Light, Dark, or Night selection is written to that key. An unresolved preference stays Auto and writes nothing. Auto leaves `data-snui-theme` off the root, follows an explicit Bootstrap, CoreUI, or legacy `.dark-mode` host theme, and otherwise uses Light. System follows `prefers-color-scheme`. Panels on different library versions share the key, so a value this version does not recognize is ignored rather than treated as a clear; only an absent key returns a mounted panel to Auto.
+- React and React DOM are host-provided peer dependencies. A consumer remote shares both as Module Federation singletons, bundles this package and its React Aria dependencies, and never configures `signalk-nearlcrews-ui` as a runtime share.
 - Components that accept a ref declare it as an ordinary `ref` prop, `SegmentedControl` and `InlineConfirm` included; neither takes `rootRef` any more. Object refs, callback refs, and callback-ref cleanup all resolve to the same native element. No component wraps in `forwardRef`. Components that render more than one host element, or that only coordinate their children, do not accept a ref.
-- The package renders in the browser only and requires native CSS `@scope` support. Call `supportsNativeCssScope(window)` before mounting when a consumer must present a local compatibility message, and verify support in every supported kiosk and embedded WebView deployment.
+- The package renders in the browser only and requires native CSS `@scope` support. Call `supportsNativeCssScope(window)` before mounting when a consumer must present a local compatibility message, render `UnsupportedBrowserNotice` instead of `PanelRoot` after a failed preflight, and verify support in every supported kiosk and embedded WebView deployment.
 
 ## Further reading
 
 - The [README](../README.md) documents installation, the component inventory, theming, and the package boundary.
 - The [design contract](design-contract.md) records the stable theme, token, accessibility, and isolation behavior consumers may rely on.
+
+## Changes in 0.7.0
+
+### Required migration work
+
+1. Add `react-dom` beside React as a development dependency in the consumer, and share both React and React DOM from the Signal K Admin host as Module Federation singletons with `import: false`. Continue to bundle `signalk-nearlcrews-ui` into the remote.
+2. Add `"system"` to every exhaustive `ThemeChoice` mapping, label map, test matrix, and saved-value validator. Auto no longer follows the operating-system preference when the host has no explicit theme. Choose System for that behavior.
+3. Give every `AlertDialog` a non-empty `cancelLabel`. Remove any duplicate cancel button from `actions`, move its callback to `onCancel`, and keep only supplemental actions in the slot.
+4. Move every `ToastRegion` inside its owning `PanelRoot`. Version 0.7.0 throws instead of using an unscoped body portal.
+5. Move imports for `Accordion`, `EmptyState`, and `Progress` to `/composites`; `Radio`, `RadioGroup`, and `Switch` to `/forms`; the complete grid API to `/data-grid`; and dialogs, menus, popovers, and toasts to `/overlays`. These APIs are no longer exported from the package root. `SecretInput` is a new `/forms` export.
+6. Update `DataGrid` refs to `HTMLDivElement`. The ref now always resolves to the stable outer container, regardless of whether the row count crosses the virtualization threshold. Query its descendant grid element when native table or ARIA-grid operations are needed.
+
+The host-sharing portion of a Webpack configuration follows this shape:
+
+```js
+shared: {
+  react: {
+    singleton: true,
+    requiredVersion: ">=19.2.0 <20.0.0",
+    import: false,
+  },
+  "react-dom": {
+    singleton: true,
+    requiredVersion: ">=19.2.0 <20.0.0",
+    import: false,
+  },
+}
+```
+
+An alert-dialog migration changes the action ownership rather than adding a second escape action:
+
+```tsx
+<AlertDialog
+  open={resetOpen}
+  title="Reset configuration?"
+  cancelLabel="Keep configuration"
+  onCancel={() => setResetOpen(false)}
+  actions={
+    <Button variant="danger" onClick={resetConfiguration}>
+      Reset
+    </Button>
+  }
+>
+  This cannot be undone.
+</AlertDialog>
+```
+
+### Optional adoption
+
+- Replace repeated password-reveal groups with `SecretInput`. It owns reveal presentation and selection preservation, while the consumer retains value state, persistence, authorization, and redaction.
+- Replace repeated browser compatibility markup with `UnsupportedBrowserNotice`, but keep the `supportsNativeCssScope(window)` decision in the consumer.
+- Replace repeated elapsed-age formatting with `formatRelativeAge`. Pass a nonnegative age in milliseconds, not a timestamp; use `fallback` for unavailable or invalid data.
+- Use `sticky="viewport-bottom"` on `ActionBar` when an unconstrained Signal K Admin `.app-body` prevents ordinary sticky positioning from reaching the viewport. The bar stays in the `PanelRoot` column, reserves its flow position, and returns to that position near the panel end.
+- `Switch` can now participate directly in native forms through `form`, `name`, `readOnly`, `required`, and `value`.
+- `DataGrid` keeps its public collection API, but large collections now use React Aria `Virtualizer` and `TableLayout`. Provide a stable `id` or `key` on every item, retain controlled sorting, and test wrapped or expandable rows at the consumer's chosen `virtualizeThreshold`.
+- Nested menus, popovers, and dialogs now layer above their owning dialog. Remove consumer z-index workarounds and rely on the public overlay tokens.
 
 ## Changes in 0.6.2
 

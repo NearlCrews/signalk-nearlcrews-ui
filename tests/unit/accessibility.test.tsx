@@ -1,35 +1,27 @@
 import { render } from "@testing-library/react";
 import axe from "axe-core";
 import { describe, expect, it } from "vitest";
-
+import { Accordion, EmptyState, Progress } from "../../src/composites.js";
+import { Cell, Column, DataGrid, Row } from "../../src/data-grid.js";
+import { Radio, RadioGroup, Switch } from "../../src/forms.js";
 import {
-  Accordion,
   ActionBar,
   Badge,
   Banner,
   Button,
   Card,
-  Cell,
   Checkbox,
   CollapsibleSection,
-  Column,
-  DataGrid,
-  EmptyState,
   FieldGroup,
   InlineConfirm,
   LabeledField,
   Metric,
   NumberInput,
   PanelRoot,
-  Progress,
-  Radio,
-  RadioGroup,
   RangeInput,
-  Row,
   Section,
   Select,
   StatusIndicator,
-  Switch,
   Textarea,
   TextInput,
   ThemeToggle,

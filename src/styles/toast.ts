@@ -17,11 +17,24 @@ export const TOAST_STYLES = scopeStyles(`
 
 .snui-toast-region {
   position: absolute;
-  inset-block-end: var(--snui-space-4);
-  inset-inline-end: var(--snui-space-4);
+  inset-block-end: max(
+    var(--snui-space-4),
+    env(safe-area-inset-bottom, 0px)
+  );
+  inset-inline-end: max(
+    var(--snui-space-4),
+    env(safe-area-inset-right, 0px)
+  );
   z-index: var(--snui-z-toast);
   display: flex;
-  width: min(22rem, calc(100% - 2 * var(--snui-space-4)));
+  width: min(
+    22rem,
+    calc(
+      100% -
+      max(var(--snui-space-4), env(safe-area-inset-left, 0px)) -
+      max(var(--snui-space-4), env(safe-area-inset-right, 0px))
+    )
+  );
   flex-direction: column;
   gap: var(--snui-space-2);
   /* Clicks pass through the gaps between toasts to the panel below. */

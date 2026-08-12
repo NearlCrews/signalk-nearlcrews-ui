@@ -39,7 +39,7 @@ body:
     id: themes
     attributes:
       label: Theme and accessibility impact
-      description: Cover Auto, Light, Dark, Night, focus, keyboard use, contrast, motion, target size, and 320-pixel reflow.
+      description: Cover Auto, System, Light, Dark, Night, focus, keyboard use, contrast, motion, target size, and 320-pixel reflow.
     validations:
       required: true
 

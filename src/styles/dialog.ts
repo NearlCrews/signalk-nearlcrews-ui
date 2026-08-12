@@ -7,11 +7,14 @@ export const DIALOG_STYLES = scopeStyles(`
 
 .snui-scrim {
   position: fixed;
-  z-index: var(--snui-z-modal);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: var(--snui-space-4);
+  padding:
+    max(var(--snui-space-4), env(safe-area-inset-top, 0px))
+    max(var(--snui-space-4), env(safe-area-inset-right, 0px))
+    max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))
+    max(var(--snui-space-4), env(safe-area-inset-left, 0px));
   background: var(--snui-color-scrim);
   inset: 0;
   opacity: 1;
@@ -49,7 +52,11 @@ export const DIALOG_STYLES = scopeStyles(`
   display: flex;
   width: 100%;
   max-width: 100%;
-  max-height: calc(100vh - var(--snui-space-6));
+  max-height: calc(
+    var(--visual-viewport-height, 100dvh) -
+    max(var(--snui-space-4), env(safe-area-inset-top, 0px)) -
+    max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))
+  );
   flex-direction: column;
   gap: var(--snui-space-3);
   padding: var(--snui-space-5);
@@ -100,7 +107,11 @@ export const DIALOG_STYLES = scopeStyles(`
 @container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
   .snui-scrim {
     align-items: flex-end;
-    padding: 0;
+    padding:
+      0
+      env(safe-area-inset-right, 0px)
+      env(safe-area-inset-bottom, 0px)
+      env(safe-area-inset-left, 0px);
   }
 
   .snui-dialog-frame {
@@ -108,7 +119,13 @@ export const DIALOG_STYLES = scopeStyles(`
   }
 
   .snui-dialog {
-    max-height: 85vh;
+    max-height: min(
+      85dvh,
+      calc(
+        var(--visual-viewport-height, 100dvh) -
+        env(safe-area-inset-bottom, 0px)
+      )
+    );
     border-end-start-radius: 0;
     border-end-end-radius: 0;
   }

@@ -266,8 +266,8 @@ describe("PanelRoot themes", () => {
       </PanelRoot>,
     );
 
-    // Auto leaves data-snui-theme off the root, which is what lets the
-    // host-following and prefers-color-scheme rules apply.
+    // Auto leaves data-snui-theme off the root, which lets explicit host theme
+    // rules apply while the base token block remains the light fallback.
     expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
     expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
@@ -468,6 +468,25 @@ describe("PanelRoot themes", () => {
       "dark",
     );
     expect(screen.getByRole("radio", { name: "Dark" })).toBeChecked();
+  });
+
+  it("stores System as an explicit operating-system-following theme", async () => {
+    const user = userEvent.setup();
+    render(
+      <PanelRoot data-testid="panel">
+        <ThemeToggle />
+      </PanelRoot>,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "System" }));
+
+    expect(screen.getByTestId("panel")).toHaveAttribute(
+      "data-snui-theme",
+      "system",
+    );
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("system");
+    const styles = document.head.querySelector("style[data-snui-styles]");
+    expect(styles?.textContent).toContain('[data-snui-theme="system"]');
   });
 
   it("synchronizes a theme change delivered by the browser storage event", () => {

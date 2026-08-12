@@ -130,23 +130,15 @@ export const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
  */
 export const TRANSITION_FAST_MS = 140;
 
-/**
- * Fixed data-grid row heights in pixels, per density. Virtualized rows are
- * absolutely positioned by pixel offset, so the CSS rule and the virtualizer's
- * size estimate have to agree; both read these numbers.
- */
+/** Initial data-grid row-height estimates in pixels, per density. */
 export const DATA_GRID_ROW_HEIGHTS = {
   compact: 32,
   default: 44,
 } as const;
 
-/** Renders a pixel height as the rem length the stylesheet uses. */
-export function remLength(pixels: number): string {
-  return `${String(pixels / 16)}rem`;
-}
-
 export const PUBLIC_FOUNDATION_TOKEN_NAMES = [
   "--snui-font-family",
+  "--snui-font-family-mono",
   "--snui-font-size",
   "--snui-font-size-sm",
   "--snui-font-size-xs",
@@ -210,6 +202,7 @@ export const TOKEN_STYLES = `
 ${ROOT_SELECTOR} {
 ${LIGHT_BLOCK}
   --snui-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --snui-font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --snui-font-size: 0.9375rem;
   --snui-font-size-sm: 0.875rem;
   --snui-font-size-xs: 0.8125rem;
@@ -251,13 +244,6 @@ ${LIGHT_BLOCK}
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  ${ROOT_SELECTOR}:not([data-snui-theme]) {
-${DARK_BLOCK}
-    color-scheme: dark;
-  }
-}
-
 [data-bs-theme="light"] ${ROOT_SELECTOR}:not([data-snui-theme]),
 [data-coreui-theme="light"] ${ROOT_SELECTOR}:not([data-snui-theme]) {
 ${LIGHT_BLOCK}
@@ -269,6 +255,20 @@ ${LIGHT_BLOCK}
 .dark-mode ${ROOT_SELECTOR}:not([data-snui-theme]) {
 ${DARK_BLOCK}
   color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  ${ROOT_SELECTOR}[data-snui-theme="system"] {
+${DARK_BLOCK}
+    color-scheme: dark;
+  }
+}
+
+@media (prefers-color-scheme: light) {
+  ${ROOT_SELECTOR}[data-snui-theme="system"] {
+${LIGHT_BLOCK}
+    color-scheme: light;
+  }
 }
 
 ${ROOT_SELECTOR}[data-snui-theme="light"] {

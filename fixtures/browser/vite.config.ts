@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
+import { BROWSER_HOST, BROWSER_PORT } from "./browser-server.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const federationRoots = {
@@ -143,9 +144,28 @@ export default defineConfig({
   root: import.meta.dirname,
   plugins: [cspFixtureServer(), federationAssetServer(), react()],
   resolve: {
-    alias: {
-      "signalk-nearlcrews-ui": resolve(repositoryRoot, "dist/index.js"),
-    },
+    alias: [
+      {
+        find: "signalk-nearlcrews-ui/composites",
+        replacement: resolve(repositoryRoot, "dist/composites.js"),
+      },
+      {
+        find: "signalk-nearlcrews-ui/data-grid",
+        replacement: resolve(repositoryRoot, "dist/data-grid.js"),
+      },
+      {
+        find: "signalk-nearlcrews-ui/forms",
+        replacement: resolve(repositoryRoot, "dist/forms.js"),
+      },
+      {
+        find: "signalk-nearlcrews-ui/overlays",
+        replacement: resolve(repositoryRoot, "dist/overlays.js"),
+      },
+      {
+        find: "signalk-nearlcrews-ui",
+        replacement: resolve(repositoryRoot, "dist/index.js"),
+      },
+    ],
   },
   define: {
     __CLASSIC_REMOTE_URL__: JSON.stringify(
@@ -165,8 +185,8 @@ export default defineConfig({
     fs: {
       allow: [repositoryRoot],
     },
-    host: "127.0.0.1",
-    port: 4173,
+    host: BROWSER_HOST,
+    port: BROWSER_PORT,
     strictPort: true,
   },
 });

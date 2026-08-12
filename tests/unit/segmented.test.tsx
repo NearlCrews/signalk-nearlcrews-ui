@@ -168,6 +168,23 @@ describe("SegmentedControl form participation", () => {
     expect(view.container.querySelector("input")).toBeNull();
   });
 
+  it("omits a disabled control from native form data", () => {
+    render(
+      <form data-testid="units-form">
+        <SegmentedControl
+          disabled
+          legend="Units"
+          name="units"
+          defaultValue="metric"
+          options={OPTIONS}
+        />
+      </form>,
+    );
+
+    const form = screen.getByTestId<HTMLFormElement>("units-form");
+    expect(new FormData(form).has("units")).toBe(false);
+  });
+
   it("restores the defaultValue selection on form reset", () => {
     render(
       <form data-testid="units-form">

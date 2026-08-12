@@ -2,55 +2,64 @@ import { StrictMode, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 
 import {
-  Accordion,
   ActionBar,
-  AlertDialog,
   Badge,
   Banner,
   Button,
   Card,
-  Cell,
   Checkbox,
   Cluster,
   CollapsibleSection,
-  Column,
-  DataGrid,
-  Dialog,
-  EmptyState,
   FieldGroup,
   InlineConfirm,
   InputGroup,
   InputGroupAddon,
   InputGroupControl,
-  type Key,
   LabeledField,
-  Menu,
-  MenuItem,
-  MenuSeparator,
   Metric,
   MetricGrid,
   NumberInput,
   PanelRoot,
-  Popover,
-  Progress,
-  Radio,
-  RadioGroup,
   RangeInput,
-  Row,
   Section,
   SegmentedControl,
   Select,
-  type Selection,
-  type SortDescriptor,
   Stack,
   StatusIndicator,
-  Switch,
   Textarea,
   TextInput,
   ThemeToggle,
+} from "signalk-nearlcrews-ui";
+import {
+  Accordion,
+  EmptyState,
+  Progress,
+} from "signalk-nearlcrews-ui/composites";
+import {
+  Cell,
+  Column,
+  DataGrid,
+  type Key,
+  Row,
+  type Selection,
+  type SortDescriptor,
+} from "signalk-nearlcrews-ui/data-grid";
+import {
+  Radio,
+  RadioGroup,
+  SecretInput,
+  Switch,
+} from "signalk-nearlcrews-ui/forms";
+import {
+  AlertDialog,
+  Dialog,
+  Menu,
+  MenuItem,
+  MenuSeparator,
+  Popover,
   ToastRegion,
   toast,
-} from "signalk-nearlcrews-ui";
+} from "signalk-nearlcrews-ui/overlays";
 
 const BANNER_TONES = [
   "neutral",
@@ -83,12 +92,12 @@ interface Boat {
   readonly wind: number;
 }
 
-const BOATS: readonly Boat[] = [
-  { id: "aria", name: "Aria", depth: 3.1, wind: 12 },
-  { id: "brisa", name: "Brisa", depth: 2.4, wind: 18 },
-  { id: "coral", name: "Coral", depth: 4.8, wind: 9 },
-  { id: "duna", name: "Duna", depth: 1.9, wind: 22 },
-];
+const BOATS: readonly Boat[] = Array.from({ length: 240 }, (_, index) => ({
+  id: `vessel-${String(index + 1)}`,
+  name: `Vessel ${String(index + 1).padStart(3, "0")}`,
+  depth: 1.5 + ((index * 17) % 60) / 10,
+  wind: 4 + ((index * 7) % 28),
+}));
 
 function compareBoats(a: Boat, b: Boat, descriptor: SortDescriptor): number {
   const column = descriptor.column;
@@ -102,6 +111,7 @@ function compareBoats(a: Boat, b: Boat, descriptor: SortDescriptor): number {
 function Showcase(): React.JSX.Element {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
+  const [expandedFirstVessel, setExpandedFirstVessel] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
     column: "name",
@@ -226,6 +236,9 @@ function Showcase(): React.JSX.Element {
             <LabeledField label="Call sign" optionalLabel="Optional">
               <TextInput type="text" />
             </LabeledField>
+            <LabeledField label="API key">
+              <SecretInput defaultValue="harbor-master-token" />
+            </LabeledField>
             <LabeledField
               label="Waypoint name"
               error="A waypoint with this name already exists."
@@ -332,13 +345,37 @@ function Showcase(): React.JSX.Element {
         <Section
           title="Data grid"
           description="Sortable headers, multiple selection, and compact density."
+          actions={
+            <Button
+              size="compact"
+              aria-pressed={expandedFirstVessel}
+              onClick={() => setExpandedFirstVessel((expanded) => !expanded)}
+            >
+              {expandedFirstVessel
+                ? "Collapse first vessel"
+                : "Expand first vessel"}
+            </Button>
+          }
         >
           <DataGrid
             aria-label="Fleet"
             items={sortedBoats}
+            style={{ height: 280 }}
             renderRow={(boat) => (
               <Row>
-                <Cell>{boat.name}</Cell>
+                <Cell>
+                  <span
+                    style={{
+                      display: "block",
+                      minHeight:
+                        expandedFirstVessel && boat.id === "vessel-1"
+                          ? 72
+                          : undefined,
+                    }}
+                  >
+                    {boat.name}
+                  </span>
+                </Cell>
                 <Cell>{boat.depth.toFixed(1)} m</Cell>
                 <Cell>{boat.wind} kn</Cell>
               </Row>
@@ -525,26 +562,27 @@ function Showcase(): React.JSX.Element {
           </Button>
         }
       >
-        <p style={{ margin: 0 }}>
-          Sand over mud, good holding, swell wraps in from the southeast above
-          fifteen knots.
-        </p>
+        <Stack gap={3}>
+          <p style={{ margin: 0 }}>
+            Sand over mud, good holding, swell wraps in from the southeast above
+            fifteen knots.
+          </p>
+          <Popover trigger={<Button>Show approach note</Button>}>
+            Keep the red lateral mark to starboard on entry.
+          </Popover>
+        </Stack>
       </Dialog>
 
       <AlertDialog
         open={alertOpen}
         onOpenChange={setAlertOpen}
+        cancelLabel="Keep route"
         title="Delete route?"
         description="Deleting the route removes it from every synced device."
         actions={
-          <>
-            <Button variant="secondary" onClick={() => setAlertOpen(false)}>
-              Keep route
-            </Button>
-            <Button variant="danger" onClick={() => setAlertOpen(false)}>
-              Delete
-            </Button>
-          </>
+          <Button variant="danger" onClick={() => setAlertOpen(false)}>
+            Delete
+          </Button>
         }
       />
     </PanelRoot>

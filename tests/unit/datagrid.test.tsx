@@ -13,12 +13,12 @@ import {
   Column,
   DataGrid,
   type DataGridProps,
-  PanelRoot,
   Row,
   type RowProps,
   type Selection,
   type SortDescriptor,
-} from "../../src/index.js";
+} from "../../src/data-grid.js";
+import { PanelRoot } from "../../src/index.js";
 import { renderInPanel } from "../helpers.js";
 
 interface Boat {
@@ -69,17 +69,21 @@ function renderGrid(props: Partial<DataGridProps<Boat>> = {}): RenderResult {
   );
 }
 
-function bodyRows(container: HTMLElement): NodeListOf<HTMLTableRowElement> {
-  return container.querySelectorAll("tbody tr");
+function bodyRows(container: HTMLElement): NodeListOf<HTMLElement> {
+  return container.querySelectorAll<HTMLElement>(
+    ".snui-data-grid__body [role='row']",
+  );
 }
 
 function rowNames(container: HTMLElement): string[] {
   return [...bodyRows(container)].map(
-    (row) => row.querySelector("td")?.textContent ?? "",
+    (row) =>
+      row.querySelector("[role='rowheader'], [role='gridcell']")?.textContent ??
+      "",
   );
 }
 
-function rowAt(container: HTMLElement, index: number): HTMLTableRowElement {
+function rowAt(container: HTMLElement, index: number): HTMLElement {
   const row = [...bodyRows(container)][index];
   if (row === undefined) {
     throw new Error(`Expected a row at index ${String(index)}.`);
@@ -87,8 +91,12 @@ function rowAt(container: HTMLElement, index: number): HTMLTableRowElement {
   return row;
 }
 
-function cellAt(row: HTMLTableRowElement, index: number): HTMLTableCellElement {
-  const cell = [...row.querySelectorAll("td")][index];
+function cellAt(row: HTMLElement, index: number): HTMLElement {
+  const cell = [
+    ...row.querySelectorAll<HTMLElement>(
+      "[role='rowheader'], [role='gridcell']",
+    ),
+  ][index];
   if (cell === undefined) {
     throw new Error(`Expected a cell at index ${String(index)}.`);
   }
@@ -226,13 +234,14 @@ describe("DataGrid", () => {
       expect(widthWarnings).toEqual([]);
     });
 
-    it("forwards ref to the grid element", () => {
-      const ref = createRef<HTMLTableElement>();
+    it("forwards ref to the stable outer container", () => {
+      const ref = createRef<HTMLDivElement>();
       renderGrid({ ref });
 
       expect(ref.current).not.toBeNull();
-      expect(ref.current?.tagName).toBe("TABLE");
-      expect(ref.current).toHaveAttribute("role", "grid");
+      expect(ref.current?.tagName).toBe("DIV");
+      expect(ref.current).toHaveClass("snui-data-grid");
+      expect(ref.current?.querySelector("[role='grid']")).toBeInTheDocument();
     });
   });
 
@@ -447,27 +456,11 @@ describe("DataGrid", () => {
   });
 
   describe("virtualization", () => {
-    const fleet: readonly Boat[] = Array.from({ length: 50 }, (_, index) => ({
+    const fleet: readonly Boat[] = Array.from({ length: 20 }, (_, index) => ({
       id: `boat-${String(index)}`,
       name: `Boat ${String(index)}`,
       depth: index,
     }));
-
-    // jsdom reports zero element sizes, and @tanstack/react-virtual windows
-    // nothing into a zero-height viewport. Stub the scroll region's offset
-    // size so the virtualizer computes a real range.
-    function mockScrollRegion(viewportHeight = 220): void {
-      vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(
-        function (this: HTMLElement): number {
-          return this.classList.contains("snui-data-grid") ? viewportHeight : 0;
-        },
-      );
-      vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(
-        function (this: HTMLElement): number {
-          return this.classList.contains("snui-data-grid") ? 400 : 0;
-        },
-      );
-    }
 
     it("renders every row below the threshold", () => {
       const { container } = renderGrid({
@@ -482,32 +475,60 @@ describe("DataGrid", () => {
       ).toBeNull();
     });
 
-    it("windows the body above the threshold and keeps the header mounted", () => {
-      mockScrollRegion();
+    it("uses React Aria virtualization above the threshold and keeps the header mounted", () => {
       const { container } = renderGrid({
         items: fleet,
         virtualizeThreshold: 10,
       });
 
-      const rendered = bodyRows(container);
-      expect(rendered.length).toBeGreaterThan(0);
-      expect(rendered.length).toBeLessThan(fleet.length);
       expect(
         container.querySelector(".snui-data-grid--virtualized"),
       ).not.toBeNull();
+      expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "21");
       expect(
         screen.getByRole("columnheader", { name: "Name" }),
       ).toBeInTheDocument();
     });
 
-    it("stamps aria-rowcount on the grid and aria-rowindex on rendered rows", () => {
-      mockScrollRegion();
+    it("keeps the public ref on the outer container across threshold modes", () => {
+      const ref = createRef<HTMLDivElement>();
+      const view = renderGrid({
+        items: fleet.slice(0, 10),
+        ref,
+        virtualizeThreshold: 10,
+      });
+
+      expect(ref.current).toHaveClass("snui-data-grid");
+      expect(ref.current?.querySelector("[role='grid']")).toBeInTheDocument();
+
+      view.rerender(
+        <PanelRoot>
+          <DataGrid
+            ref={ref}
+            aria-label="Boats"
+            items={fleet}
+            renderRow={renderBoatRow}
+            virtualizeThreshold={10}
+          >
+            {boatColumns()}
+          </DataGrid>
+        </PanelRoot>,
+      );
+
+      expect(ref.current).toHaveClass(
+        "snui-data-grid",
+        "snui-data-grid--virtualized",
+      );
+      expect(ref.current?.querySelector("[role='grid']")).toBeInTheDocument();
+    });
+
+    it("lets React Aria own complete row counts and rendered row indices", () => {
       const { container } = renderGrid({
         items: fleet,
         virtualizeThreshold: 10,
       });
 
-      expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "51");
+      expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "21");
       expect(rowAt(container, 0)).toHaveAttribute("aria-rowindex", "2");
       const indices = [...bodyRows(container)].map((row) =>
         Number(row.getAttribute("aria-rowindex")),
@@ -518,25 +539,25 @@ describe("DataGrid", () => {
       });
     });
 
-    it("stamps the roles that lost table layout would otherwise drop", () => {
-      mockScrollRegion();
+    it("keeps explicit grid roles without relying on native table layout", () => {
       const { container } = renderGrid({
         items: fleet,
         virtualizeThreshold: 10,
       });
 
-      expect(container.querySelector("thead")).toHaveAttribute(
+      expect(
+        container.querySelector(".snui-data-grid__header"),
+      ).toHaveAttribute("role", "rowgroup");
+      expect(container.querySelector(".snui-data-grid__body")).toHaveAttribute(
         "role",
         "rowgroup",
       );
-      expect(container.querySelector("tbody")).toHaveAttribute(
-        "role",
-        "rowgroup",
-      );
-      for (const row of container.querySelectorAll("tr")) {
+      for (const row of container.querySelectorAll("[role='row']")) {
         expect(row).toHaveAttribute("role", "row");
       }
-      const cells = [...container.querySelectorAll("td")];
+      const cells = [
+        ...container.querySelectorAll("[role='rowheader'], [role='gridcell']"),
+      ];
       expect(cells.length).toBeGreaterThan(0);
       const rowheaders = cells.filter(
         (cell) => cell.getAttribute("role") === "rowheader",
@@ -551,20 +572,23 @@ describe("DataGrid", () => {
       expect(rowheaders.length + gridcells.length).toBe(cells.length);
     });
 
-    it("sizes the body to the full virtual height per density", () => {
-      mockScrollRegion();
+    it("preserves consumer row styles in virtualized mode", () => {
       const { container } = renderGrid({
         density: "compact",
         items: fleet,
+        renderRow: (boat) => (
+          <Row {...(boat.id === "boat-0" ? { style: { height: 72 } } : {})}>
+            <Cell>{boat.name}</Cell>
+            <Cell>{boat.depth}</Cell>
+          </Row>
+        ),
         virtualizeThreshold: 10,
       });
 
-      const body = container.querySelector("tbody");
-      expect(body).toHaveStyle({ height: "1600px" });
+      expect(rowAt(container, 0)).toHaveStyle({ height: "72px" });
     });
 
     it("falls back to index keys for items without id", () => {
-      mockScrollRegion();
       const anonymous = Array.from({ length: 20 }, (_, index) => ({
         name: `Anon ${String(index)}`,
       }));
@@ -583,12 +607,11 @@ describe("DataGrid", () => {
         </DataGrid>,
       );
 
-      expect(bodyRows(container).length).toBeGreaterThan(0);
-      expect(bodyRows(container).length).toBeLessThan(anonymous.length);
+      expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "21");
+      expect(rowAt(container, 0)).toHaveAttribute("data-key", "0");
     });
 
     it("renders virtualized rows in document order matching the data", () => {
-      mockScrollRegion();
       const { container } = renderGrid({
         items: fleet,
         virtualizeThreshold: 10,
@@ -598,6 +621,18 @@ describe("DataGrid", () => {
       expect(names[0]).toBe("Boat 0");
       const sequence = names.map((name) => Number(name.replace("Boat ", "")));
       expect(sequence).toEqual([...sequence].sort((a, b) => a - b));
+    });
+
+    it("marks virtual zebra parity from the collection index", () => {
+      const { container } = renderGrid({
+        items: fleet,
+        virtualizeThreshold: 10,
+        zebra: true,
+      });
+
+      expect(rowAt(container, 0)).not.toHaveAttribute("data-snui-zebra-odd");
+      expect(rowAt(container, 1)).toHaveAttribute("data-snui-zebra-odd");
+      expect(rowAt(container, 2)).not.toHaveAttribute("data-snui-zebra-odd");
     });
   });
 

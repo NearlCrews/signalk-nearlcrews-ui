@@ -3,12 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import {
-  Accordion,
-  CollapsibleSection,
-  InlineConfirm,
-  Section,
-} from "../../src/index.js";
+import { Accordion } from "../../src/composites.js";
+import { CollapsibleSection, InlineConfirm, Section } from "../../src/index.js";
 import { panel, renderInPanel } from "../helpers.js";
 
 describe("merged collapsible contract", () => {

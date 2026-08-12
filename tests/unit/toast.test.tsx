@@ -15,7 +15,7 @@ import {
   ToastRegion,
   type ToastRegionProps,
   toast,
-} from "../../src/index.js";
+} from "../../src/overlays.js";
 import { TRANSITION_FAST_MS } from "../../src/styles/tokens.js";
 import { renderInPanel } from "../helpers.js";
 
@@ -157,6 +157,18 @@ describe("createToastQueue", () => {
 });
 
 describe("ToastRegion", () => {
+  it("keeps the notification region inside device safe areas", () => {
+    const queue = createToastQueue();
+    const { container } = renderToastRegion(queue);
+    const styles = container.ownerDocument.head.querySelector(
+      "style[data-snui-styles]",
+    );
+
+    expect(styles?.textContent).toContain("env(safe-area-inset-bottom, 0px)");
+    expect(styles?.textContent).toContain("env(safe-area-inset-right, 0px)");
+    expect(styles?.textContent).toContain("env(safe-area-inset-left, 0px)");
+  });
+
   it("renders enqueued toasts inside the panel root portal", () => {
     const queue = createToastQueue();
     const { container } = renderToastRegion(queue);
@@ -436,15 +448,22 @@ describe("ToastRegion", () => {
     expect(screen.getByText("Shared notice")).toBeInTheDocument();
   });
 
-  it("falls back to the document body outside a PanelRoot", () => {
+  it("rejects rendering outside a PanelRoot", () => {
     const queue = createToastQueue();
-    render(<ToastRegion queue={queue} />);
-    flush();
-    enqueue(queue, { title: "Unpanelled" });
+    expect(() => render(<ToastRegion queue={queue} />)).toThrow(
+      "ToastRegion must be rendered inside PanelRoot.",
+    );
+  });
 
-    const region = screen.getByRole("region", { name: "Notifications" });
-    expect(region.parentElement).toBe(document.body);
-    expect(screen.getByText("Unpanelled")).toBeInTheDocument();
+  it("finishes dismissal when the exit transition ends", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    enqueue(queue, { title: "Synced" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    const card = toastCard("status");
+    fireEvent.transitionEnd(card, { propertyName: "opacity" });
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("removes a dismissed toast immediately under reduced motion", () => {

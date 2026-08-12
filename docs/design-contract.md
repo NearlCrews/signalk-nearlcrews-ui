@@ -25,17 +25,17 @@ The React package must not own:
 
 ## Themes
 
-The public theme names are `auto`, `light`, `dark`, and `night`.
+The public theme names are `auto`, `system`, `light`, `dark`, and `night`.
 
-- Auto is the implicit default when no valid shared preference exists. It is not written to storage, and it leaves `data-snui-theme` off the root so host-following and `prefers-color-scheme` rules apply.
-- Auto follows an explicit host theme before the operating-system preference.
+- Auto is the implicit default when no valid shared preference exists. It is not written to storage, and it leaves `data-snui-theme` off the root so an explicit Bootstrap, CoreUI, or legacy `.dark-mode` host theme can apply. Without an explicit host theme, Auto uses the library's Light palette.
+- System is an explicit choice that follows `prefers-color-scheme` independently of the host theme.
 - Light uses dark text on light surfaces.
 - Dark uses light text on dark surfaces and dark text on the brighter accent fill.
 - Night uses red-preserving surfaces, text, focus, and status colors.
 
 Night styling ends at the panel root. It does not modify host chrome, the document body, or surrounding gutters. A full-surface night experience requires the host to coordinate those surfaces.
 
-Theme preference is shared across NearlCrews administration panels through `signalk-nearlcrews-ui.theme.v1`, the only storage key the package reads or writes. Explicit selections are persisted. Panels mounted in the same document stay in sync through a same-document event, and open panels in other tabs follow the browser storage event. A selection whose storage write fails remains current in the mounted panels for the page session but is not durable. Existing valid stored choices, including Auto, otherwise remain authoritative. Binnacle and other chartplotter interfaces maintain separate product preferences.
+Theme preference is shared across NearlCrews administration panels through `signalk-nearlcrews-ui.theme.v1`, the only storage key the package reads or writes. Explicit selections, including Auto and System, are persisted. Panels mounted in the same document stay in sync through a same-document event, and open panels in other tabs follow the browser storage event. A selection whose storage write fails remains current in the mounted panels for the page session but is not durable. Existing valid stored choices otherwise remain authoritative. A package version that does not recognize a choice written by another version ignores it instead of clearing the mounted theme. Binnacle and other chartplotter interfaces maintain separate product preferences.
 
 ## Public CSS tokens
 
@@ -63,7 +63,7 @@ These color token names are public API:
 
 These foundation token names are also public API:
 
-- `--snui-font-family`
+- `--snui-font-family` and `--snui-font-family-mono`
 - `--snui-font-size`
 - `--snui-font-size-sm` and `--snui-font-size-xs`
 - `--snui-font-weight-medium`, `--snui-font-weight-semibold`, `--snui-font-weight-bold`, and `--snui-font-weight-heavy`
@@ -87,6 +87,12 @@ Token values may change in a compatible release to fix contrast, browser behavio
 
 Consumers may override public tokens through the native `style` prop on `PanelRoot`. Token overrides must remain on that versioned root and must not target private classes or DOM structure. Inline overrides apply across theme choices, so consumers must verify Light, Dark, and Night contrast before using them.
 
+## Presentation utilities
+
+`formatRelativeAge` accepts a nonnegative elapsed age in milliseconds and formats it through `Intl.RelativeTimeFormat`. It does not read the clock, accept a timestamp, decide whether data is stale, or assign domain meaning to the age. Consumers compute and clamp the age at their data boundary, choose any unavailable-data fallback, and retain ownership of freshness policy.
+
+`SecretInput` owns only password-visibility presentation. It does not store, fetch, authorize, encrypt, or redact its value. Consumers retain those responsibilities and must not treat a concealed native input as a security boundary.
+
 ## Accessibility
 
 - Normal text and control labels must meet WCAG AA contrast.
@@ -102,6 +108,10 @@ Consumers may override public tokens through the native `style` prop on `PanelRo
 - Checkboxes expose the native mixed state through `indeterminate`, and platform interaction clears the mixed state as usual. Range inputs show a filled progress track alongside their thumb position.
 - Loading buttons remain focusable, expose busy and disabled accessibility states, and suppress repeat pointer and keyboard activation. The accessible name stays stable while busy, and the loading label is exposed as a description, so the control is not announced as a different element mid-interaction.
 - Confirmation regions receive initial focus so their message is announced on open, support Escape while idle, and restore focus when dismissed. Their actions block activation through `aria-disabled` rather than leaving the tab order, so focus is never destroyed and chased across a busy transition.
+- `AlertDialog` always renders an enabled, explicitly labeled cancel action before supplemental actions. A destructive or busy supplemental action may not remove the user's route out of the alert dialog.
+- `SecretInput` uses an explicit Show or Hide toggle with pressed-state semantics. Pointer activation preserves the input's focus, caret, and selected range, while keyboard activation retains normal button focus behavior.
+- `DataGrid` exposes one row-header column, a complete accessible collection, controlled sorting, and React Aria keyboard navigation whether its rows are virtualized or rendered directly.
+- `UnsupportedBrowserNotice` is a standalone alert with an overridable heading and body. Consumers render it instead of `PanelRoot` only after their own CSS-scope preflight fails.
 - `ariaDisabled` buttons remain focusable, suppress pointer and keyboard activation, and use disabled presentation.
 - Raw links inside a panel use theme-safe link tokens for default, visited, and hover states.
 - Coarse-pointer controls have a minimum target height of 44 pixels.
@@ -117,7 +127,7 @@ Consumers may override public tokens through the native `style` prop on `PanelRo
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.6.2"])
+@scope (.snui-root[data-snui-version="0.7.0"])
   to ([data-snui-version]) {
   /* component rules */
 }
@@ -127,20 +137,31 @@ Every descendant selector is inside a native CSS scope rooted at the exact packa
 
 Host applications ship global element styles that reach unclassed markup a consumer renders inside a panel. Signal K Admin bundles Bootstrap Reboot, whose legend, heading, and block margins visibly change panel content. A panel neutralizes those element styles so it renders the same in every host. This reset applies to consumer-owned markup inside the panel, and stops at the panel root.
 
+## Overlays and viewport chrome
+
+Dialogs, menus, popovers, and toast regions portal into the nearest owning `PanelRoot`. They do not fall back to `document.body`, because leaving the versioned root would also leave its native CSS scope, theme tokens, CSP style contract, and nested-version boundary. `ToastRegion` therefore throws when used outside `PanelRoot`.
+
+The public z-index tokens define the base overlay, modal, and toast layers. Nested dialogs increment the modal layer, while menus and popovers opened from a dialog render above that dialog. Consumers may override the public tokens on `PanelRoot`, but must not target private overlay classes or inline layer calculations.
+
+Dialogs size against the visual viewport and safe-area insets, including the narrow-panel bottom-sheet layout. Toast regions respect bottom, left, and right safe-area insets. Toast exit removal follows the transition end, with a token-derived fallback timer for engines that omit the event and an immediate path for reduced motion.
+
+`ActionBar` retains ordinary `"top"` and `"bottom"` sticky modes. Its `"viewport-bottom"` mode remains inside the versioned root rather than portaling, measures the `PanelRoot` column, reserves the bar's natural-flow height, and uses fixed positioning only while the viewport edge lies between the panel's leading edge and the bar's anchor. It accounts for `visualViewport`, safe-area insets, nested scroll events, and resizing. The bar returns to natural flow at its anchor and does not linger after the panel leaves the viewport.
+
 ## Density and responsive behavior
 
 Desktop controls have a compact 40-pixel minimum height. A device with any coarse pointer uses 44 pixels. Square and icon-only targets meet the same floor in both width and height. The range thumb opts out of native rendering, so it scales with this contract through `--snui-range-thumb-size` rather than relying on the user-agent target-size exception. Panels must reflow without horizontal page overflow at 320 CSS pixels, and action groups may wrap when space is limited. Responsive component rules use the `PanelRoot` inline size instead of the browser viewport, so a narrow embedded panel reflows correctly in a wide host window.
 
-`PanelRoot` is full width by default. `width="standard"` caps content at `--snui-content-width-standard`, and `width="wide"` caps it at `--snui-content-width-wide`. `Stack` is the sole owner of external vertical rhythm between shared surfaces, `Cluster` owns wrapping inline rhythm, and `DataGrid` owns generic tabular presentation. Plugin-specific workflow layouts, and the row data and sorting a grid displays, remain local.
+`PanelRoot` is full width by default. `width="standard"` caps content at `--snui-content-width-standard`, and `width="wide"` caps it at `--snui-content-width-wide`. `Stack` is the sole owner of external vertical rhythm between shared surfaces, `Cluster` owns wrapping inline rhythm, and `DataGrid` owns generic tabular presentation. Above its virtualization threshold, `DataGrid` uses React Aria's complete collection and measured row layout; consumers must provide stable item identifiers and continue to own row data and controlled sorting. Plugin-specific workflows remain local.
 
 ## Compatibility
 
-- React support is `>=19.2 <20` for `0.x`.
+- React and React DOM support is `>=19.2 <20` for `0.x`.
 - Native CSS `@scope` sets the browser floors: Chromium and Edge 118, Firefox 146, and Safari 17.4. `supportsNativeCssScope` lets consumers check support before rendering, and unsupported engines receive `UnsupportedBrowserError` before style installation. No unscoped fallback is provided. Consumer adoption is blocked until every supported kiosk and embedded WebView deployment meets that floor.
 - Right-to-left caret mirroring and select indicator placement use `:dir()`, which Chromium added in 120. On Chromium and Edge 118 and 119 those cosmetic rules, including the range fill direction, are skipped while layout, keyboard direction handling, and all other styling remain correct.
-- React and `react/jsx-runtime` remain external to the unbundled library build. Consumer remotes may embed React's small JSX element-construction helper. React itself must resolve through the host singleton, and React or React DOM implementations must never be embedded.
+- React, React DOM, and their implementation entry points remain external to the unbundled library build. Consumer remotes may embed React's small JSX element-construction helper. React and React DOM must both resolve through Signal K Admin host singletons configured with `import: false`, and their implementations must never be embedded.
 - Consumers bundle this package into each Module Federation remote.
 - Consumers must not share this package dynamically between remotes.
+- The package's `/composites`, `/data-grid`, `/forms`, and `/overlays` entry points are supported public import paths. The package root is the supported entry point for lightweight panel, layout, field, feedback, theme, compatibility, and formatting primitives. APIs assigned to a focused entry point are not also exported from the root.
 - Both classic global and ESM Module Federation output are tested.
 - Browser behavior is tested in Playwright Chromium, Firefox, WebKit, and mobile Chromium. A nonce-restricted CSP fixture proves matching nonces apply styles and missing or incorrect nonces do not.
-- The repository runtime harness supplies a minimal host-equivalent React share scope. Each consumer remains responsible for testing the production remote in its supported Signal K Admin host.
+- The repository runtime harness supplies a minimal host-equivalent React and React DOM share scope. Each consumer remains responsible for testing the production remote in its supported Signal K Admin host.

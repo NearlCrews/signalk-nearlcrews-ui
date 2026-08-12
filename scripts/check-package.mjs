@@ -87,6 +87,31 @@ for (const [documentName, document, expectedText] of [
   }
 }
 
+if (process.env.SNUI_RELEASE_APPROVED === "true") {
+  const escapedVersion = packageJson.version.replaceAll(".", String.raw`\.`);
+  const datedHeading = new RegExp(
+    String.raw`^## \[${escapedVersion}\] - \d{4}-\d{2}-\d{2}$`,
+    "m",
+  );
+  if (!datedHeading.test(changelog)) {
+    throw new Error(
+      `CHANGELOG.md must date approved release ${packageJson.version}.`,
+    );
+  }
+
+  const releaseLink = changelog.match(
+    new RegExp(String.raw`^\[${escapedVersion}\]: (\S+)$`, "m"),
+  )?.[1];
+  if (
+    releaseLink === undefined ||
+    !releaseLink.endsWith(`...v${packageJson.version}`)
+  ) {
+    throw new Error(
+      `CHANGELOG.md must compare release ${packageJson.version} to v${packageJson.version}, not HEAD.`,
+    );
+  }
+}
+
 const output = runNpmPack(["--dry-run", "--json", "--ignore-scripts"]);
 const packResult = parseNpmPackResult(output, packageJson.name);
 const files = new Set(packResult.files.map((file) => file.path));
@@ -99,8 +124,16 @@ for (const requiredFile of [
   "docs/migration.md",
   "docs/repository-setup.md",
   "docs/release-policy.md",
+  "dist/composites.js",
+  "dist/composites.d.ts",
+  "dist/data-grid.js",
+  "dist/data-grid.d.ts",
+  "dist/forms.js",
+  "dist/forms.d.ts",
   "dist/index.js",
   "dist/index.d.ts",
+  "dist/overlays.js",
+  "dist/overlays.d.ts",
   "package.json",
 ]) {
   if (!files.has(requiredFile)) {

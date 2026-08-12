@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("loads classic and ESM remotes against one host React", async ({
+test("loads classic and ESM remotes against host React and ReactDOM", async ({
   page,
 }) => {
   const pageErrors: string[] = [];
@@ -22,6 +22,9 @@ test("loads classic and ESM remotes against one host React", async ({
   await expect(roots).toHaveCount(2);
   await expect(roots.nth(0)).toHaveAttribute("data-snui-theme", "night");
   await expect(roots.nth(1)).toHaveAttribute("data-snui-theme", "night");
+
+  await page.getByRole("button", { name: "Notify" }).first().click();
+  await expect(page.getByText("Host portal ready")).toHaveCount(1);
 
   await page.evaluate(() => window.unmountFederationFixture?.("classic-root"));
   await expect(page.getByText("Fixture ready")).toHaveCount(1);

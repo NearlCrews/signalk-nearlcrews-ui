@@ -64,19 +64,17 @@ test("renders all themes and component states without axe violations", async ({
   }
 });
 
-test("follows the host and system theme for a fresh profile", async ({
-  page,
-}) => {
-  await page.emulateMedia({ colorScheme: "dark" });
+test("follows the host theme for a fresh Auto profile", async ({ page }) => {
   await page.addInitScript(() => {
     window.localStorage.clear();
-    document.documentElement.dataset.bsTheme = "dark";
   });
   await page.goto("/");
+  await page.evaluate(() => {
+    document.documentElement.dataset.bsTheme = "dark";
+  });
 
   // An unresolved preference stays Auto, which leaves data-snui-theme off the
-  // root. Pinning it to Light would disable every host-following rule, all of
-  // which are written as :not([data-snui-theme]).
+  // root so an explicit host theme can apply.
   const root = page.locator("[data-snui-version]");
   await expect(root).not.toHaveAttribute("data-snui-theme");
   await expect(root).toHaveCSS("background-color", "rgb(16, 19, 28)");
@@ -133,15 +131,37 @@ test("uses the host theme while Auto is selected", async ({ page }) => {
   await expect(root).toHaveCSS("background-color", "rgb(16, 19, 28)");
 });
 
-test("uses the operating-system theme while Auto is selected", async ({
+test("uses the light fallback while Auto is selected without a host theme", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "dark" });
+  await page.evaluate(() => {
+    document.documentElement.removeAttribute("data-bs-theme");
+    document.documentElement.removeAttribute("data-coreui-theme");
+    document.documentElement.classList.remove("dark-mode");
+  });
   await page.getByRole("radio", { name: "Auto" }).click();
   const root = page.locator("[data-snui-version]");
 
   await expect(root).not.toHaveAttribute("data-snui-theme");
+  await expect(root).toHaveCSS("background-color", "rgb(244, 246, 248)");
+  await expect(root).toHaveCSS("color", "rgb(24, 32, 44)");
+});
+
+test("uses the operating-system theme while System is selected", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.getByRole("radio", { name: "System" }).click();
+  const root = page.locator("[data-snui-version]");
+
+  await expect(root).toHaveAttribute("data-snui-theme", "system");
   await expect(root).toHaveCSS("background-color", "rgb(16, 19, 28)");
+  await expect(root).toHaveCSS("color", "rgb(245, 247, 250)");
+
+  await page.emulateMedia({ colorScheme: "light" });
+  await expect(root).toHaveCSS("background-color", "rgb(244, 246, 248)");
+  await expect(root).toHaveCSS("color", "rgb(24, 32, 44)");
 });
 
 test("keeps library styling inside the panel root", async ({
@@ -761,6 +781,122 @@ test("reflows state-heavy content at a 320 pixel viewport", async ({
   expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.clientWidth);
 });
 
+test("docks the viewport action bar inside an unconstrained Admin host", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 900, height: 600 });
+  await page.goto("/?admin-host=1");
+
+  const appBody = page.locator(".app-body");
+  const panel = page.locator("[data-snui-root]");
+  const anchor = page.locator(".snui-action-bar__viewport-anchor");
+  const bar = page.locator(".snui-action-bar");
+
+  await expect(appBody).toHaveCSS("overflow-x", "hidden");
+  await expect(appBody).toHaveCSS("overflow-y", "auto");
+  const appBodyMetrics = await appBody.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(appBodyMetrics.clientHeight).toBe(appBodyMetrics.scrollHeight);
+  await expect
+    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
+    .toBe("fixed");
+  await expect
+    .poll(async () => {
+      const [currentAnchor, currentBar] = await Promise.all([
+        anchor.boundingBox(),
+        bar.boundingBox(),
+      ]);
+      return (
+        currentAnchor !== null &&
+        currentBar !== null &&
+        Math.abs(currentAnchor.x - currentBar.x) < 0.1 &&
+        Math.abs(currentAnchor.width - currentBar.width) < 0.1 &&
+        Math.abs(currentAnchor.height - currentBar.height) < 0.1
+      );
+    })
+    .toBe(true);
+
+  const [panelBox, anchorBox, barBox] = await Promise.all([
+    panel.boundingBox(),
+    anchor.boundingBox(),
+    bar.boundingBox(),
+  ]);
+  expect(panelBox).not.toBeNull();
+  expect(anchorBox).not.toBeNull();
+  expect(barBox).not.toBeNull();
+  if (panelBox === null || anchorBox === null || barBox === null) return;
+  expect(barBox.x).toBeCloseTo(anchorBox.x, 1);
+  expect(barBox.width).toBeCloseTo(anchorBox.width, 1);
+  expect(barBox.x).toBeGreaterThanOrEqual(panelBox.x);
+  expect(barBox.x + barBox.width).toBeLessThanOrEqual(
+    panelBox.x + panelBox.width,
+  );
+  expect(anchorBox.height).toBeCloseTo(barBox.height, 1);
+  expect(barBox.y + barBox.height).toBeCloseTo(600, 0);
+
+  await page.setViewportSize({ width: 760, height: 600 });
+  await expect
+    .poll(async () => {
+      const [currentAnchor, currentBar] = await Promise.all([
+        anchor.boundingBox(),
+        bar.boundingBox(),
+      ]);
+      return (
+        currentAnchor !== null &&
+        currentBar !== null &&
+        Math.abs(currentAnchor.x - currentBar.x) < 0.1 &&
+        Math.abs(currentAnchor.width - currentBar.width) < 0.1
+      );
+    })
+    .toBe(true);
+  const [resizedPanelBox, resizedBarBox] = await Promise.all([
+    panel.boundingBox(),
+    bar.boundingBox(),
+  ]);
+  expect(resizedPanelBox).not.toBeNull();
+  expect(resizedBarBox).not.toBeNull();
+  if (resizedPanelBox !== null && resizedBarBox !== null) {
+    expect(resizedBarBox.x).toBeGreaterThanOrEqual(resizedPanelBox.x);
+    expect(resizedBarBox.x + resizedBarBox.width).toBeLessThanOrEqual(
+      resizedPanelBox.x + resizedPanelBox.width,
+    );
+  }
+
+  const anchorDocumentTop = await anchor.evaluate(
+    (element) => element.getBoundingClientRect().top + window.scrollY,
+  );
+  await page.evaluate(
+    ({ documentTop, height }) => {
+      window.scrollTo(0, documentTop - window.innerHeight + height + 1);
+    },
+    { documentTop: anchorDocumentTop, height: barBox.height },
+  );
+  await expect
+    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
+    .not.toBe("fixed");
+  const naturalBoxes = await Promise.all([
+    anchor.boundingBox(),
+    bar.boundingBox(),
+  ]);
+  expect(naturalBoxes[0]).not.toBeNull();
+  expect(naturalBoxes[1]).not.toBeNull();
+  if (naturalBoxes[0] !== null && naturalBoxes[1] !== null) {
+    expect(naturalBoxes[1].y).toBeCloseTo(naturalBoxes[0].y, 1);
+  }
+
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect
+    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
+    .not.toBe("fixed");
+  await expect
+    .poll(() =>
+      bar.evaluate((element) => element.getBoundingClientRect().bottom),
+    )
+    .toBeLessThanOrEqual(1);
+});
+
 test("honors reduced-motion preferences", async ({ page }) => {
   await page.goto("/?states=1");
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -916,6 +1052,7 @@ test("matches the WebKit native-control baseline", async ({
   await expect(page).toHaveScreenshot("panel-native-controls-webkit.png", {
     animations: "disabled",
     fullPage: true,
+    timeout: 15_000,
   });
 });
 

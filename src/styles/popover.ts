@@ -9,7 +9,6 @@ export const POPOVER_STYLES = scopeStyles(`
 /* ==== Popover (anchored content overlay) ==== */
 
 .snui-popover {
-  z-index: var(--snui-z-overlay);
   width: var(--snui-popover-width, auto);
   max-width: min(24rem, 100%);
   padding: var(--snui-space-3);

@@ -1,4 +1,3 @@
-import { useVirtualizer } from "@tanstack/react-virtual";
 import {
   type AriaAttributes,
   Children,
@@ -9,8 +8,6 @@ import {
   type ReactElement,
   type ReactNode,
   type RefAttributes,
-  useLayoutEffect,
-  useRef,
 } from "react";
 import {
   Cell,
@@ -25,11 +22,11 @@ import {
   TableBody,
   TableHeader,
 } from "react-aria-components";
+import { TableLayout, Virtualizer } from "react-aria-components/Virtualizer";
 import { DATA_GRID_ROW_HEIGHTS } from "../styles/tokens.js";
 import { hasAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
-import { attachRef } from "../utils/ref.js";
 import { EmptyState } from "./EmptyState.js";
 
 export type {
@@ -47,12 +44,15 @@ export type DataGridDensity = "default" | "compact";
 export type DataGridSelectionMode = "none" | "single" | "multiple";
 
 const DEFAULT_VIRTUALIZE_THRESHOLD = 100;
-const VIRTUAL_OVERSCAN = 8;
-/** One header row: row indices are 1 based and the header row comes first. */
-const HEADER_ROW_COUNT = 1;
+
+interface VirtualCollectionItem<T> {
+  readonly id: Key;
+  readonly odd: boolean;
+  readonly value: T;
+}
 
 export interface DataGridProps<TRow, TColumn = unknown>
-  extends RefAttributes<HTMLTableElement> {
+  extends RefAttributes<HTMLDivElement> {
   readonly "aria-label"?: AriaAttributes["aria-label"];
   readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"];
   /**
@@ -93,10 +93,10 @@ export interface DataGridProps<TRow, TColumn = unknown>
   readonly sortDescriptor?: SortDescriptor;
   readonly style?: CSSProperties;
   /**
-   * Number of rows above which the body is windowed with
-   * @tanstack/react-virtual. Virtualized rows have a fixed height per density
-   * and columns size by flex (a Column `width` pins its basis); keyboard
-   * navigation reaches rendered rows, scrolling reveals the rest.
+   * Number of rows above which the body uses React Aria's TableLayout and
+   * Virtualizer. The density row height is an estimate, and rows are observed
+   * so wrapped or expanded content can use its measured height. Keyboard
+   * navigation and accessibility metadata cover the complete collection.
    */
   readonly virtualizeThreshold?: number;
   /** Paints alternating row backgrounds. Off by default. */
@@ -203,19 +203,7 @@ export function DataGrid<TRow, TColumn = unknown>({
     );
   }
 
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const gridRef = useRef<HTMLTableElement | null>(null);
   const virtualized = items.length > virtualizeThreshold;
-  // TanStack Virtual is not compiler-optimizable, so React skips memoizing
-  // this component; every virtualizer value is consumed in the same render,
-  // so no stale-UI path exists.
-  // eslint-disable-next-line react-hooks/incompatible-library
-  const virtualizer = useVirtualizer({
-    count: virtualized ? items.length : 0,
-    estimateSize: () => DATA_GRID_ROW_HEIGHTS[density],
-    getScrollElement: () => scrollRef.current,
-    overscan: VIRTUAL_OVERSCAN,
-  });
 
   let headerChildren: ReactNode | ((column: TColumn) => ReactElement);
   if (typeof children === "function") {
@@ -278,63 +266,40 @@ export function DataGrid<TRow, TColumn = unknown>({
 
   let body: ReactElement;
   if (virtualized) {
-    const rows: ReactNode[] = [];
-    for (const virtualItem of virtualizer.getVirtualItems()) {
-      const item = items[virtualItem.index];
-      if (item === undefined) {
-        continue;
-      }
-      const key = getRowKey(item, virtualItem.index);
-      const row = renderRow(item);
-      const rowIndex = virtualItem.index + 1 + HEADER_ROW_COUNT;
-      // React 19 passes ref through element props; RowProps cannot express
-      // it, so recover any consumer ref before composing.
-      const consumerRef = (
-        row as ReactElement<RowProps<TRow> & RefAttributes<HTMLTableRowElement>>
-      ).props.ref;
-      rows.push(
-        cloneElement(row, {
-          key,
-          id: key,
-          // RAC strips consumer aria-rowindex from Row props (it owns row
-          // indices, but only stamps them under its own Virtualizer), and
-          // its collection commits rows in an internal pass, so the ref
-          // callback stamps the index exactly when each row mounts. The row
-          // role rides along: table layout is off in virtualized mode, so
-          // the implicit tr role is gone in real browsers.
-          ref: (node: HTMLTableRowElement | null) => {
-            if (node !== null) {
-              node.setAttribute("role", "row");
-              node.setAttribute("aria-rowindex", String(rowIndex));
-              // Gridcell roles ride the same mount: RAC stamps only
-              // rowheader cells, so the rest need theirs explicitly.
-              for (const cell of node.cells) {
-                if (!cell.hasAttribute("role")) {
-                  cell.setAttribute("role", "gridcell");
-                }
-              }
-            }
-            return attachRef(consumerRef, node);
-          },
-          className: classNames(
-            "snui-data-grid__row",
-            typeof row.props.className === "string"
-              ? row.props.className
-              : undefined,
-          ),
-          style: {
-            ...(isPlainStyle(row.props.style) ? row.props.style : {}),
-            transform: `translateY(${String(virtualItem.start)}px)`,
-          },
-        } as Partial<RowProps<TRow>>),
-      );
-    }
+    const virtualItems: readonly VirtualCollectionItem<TRow>[] = items.map(
+      (value, index) => ({
+        id: getRowKey(value, index),
+        odd: index % 2 === 1,
+        value,
+      }),
+    );
     body = (
       <TableBody
         className="snui-data-grid__body"
-        style={{ height: virtualizer.getTotalSize() }}
+        items={virtualItems}
+        renderEmptyState={() =>
+          hasReactContent(emptyState) ? (
+            emptyState
+          ) : (
+            <EmptyState title={emptyTitle} />
+          )
+        }
       >
-        {rows}
+        {(entry) => {
+          const row = renderRow(entry.value);
+          return isPlainStyle(row.props.style)
+            ? cloneElement(row, {
+                "data-snui-zebra-odd": entry.odd || undefined,
+                style: {
+                  width: "inherit",
+                  height: "inherit",
+                  ...row.props.style,
+                },
+              } as Partial<RowProps<TRow>> & {
+                readonly "data-snui-zebra-odd"?: boolean | undefined;
+              })
+            : row;
+        }}
       </TableBody>
     );
   } else {
@@ -354,36 +319,33 @@ export function DataGrid<TRow, TColumn = unknown>({
     );
   }
 
-  // RAC only stamps aria-rowcount under its own Virtualizer; mirror it here
-  // so windowed rows keep an honest screen-reader row count. React never
-  // renders this attribute, so there is no reconciliation conflict. The
-  // rowgroup and header-row roles ride the same cadence: virtualized mode
-  // restyles the table as stacked blocks, which drops those implicit roles
-  // in real browsers. Body rows and cells stamp their own roles at mount
-  // through the row ref callback above.
-  useLayoutEffect(() => {
-    const grid = gridRef.current;
-    if (grid === null) {
-      return;
-    }
-    if (virtualized) {
-      grid.setAttribute(
-        "aria-rowcount",
-        String(items.length + HEADER_ROW_COUNT),
-      );
-      grid.querySelector("thead")?.setAttribute("role", "rowgroup");
-      grid.querySelector("tbody")?.setAttribute("role", "rowgroup");
-      for (const headerRow of grid.querySelectorAll("thead tr")) {
-        headerRow.setAttribute("role", "row");
-      }
-    } else {
-      grid.removeAttribute("aria-rowcount");
-    }
-  }, [virtualized, items.length]);
+  const table = (
+    <Table
+      className="snui-data-grid__table"
+      selectionMode={selectionMode}
+      {...(ariaLabel === undefined ? {} : { "aria-label": ariaLabel })}
+      {...(ariaLabelledBy === undefined
+        ? {}
+        : { "aria-labelledby": ariaLabelledBy })}
+      {...(defaultSelectedKeys === undefined ? {} : { defaultSelectedKeys })}
+      {...(selectedKeys === undefined ? {} : { selectedKeys })}
+      {...(onSelectionChange === undefined ? {} : { onSelectionChange })}
+      {...(sortDescriptor === undefined ? {} : { sortDescriptor })}
+      {...(onSortChange === undefined ? {} : { onSortChange })}
+    >
+      <TableHeader
+        className="snui-data-grid__header"
+        {...(columns === undefined ? {} : { columns })}
+      >
+        {headerChildren}
+      </TableHeader>
+      {body}
+    </Table>
+  );
 
   return (
     <div
-      ref={scrollRef}
+      ref={ref}
       className={classNames(
         "snui-data-grid",
         `snui-data-grid--${density}`,
@@ -394,31 +356,20 @@ export function DataGrid<TRow, TColumn = unknown>({
       {...(id === undefined ? {} : { id })}
       {...(style === undefined ? {} : { style })}
     >
-      <Table
-        ref={(node) => {
-          gridRef.current = node as HTMLTableElement | null;
-          return attachRef(ref, node as HTMLTableElement | null);
-        }}
-        className="snui-data-grid__table"
-        selectionMode={selectionMode}
-        {...(ariaLabel === undefined ? {} : { "aria-label": ariaLabel })}
-        {...(ariaLabelledBy === undefined
-          ? {}
-          : { "aria-labelledby": ariaLabelledBy })}
-        {...(defaultSelectedKeys === undefined ? {} : { defaultSelectedKeys })}
-        {...(selectedKeys === undefined ? {} : { selectedKeys })}
-        {...(onSelectionChange === undefined ? {} : { onSelectionChange })}
-        {...(sortDescriptor === undefined ? {} : { sortDescriptor })}
-        {...(onSortChange === undefined ? {} : { onSortChange })}
-      >
-        <TableHeader
-          className="snui-data-grid__header"
-          {...(columns === undefined ? {} : { columns })}
+      {virtualized ? (
+        <Virtualizer
+          layout={TableLayout}
+          layoutOptions={{
+            estimatedHeadingHeight: DATA_GRID_ROW_HEIGHTS.default,
+            estimatedRowHeight: DATA_GRID_ROW_HEIGHTS[density],
+          }}
+          shouldObserveItemSize
         >
-          {headerChildren}
-        </TableHeader>
-        {body}
-      </Table>
+          {table}
+        </Virtualizer>
+      ) : (
+        table
+      )}
     </div>
   );
 }

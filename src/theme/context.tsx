@@ -67,9 +67,9 @@ export interface ThemeProviderProps {
 export function ThemeProvider({
   children,
 }: ThemeProviderProps): React.JSX.Element {
-  // An unresolved preference stays "auto" so the panel follows the host and the
-  // operating system. Writing "light" would pin data-snui-theme and disable
-  // every host-following rule, which are all written as :not([data-snui-theme]).
+  // An unresolved preference stays "auto" so the panel follows an explicit
+  // host theme and otherwise uses the library's light fallback. Operating-system
+  // preferences are reserved for the explicit "system" choice.
   const [theme, setThemeState] = useState<ThemeChoice>(
     () => readStorage(THEME_STORAGE_KEY) ?? "auto",
   );

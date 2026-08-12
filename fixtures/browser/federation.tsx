@@ -1,4 +1,5 @@
 import * as React from "react";
+import * as ReactDOM from "react-dom";
 import { createRoot, type Root } from "react-dom/client";
 
 declare const __CLASSIC_REMOTE_URL__: string;
@@ -9,16 +10,16 @@ interface RemoteContainer {
   init(scope: ShareScope): Promise<void> | void;
 }
 
+interface SharedModule<T> {
+  readonly eager: boolean;
+  readonly from: string;
+  readonly get: () => Promise<() => T>;
+  readonly loaded: boolean;
+}
+
 interface ShareScope {
-  readonly react: Record<
-    string,
-    {
-      readonly eager: boolean;
-      readonly from: string;
-      readonly get: () => Promise<() => typeof React>;
-      readonly loaded: boolean;
-    }
-  >;
+  readonly react: Record<string, SharedModule<typeof React>>;
+  readonly "react-dom": Record<string, SharedModule<typeof ReactDOM>>;
 }
 
 declare global {
@@ -34,6 +35,14 @@ const shareScope: ShareScope = {
       eager: true,
       from: "fixture-host",
       get: () => Promise.resolve(() => React),
+      loaded: true,
+    },
+  },
+  "react-dom": {
+    [ReactDOM.version]: {
+      eager: true,
+      from: "fixture-host",
+      get: () => Promise.resolve(() => ReactDOM),
       loaded: true,
     },
   },

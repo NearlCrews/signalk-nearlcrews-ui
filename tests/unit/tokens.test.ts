@@ -18,6 +18,8 @@ describe("design token scales", () => {
 
   it("keeps the typography, spacing, and radius scale values stable", () => {
     const expected: Record<string, string> = {
+      "--snui-font-family-mono":
+        'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       "--snui-font-size-sm": "0.875rem",
       "--snui-font-size-xs": "0.8125rem",
       "--snui-font-weight-medium": "600",

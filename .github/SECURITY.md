@@ -25,8 +25,10 @@ The maintainer will acknowledge the report, assess severity, coordinate a correc
 
 ## Security boundary
 
-The published package has no direct runtime dependencies and uses React as a peer dependency. It does not make network requests, call Signal K APIs, or handle plugin configuration. It writes the shared theme preference to browser local storage and installs package CSS in the rendered panel's owner document.
+The published package uses React Aria and React Aria Components as runtime dependencies, with React and React DOM as host-provided peer dependencies. It does not make network requests, call Signal K APIs, or handle plugin configuration. It writes only the shared theme preference to browser local storage, installs package CSS in the rendered panel's owner document, and portals overlays only into the owning `PanelRoot`.
 
-Consumers are responsible for validating data, enforcing authorization, protecting Signal K requests, supplying a trusted CSP nonce when required, and keeping React and the package current.
+`SecretInput` is a presentation control, not a secret store or redaction boundary. Revealing a value changes the native input type, while the value remains available to the consumer and browser. Consumers are responsible for secret storage, log and notification redaction, validation, authorization, protected Signal K requests, and safe configuration persistence. Do not place credentials or private vessel data in toast content, compatibility notices, diagnostics, screenshots, or browser storage.
 
-Repository checks include dependency audits, Dependabot, SHA-pinned GitHub Actions, type-aware linting, Knip, packed-package inspection, React externalization checks, browser accessibility tests, and npm provenance.
+Consumers must supply a trusted CSP nonce when required, resolve React and React DOM through the Signal K Admin host singletons with Module Federation fallback imports disabled, and keep the package, its runtime dependencies, and both peer implementations current. A consumer remote must not embed separate React or React DOM implementations.
+
+Repository checks include full and production dependency audits, Dependabot, SHA-pinned GitHub Actions, type-aware linting, Knip, packed-package inspection, React and React DOM externalization checks, browser accessibility tests, and npm provenance.

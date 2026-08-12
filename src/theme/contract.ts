@@ -1,6 +1,12 @@
 export const THEME_STORAGE_KEY = "signalk-nearlcrews-ui.theme.v1";
 
-export const THEME_CHOICES = ["auto", "light", "dark", "night"] as const;
+export const THEME_CHOICES = [
+  "auto",
+  "system",
+  "light",
+  "dark",
+  "night",
+] as const;
 
 export type ThemeChoice = (typeof THEME_CHOICES)[number];
 

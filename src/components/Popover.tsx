@@ -1,6 +1,5 @@
 import type {
   ComponentProps,
-  CSSProperties,
   ReactElement,
   ReactNode,
   RefAttributes,
@@ -11,6 +10,7 @@ import {
   Popover as RACPopover,
 } from "react-aria-components";
 import { classNames } from "../utils/class-names.js";
+import { overlayZIndex, useOverlayLayer } from "../utils/overlay-layer.js";
 import { usePortalContainerReady } from "../utils/portal.js";
 import type { ButtonProps } from "./Button.js";
 import {
@@ -44,6 +44,7 @@ export function Popover({
   width = "auto",
 }: PopoverProps): React.JSX.Element {
   const portalReady = usePortalContainerReady();
+  const overlayLayer = useOverlayLayer();
 
   return (
     <DialogTrigger {...overlayOpenProps({ open, defaultOpen, onOpenChange })}>
@@ -60,13 +61,14 @@ export function Popover({
           ref={ref}
           className={classNames("snui-popover", className)}
           placement={OVERLAY_PLACEMENTS[placement]}
-          {...(width === "auto"
-            ? {}
-            : {
-                style: {
+          style={{
+            zIndex: overlayZIndex(overlayLayer),
+            ...(width === "auto"
+              ? {}
+              : {
                   "--snui-popover-width": `${String(width)}px`,
-                } as CSSProperties,
-              })}
+                }),
+          }}
         >
           {children}
         </RACPopover>

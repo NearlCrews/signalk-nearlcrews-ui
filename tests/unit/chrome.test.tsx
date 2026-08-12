@@ -281,7 +281,7 @@ describe("chrome primitives", () => {
   });
 
   it("pins action bars to the requested edge only", () => {
-    renderInPanel(
+    const { container } = renderInPanel(
       <>
         <ActionBar
           sticky="bottom"
@@ -291,6 +291,11 @@ describe("chrome primitives", () => {
         <ActionBar
           sticky="top"
           data-testid="top-bar"
+          actions={<Button>Save</Button>}
+        />
+        <ActionBar
+          sticky="viewport-bottom"
+          data-testid="viewport-bottom-bar"
           actions={<Button>Save</Button>}
         />
         <ActionBar data-testid="plain-bar" actions={<Button>Save</Button>} />
@@ -303,7 +308,98 @@ describe("chrome primitives", () => {
     expect(screen.getByTestId("top-bar")).toHaveClass(
       "snui-action-bar--sticky-top",
     );
+    expect(screen.getByTestId("viewport-bottom-bar")).toHaveClass(
+      "snui-action-bar--sticky-viewport-bottom",
+    );
+    expect(
+      container.querySelector(".snui-action-bar__viewport-anchor"),
+    ).toHaveStyle({ "--snui-action-bar-fixed-bottom": "0px" });
     expect(screen.getByTestId("plain-bar").className).not.toContain("sticky");
+  });
+
+  it("docks a viewport action bar only between the panel edge and its flow anchor", async () => {
+    const originalVisualViewport = Object.getOwnPropertyDescriptor(
+      window,
+      "visualViewport",
+    );
+    const visualViewport = Object.assign(new EventTarget(), {
+      height: 500,
+      offsetLeft: 0,
+      offsetTop: 0,
+      pageLeft: 0,
+      pageTop: 0,
+      scale: 1,
+      width: 800,
+    }) as VisualViewport;
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: visualViewport,
+    });
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(800);
+
+    let anchorTop = 900;
+    let panelTop = 0;
+    const { container, unmount } = render(
+      <PanelRoot data-testid="viewport-panel">
+        <ActionBar
+          sticky="viewport-bottom"
+          data-testid="viewport-bar"
+          actions={<Button>Save</Button>}
+        />
+      </PanelRoot>,
+    );
+    const panel = screen.getByTestId("viewport-panel");
+    const bar = screen.getByTestId("viewport-bar");
+    const anchor = container.querySelector<HTMLElement>(
+      ".snui-action-bar__viewport-anchor",
+    );
+    const safeAreaProbe = container.querySelector<HTMLElement>(
+      ".snui-action-bar__safe-area-probe",
+    );
+    expect(anchor).not.toBeNull();
+    expect(safeAreaProbe).not.toBeNull();
+    if (anchor === null || safeAreaProbe === null) return;
+
+    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(100, panelTop, 600, 1_200),
+    );
+    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(120, anchorTop, 560, 60),
+    );
+    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(120, anchorTop, 560, 60),
+    );
+    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(800, 600, 0, 0),
+    );
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    expect(bar).toHaveClass("snui-action-bar--viewport-docked");
+    expect(anchor).toHaveStyle({
+      "--snui-action-bar-fixed-bottom": "100px",
+      "--snui-action-bar-fixed-height": "60px",
+      "--snui-action-bar-fixed-left": "120px",
+      "--snui-action-bar-fixed-width": "560px",
+    });
+
+    anchorTop = 430;
+    document.dispatchEvent(new Event("scroll"));
+    await waitFor(() => expect(anchor).not.toHaveAttribute("data-snui-docked"));
+    expect(bar).not.toHaveClass("snui-action-bar--viewport-docked");
+
+    anchorTop = 900;
+    panelTop = 650;
+    window.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).not.toHaveAttribute("data-snui-docked"));
+
+    unmount();
+    if (originalVisualViewport === undefined) {
+      Reflect.deleteProperty(window, "visualViewport");
+    } else {
+      Object.defineProperty(window, "visualViewport", originalVisualViewport);
+    }
   });
 
   it("adds scroll padding so a sticky action bar never covers focused content", () => {
@@ -313,12 +409,18 @@ describe("chrome primitives", () => {
 
     const styles = document.head.querySelector("style[data-snui-styles]");
     expect(styles?.textContent).toContain(
-      ".snui-root:has(> .snui-action-bar--sticky-bottom)",
+      ".snui-root:has(> .snui-root__content > .snui-action-bar--sticky-bottom)",
     );
     expect(styles?.textContent).toContain("scroll-padding-block-end");
     expect(styles?.textContent).toContain(
-      ".snui-root:has(> .snui-action-bar--sticky-top)",
+      ".snui-root:has(> .snui-root__content > .snui-action-bar--sticky-top)",
     );
+    expect(styles?.textContent).not.toContain(
+      ".snui-root:has(> .snui-action-bar",
+    );
+    expect(styles?.textContent).toContain(".snui-action-bar__viewport-anchor");
+    expect(styles?.textContent).toContain(".snui-action-bar--viewport-docked");
+    expect(styles?.textContent).toContain("env(safe-area-inset-bottom, 0px)");
     expect(styles?.textContent).toContain("scroll-padding-block-start");
   });
 });

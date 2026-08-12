@@ -54,6 +54,11 @@ module.exports = {
           requiredVersion: peerDependencies.react,
           import: false,
         },
+        "react-dom": {
+          singleton: true,
+          requiredVersion: peerDependencies["react-dom"],
+          import: false,
+        },
       },
     }),
   ],

@@ -14,8 +14,14 @@ import {
 import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import type { HeadingLevel } from "../utils/heading.js";
+import {
+  OverlayLayerProvider,
+  overlayZIndex,
+  useOverlayLayer,
+} from "../utils/overlay-layer.js";
 import { usePortalContainerReady } from "../utils/portal.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { Button, type ButtonVariant } from "./Button.js";
 import {
   type OverlayOpenState,
   overlayOpenProps,
@@ -46,9 +52,18 @@ export interface DialogProps
   readonly width?: DialogWidth;
 }
 
-export type AlertDialogProps = DialogProps;
+export interface AlertDialogProps extends Omit<DialogProps, "actions"> {
+  /** Supplemental actions, such as the destructive confirmation. */
+  readonly actions?: ReactNode;
+  /** Required label for the always-enabled escape action. */
+  readonly cancelLabel: ReactNode;
+  /** Defaults to secondary. */
+  readonly cancelVariant?: ButtonVariant;
+  readonly onCancel?: (() => void) | undefined;
+}
 
-interface DialogSurfaceProps extends DialogProps {
+interface DialogSurfaceProps extends Omit<DialogProps, "actions"> {
+  readonly actions?: ReactNode | ((close: () => void) => ReactNode) | undefined;
   readonly role: "dialog" | "alertdialog";
 }
 
@@ -78,11 +93,13 @@ function DialogSurface({
 
   const generatedId = useId();
   const portalReady = usePortalContainerReady();
+  const parentOverlayLayer = useOverlayLayer();
+  const dialogLayer = Math.max(1, parentOverlayLayer);
 
   const hasDescription = hasReactContent(description);
   const descriptionId = resolveDescriptionId(generatedId, hasDescription);
   const describedBy = joinIdReferences(ariaDescribedBy, descriptionId);
-  const hasActions = hasReactContent(actions);
+  const hasActions = typeof actions === "function" || hasReactContent(actions);
 
   if (!portalReady) return null;
 
@@ -91,6 +108,7 @@ function DialogSurface({
       className={classNames("snui-scrim", blurScrim && "snui-scrim--blur")}
       isDismissable={dismissable}
       isKeyboardDismissDisabled={!dismissable}
+      style={{ zIndex: overlayZIndex(dialogLayer) }}
       {...overlayOpenProps({ open, defaultOpen, onOpenChange })}
     >
       <Modal className="snui-dialog-frame">
@@ -115,22 +133,28 @@ function DialogSurface({
             ? {}
             : { "aria-details": ariaDetails })}
         >
-          <Heading
-            slot="title"
-            level={headingLevel}
-            className="snui-dialog__title"
-          >
-            {title}
-          </Heading>
-          {hasDescription ? (
-            <div id={descriptionId} className="snui-dialog__description">
-              {description}
-            </div>
-          ) : null}
-          <div className="snui-dialog__body">{children}</div>
-          {hasActions ? (
-            <div className="snui-dialog__actions">{actions}</div>
-          ) : null}
+          {({ close }) => (
+            <OverlayLayerProvider value={dialogLayer + 1}>
+              <Heading
+                slot="title"
+                level={headingLevel}
+                className="snui-dialog__title"
+              >
+                {title}
+              </Heading>
+              {hasDescription ? (
+                <div id={descriptionId} className="snui-dialog__description">
+                  {description}
+                </div>
+              ) : null}
+              <div className="snui-dialog__body">{children}</div>
+              {hasActions ? (
+                <div className="snui-dialog__actions">
+                  {typeof actions === "function" ? actions(close) : actions}
+                </div>
+              ) : null}
+            </OverlayLayerProvider>
+          )}
         </AriaDialog>
       </Modal>
     </ModalOverlay>
@@ -143,18 +167,34 @@ export function Dialog(props: DialogProps): React.JSX.Element {
 
 export function AlertDialog({
   actions,
+  cancelLabel,
+  cancelVariant = "secondary",
   dismissable = false,
+  onCancel,
   ...props
 }: AlertDialogProps): React.JSX.Element {
   requireContent(
-    actions,
-    "AlertDialog requires non-empty actions: an alert dialog must give the user an explicit way out.",
+    cancelLabel,
+    "AlertDialog requires a non-empty cancelLabel so the user always has an explicit way out.",
   );
 
   return (
     <DialogSurface
       {...props}
-      actions={actions}
+      actions={(close) => (
+        <>
+          <Button
+            variant={cancelVariant}
+            onClick={() => {
+              onCancel?.();
+              close();
+            }}
+          >
+            {cancelLabel}
+          </Button>
+          {actions}
+        </>
+      )}
       dismissable={dismissable}
       role="alertdialog"
     />
