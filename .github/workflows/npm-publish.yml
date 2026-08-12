@@ -172,7 +172,11 @@ jobs:
             echo "Expected exactly one verified tarball, found ${#TARBALLS[@]}." >&2
             exit 1
           fi
-          TARBALL="${TARBALLS[0]}"
+          TARBALL="$(realpath -- "${TARBALLS[0]}")"
+          if [[ "$TARBALL" != /* ]]; then
+            echo "Publish candidate must resolve to an absolute path, received $TARBALL." >&2
+            exit 1
+          fi
           PACKED_MANIFEST="$(tar --extract --gzip --to-stdout --file "$TARBALL" package/package.json)"
           PACKAGE_NAME="$(node -e 'const manifest = JSON.parse(process.argv[1]); console.log(manifest.name);' "$PACKED_MANIFEST")"
           PACKAGE_VERSION="$(node -e 'const manifest = JSON.parse(process.argv[1]); console.log(manifest.version);' "$PACKED_MANIFEST")"
@@ -207,6 +211,7 @@ jobs:
           fi
           echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
           sha256sum "$TARBALL"
+          npm publish "$TARBALL" --dry-run --ignore-scripts --access public --tag "$DIST_TAG"
       - name: Publish verified package
         env:
           DIST_TAG: ${{ needs.verify.outputs.dist-tag }}
