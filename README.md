@@ -15,20 +15,19 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or marketplace package. The initial API may change during the `0.x` series, so consumers should pin an exact version.
 
-## What's new in 0.7.0
+## What's new in 0.7.1
 
-Version 0.7.0 adds focused entry points, reusable administration-panel helpers, and stronger host integration. See [the 0.7.0 changelog](CHANGELOG.md#070---2026-08-12) for the complete release notes. Review the [migration guide](docs/migration.md) before upgrading because the React DOM peer contract, theme behavior, `AlertDialog`, and `ToastRegion` require consumer attention.
+Version 0.7.1 aligns the package with the Signal K Admin host dependency declaration and adds design tokens for panels that do not use React. Existing panels need no code changes. See the 0.7.1 changelog for the complete release notes.
 
-- **Focused entry points**: forms, composites, data grids, and overlays can be imported from `/forms`, `/composites`, `/data-grid`, and `/overlays`.
-- **Reusable panel helpers**: `SecretInput`, `UnsupportedBrowserNotice`, and `formatRelativeAge` replace repeated consumer implementations while leaving data and policy local.
-- **Host-aligned behavior**: Auto follows an explicit Signal K host theme and otherwise uses Light, while the new System choice follows the operating system.
-- **Stronger composites**: `ActionBar` gains a viewport-bottom mode, `DataGrid` uses React Aria virtualization, `AlertDialog` guarantees an enabled cancel action, and overlays remain correctly layered inside `PanelRoot`.
+- **Tokens without React**: `signalk-nearlcrews-ui/tokens.css` carries the palette and foundation tokens under the public `snui-tokens` class, so a panel in any framework can match the family without taking on React.
+- **Host dependency check**: `npm run host-contract` compares the package against the libraries the Signal K Admin UI declares for embedded webapps and configuration panels, and a scheduled job reports when that declaration moves.
+- **Narrower React peers**: the React and React DOM peer ranges are now `^19.2.0`, which keeps every stable React 19 release and drops the React 20 prereleases the host declaration excludes.
 
 ## Compatibility
 
 | Package | React peers  | JavaScript | Remote output                            | Browser verification                                      | Signal K boundary                                                              |
 | ------- | ------------ | ---------- | ---------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `0.7.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
+| `0.7.x` | `^19.2.0`    | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.6.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.5.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 | `0.4.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
@@ -52,12 +51,30 @@ React and React DOM are peer dependencies. Both implementations must resolve fro
 
 The repository builds real production Webpack remotes in classic global and ESM formats. Its browser harness initializes those containers with a minimal host-equivalent React and React DOM share scope. It does not reproduce the complete Signal K Admin bootstrap, so each consumer must retain a production remote-load check against its supported Signal K host.
 
+## Signal K Admin host dependencies
+
+The Signal K Admin UI declares the libraries it supplies to embedded webapps and plugin configuration panels in [`@signalk/server-admin-ui-dependencies`](https://github.com/SignalK/signalk-server/tree/master/packages/server-admin-ui-dependencies). Its peer dependencies are that declaration, recorded for this repository in `tests/host-contract.baseline.json`. A federated remote may share those modules with the host, and must bundle everything else.
+
+A consumer plugin installs that package and imports it from its build configuration, which is how the Admin UI validates the same contract for itself:
+
+```sh
+npm install --save-dev @signalk/server-admin-ui-dependencies
+```
+
+```js
+import "@signalk/server-admin-ui-dependencies";
+```
+
+This package shares React and React DOM, and nothing else. It uses none of the Bootstrap-family or icon-font libraries, so a consumer remote must not add them to `shared` on its behalf.
+
+The repository checks the declaration against that committed baseline rather than installing the contract package, for the reason recorded in `scripts/check-host-contract.mjs`. `npm run host-contract` runs the comparison and `npm run host-contract:update` refreshes the baseline from the npm registry, verifying the refreshed contract in the same run.
+
 ## Installation
 
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.7.0
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.7.1
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball:
@@ -65,7 +82,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.7.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.7.1.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while continuing to share React and React DOM with the Signal K Admin host as singletons.
@@ -95,6 +112,8 @@ import {
 ```
 
 `Accordion`, `EmptyState`, and `Progress` are available only from `/composites`. `Radio`, `RadioGroup`, `SecretInput`, and `Switch` are available only from `/forms`. The complete data-grid collection API is available only from `/data-grid`, and dialogs, menus, popovers, and toasts are available only from `/overlays`. Imports of those APIs from the package root must be migrated when upgrading from 0.6.x.
+
+`signalk-nearlcrews-ui/tokens.css` is the one non-JavaScript entry point. It carries the design tokens for panels that do not use React, as described under theme preference below.
 
 ### Browser preflight
 
@@ -293,11 +312,11 @@ An inline token override applies in every selected theme. Use it only when that 
 
 The repository ships a fixture page that renders every exported component. The top of that page in each theme:
 
-![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.7.0/docs/screenshots/showcase-light.png)
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.7.1/docs/screenshots/showcase-light.png)
 
-![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.7.0/docs/screenshots/showcase-dark.png)
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.7.1/docs/screenshots/showcase-dark.png)
 
-![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.7.0/docs/screenshots/showcase-night.png)
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.7.1/docs/screenshots/showcase-night.png)
 
 The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
 
@@ -309,6 +328,24 @@ The shared preference key is `signalk-nearlcrews-ui.theme.v1`, the only storage 
 2. Otherwise, use Auto without writing an implicit preference. Auto leaves `data-snui-theme` off the root so an explicit Bootstrap, CoreUI, or legacy `.dark-mode` host theme can apply. Without an explicit host theme, the library uses Light.
 
 Selecting a theme writes the shared key and broadcasts the choice to panels in the same document, while open panels in other tabs follow the browser storage event. If the write fails, the selection remains current in the mounted panels for the page session but is not durable. Existing valid values, including Auto and System, otherwise remain authoritative. Auto follows only an explicit host theme and falls back to Light. System follows the operating-system color preference independently of the host theme. The Night theme uses a red-preserving palette inside the panel. It does not recolor Signal K host chrome or surrounding page gutters, so a host that needs full-surface night adaptation must coordinate those surfaces separately.
+
+### Tokens without React
+
+`signalk-nearlcrews-ui/tokens.css` is a plain stylesheet carrying the same palette and foundation tokens as the components, so a panel written in another framework or in none at all can match the rest of the family without taking on React or the component layer:
+
+```css
+@import "signalk-nearlcrews-ui/tokens.css";
+```
+
+```html
+<div class="snui-tokens" data-snui-theme="dark">
+  <p style="color: var(--snui-color-text)">Panel content</p>
+</div>
+```
+
+Set `data-snui-theme` to `light`, `dark`, `night`, or `system`, or omit it to follow an explicit Bootstrap, CoreUI, or legacy `.dark-mode` host theme with a Light fallback. The sheet needs no native CSS `@scope` support, so the browser floors above bound the React components rather than this file. The design contract records what the `snui-tokens` class guarantees.
+
+Unlike the component root, the class is not version scoped. When two package versions load the sheet into one document, whichever loaded last defines the tokens for every element carrying the class, control sizing included, so a panel can inherit another version's values. A panel that must not should set the tokens it depends on directly on its own root, or use `PanelRoot`, which scopes its tokens to an exact package version.
 
 ## Package boundary
 
@@ -333,7 +370,7 @@ npm run test:browser
 
 Development supports Node 22.22.2 or newer in the Node 22 release line, Node 24.15.0 or newer in the Node 24 release line, or Node 26. npm 12.0.2 is preferred, and npm 11.16 or newer remains accepted during the transition. These are source-tooling requirements and do not impose a Node runtime on consumers of the browser bundle.
 
-`npm run validate` runs Biome formatting and linting, Prettier documentation formatting, type-aware ESLint rules, Knip dead-code analysis, TypeScript checks under both installed compilers, unit coverage including type-level tests, full and runtime dependency audits, compilation, packed-package validation, an emitted-declaration comparison against the committed baseline, a consumer type check against the packed artifact, bundle-size and React plus React DOM externalization checks, and classic and ESM Module Federation fixture builds.
+`npm run validate` runs Biome formatting and linting, Prettier documentation formatting, type-aware ESLint rules, Knip dead-code analysis, TypeScript checks under both installed compilers, a Signal K Admin host dependency comparison against the committed contract baseline, unit coverage including type-level tests, full and runtime dependency audits, compilation, packed-package validation, an emitted-declaration comparison against the committed baseline, a consumer type check against the packed artifact, bundle-size and React plus React DOM externalization checks, and classic and ESM Module Federation fixture builds.
 
 Two TypeScript compilers are installed on purpose. See the TypeScript toolchain section of `CONTRIBUTING.md` in the repository for why, and for the condition that collapses them back to one.
 

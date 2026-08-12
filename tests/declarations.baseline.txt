@@ -1070,11 +1070,11 @@ export declare function resolveToneLabel(tone: SemanticTone, toneLabel: string |
 
 === version.d.ts ===
 /** The package version used to isolate styles from other loaded versions. */
-export declare const PACKAGE_VERSION = "0.7.0";
+export declare const PACKAGE_VERSION = "0.7.1";
 /** The root class is private and may change without notice. */
 export declare const ROOT_CLASS = "snui-root";
 /** The exact selector prevents styles from crossing package-version roots. */
-export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.7.0\"]";
+export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.7.1\"]";
 /** A versioned global name prevents keyframe collisions between package copies. */
 export declare function versionedAnimationName(suffix: string): string;
 export declare const SPINNER_ANIMATION_NAME: string;

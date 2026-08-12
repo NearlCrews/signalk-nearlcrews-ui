@@ -8,6 +8,7 @@ Adopt one plugin at a time. Wrap the panel in `PanelRoot`, replace local theme t
 
 - Theme preference persists under one shared storage key, `signalk-nearlcrews-ui.theme.v1`. An explicit Auto, System, Light, Dark, or Night selection is written to that key. An unresolved preference stays Auto and writes nothing. Auto leaves `data-snui-theme` off the root, follows an explicit Bootstrap, CoreUI, or legacy `.dark-mode` host theme, and otherwise uses Light. System follows `prefers-color-scheme`. Panels on different library versions share the key, so a value this version does not recognize is ignored rather than treated as a clear; only an absent key returns a mounted panel to Auto.
 - React and React DOM are host-provided peer dependencies. A consumer remote shares both as Module Federation singletons, bundles this package and its React Aria dependencies, and never configures `signalk-nearlcrews-ui` as a runtime share.
+- `@signalk/server-admin-ui-dependencies` is the Signal K Admin host's own declaration of what it supplies to embedded webapps and configuration panels. Install it as a development dependency in each consumer plugin and import it from the build configuration, so the plugin fails loudly when its React version drifts from the host. Share only the modules that declaration names, and bundle everything else.
 - Components that accept a ref declare it as an ordinary `ref` prop, `SegmentedControl` and `InlineConfirm` included; neither takes `rootRef` any more. Object refs, callback refs, and callback-ref cleanup all resolve to the same native element. No component wraps in `forwardRef`. Components that render more than one host element, or that only coordinate their children, do not accept a ref.
 - The package renders in the browser only and requires native CSS `@scope` support. Call `supportsNativeCssScope(window)` before mounting when a consumer must present a local compatibility message, render `UnsupportedBrowserNotice` instead of `PanelRoot` after a failed preflight, and verify support in every supported kiosk and embedded WebView deployment.
 
@@ -15,6 +16,19 @@ Adopt one plugin at a time. Wrap the panel in `PanelRoot`, replace local theme t
 
 - The [README](../README.md) documents installation, the component inventory, theming, and the package boundary.
 - The [design contract](design-contract.md) records the stable theme, token, accessibility, and isolation behavior consumers may rely on.
+
+## Changes in 0.7.1
+
+The React and React DOM peer ranges narrowed from `>=19.2.0 <20.0.0` to `^19.2.0`. Every stable React 19 release keeps the meaning it had; the old range also accepted React 20 prereleases, which the Signal K Admin host declaration excludes. A consumer that copied the old range into its Module Federation `shared` block should copy the new one:
+
+```js
+shared: {
+  react: { singleton: true, requiredVersion: "^19.2.0", import: false },
+  "react-dom": { singleton: true, requiredVersion: "^19.2.0", import: false },
+}
+```
+
+`signalk-nearlcrews-ui/tokens.css` is new and requires no migration. A panel that already uses `PanelRoot` gets the same tokens from the component styles and should not also load the sheet.
 
 ## Changes in 0.7.0
 

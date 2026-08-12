@@ -1,5 +1,11 @@
 import { readdir, readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { join } from "node:path";
+
+const { FEDERATION_SHARED } = createRequire(import.meta.url)(
+  "../fixtures/federation/shared.cjs",
+);
+const hostSharedModules = Object.keys(FEDERATION_SHARED);
 
 async function readJavaScript(directory) {
   const names = await readdir(directory);
@@ -75,19 +81,16 @@ for (const [format, files, stats] of [
   if (!moduleNames.some((name) => name.includes("dist/index.js"))) {
     throw new Error(`${format} fixture did not consume the built package.`);
   }
-  if (
-    !moduleNames.some((name) =>
-      name.startsWith("consume shared module (default) react@"),
-    )
-  ) {
-    throw new Error(`${format} fixture did not consume host-shared React.`);
-  }
-  if (
-    !moduleNames.some((name) =>
-      name.startsWith("consume shared module (default) react-dom@"),
-    )
-  ) {
-    throw new Error(`${format} fixture did not consume host-shared ReactDOM.`);
+  for (const shared of hostSharedModules) {
+    if (
+      !moduleNames.some((name) =>
+        name.startsWith(`consume shared module (default) ${shared}@`),
+      )
+    ) {
+      throw new Error(
+        `${format} fixture did not consume host-shared ${shared}.`,
+      );
+    }
   }
 
   const bundledReactModules = moduleNames.filter((name) =>

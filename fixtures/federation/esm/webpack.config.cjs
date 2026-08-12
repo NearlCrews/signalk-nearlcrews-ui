@@ -1,6 +1,6 @@
 const path = require("node:path");
 const { container } = require("webpack");
-const { peerDependencies } = require("../../../package.json");
+const { FEDERATION_SHARED } = require("../shared.cjs");
 
 const { ModuleFederationPlugin } = container;
 
@@ -48,18 +48,7 @@ module.exports = {
       exposes: {
         "./Panel": path.resolve(__dirname, "../Panel.tsx"),
       },
-      shared: {
-        react: {
-          singleton: true,
-          requiredVersion: peerDependencies.react,
-          import: false,
-        },
-        "react-dom": {
-          singleton: true,
-          requiredVersion: peerDependencies["react-dom"],
-          import: false,
-        },
-      },
+      shared: FEDERATION_SHARED,
     }),
   ],
 };

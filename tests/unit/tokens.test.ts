@@ -4,8 +4,11 @@ import { PANEL_STYLES } from "../../src/styles/index.js";
 import {
   CONTAINER_BREAKPOINT_NARROW,
   PUBLIC_TOKEN_NAMES,
+  renderTokenStyles,
   TOKEN_STYLES,
+  TOKENS_ROOT_CLASS,
 } from "../../src/styles/tokens.js";
+import { ROOT_SELECTOR } from "../../src/version.js";
 
 describe("design token scales", () => {
   it("defines every public token in the token stylesheet", () => {
@@ -83,5 +86,37 @@ describe("design token scales", () => {
   it("drives the spinner duration from the motion token", () => {
     expect(CONTROL_STYLES).toContain("var(--snui-motion-spin)");
     expect(CONTROL_STYLES).not.toContain("0.8s");
+  });
+});
+
+/*
+ * The parity assertion carries the rest of this sheet's coverage: everything
+ * proven about TOKEN_STYLES elsewhere holds for a string that differs from it
+ * only by its root selector, so token coverage and CSS validity are not
+ * reasserted here.
+ */
+describe("framework-neutral token stylesheet", () => {
+  const neutralStyles = renderTokenStyles(`.${TOKENS_ROOT_CLASS}`);
+
+  it("differs from the component token stylesheet only by its root selector", () => {
+    expect(
+      neutralStyles.split(`.${TOKENS_ROOT_CLASS}`).join(ROOT_SELECTOR),
+    ).toBe(TOKEN_STYLES);
+  });
+
+  it("carries no versioned root", () => {
+    for (const marker of ["snui-root", "data-snui-version"]) {
+      expect(neutralStyles).not.toContain(marker);
+    }
+  });
+
+  it("declares nothing but custom properties and color-scheme", () => {
+    const properties = [...neutralStyles.matchAll(/^\s+([\w-]+)\s*:/gm)].map(
+      (match) => match[1] ?? "",
+    );
+
+    expect([
+      ...new Set(properties.filter((name) => !name.startsWith("--"))),
+    ]).toEqual(["color-scheme"]);
   });
 });

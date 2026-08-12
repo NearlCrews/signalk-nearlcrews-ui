@@ -6,6 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-08-12
+
+### Added
+
+- `signalk-nearlcrews-ui/tokens.css`, a framework-neutral stylesheet carrying the palette and foundation tokens for panels that do not use React. Put the public `snui-tokens` class on a panel root and set `data-snui-theme` to pick a theme. See the design contract for what the class guarantees.
+- `npm run host-contract`, which checks the package against the Signal K Admin host dependency declaration recorded in `tests/host-contract.baseline.json`. See the host dependencies section of the README.
+
+### Changed
+
+- The React and React DOM peer ranges narrowed to `^19.2.0`. Every stable React 19 release keeps the support it had; the previous `>=19.2.0 <20.0.0` also accepted React 20 prereleases, which the host dependency declaration excludes.
+
 ## [0.7.0] - 2026-08-12
 
 ### Breaking
@@ -224,7 +235,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.0...v0.6.1

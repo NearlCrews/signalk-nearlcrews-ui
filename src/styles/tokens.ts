@@ -198,8 +198,23 @@ export const PUBLIC_TOKEN_NAMES: readonly (
   ...PUBLIC_FOUNDATION_TOKEN_NAMES,
 ]);
 
-export const TOKEN_STYLES = `
-${ROOT_SELECTOR} {
+/**
+ * The root class of `signalk-nearlcrews-ui/tokens.css`. See the design contract
+ * for what the class guarantees.
+ *
+ * @internal The class name is public API; importing this constant is not.
+ */
+export const TOKENS_ROOT_CLASS = "snui-tokens";
+
+/**
+ * Renders the token declarations for one root selector, so the component styles
+ * and the framework-neutral stylesheet cannot describe different palettes.
+ *
+ * @internal
+ */
+export function renderTokenStyles(rootSelector: string): string {
+  return `
+${rootSelector} {
 ${LIGHT_BLOCK}
   --snui-font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --snui-font-family-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
@@ -244,52 +259,55 @@ ${LIGHT_BLOCK}
   color-scheme: light;
 }
 
-[data-bs-theme="light"] ${ROOT_SELECTOR}:not([data-snui-theme]),
-[data-coreui-theme="light"] ${ROOT_SELECTOR}:not([data-snui-theme]) {
+[data-bs-theme="light"] ${rootSelector}:not([data-snui-theme]),
+[data-coreui-theme="light"] ${rootSelector}:not([data-snui-theme]) {
 ${LIGHT_BLOCK}
   color-scheme: light;
 }
 
-[data-bs-theme="dark"] ${ROOT_SELECTOR}:not([data-snui-theme]),
-[data-coreui-theme="dark"] ${ROOT_SELECTOR}:not([data-snui-theme]),
-.dark-mode ${ROOT_SELECTOR}:not([data-snui-theme]) {
+[data-bs-theme="dark"] ${rootSelector}:not([data-snui-theme]),
+[data-coreui-theme="dark"] ${rootSelector}:not([data-snui-theme]),
+.dark-mode ${rootSelector}:not([data-snui-theme]) {
 ${DARK_BLOCK}
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
-  ${ROOT_SELECTOR}[data-snui-theme="system"] {
+  ${rootSelector}[data-snui-theme="system"] {
 ${DARK_BLOCK}
     color-scheme: dark;
   }
 }
 
 @media (prefers-color-scheme: light) {
-  ${ROOT_SELECTOR}[data-snui-theme="system"] {
+  ${rootSelector}[data-snui-theme="system"] {
 ${LIGHT_BLOCK}
     color-scheme: light;
   }
 }
 
-${ROOT_SELECTOR}[data-snui-theme="light"] {
+${rootSelector}[data-snui-theme="light"] {
 ${LIGHT_BLOCK}
   color-scheme: light;
 }
 
-${ROOT_SELECTOR}[data-snui-theme="dark"] {
+${rootSelector}[data-snui-theme="dark"] {
 ${DARK_BLOCK}
   color-scheme: dark;
 }
 
-${ROOT_SELECTOR}[data-snui-theme="night"] {
+${rootSelector}[data-snui-theme="night"] {
 ${NIGHT_BLOCK}
   color-scheme: dark;
 }
 
 @media (any-pointer: coarse) {
-  ${ROOT_SELECTOR} {
+  ${rootSelector} {
     --snui-control-min-height: 2.75rem;
     --snui-range-thumb-size: 2.75rem;
   }
 }
 `;
+}
+
+export const TOKEN_STYLES = renderTokenStyles(ROOT_SELECTOR);

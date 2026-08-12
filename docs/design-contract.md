@@ -87,6 +87,10 @@ Token values may change in a compatible release to fix contrast, browser behavio
 
 Consumers may override public tokens through the native `style` prop on `PanelRoot`. Token overrides must remain on that versioned root and must not target private classes or DOM structure. Inline overrides apply across theme choices, so consumers must verify Light, Dark, and Night contrast before using them.
 
+The same tokens ship as a framework-neutral stylesheet at `signalk-nearlcrews-ui/tokens.css`, for panels that do not use React. The `snui-tokens` class it styles is public API. Both stylesheets are rendered from one source, so the palettes cannot diverge. The neutral sheet declares only custom properties and `color-scheme`, styles no element of its own, and requires no native CSS `@scope` support. It reads `data-snui-theme` exactly as the component root does, and follows an explicit Bootstrap, CoreUI, or legacy `.dark-mode` host theme when that attribute is absent.
+
+That class is the one documented exception to version-scoped styling. It carries no version, so the last copy loaded into a document defines the tokens for every element carrying the class, control sizing tokens included. The exception is deliberate: requiring a version in consumer markup would defeat the point of a sheet meant for panels with no build-time knowledge of this package. Version isolation remains available only through `PanelRoot`.
+
 ## Presentation utilities
 
 `formatRelativeAge` accepts a nonnegative elapsed age in milliseconds and formats it through `Intl.RelativeTimeFormat`. It does not read the clock, accept a timestamp, decide whether data is stale, or assign domain meaning to the age. Consumers compute and clamp the age at their data boundary, choose any unavailable-data fallback, and retain ownership of freshness policy.
@@ -127,7 +131,7 @@ Consumers may override public tokens through the native `style` prop on `PanelRo
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.7.0"])
+@scope (.snui-root[data-snui-version="0.7.1"])
   to ([data-snui-version]) {
   /* component rules */
 }
@@ -155,7 +159,8 @@ Desktop controls have a compact 40-pixel minimum height. A device with any coars
 
 ## Compatibility
 
-- React and React DOM support is `>=19.2 <20` for `0.x`.
+- React and React DOM support is `^19.2.0`.
+- `@signalk/server-admin-ui-dependencies` declares which libraries the Signal K Admin host supplies to embedded webapps and configuration panels. A remote shares only modules that declaration names. This package shares React and React DOM alone, uses none of the Bootstrap-family or icon-font libraries, and never becomes a shared module itself. `npm run host-contract` enforces this against a committed baseline of the declaration.
 - Native CSS `@scope` sets the browser floors: Chromium and Edge 118, Firefox 146, and Safari 17.4. `supportsNativeCssScope` lets consumers check support before rendering, and unsupported engines receive `UnsupportedBrowserError` before style installation. No unscoped fallback is provided. Consumer adoption is blocked until every supported kiosk and embedded WebView deployment meets that floor.
 - Right-to-left caret mirroring and select indicator placement use `:dir()`, which Chromium added in 120. On Chromium and Edge 118 and 119 those cosmetic rules, including the range fill direction, are skipped while layout, keyboard direction handling, and all other styling remain correct.
 - React, React DOM, and their implementation entry points remain external to the unbundled library build. Consumer remotes may embed React's small JSX element-construction helper. React and React DOM must both resolve through Signal K Admin host singletons configured with `import: false`, and their implementations must never be embedded.

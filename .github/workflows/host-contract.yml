@@ -1,0 +1,51 @@
+name: Host contract drift
+
+# npm run host-contract compares the package against a committed baseline, which
+# cannot notice that the Signal K Admin host itself has moved on. This job
+# refreshes the baseline from the registry on a schedule and fails when the
+# result differs from what is committed, so a host that changes its supplied
+# libraries or its React range surfaces here rather than in a consumer's panel.
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: Compare against the published declaration
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Set up npm
+        env:
+          NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
+        run: |
+          npm install --global npm@12.0.2
+          echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
+          "${NPM_CONFIG_PREFIX}/bin/npm" --version
+      - name: Install dependencies
+        run: npm ci
+      - name: Refresh the baseline from the registry
+        run: npm run host-contract:update
+      - name: Fail when the committed baseline is stale
+        run: |
+          if ! git diff --quiet -- tests/host-contract.baseline.json; then
+            echo "The Signal K Admin host dependency declaration has changed:"
+            git --no-pager diff -- tests/host-contract.baseline.json
+            echo "Run \`npm run host-contract:update\` and commit the result."
+            exit 1
+          fi
+          echo "The committed baseline matches the published declaration."

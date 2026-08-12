@@ -116,7 +116,14 @@ const output = runNpmPack(["--dry-run", "--json", "--ignore-scripts"]);
 const packResult = parseNpmPackResult(output, packageJson.name);
 const files = new Set(packResult.files.map((file) => file.path));
 
+// Every target the exports map names must be inside the tarball, so a new entry
+// point is covered here the moment it is declared.
+const exportedFiles = Object.values(packageJson.exports).flatMap((target) =>
+  typeof target === "string" ? [target] : Object.values(target),
+);
+
 for (const requiredFile of [
+  ...exportedFiles.map((target) => target.replace(/^\.\//, "")),
   "CHANGELOG.md",
   "LICENSE",
   "README.md",
@@ -124,16 +131,6 @@ for (const requiredFile of [
   "docs/migration.md",
   "docs/repository-setup.md",
   "docs/release-policy.md",
-  "dist/composites.js",
-  "dist/composites.d.ts",
-  "dist/data-grid.js",
-  "dist/data-grid.d.ts",
-  "dist/forms.js",
-  "dist/forms.d.ts",
-  "dist/index.js",
-  "dist/index.d.ts",
-  "dist/overlays.js",
-  "dist/overlays.d.ts",
   "package.json",
 ]) {
   if (!files.has(requiredFile)) {
@@ -219,9 +216,27 @@ try {
     stdio: "inherit",
   });
 
+  // A stylesheet entry point is not a module, so type resolution has nothing to
+  // report on it and the analyzer would otherwise fail the whole package. The
+  // exclusions come from the exports map, so a second stylesheet needs no edit.
+  const stylesheetEntryPoints = Object.entries(packageJson.exports)
+    .filter(
+      ([, target]) => typeof target === "string" && !target.endsWith(".js"),
+    )
+    .map(([subpath]) => subpath.replace(/^\.\/?/, ""));
+
   execFileSync(
     process.execPath,
-    [attwEntryPoint, tarballPath, "--profile", "esm-only", "--no-emoji"],
+    [
+      attwEntryPoint,
+      tarballPath,
+      "--profile",
+      "esm-only",
+      "--no-emoji",
+      ...(stylesheetEntryPoints.length > 0
+        ? ["--exclude-entrypoints", ...stylesheetEntryPoints]
+        : []),
+    ],
     { stdio: "inherit" },
   );
 } finally {

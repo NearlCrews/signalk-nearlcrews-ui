@@ -39,7 +39,7 @@ Collapse this back to a single `typescript` dependency once typescript-eslint su
 - Keep components presentational and independent of plugin domain state.
 - Add or update keyboard and accessibility tests with interaction changes.
 - Add contrast coverage when theme colors change.
-- Keep every CSS rule beneath the exact version-qualified root.
+- Keep every CSS rule beneath the exact version-qualified root. The `snui-tokens` class in `dist/tokens.css` is the one exception, recorded in the design contract; do not add a second.
 - Keep descendant styles from crossing a nested root with another package version.
 - Update `src/version.ts` whenever `package.json` changes version.
 - Document public API changes in `CHANGELOG.md`.
