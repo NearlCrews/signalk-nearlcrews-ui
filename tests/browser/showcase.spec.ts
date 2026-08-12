@@ -77,6 +77,12 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
   const grid = page.getByRole("grid", { name: "Fleet" });
   const row = (name: string) =>
     grid.getByRole("row").filter({ hasText: name }).first();
+  const nameHeader = grid.getByRole("columnheader", { name: "Boat" });
+
+  await nameHeader.click();
+  await expect(nameHeader).toHaveAttribute("data-sort-direction", "descending");
+  await nameHeader.click();
+  await expect(nameHeader).toHaveAttribute("data-sort-direction", "ascending");
 
   const firstRow = row("Vessel 001");
   const secondRow = row("Vessel 002");
@@ -131,8 +137,13 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
   await expect(lastRow).toBeVisible();
   await expect(lastRow).toHaveAttribute("data-snui-zebra-odd", "true");
 
-  const nameHeader = grid.getByRole("columnheader", { name: "Boat" });
-  await nameHeader.click();
+  await grid.evaluate((element) => {
+    element.scrollTop = 0;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await expect(nameHeader).toBeVisible();
+  await nameHeader.focus();
+  await page.keyboard.press("Enter");
   await expect(nameHeader).toHaveAttribute("data-sort-direction", "descending");
   await grid.evaluate((element) => {
     element.scrollTop = 0;
