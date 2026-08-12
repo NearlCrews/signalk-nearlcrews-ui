@@ -13,3 +13,21 @@ body:has([data-snui-theme="dark"]) {
 body:has([data-snui-theme="night"]) {
   background: #050000;
 }
+
+/* Mirrors Signal K Admin's unconstrained scrolling app-body host. */
+.app-body {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.app-body > [data-snui-root] {
+  width: min(100%, 42rem);
+}
+
+.admin-host__tall-panel-content {
+  min-height: max(100vh, 50rem);
+}
+
+.admin-host__after-panel-content {
+  min-height: 100vh;
+}

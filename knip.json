@@ -2,6 +2,10 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "entry": [
     "src/index.ts",
+    "src/composites.ts",
+    "src/data-grid.ts",
+    "src/forms.ts",
+    "src/overlays.ts",
     "scripts/*.mjs",
     "fixtures/browser/main.tsx",
     "fixtures/browser/showcase.tsx",

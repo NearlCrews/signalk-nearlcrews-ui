@@ -212,6 +212,7 @@ export function SegmentedControl<Value extends string>({
         <input
           ref={setHiddenInputRef}
           type="hidden"
+          disabled={disabled}
           name={name}
           value={effectiveValue ?? ""}
           readOnly

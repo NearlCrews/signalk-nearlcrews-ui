@@ -118,20 +118,24 @@ describe("Button anchors", () => {
       </PanelRoot>,
     );
 
-    const link = screen.getByRole("link", { name: "Docs" });
-    expect(link).toHaveAttribute("href", "https://example.com/docs");
-    expect(link).toHaveAttribute("aria-disabled", "true");
-    expect(link).toHaveAttribute("aria-busy", "true");
-    expect(link).toHaveAccessibleDescription("Working");
-    expect(link.querySelector(".snui-button__spinner")).not.toBeNull();
+    const anchor = screen.getByText("Docs").closest("a");
+    expect(anchor).not.toBeNull();
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      throw new Error("Button did not render an anchor element.");
+    }
+    expect(anchor).not.toHaveAttribute("href");
+    expect(anchor).toHaveAttribute("aria-disabled", "true");
+    expect(anchor).toHaveAttribute("aria-busy", "true");
+    expect(anchor).toHaveAccessibleDescription("Working");
+    expect(anchor.querySelector(".snui-button__spinner")).not.toBeNull();
 
-    await user.click(link);
-    link.focus();
+    await user.click(anchor);
+    anchor.focus();
     await user.keyboard("{Enter}");
     await user.keyboard(" ");
     expect(onClick).not.toHaveBeenCalled();
     expect(onKeyDown).not.toHaveBeenCalled();
-    expect(link).toHaveFocus();
+    expect(anchor).toHaveFocus();
   });
 
   it("keeps an aria-disabled anchor focusable while suppressing navigation", async () => {
@@ -152,12 +156,17 @@ describe("Button anchors", () => {
       </PanelRoot>,
     );
 
-    const link = screen.getByRole("link", { name: "Docs" });
-    expect(link).toHaveAttribute("aria-disabled", "true");
-    expect(link).not.toHaveAttribute("aria-busy");
+    const anchor = screen.getByText("Docs").closest("a");
+    expect(anchor).not.toBeNull();
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      throw new Error("Button did not render an anchor element.");
+    }
+    expect(anchor).not.toHaveAttribute("href");
+    expect(anchor).toHaveAttribute("aria-disabled", "true");
+    expect(anchor).not.toHaveAttribute("aria-busy");
 
-    await user.click(link);
-    link.focus();
+    await user.click(anchor);
+    anchor.focus();
     await user.keyboard("{Enter}");
     expect(onClick).not.toHaveBeenCalled();
     expect(onKeyDown).not.toHaveBeenCalled();
@@ -181,8 +190,8 @@ describe("Button anchors", () => {
       </PanelRoot>,
     );
 
-    await user.click(screen.getByRole("link", { name: "Docs" }));
-    await user.click(screen.getByRole("link", { name: "Guide" }));
+    await user.click(screen.getByText("Docs"));
+    await user.click(screen.getByText("Guide"));
     expect(onClick).not.toHaveBeenCalled();
   });
 

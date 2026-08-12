@@ -166,6 +166,7 @@ it("keeps the Night on-accent foreground red-preserving", () => {
 it("exports the complete public foundation token surface", () => {
   expect(PUBLIC_FOUNDATION_TOKEN_NAMES).toEqual([
     "--snui-font-family",
+    "--snui-font-family-mono",
     "--snui-font-size",
     "--snui-font-size-sm",
     "--snui-font-size-xs",

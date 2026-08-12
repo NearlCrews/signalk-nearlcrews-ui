@@ -4,6 +4,7 @@ import {
   type RefAttributes,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   useSyncExternalStore,
@@ -42,12 +43,7 @@ const DEFAULT_TOAST_DURATION_MS = 5000;
  */
 const MAX_QUEUED_TOASTS = 5;
 
-/**
- * The exit timer must outlive the exit transition, which runs on the fast
- * transition token; a small buffer keeps the card mounted until it is fully
- * transparent.
- */
-const TOAST_EXIT_DURATION_MS = TRANSITION_FAST_MS + 10;
+const TOAST_EXIT_FALLBACK_BUFFER_MS = 10;
 
 /** Browser timer handle returned by window.setTimeout. */
 type TimerId = number;
@@ -163,6 +159,7 @@ function ToastCard<T extends ToastContent>({
 
   const [exiting, setExiting] = useState(false);
   const [contentReady, setContentReady] = useState(false);
+  const cardRef = useRef<HTMLDivElement | null>(null);
 
   const countdownTimerRef = useRef<TimerId | null>(null);
   const exitTimerRef = useRef<TimerId | null>(null);
@@ -170,6 +167,11 @@ function ToastCard<T extends ToastContent>({
   const startedAtRef = useRef(0);
   const hoverPausedRef = useRef(false);
   const focusPausedRef = useRef(false);
+  const exitStartedRef = useRef(false);
+
+  const finishExit = useCallback((): void => {
+    queue.dismiss(key);
+  }, [queue, key]);
 
   // queue, key, and duration never change for a mounted toast, so these
   // callbacks stay valid for the card's lifetime.
@@ -182,21 +184,43 @@ function ToastCard<T extends ToastContent>({
   }, []);
 
   const beginExit = useCallback((): void => {
-    if (exitTimerRef.current !== null) return;
+    if (exitStartedRef.current) return;
+    exitStartedRef.current = true;
     stopCountdown();
     setExiting(true);
-    // Reduced motion skips the exit transition, so removal follows in the
-    // same tick.
+  }, [stopCountdown]);
+
+  useLayoutEffect(() => {
+    if (!exiting) return undefined;
     const reduceMotion = prefersReducedMotion(
       typeof window === "undefined" ? null : window,
     );
+    if (reduceMotion) {
+      exitTimerRef.current = window.setTimeout(finishExit, 0);
+      return undefined;
+    }
+
+    const card = cardRef.current;
+    const token =
+      card === null
+        ? ""
+        : window
+            .getComputedStyle(card)
+            .getPropertyValue("--snui-transition-fast");
+    const tokenMatch = /([\d.]+)\s*(ms|s)\b/.exec(token);
+    const tokenDuration =
+      tokenMatch === null
+        ? TRANSITION_FAST_MS
+        : Number(tokenMatch[1]) * (tokenMatch[2] === "s" ? 1000 : 1);
+    const duration = Number.isFinite(tokenDuration)
+      ? tokenDuration
+      : TRANSITION_FAST_MS;
     exitTimerRef.current = window.setTimeout(
-      () => {
-        queue.dismiss(key);
-      },
-      reduceMotion ? 0 : TOAST_EXIT_DURATION_MS,
+      finishExit,
+      duration + TOAST_EXIT_FALLBACK_BUFFER_MS,
     );
-  }, [queue, key, stopCountdown]);
+    return undefined;
+  }, [exiting, finishExit]);
 
   const startCountdown = useCallback((): void => {
     if (duration <= 0) return;
@@ -252,8 +276,19 @@ function ToastCard<T extends ToastContent>({
     // toast itself is not an interactive control.
     // biome-ignore lint/a11y/noStaticElementInteractions: hover and focus pause auto-dismiss, they do not make the card interactive
     <div
+      ref={cardRef}
       className={classNames("snui-toast", `snui-toast--${tone}`)}
       data-exiting={exiting || undefined}
+      onTransitionEnd={(event) => {
+        if (
+          exiting &&
+          event.target === event.currentTarget &&
+          (event.propertyName === "opacity" ||
+            event.propertyName === "transform")
+        ) {
+          finishExit();
+        }
+      }}
       onPointerEnter={() => {
         setPaused("hover", true);
       }}
@@ -315,8 +350,8 @@ export interface ToastRegionProps<T extends ToastContent = ToastContent>
 
 /**
  * Renders a queue's toasts, newest first, into the nearest PanelRoot portal
- * container so the scoped styles and theme reach them. Outside a PanelRoot
- * the region falls back to the document body.
+ * container so the scoped styles and theme reach them. Rendering outside a
+ * PanelRoot throws because a body portal would lose scoped styles and tokens.
  */
 export function ToastRegion<T extends ToastContent = ToastContent>({
   className,
@@ -347,12 +382,15 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
     );
   }
   const { getContainer } = useUNSAFE_PortalContext();
+  const portalReady = usePortalContainerReady();
+  if (getContainer === undefined || getContainer === null) {
+    throw new Error("ToastRegion must be rendered inside PanelRoot.");
+  }
+  const resolveContainer = getContainer;
 
   // The portal container reads the panel root lazily, so it only resolves
-  // once the commit has attached that ref. Outside a PanelRoot the region
-  // falls back to the document body.
-  const portalReady = usePortalContainerReady();
-  const container = portalReady ? (getContainer?.() ?? document.body) : null;
+  // once the commit has attached that ref.
+  const container = portalReady ? resolveContainer() : null;
 
   if (container === null) return null;
 

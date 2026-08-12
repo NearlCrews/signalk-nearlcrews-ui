@@ -10,6 +10,7 @@ import {
   Separator as RACSeparator,
 } from "react-aria-components";
 import { classNames } from "../utils/class-names.js";
+import { overlayZIndex, useOverlayLayer } from "../utils/overlay-layer.js";
 import { usePortalContainerReady } from "../utils/portal.js";
 import { requireContent } from "../utils/react-node.js";
 import { Button, type ButtonSize, type ButtonVariant } from "./Button.js";
@@ -49,6 +50,7 @@ export function Menu({
   );
 
   const portalReady = usePortalContainerReady();
+  const overlayLayer = useOverlayLayer();
 
   return (
     <MenuTrigger {...overlayOpenProps({ open, defaultOpen, onOpenChange })}>
@@ -64,6 +66,7 @@ export function Menu({
         <RACPopover
           className="snui-menu-popover"
           placement={OVERLAY_PLACEMENTS[placement]}
+          style={{ zIndex: overlayZIndex(overlayLayer) }}
         >
           <RACMenu
             className={classNames("snui-menu", className)}

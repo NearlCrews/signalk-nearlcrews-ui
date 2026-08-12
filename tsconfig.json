@@ -19,7 +19,11 @@
     "target": "ES2022",
     "verbatimModuleSyntax": true,
     "paths": {
-      "signalk-nearlcrews-ui": ["./src/index.ts"]
+      "signalk-nearlcrews-ui": ["./src/index.ts"],
+      "signalk-nearlcrews-ui/composites": ["./src/composites.ts"],
+      "signalk-nearlcrews-ui/data-grid": ["./src/data-grid.ts"],
+      "signalk-nearlcrews-ui/forms": ["./src/forms.ts"],
+      "signalk-nearlcrews-ui/overlays": ["./src/overlays.ts"]
     },
     "types": ["node", "vitest/globals", "@testing-library/jest-dom"]
   },

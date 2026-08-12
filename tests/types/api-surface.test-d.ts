@@ -1,5 +1,7 @@
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { describe, expectTypeOf, it } from "vitest";
+import type { ProgressTone } from "../../src/composites.js";
+import type { DataGridProps } from "../../src/data-grid.js";
 import type {
   ActionBar,
   ActionBarSticky,
@@ -7,17 +9,17 @@ import type {
   BannerTone,
   ButtonAsAnchorProps,
   ButtonAsButtonProps,
-  DataGridProps,
   FieldControlProps,
+  FormatRelativeAgeOptions,
   LabeledFieldChild,
   LabeledFieldControlProps,
-  ProgressTone,
   SegmentedControlOption,
   SegmentedControlProps,
   StatusTone,
   TextInput,
   TextInputType,
   ThemeChoice,
+  UnsupportedBrowserNoticeProps,
 } from "../../src/index.js";
 import { SegmentedControl } from "../../src/index.js";
 
@@ -111,7 +113,7 @@ describe("text input types", () => {
 describe("literal unions", () => {
   it("pins the theme choices", () => {
     expectTypeOf<ThemeChoice>().toEqualTypeOf<
-      "auto" | "light" | "dark" | "night"
+      "auto" | "system" | "light" | "dark" | "night"
     >();
   });
 
@@ -132,6 +134,23 @@ describe("literal unions", () => {
   });
 });
 
+describe("relative age formatting", () => {
+  it("exports the formatter option contract", () => {
+    expectTypeOf<FormatRelativeAgeOptions["numeric"]>().toEqualTypeOf<
+      Intl.RelativeTimeFormatNumeric | undefined
+    >();
+    expectTypeOf<FormatRelativeAgeOptions["style"]>().toEqualTypeOf<
+      Intl.RelativeTimeFormatStyle | undefined
+    >();
+  });
+});
+
+describe("unsupported browser notice", () => {
+  it("keeps the mandatory alert role out of consumer props", () => {
+    expectTypeOf<"role">().not.toExtend<keyof UnsupportedBrowserNoticeProps>();
+  });
+});
+
 describe("button element forms", () => {
   it("requires href on the anchor form", () => {
     expectTypeOf<ButtonAsAnchorProps["as"]>().toEqualTypeOf<"a">();
@@ -147,7 +166,9 @@ describe("button element forms", () => {
 
 describe("action bar stickiness", () => {
   it("accepts only the edge literals", () => {
-    expectTypeOf<ActionBarSticky>().toEqualTypeOf<"bottom" | "top">();
+    expectTypeOf<ActionBarSticky>().toEqualTypeOf<
+      "bottom" | "top" | "viewport-bottom"
+    >();
   });
 
   it("rejects a boolean sticky prop", () => {

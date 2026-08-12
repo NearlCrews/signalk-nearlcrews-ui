@@ -8,14 +8,13 @@ import userEvent from "@testing-library/user-event";
 import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { Button, PanelRoot, type PanelRootProps } from "../../src/index.js";
 import {
   AlertDialog,
-  Button,
   Dialog,
   type DialogProps,
-  PanelRoot,
-  type PanelRootProps,
-} from "../../src/index.js";
+  Popover,
+} from "../../src/overlays.js";
 import { renderInPanel } from "../helpers.js";
 
 function renderDialog(
@@ -277,6 +276,24 @@ describe("Dialog", () => {
     expect(dialog).toHaveAttribute("aria-labelledby", "external-title");
     expect(dialog).toHaveAttribute("aria-details", "settings-details");
   });
+
+  it("keeps nested overlays above their owning dialog", async () => {
+    const user = userEvent.setup();
+    const { container } = renderInPanel(
+      <Dialog title="Connection settings" defaultOpen>
+        <Popover trigger={<Button>Show details</Button>}>
+          <p>Nested details</p>
+        </Popover>
+      </Dialog>,
+    );
+
+    const scrim = getScrim(container);
+    expect(scrim).toHaveStyle({ zIndex: "calc(var(--snui-z-modal) + 1)" });
+    await user.click(screen.getByRole("button", { name: "Show details" }));
+    expect(screen.getByRole("dialog", { name: "Show details" })).toHaveStyle({
+      zIndex: "calc(var(--snui-z-modal) + 2)",
+    });
+  });
 });
 
 describe("AlertDialog", () => {
@@ -285,6 +302,7 @@ describe("AlertDialog", () => {
       <AlertDialog
         title="Discard route?"
         defaultOpen
+        cancelLabel="Keep route"
         actions={<Button variant="danger">Discard</Button>}
       >
         <p>This cannot be undone.</p>
@@ -296,15 +314,15 @@ describe("AlertDialog", () => {
     ).toBeVisible();
   });
 
-  it("throws when actions are empty", () => {
+  it("throws when cancelLabel is empty", () => {
     expect(() =>
       renderInPanel(
-        <AlertDialog title="Discard route?">
+        <AlertDialog title="Discard route?" cancelLabel=" ">
           <p>This cannot be undone.</p>
         </AlertDialog>,
       ),
     ).toThrow(
-      "AlertDialog requires non-empty actions: an alert dialog must give the user an explicit way out.",
+      "AlertDialog requires a non-empty cancelLabel so the user always has an explicit way out.",
     );
   });
 
@@ -315,6 +333,7 @@ describe("AlertDialog", () => {
       <AlertDialog
         title="Discard route?"
         defaultOpen
+        cancelLabel="Keep route"
         onOpenChange={onOpenChange}
         actions={<Button variant="danger">Discard</Button>}
       >
@@ -335,6 +354,7 @@ describe("AlertDialog", () => {
       <AlertDialog
         title="Discard route?"
         defaultOpen
+        cancelLabel="Keep route"
         ref={ref}
         actions={<Button variant="danger">Discard</Button>}
       >
@@ -343,5 +363,33 @@ describe("AlertDialog", () => {
     );
 
     expect(ref.current).toBe(screen.getByRole("alertdialog"));
+  });
+
+  it("always provides an enabled cancel action when supplemental actions are disabled", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    const onOpenChange = vi.fn();
+    renderInPanel(
+      <AlertDialog
+        title="Discard route?"
+        defaultOpen
+        cancelLabel="Keep route"
+        onCancel={onCancel}
+        onOpenChange={onOpenChange}
+        actions={
+          <Button disabled variant="danger">
+            Discard
+          </Button>
+        }
+      >
+        <p>This cannot be undone.</p>
+      </AlertDialog>,
+    );
+
+    const cancel = screen.getByRole("button", { name: "Keep route" });
+    expect(cancel).toBeEnabled();
+    await user.click(cancel);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 });

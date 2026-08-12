@@ -1,15 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  EmptyState,
-  Progress,
-  Radio,
-  RadioGroup,
-  Switch,
-} from "../../src/index.js";
+import { EmptyState, Progress } from "../../src/composites.js";
+import { Radio, RadioGroup, Switch } from "../../src/forms.js";
 import { formOf, panel, renderInPanel } from "../helpers.js";
 
 describe("RadioGroup", () => {
@@ -298,6 +293,56 @@ describe("Switch", () => {
 
     expect(ref.current?.tagName).toBe("DIV");
     expect(ref.current?.classList.contains("snui-switch")).toBe(true);
+  });
+
+  it("participates in native forms and resets to defaultChecked", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <form data-testid="switch-form">
+        <Switch name="autopilot" value="enabled" defaultChecked required>
+          Autopilot
+        </Switch>
+      </form>,
+    );
+
+    const form = screen.getByTestId<HTMLFormElement>("switch-form");
+    const toggle = screen.getByRole("switch", { name: "Autopilot" });
+    expect(new FormData(form).get("autopilot")).toBe("enabled");
+    await user.click(toggle);
+    expect(new FormData(form).has("autopilot")).toBe(false);
+    form.reset();
+    await waitFor(() => expect(toggle).toBeChecked());
+    expect(new FormData(form).get("autopilot")).toBe("enabled");
+  });
+
+  it("supports an external form and read-only state", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <>
+        <form id="external-switch-form" />
+        <Switch
+          form="external-switch-form"
+          name="shore-power"
+          value="connected"
+          defaultChecked
+          readOnly
+        >
+          Shore power
+        </Switch>
+      </>,
+    );
+
+    const toggle = screen.getByRole("switch", { name: "Shore power" });
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+    const form = document.querySelector<HTMLFormElement>(
+      "#external-switch-form",
+    );
+    expect(form).not.toBeNull();
+    if (form === null) {
+      throw new Error("Expected the external switch form to exist.");
+    }
+    expect(new FormData(form).get("shore-power")).toBe("connected");
   });
 });
 

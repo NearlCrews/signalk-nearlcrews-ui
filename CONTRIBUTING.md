@@ -4,7 +4,7 @@ Review the [Code of Conduct](.github/CODE_OF_CONDUCT.md) before participating. U
 
 ## Local checks
 
-Use Node 22.22.2 or newer in the Node 22 release line, Node 24.15.0 or newer in the Node 24 release line, or Node 26. npm 12.0.1 is preferred, and npm 11.16.0 or newer also satisfies the development engine range. Install the locked dependency tree and run:
+Use Node 22.22.2 or newer in the Node 22 release line, Node 24.15.0 or newer in the Node 24 release line, or Node 26. npm 12.0.2 is preferred, and npm 11.16.0 or newer also satisfies the development engine range. Install the locked dependency tree and run:
 
 ```sh
 npm ci
@@ -18,6 +18,8 @@ Install Playwright browsers when needed:
 ```sh
 npx --no-install playwright install chromium firefox webkit
 ```
+
+Set `SNUI_BROWSER_PORT` to an unused port from 1024 through 65535 when another local browser suite is running on the default port, for example `SNUI_BROWSER_PORT=4273 npm run test:browser`.
 
 ## TypeScript toolchain
 

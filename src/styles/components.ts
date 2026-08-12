@@ -165,17 +165,63 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
   top: 0;
 }
 
+.snui-action-bar--sticky-viewport-bottom {
+  position: relative;
+}
+
+.snui-action-bar__viewport-anchor {
+  min-width: 0;
+}
+
+.snui-action-bar__viewport-anchor--docked {
+  block-size: var(--snui-action-bar-fixed-height);
+}
+
+/*
+ * The probe resolves env() to a measurable layout coordinate. Keeping it in
+ * the panel avoids a body portal while giving the positioning code the real
+ * safe-area inset instead of assuming a particular device notch size.
+ */
+.snui-action-bar__safe-area-probe {
+  position: fixed;
+  right: 0;
+  bottom: env(safe-area-inset-bottom, 0px);
+  width: 0;
+  height: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/*
+ * Fixed positioning is measured against the bar's natural-flow anchor. The
+ * anchor reserves its height, while these values keep the fixed surface in
+ * the PanelRoot column and above the visual viewport or device safe area.
+ */
+.snui-action-bar--viewport-docked {
+  position: fixed;
+  z-index: var(--snui-z-sticky);
+  bottom: max(
+    env(safe-area-inset-bottom, 0px),
+    var(--snui-action-bar-fixed-bottom, 0px)
+  );
+  left: var(--snui-action-bar-fixed-left);
+  width: var(--snui-action-bar-fixed-width);
+}
+
 /*
  * Keep focused content clear of a sticky bar: the bar is one control height
  * plus its vertical padding, and one more gap keeps focus rings visible.
  */
-.snui-root:has(> .snui-action-bar--sticky-bottom) {
+.snui-root:has(> .snui-root__content > .snui-action-bar--sticky-bottom),
+.snui-root:has(
+  > .snui-root__content > .snui-action-bar__viewport-anchor
+) {
   scroll-padding-block-end: calc(
     var(--snui-control-min-height) + var(--snui-space-3) * 3
   );
 }
 
-.snui-root:has(> .snui-action-bar--sticky-top) {
+.snui-root:has(> .snui-root__content > .snui-action-bar--sticky-top) {
   scroll-padding-block-start: calc(
     var(--snui-control-min-height) + var(--snui-space-3) * 3
   );

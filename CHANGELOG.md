@@ -4,6 +4,42 @@ All notable changes to this project will be documented in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.7.0] - 2026-08-12
+
+### Breaking
+
+- Composite, data-grid, form-composite, and overlay exports moved from the package root to `/composites`, `/data-grid`, `/forms`, and `/overlays`. Consumers must update those import paths. The package root now contains the lightweight panel, layout, field, feedback, theme, compatibility, and formatting primitives.
+- `DataGrid.ref` now resolves to the stable outer `HTMLDivElement` in both direct and virtualized modes. Consumers that used table-specific ref operations must query the descendant grid element instead.
+- React DOM `>=19.2 <20` is now a peer dependency because in-root overlays use its portal API. Module Federation consumers must resolve both React and React DOM from the Signal K Admin host as singletons, while continuing to bundle this package into each remote.
+- `ThemeChoice` and `THEME_CHOICES` add `"system"`. Auto now follows an explicit Bootstrap, CoreUI, or legacy `.dark-mode` host theme and otherwise falls back to Light. Select System when the panel should follow `prefers-color-scheme` without an explicit host theme.
+- `AlertDialog` requires a non-empty `cancelLabel` and always renders an enabled cancel action before supplemental `actions`. `onCancel` runs before close, `cancelVariant` defaults to `secondary`, and the dialog is not dismissible through Escape or the scrim by default.
+- `ToastRegion` must render inside `PanelRoot`. It now throws outside that boundary instead of portaling to `document.body`, where version-scoped styles and theme tokens cannot apply safely.
+
+### Added
+
+- Focused `/composites`, `/data-grid`, `/forms`, and `/overlays` package entry points.
+- `SecretInput`, with controlled or uncontrolled reveal state, localized Show and Hide labels, optional trailing content, and pointer-safe caret and selection preservation.
+- `UnsupportedBrowserNotice`, a standalone alert consumers can render instead of `PanelRoot` after `supportsNativeCssScope(window)` fails.
+- `formatRelativeAge`, which formats a nonnegative elapsed age in milliseconds through `Intl.RelativeTimeFormat` with locale, numeric, style, and fallback options.
+- The `"viewport-bottom"` `ActionBar.sticky` mode. It aligns to the `PanelRoot` column, accounts for visual-viewport occlusion and safe-area insets, reserves flow space, returns to natural flow at its anchor, and stops docking when the panel leaves the viewport.
+- Native form participation for `Switch` through `form`, `name`, `readOnly`, `required`, and `value`.
+- The public `--snui-font-family-mono` token for paths, identifiers, and other fixed-width consumer content.
+
+### Changed
+
+- Large `DataGrid` collections now use React Aria `Virtualizer` and `TableLayout` instead of TanStack Virtual. The virtualizer observes variable row heights while preserving complete-collection keyboard navigation and accessibility metadata.
+- Dialogs honor the visual viewport and safe-area insets. Menus, popovers, and nested dialogs use token-driven overlay layers so an overlay opened from a dialog stays above its owner.
+- Toast positioning honors safe-area insets. Exit removal follows the actual transition, uses the public transition token for its fallback timer, and completes immediately when reduced motion is requested.
+- Development dependencies and compatible runtime dependencies were refreshed to current releases. React Aria and React Aria Components remain bundled with each consumer remote rather than shared through Module Federation.
+
+### Fixed
+
+- Disabled, loading, and unsafe anchor-form buttons no longer retain a navigable `href`.
+- A disabled `SegmentedControl` no longer contributes its hidden value to native form submission.
+- The viewport-bottom action bar now works in the Signal K Admin `.app-body` layout, whose vertical overflow is unconstrained, and stays aligned across Chromium, Firefox, WebKit, and mobile Chromium.
+
 ## [0.6.2] - 2026-08-04
 
 ### Fixed
@@ -188,7 +224,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.2...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.5.0...v0.6.0

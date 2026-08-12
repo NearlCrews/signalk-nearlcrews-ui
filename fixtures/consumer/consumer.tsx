@@ -15,6 +15,17 @@ import {
   Textarea,
   TextInput,
 } from "signalk-nearlcrews-ui";
+import { EmptyState, Progress } from "signalk-nearlcrews-ui/composites";
+import { Cell, Column, DataGrid, Row } from "signalk-nearlcrews-ui/data-grid";
+import { SecretInput, Switch } from "signalk-nearlcrews-ui/forms";
+import {
+  createToastQueue,
+  Dialog,
+  Popover,
+  ToastRegion,
+} from "signalk-nearlcrews-ui/overlays";
+
+const queue = createToastQueue();
 
 export function ObjectRefs(): React.JSX.Element {
   const buttonRef = createRef<HTMLButtonElement>();
@@ -86,6 +97,36 @@ export function NativeAttributes(): React.JSX.Element {
         Save
       </Button>
       <TextInput autoComplete="off" maxLength={64} placeholder="host" />
+    </PanelRoot>
+  );
+}
+
+/** Every public subpath must compile from the packed artifact. */
+export function FocusedEntryPoints(): React.JSX.Element {
+  const gridRef = createRef<HTMLDivElement>();
+  return (
+    <PanelRoot>
+      <Progress label="Loading" value={50} />
+      <EmptyState title="No providers" />
+      <SecretInput aria-label="Token" />
+      <Switch name="enabled">Enabled</Switch>
+      <DataGrid
+        ref={gridRef}
+        aria-label="Providers"
+        items={[{ id: "alpha", name: "Alpha" }]}
+        renderRow={(item) => (
+          <Row>
+            <Cell>{item.name}</Cell>
+          </Row>
+        )}
+      >
+        <Column id="name">Name</Column>
+      </DataGrid>
+      <Popover trigger={<Button>Details</Button>}>Provider details</Popover>
+      <Dialog open={false} title="Provider">
+        Provider details
+      </Dialog>
+      <ToastRegion queue={queue} />
     </PanelRoot>
   );
 }

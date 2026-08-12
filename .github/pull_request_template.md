@@ -18,6 +18,7 @@
 - [ ] Exported API and semantic-versioning impact were reviewed.
 - [ ] Package ownership remains presentational and excludes consumer domain behavior.
 - [ ] Theme persistence, CSP, style isolation, and Module Federation impact were reviewed.
+- [ ] React and React DOM remain host singletons, and the package remains bundled per remote.
 - [ ] Changelog, compatibility, and migration guidance were updated when needed.
 
 ## Verification
@@ -25,7 +26,7 @@
 - [ ] `npm run validate` passes.
 - [ ] `npm run test:browser` passes when UI or browser behavior changed.
 - [ ] Keyboard behavior, visible focus, and full Axe results pass.
-- [ ] Light, Dark, Night, Auto, reduced motion, and forced colors were checked when relevant.
+- [ ] Auto, System, Light, Dark, Night, reduced motion, and forced colors were checked when relevant.
 - [ ] 320-pixel reflow and 44-pixel coarse-pointer targets pass when layout changed.
 - [ ] Updated screenshots were visually inspected.
 - [ ] `git diff --check` passes.

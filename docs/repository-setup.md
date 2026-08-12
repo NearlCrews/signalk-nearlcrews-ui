@@ -16,7 +16,7 @@ Enable Dependabot alerts and security updates, secret scanning, push protection,
 
 ## Protected branches and tags
 
-After the first successful CI run, protect `main` with every required CI job. Require pull requests, resolved conversations, linear history, and current branches. Block force pushes and deletion. Keep an administrator recovery path for repository-level emergencies.
+After the first successful CI run, protect `main` with every required CI job, including workflow lint, all supported Node lines, Windows package validation, x64 and ARM64 browser tests, and both CodeQL analyses. Require pull requests, resolved conversations, linear history, and current branches. Block force pushes and deletion. Keep an administrator recovery path for repository-level emergencies.
 
 Protect tags matching `v*` from updates and deletion. A release tag must exactly match `v<package version>` and identify a commit contained in `main`.
 
@@ -51,13 +51,13 @@ The first local publication is the only provenance exception. It establishes pac
 While the short-lived npm session is still active, create and verify the trusted-publisher relationship with npm 12 or newer:
 
 ```sh
-npx --yes npm@12.0.1 trust github signalk-nearlcrews-ui \
+npx --yes npm@12.0.2 trust github signalk-nearlcrews-ui \
   --file npm-publish.yml \
   --repo NearlCrews/signalk-nearlcrews-ui \
   --env npm \
   --allow-publish \
   --yes
-npx --yes npm@12.0.1 trust list signalk-nearlcrews-ui
+npx --yes npm@12.0.2 trust list signalk-nearlcrews-ui
 npm logout
 ```
 

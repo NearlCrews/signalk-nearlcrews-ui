@@ -1,7 +1,7 @@
 # UI and UX Improvement Plan
 
-Status: Stage 0 and Stage 1 delivered in 0.5.0. Stage 2 onward pending.
-Last revised: 2026-07-31, against package version 0.5.0.
+Status: Stages 0 through 4 and 6 are delivered for version 0.7.0. Stage 5 packed-artifact validation is complete across all six consumers; their exact 0.7.0 dependency pins remain downstream work after publication. `OverflowActions` and `SlideOver` remain deferred.
+Last revised: 2026-08-12, for package version 0.7.0.
 Findings that informed this revision are recorded in `improvement-findings.md`.
 
 This roadmap covers improvements to the `signalk-nearlcrews-ui` React component library. It is a repository planning document, not a published package contract or release commitment. Target versions will be assigned only after scope, compatibility, and consumer evidence are complete.
@@ -41,9 +41,9 @@ The library must not own:
 
 Do not add `ActionForm` or a `SubmitButton` coupled to `useFormStatus` in the current package architecture.
 
-`useFormStatus` comes from `react-dom`, while this package intentionally requires only React as a peer and must not bundle React DOM. Signal K Admin configuration saves also do not expose an awaited persistence result that React form pending state could represent reliably. Consumers will continue to supply the controlled `loading`, `aria-busy`, and status state that existing primitives render.
+React DOM is now a host-provided peer because overlays portal into their owning `PanelRoot`. That narrow dependency does not change the form-state decision: Signal K Admin configuration saves do not expose an awaited native form result that `useFormStatus` could represent reliably. Consumers continue to supply the controlled `loading`, `aria-busy`, and status state that existing primitives render.
 
-Any future React DOM integration requires a separate boundary decision covering peer dependencies, externalization, Module Federation sharing, fixtures, package documentation, and consumer migrations.
+Any future form-state integration requires a separate boundary decision covering persistence semantics, pending-state ownership, externalization, Module Federation fixtures, package documentation, and consumer migrations.
 
 ### Units
 
@@ -125,8 +125,6 @@ describe consumer discovery as outstanding work.
 | `signalk-virtual-weather-sensors` | `src/configpanel/components/`            |
 | `signalk-chart-locker`            | `src/panel/PluginConfigurationPanel.tsx` |
 
-Re-check adoption versions before each stage begins. For each candidate, record:
-
 For each candidate, record:
 
 - At least two distinct consumer packages, and the call sites within each
@@ -184,6 +182,8 @@ Definition of done:
 
 ### Stage 2: Recipes and Proven Presentation Gaps
 
+Delivered through the README composition recipes and the candidate dispositions below. No domain-state component was added.
+
 Add documentation recipes first:
 
 1. Numeric input with a visible unit while conversion remains consumer-owned.
@@ -201,6 +201,8 @@ Each component must use native semantics, accept localized content, expose nativ
 
 ### Stage 3: Overlay Feasibility
 
+Delivered with an in-root React Aria architecture. React and React DOM stay host singletons, while this package and its React Aria dependencies remain bundled per remote. Version 0.7.0 adds nested layer ordering, visual-viewport sizing, safe-area behavior, and a strict no-body-fallback contract.
+
 Do not commit to public overlay APIs until these decisions are documented:
 
 - Native Popover API, native dialog, internal positioning, or a justified dependency
@@ -214,14 +216,16 @@ Do not commit to public overlay APIs until these decisions are documented:
 - Reduced motion, safe-area insets, virtual keyboards, and 320-pixel reflow
 - CSP nonce behavior, owner-document behavior, nested package versions, and unmount cleanup
 - Overlay surface, scrim, border, shadow, z-order, panel-size, pill-radius, and numeric-typography tokens
-- Bundle impact against the 24 KiB gzip ceiling, which currently has roughly 40 percent headroom and will therefore not be the deciding gate
-- If a dependency is proposed, its license, its effect on `npm run audit:runtime`, third-party notices in this repository, and its effect on the federation share scope. The package has no runtime `dependencies` today, and adding the first one changes its supply-chain posture for every pinned consumer
+- Bundle impact against the checked-in per-entry gzip ceilings
+- If another dependency is proposed, its license, its effect on `npm run audit:runtime`, third-party notices in this repository, and its effect on the federation share scope. React Aria and React Aria Components are the current runtime dependencies.
 
 Public menu roles are allowed only when the complete menu keyboard contract is implemented. A generic popup containing ordinary controls must not use menu semantics.
 
 Deliverable: an architecture decision and tested foundation with no exported component API unless the evidence and budget gates pass.
 
 ### Stage 4: Overlay Primitives
+
+Delivered as `Menu`, `Popover`, `Dialog`, `AlertDialog`, and `ToastRegion`. The original candidate names and requirements remain below as the decision record; `OverflowActions` and `SlideOver` were not added.
 
 If Stage 3 passes, implement in this order:
 
@@ -244,6 +248,8 @@ If approved, a slide-over must define:
 
 ### Stage 5: Consumer Pilots
 
+All six named consumers passed their production remote, package, browser, and panel checks against the final 0.7.0 tarball. Their source migrations are prepared, while committed exact 0.7.0 dependency pins must follow npm publication and a clean-install verification in each repository.
+
 Install a locally packed exact version into at least two representative administration-panel consumers. Select pilots based on the Stage 0 evidence rather than convenience.
 
 Each pilot must:
@@ -253,7 +259,7 @@ Each pilot must:
 - Build a production Module Federation remote without React or React DOM implementations.
 - Load that remote in the supported Signal K Admin host.
 - Pass a complete save and validation flow.
-- Verify Light, Dark, Night, and Auto.
+- Verify Auto, System, Light, Dark, and Night.
 - Verify keyboard behavior, focus visibility, Axe, forced colors, reduced motion, RTL, 320-pixel reflow, and coarse-pointer sizing.
 - Record production bundle and gzip changes.
 - Update exact dependency metadata and third-party notices.
@@ -261,6 +267,8 @@ Each pilot must:
 Do not raise a consumer bundle ceiling solely to make adoption pass.
 
 ### Stage 6: Documentation and Release Preparation
+
+The 0.7.0 documentation and release-contract refresh is complete. Publication remains a separate action that requires explicit approval.
 
 For every approved public API change, update together:
 
@@ -285,14 +293,14 @@ Every new or changed public primitive must satisfy the applicable rows.
 | Public API     | Export review, native attribute forwarding, localized labels, semantic-versioning classification, and migration notes                                                                                                                           |
 | Types and refs | Type checks, object refs, callback refs, replacement, cleanup, unmount, and packed declaration compilation                                                                                                                                      |
 | Accessibility  | Native semantics, accessible names, keyboard behavior, initial and restored focus, live-region policy, Axe, and no color-only state                                                                                                             |
-| Themes         | Auto, Light, Dark, and Night behavior, plus token contrast checks                                                                                                                                                                               |
+| Themes         | Auto, System, Light, Dark, and Night behavior, plus token contrast checks                                                                                                                                                                       |
 | Forced colors  | Boundaries, selected states, invalid states, disabled states, focus, overlays, and scrims                                                                                                                                                       |
 | Motion         | Reduced-motion behavior for every transition and animation                                                                                                                                                                                      |
 | Layout         | Panel-container queries, 320-pixel reflow, long and unbroken content, direction-independent RTL behavior on every supported engine, `:dir()` cosmetic mirroring only where supported, zoom, virtual keyboards, safe areas, and no page overflow |
 | Targets        | Coarse-pointer sizing and width plus height checks for square and icon-only controls                                                                                                                                                            |
 | Overlays       | Positioning, collision, scroll, resize, dismissal stack, focus containment, focus return, CSP, owner document, nested versions, and cleanup                                                                                                     |
 | Browsers       | Chromium, Firefox, WebKit, and mobile Chromium                                                                                                                                                                                                  |
-| Packaging      | `publint`, Are the Types Wrong, npm pack inspection, 24 KiB gzip ceiling, React externalization, and no React DOM implementation                                                                                                                |
+| Packaging      | `publint`, Are the Types Wrong, npm pack inspection, per-entry gzip ceilings, and React plus React DOM externalization                                                                                                                          |
 | Federation     | Classic and ESM production builds and runtime checks with the host-equivalent React share scope                                                                                                                                                 |
 | CI             | Supported Node lines, Windows package validation, and x64 plus ARM64 browser lanes                                                                                                                                                              |
 | Consumers      | At least two packed-artifact pilots and a production remote-load check in Signal K Admin                                                                                                                                                        |
@@ -304,7 +312,7 @@ Every new or changed public primitive must satisfy the applicable rows.
 | ------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | React 19 ref-as-prop migration       | Proceed as a separate compatibility-reviewed change                                                                                                  |
 | `ActionForm`                         | Do not implement                                                                                                                                     |
-| `SubmitButton` using `useFormStatus` | Do not implement under the current React-only runtime contract                                                                                       |
+| `SubmitButton` using `useFormStatus` | Do not implement while consumer save persistence and pending-state ownership remain incompatible                                                     |
 | Stateful or converting `UnitField`   | Do not implement                                                                                                                                     |
 | Numeric-with-unit composition recipe | Proceed. The separate-unit composition exists in one consumer, so the recipe is the deliverable and a component is not                               |
 | Stateful `SaveStatus`                | Do not implement                                                                                                                                     |

@@ -12,7 +12,6 @@ export const MENU_STYLES = scopeStyles(`
 /* ==== Menu (Menu, MenuItem, MenuSeparator, MenuSection) ==== */
 
 .snui-menu-popover {
-  z-index: var(--snui-z-overlay);
 ${RAISED_OVERLAY_DECLARATIONS}
 }
 

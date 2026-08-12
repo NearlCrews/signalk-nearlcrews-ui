@@ -1,20 +1,16 @@
 import { render } from "@testing-library/react";
 import { createRef, type ReactElement, type Ref } from "react";
 import { describe, expect, it, vi } from "vitest";
-
+import { Cell, Column, DataGrid, Row } from "../../src/data-grid.js";
 import {
   Banner,
   Button,
-  Cell,
   Checkbox,
-  Column,
-  DataGrid,
   FieldGroup,
   InlineConfirm,
   NumberInput,
   PanelRoot,
   RangeInput,
-  Row,
   SegmentedControl,
   Select,
   Textarea,
@@ -113,7 +109,7 @@ const REF_CASES: readonly {
   },
   {
     name: "DataGrid",
-    tagName: "TABLE",
+    tagName: "DIV",
     render: (ref) => (
       <DataGrid
         ref={ref}

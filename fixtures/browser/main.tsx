@@ -37,6 +37,7 @@ const showStates = fixtureParameters.has("states");
 const startBusy = fixtureParameters.has("busy");
 const becomeBusyOnConfirm = fixtureParameters.has("busy-on-confirm");
 const testFocusLoading = fixtureParameters.has("focus-loading");
+const simulateAdminHost = fixtureParameters.has("admin-host");
 
 function Fixture(): React.JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -49,7 +50,7 @@ function Fixture(): React.JSX.Element {
   const saveRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <PanelRoot>
+    <PanelRoot {...(simulateAdminHost ? { width: "standard" } : {})}>
       <Stack gap={4}>
         <Cluster justify="between" gap={4}>
           <div>
@@ -255,7 +256,12 @@ function Fixture(): React.JSX.Element {
           }}
         />
 
+        {simulateAdminHost ? (
+          <div className="admin-host__tall-panel-content" aria-hidden="true" />
+        ) : null}
+
         <ActionBar
+          sticky={simulateAdminHost ? "viewport-bottom" : undefined}
           status={
             <StatusIndicator tone="warning">Unsaved changes</StatusIndicator>
           }
@@ -282,8 +288,11 @@ if (!(container instanceof HTMLElement)) {
 
 createRoot(container).render(
   <StrictMode>
-    <main>
+    <main className={simulateAdminHost ? "app-body" : undefined}>
       <Fixture />
+      {simulateAdminHost ? (
+        <div className="admin-host__after-panel-content" aria-hidden="true" />
+      ) : null}
     </main>
   </StrictMode>,
 );

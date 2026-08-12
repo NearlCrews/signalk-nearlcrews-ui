@@ -14,6 +14,7 @@ export interface ThemeToggleProps {
 
 const THEME_LABELS: Readonly<Record<ThemeChoice, string>> = {
   auto: "Auto",
+  system: "System",
   light: "Light",
   dark: "Dark",
   night: "Night",

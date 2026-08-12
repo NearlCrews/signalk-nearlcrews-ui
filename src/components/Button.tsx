@@ -273,6 +273,7 @@ function AnchorButton({
   ref,
   shape = "default",
   size = "default",
+  tabIndex,
   variant = "secondary",
   ...anchorProps
 }: ButtonAsAnchorProps): React.JSX.Element {
@@ -301,7 +302,8 @@ function AnchorButton({
       {...anchorProps}
       {...state.dom}
       ref={ref}
-      href={safeHref}
+      href={blocksActivation ? undefined : safeHref}
+      tabIndex={blocksActivation ? (tabIndex ?? 0) : tabIndex}
       aria-disabled={blocksActivation || undefined}
       onClick={guardClick(blocksActivation, onClick)}
       onKeyDown={guardKeyDown(blocksActivation, onKeyDown)}

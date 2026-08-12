@@ -59,7 +59,7 @@ jobs:
         env:
           NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
         run: |
-          npm install --global npm@12.0.1
+          npm install --global npm@12.0.2
           echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
           "${NPM_CONFIG_PREFIX}/bin/npm" --version
       - name: Cache npm downloads
@@ -93,7 +93,7 @@ jobs:
         shell: pwsh
         run: |
           $npmPrefix = Join-Path $env:RUNNER_TEMP "npm-global"
-          npm install --global npm@12.0.1 --prefix $npmPrefix
+          npm install --global npm@12.0.2 --prefix $npmPrefix
           $npmPrefix | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           & (Join-Path $npmPrefix "npm.cmd") --version
       - name: Cache npm downloads
@@ -137,7 +137,7 @@ jobs:
         env:
           NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
         run: |
-          npm install --global npm@12.0.1
+          npm install --global npm@12.0.2
           echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
           "${NPM_CONFIG_PREFIX}/bin/npm" --version
       - name: Cache npm downloads

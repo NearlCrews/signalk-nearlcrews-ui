@@ -16,8 +16,8 @@ export interface AccordionProps extends Omit<HTMLAttributes<HTMLDivElement>, "ch
 export declare function Accordion({ children, className, ...props }: AccordionProps): React.JSX.Element;
 
 === components/ActionBar.d.ts ===
-import type { HTMLAttributes, ReactNode, Ref } from "react";
-export type ActionBarSticky = "bottom" | "top";
+import { type HTMLAttributes, type ReactNode, type Ref } from "react";
+export type ActionBarSticky = "bottom" | "top" | "viewport-bottom";
 export interface ActionBarProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
     readonly actions: ReactNode;
     readonly status?: ReactNode;
@@ -101,7 +101,7 @@ export type { CellProps, ColumnProps, Key, RowProps, Selection, SortDescriptor, 
 export { Cell, Column, Row };
 export type DataGridDensity = "default" | "compact";
 export type DataGridSelectionMode = "none" | "single" | "multiple";
-export interface DataGridProps<TRow, TColumn = unknown> extends RefAttributes<HTMLTableElement> {
+export interface DataGridProps<TRow, TColumn = unknown> extends RefAttributes<HTMLDivElement> {
     readonly "aria-label"?: AriaAttributes["aria-label"];
     readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"];
     /**
@@ -142,10 +142,10 @@ export interface DataGridProps<TRow, TColumn = unknown> extends RefAttributes<HT
     readonly sortDescriptor?: SortDescriptor;
     readonly style?: CSSProperties;
     /**
-     * Number of rows above which the body is windowed with
-     * @tanstack/react-virtual. Virtualized rows have a fixed height per density
-     * and columns size by flex (a Column `width` pins its basis); keyboard
-     * navigation reaches rendered rows, scrolling reveals the rest.
+     * Number of rows above which the body uses React Aria's TableLayout and
+     * Virtualizer. The density row height is an estimate, and rows are observed
+     * so wrapped or expanded content can use its measured height. Keyboard
+     * navigation and accessibility metadata cover the complete collection.
      */
     readonly virtualizeThreshold?: number;
     /** Paints alternating row backgrounds. Off by default. */
@@ -156,6 +156,7 @@ export declare function DataGrid<TRow, TColumn = unknown>({ "aria-label": ariaLa
 === components/Dialog.d.ts ===
 import { type AriaAttributes, type CSSProperties, type ReactNode, type RefAttributes } from "react";
 import type { HeadingLevel } from "../utils/heading.js";
+import { type ButtonVariant } from "./Button.js";
 import { type OverlayOpenState } from "./overlay-placement.js";
 export type DialogWidth = "standard" | "wide";
 export interface DialogProps extends RefAttributes<HTMLElement>, OverlayOpenState {
@@ -178,9 +179,17 @@ export interface DialogProps extends RefAttributes<HTMLElement>, OverlayOpenStat
     readonly title: ReactNode;
     readonly width?: DialogWidth;
 }
-export type AlertDialogProps = DialogProps;
+export interface AlertDialogProps extends Omit<DialogProps, "actions"> {
+    /** Supplemental actions, such as the destructive confirmation. */
+    readonly actions?: ReactNode;
+    /** Required label for the always-enabled escape action. */
+    readonly cancelLabel: ReactNode;
+    /** Defaults to secondary. */
+    readonly cancelVariant?: ButtonVariant;
+    readonly onCancel?: (() => void) | undefined;
+}
 export declare function Dialog(props: DialogProps): React.JSX.Element;
-export declare function AlertDialog({ actions, dismissable, ...props }: AlertDialogProps): React.JSX.Element;
+export declare function AlertDialog({ actions, cancelLabel, cancelVariant, dismissable, onCancel, ...props }: AlertDialogProps): React.JSX.Element;
 
 === components/EmptyState.d.ts ===
 import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
@@ -493,6 +502,25 @@ export interface RadioProps extends Omit<HTMLAttributes<HTMLDivElement>, "childr
 }
 export declare function Radio({ children, className, disabled, ref, value, ...props }: RadioProps): React.JSX.Element;
 
+=== components/SecretInput.d.ts ===
+import { type ReactNode, type RefAttributes } from "react";
+import { type TextInputProps } from "./Inputs.js";
+import { type InputGroupControlWidth } from "./Layout.js";
+export interface SecretInputProps extends Omit<TextInputProps, "type">, RefAttributes<HTMLInputElement> {
+    readonly defaultRevealed?: boolean | undefined;
+    /** Accessible and visible label for the conceal action. */
+    readonly hideLabel?: string | undefined;
+    readonly onRevealedChange?: ((revealed: boolean) => void) | undefined;
+    readonly revealed?: boolean | undefined;
+    /** Content rendered after the input and before the visibility control. */
+    readonly trailingContent?: ReactNode | undefined;
+    /** Width behavior for the input slot. Defaults to grow. */
+    readonly width?: InputGroupControlWidth | undefined;
+    /** Accessible and visible label for the reveal action. */
+    readonly showLabel?: string | undefined;
+}
+export declare function SecretInput({ defaultRevealed, disabled, hideLabel, onRevealedChange, ref, revealed, showLabel, trailingContent, width, ...props }: SecretInputProps): React.JSX.Element;
+
 === components/Section.d.ts ===
 import { type HTMLAttributes, type ReactNode } from "react";
 import { type HeadingLevel } from "../utils/heading.js";
@@ -553,9 +581,17 @@ export interface SwitchProps extends Omit<HTMLAttributes<HTMLDivElement>, "child
     readonly children: ReactNode;
     readonly defaultChecked?: boolean | undefined;
     readonly disabled?: boolean | undefined;
+    /** Associates the switch with a form outside its DOM subtree. */
+    readonly form?: string | undefined;
+    /** Name submitted with the switch value while it is selected. */
+    readonly name?: string | undefined;
     readonly onChange?: ((checked: boolean) => void) | undefined;
+    readonly readOnly?: boolean | undefined;
+    readonly required?: boolean | undefined;
+    /** Submitted value while selected. Defaults to the browser's "on" value. */
+    readonly value?: string | undefined;
 }
-export declare function Switch({ checked, children, className, defaultChecked, disabled, onChange, ref, ...props }: SwitchProps): React.JSX.Element;
+export declare function Switch({ checked, children, className, defaultChecked, disabled, form, name, onChange, readOnly, ref, required, value, ...props }: SwitchProps): React.JSX.Element;
 
 === components/ThemeToggle.d.ts ===
 import type { ReactNode } from "react";
@@ -625,8 +661,8 @@ export interface ToastRegionProps<T extends ToastContent = ToastContent> extends
 }
 /**
  * Renders a queue's toasts, newest first, into the nearest PanelRoot portal
- * container so the scoped styles and theme reach them. Outside a PanelRoot
- * the region falls back to the document body.
+ * container so the scoped styles and theme reach them. Rendering outside a
+ * PanelRoot throws because a body portal would lose scoped styles and tokens.
  */
 export declare function ToastRegion<T extends ToastContent = ToastContent>({ className, dismissLabel, label, queue, ref, ...props }: ToastRegionProps<T>): React.JSX.Element | null;
 
@@ -639,6 +675,20 @@ export declare function ToastRegion<T extends ToastContent = ToastContent>({ cla
 export declare function ToneAnnouncement({ label, }: {
     readonly label: string | undefined;
 }): React.JSX.Element | null;
+
+=== components/UnsupportedBrowserNotice.d.ts ===
+import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
+export interface UnsupportedBrowserNoticeProps extends Omit<HTMLAttributes<HTMLElement>, "children" | "role" | "title">, RefAttributes<HTMLElement> {
+    /** Optional body override. */
+    readonly children?: ReactNode | undefined;
+    /** Heading shown above the compatibility explanation. */
+    readonly title?: ReactNode | undefined;
+}
+/**
+ * Standalone compatibility notice for a consumer-controlled browser preflight.
+ * Render this instead of PanelRoot after supportsNativeCssScope returns false.
+ */
+export declare function UnsupportedBrowserNotice({ children, ref, title, ...props }: UnsupportedBrowserNoticeProps): React.JSX.Element;
 
 === components/overlay-placement.d.ts ===
 import type { Placement as RACPlacement } from "react-aria-components";
@@ -671,39 +721,50 @@ export declare function overlayOpenProps({ open, defaultOpen, onOpenChange, }: O
     readonly onOpenChange?: (isOpen: boolean) => void;
 };
 
-=== index.d.ts ===
+=== composites.d.ts ===
 export { Accordion, type AccordionProps } from "./components/Accordion.js";
+export { EmptyState, type EmptyStateProps } from "./components/EmptyState.js";
+export { Progress, type ProgressProps, type ProgressTone, } from "./components/Progress.js";
+
+=== data-grid.d.ts ===
+export { Cell, type CellProps, Column, type ColumnProps, DataGrid, type DataGridDensity, type DataGridProps, type DataGridSelectionMode, type Key, Row, type RowProps, type Selection, type SortDescriptor, type SortDirection, } from "./components/DataGrid.js";
+
+=== forms.d.ts ===
+export { Radio, RadioGroup, type RadioGroupErrorLive, type RadioGroupOrientation, type RadioGroupProps, type RadioProps, } from "./components/RadioGroup.js";
+export { SecretInput, type SecretInputProps, } from "./components/SecretInput.js";
+export { Switch, type SwitchProps } from "./components/Switch.js";
+
+=== index.d.ts ===
 export { ActionBar, type ActionBarProps, type ActionBarSticky, } from "./components/ActionBar.js";
 export { Banner, type BannerLive, type BannerProps, type BannerTone, } from "./components/Banner.js";
 export { Button, type ButtonAsAnchorProps, type ButtonAsButtonProps, type ButtonProps, type ButtonShape, type ButtonSize, type ButtonVariant, } from "./components/Button.js";
 export { type CollapsibleMountStrategy, CollapsibleSection, type CollapsibleSectionProps, type CollapsibleSummaryPlacement, type CollapsibleSummaryVisibility, } from "./components/CollapsibleSection.js";
-export { Cell, type CellProps, Column, type ColumnProps, DataGrid, type DataGridDensity, type DataGridProps, type DataGridSelectionMode, type Key, Row, type RowProps, type Selection, type SortDescriptor, type SortDirection, } from "./components/DataGrid.js";
-export { AlertDialog, type AlertDialogProps, Dialog, type DialogProps, type DialogWidth, } from "./components/Dialog.js";
-export { EmptyState, type EmptyStateProps, } from "./components/EmptyState.js";
 export { FieldGroup, type FieldGroupProps, } from "./components/FieldGroup.js";
 export { InlineConfirm, type InlineConfirmCancelReason, type InlineConfirmProps, } from "./components/InlineConfirm.js";
 export { Checkbox, type CheckboxErrorLive, type CheckboxProps, NumberInput, type NumberInputProps, RangeInput, type RangeInputProps, Select, type SelectProps, Textarea, type TextareaProps, TextInput, type TextInputProps, type TextInputType, } from "./components/Inputs.js";
 export { type FieldControlProps, type FieldErrorLive, LabeledField, type LabeledFieldChild, type LabeledFieldControlProps, type LabeledFieldDensity, type LabeledFieldLayout, type LabeledFieldProps, } from "./components/LabeledField.js";
 export { Badge, type BadgeProps, Card, type CardDensity, type CardElement, type CardProps, Cluster, type ClusterElement, type ClusterProps, InputGroup, InputGroupAddon, type InputGroupAddonProps, InputGroupControl, type InputGroupControlProps, type InputGroupControlWidth, type InputGroupDensity, type InputGroupProps, type LayoutAlignment, Metric, MetricGrid, type MetricGridElement, type MetricGridProps, type MetricProps, type SpaceScale, Stack, type StackElement, type StackProps, } from "./components/Layout.js";
-export { Menu, MenuItem, type MenuItemProps, type MenuProps, MenuSection, type MenuSectionProps, MenuSeparator, type MenuSeparatorProps, } from "./components/Menu.js";
-export type { OverlayOpenState, OverlayPlacement, } from "./components/overlay-placement.js";
 export { PanelRoot, type PanelRootProps, type PanelWidth, } from "./components/PanelRoot.js";
-export { Popover, type PopoverProps } from "./components/Popover.js";
-export { Progress, type ProgressProps, type ProgressTone, } from "./components/Progress.js";
-export { Radio, RadioGroup, type RadioGroupErrorLive, type RadioGroupOrientation, type RadioGroupProps, type RadioProps, } from "./components/RadioGroup.js";
 export { Section, type SectionProps } from "./components/Section.js";
 export { SegmentedControl, type SegmentedControlLegendVisibility, type SegmentedControlOption, type SegmentedControlOrientation, type SegmentedControlProps, } from "./components/SegmentedControl.js";
 export { StatusIndicator, type StatusIndicatorProps, type StatusTone, } from "./components/StatusIndicator.js";
-export { Switch, type SwitchProps, } from "./components/Switch.js";
 export { ThemeToggle, type ThemeToggleProps, } from "./components/ThemeToggle.js";
-export { createToastQueue, type QueuedToast, type ToastContent, type ToastQueue, ToastRegion, type ToastRegionProps, toast, } from "./components/Toast.js";
+export { UnsupportedBrowserNotice, type UnsupportedBrowserNoticeProps, } from "./components/UnsupportedBrowserNotice.js";
 export { supportsNativeCssScope, UnsupportedBrowserError, } from "./styles/install.js";
 export { type ColorTokenName, type FoundationTokenName, PUBLIC_COLOR_TOKEN_NAMES, PUBLIC_FOUNDATION_TOKEN_NAMES, PUBLIC_TOKEN_NAMES, } from "./styles/tokens.js";
 export { type ThemeContextValue, ThemeProvider, type ThemeProviderProps, usePanelTheme, } from "./theme/context.js";
 export { THEME_CHOICES, THEME_STORAGE_KEY, type ThemeChoice, } from "./theme/contract.js";
 export type { AnnouncementMode } from "./utils/announcement.js";
+export { type FormatRelativeAgeOptions, formatRelativeAge, } from "./utils/format-relative-age.js";
 export type { HeadingLevel } from "./utils/heading.js";
 export type { SemanticTone } from "./utils/tone.js";
+
+=== overlays.d.ts ===
+export { AlertDialog, type AlertDialogProps, Dialog, type DialogProps, type DialogWidth, } from "./components/Dialog.js";
+export { Menu, MenuItem, type MenuItemProps, type MenuProps, MenuSection, type MenuSectionProps, MenuSeparator, type MenuSeparatorProps, } from "./components/Menu.js";
+export type { OverlayOpenState, OverlayPlacement, } from "./components/overlay-placement.js";
+export { Popover, type PopoverProps } from "./components/Popover.js";
+export { createToastQueue, type QueuedToast, type ToastContent, type ToastQueue, ToastRegion, type ToastRegionProps, toast, } from "./components/Toast.js";
 
 === styles/collapsible.d.ts ===
 export declare const COLLAPSIBLE_STYLES: string;
@@ -813,18 +874,12 @@ export declare const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
  * token.
  */
 export declare const TRANSITION_FAST_MS = 140;
-/**
- * Fixed data-grid row heights in pixels, per density. Virtualized rows are
- * absolutely positioned by pixel offset, so the CSS rule and the virtualizer's
- * size estimate have to agree; both read these numbers.
- */
+/** Initial data-grid row-height estimates in pixels, per density. */
 export declare const DATA_GRID_ROW_HEIGHTS: {
     readonly compact: 32;
     readonly default: 44;
 };
-/** Renders a pixel height as the rem length the stylesheet uses. */
-export declare function remLength(pixels: number): string;
-export declare const PUBLIC_FOUNDATION_TOKEN_NAMES: readonly ["--snui-font-family", "--snui-font-size", "--snui-font-size-sm", "--snui-font-size-xs", "--snui-font-weight-medium", "--snui-font-weight-semibold", "--snui-font-weight-bold", "--snui-font-weight-heavy", "--snui-line-height", "--snui-space-1", "--snui-space-2", "--snui-space-3", "--snui-space-4", "--snui-space-5", "--snui-space-6", "--snui-space-7", "--snui-space-8", "--snui-radius-sm", "--snui-radius-md", "--snui-radius-lg", "--snui-radius-pill", "--snui-control-min-height", "--snui-range-thumb-size", "--snui-range-progress-color", "--snui-range-track-color", "--snui-input-group-control-min", "--snui-input-group-control-basis", "--snui-content-width-standard", "--snui-content-width-wide", "--snui-focus-ring", "--snui-shadow-flat", "--snui-shadow-raised", "--snui-shadow-overlay", "--snui-color-scrim", "--snui-ease-standard", "--snui-transition-fast", "--snui-transition-normal", "--snui-transition-slow", "--snui-motion-spin", "--snui-z-sticky", "--snui-z-overlay", "--snui-z-modal", "--snui-z-toast"];
+export declare const PUBLIC_FOUNDATION_TOKEN_NAMES: readonly ["--snui-font-family", "--snui-font-family-mono", "--snui-font-size", "--snui-font-size-sm", "--snui-font-size-xs", "--snui-font-weight-medium", "--snui-font-weight-semibold", "--snui-font-weight-bold", "--snui-font-weight-heavy", "--snui-line-height", "--snui-space-1", "--snui-space-2", "--snui-space-3", "--snui-space-4", "--snui-space-5", "--snui-space-6", "--snui-space-7", "--snui-space-8", "--snui-radius-sm", "--snui-radius-md", "--snui-radius-lg", "--snui-radius-pill", "--snui-control-min-height", "--snui-range-thumb-size", "--snui-range-progress-color", "--snui-range-track-color", "--snui-input-group-control-min", "--snui-input-group-control-basis", "--snui-content-width-standard", "--snui-content-width-wide", "--snui-focus-ring", "--snui-shadow-flat", "--snui-shadow-raised", "--snui-shadow-overlay", "--snui-color-scrim", "--snui-ease-standard", "--snui-transition-fast", "--snui-transition-normal", "--snui-transition-slow", "--snui-motion-spin", "--snui-z-sticky", "--snui-z-overlay", "--snui-z-modal", "--snui-z-toast"];
 export type FoundationTokenName = (typeof PUBLIC_FOUNDATION_TOKEN_NAMES)[number];
 export declare const PUBLIC_COLOR_TOKEN_NAMES: readonly ColorTokenName[];
 export declare const PUBLIC_TOKEN_NAMES: readonly (ColorTokenName | FoundationTokenName)[];
@@ -845,7 +900,7 @@ export declare function usePanelTheme(): ThemeContextValue;
 
 === theme/contract.d.ts ===
 export declare const THEME_STORAGE_KEY = "signalk-nearlcrews-ui.theme.v1";
-export declare const THEME_CHOICES: readonly ["auto", "light", "dark", "night"];
+export declare const THEME_CHOICES: readonly ["auto", "system", "light", "dark", "night"];
 export type ThemeChoice = (typeof THEME_CHOICES)[number];
 export declare function isThemeChoice(value: unknown): value is ThemeChoice;
 
@@ -898,6 +953,21 @@ export interface FieldErrorState {
  */
 export declare function resolveFieldError(idBase: string, hasError: boolean, errorLive: AnnouncementMode): FieldErrorState;
 
+=== utils/format-relative-age.d.ts ===
+export interface FormatRelativeAgeOptions {
+    /** Text returned for a missing, non-finite, or negative age. */
+    readonly fallback?: string | undefined;
+    readonly locale?: string | readonly string[] | undefined;
+    readonly numeric?: Intl.RelativeTimeFormatNumeric | undefined;
+    readonly style?: Intl.RelativeTimeFormatStyle | undefined;
+}
+/**
+ * Formats an elapsed age in milliseconds with deterministic unit thresholds.
+ * Values are always ages in the past; callers with timestamps should compute
+ * and clamp their age at the data boundary.
+ */
+export declare function formatRelativeAge(ageMs: number | null | undefined, { fallback, locale, numeric, style, }?: FormatRelativeAgeOptions): string;
+
 === utils/heading.d.ts ===
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 export declare const HEADING_ELEMENTS: {
@@ -930,6 +1000,16 @@ export declare function resolveLabel(label: string | undefined, fallback: string
  * "motion is fine".
  */
 export declare function prefersReducedMotion(view: unknown): boolean;
+
+=== utils/overlay-layer.d.ts ===
+import { type ReactNode } from "react";
+export interface OverlayLayerProviderProps {
+    readonly children: ReactNode;
+    readonly value: number;
+}
+export declare function OverlayLayerProvider({ children, value, }: OverlayLayerProviderProps): React.JSX.Element;
+export declare function useOverlayLayer(): number;
+export declare function overlayZIndex(layer: number): string;
 
 === utils/portal.d.ts ===
 export { UNSAFE_PortalProvider, useUNSAFE_PortalContext, } from "react-aria/PortalProvider";
@@ -990,11 +1070,11 @@ export declare function resolveToneLabel(tone: SemanticTone, toneLabel: string |
 
 === version.d.ts ===
 /** The package version used to isolate styles from other loaded versions. */
-export declare const PACKAGE_VERSION = "0.6.2";
+export declare const PACKAGE_VERSION = "0.7.0";
 /** The root class is private and may change without notice. */
 export declare const ROOT_CLASS = "snui-root";
 /** The exact selector prevents styles from crossing package-version roots. */
-export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.6.2\"]";
+export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.7.0\"]";
 /** A versioned global name prevents keyframe collisions between package copies. */
 export declare function versionedAnimationName(suffix: string): string;
 export declare const SPINNER_ANIMATION_NAME: string;

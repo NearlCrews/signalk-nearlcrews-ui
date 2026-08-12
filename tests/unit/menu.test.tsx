@@ -2,15 +2,14 @@ import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-
+import { Button } from "../../src/index.js";
 import {
-  Button,
   Menu,
   MenuItem,
   MenuSection,
   MenuSeparator,
   Popover,
-} from "../../src/index.js";
+} from "../../src/overlays.js";
 import { panel, renderInPanel } from "../helpers.js";
 
 describe("Menu", () => {
@@ -349,6 +348,7 @@ describe("Popover", () => {
     const popover = screen.getByRole("dialog", { name: "Details" });
     expect(popover).toHaveTextContent("Depth details");
     expect(popover).toHaveClass("snui-popover");
+    expect(popover).toHaveStyle({ zIndex: "var(--snui-z-overlay)" });
     expect(popover.closest(".snui-root")).not.toBeNull();
     expect(ref.current).toBe(popover);
   });
