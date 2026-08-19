@@ -14,11 +14,29 @@ const ignoredDirectories = new Set([
   "test-results",
 ]);
 
-function githubSlug(text) {
-  return text
+function stripHtmlTags(text) {
+  let result = "";
+  let insideTag = false;
+
+  for (const character of text) {
+    if (character === "<") {
+      insideTag = true;
+      continue;
+    }
+    if (character === ">" && insideTag) {
+      insideTag = false;
+      continue;
+    }
+    if (!insideTag) result += character;
+  }
+
+  return result;
+}
+
+export function githubSlug(text) {
+  return stripHtmlTags(text)
     .trim()
     .toLowerCase()
-    .replace(/<[^>]*>/g, "")
     .replace(/[`*_~]/g, "")
     .replace(/[^\p{L}\p{N}\s-]/gu, "")
     .replace(/\s+/g, "-");
