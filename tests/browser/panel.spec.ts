@@ -849,6 +849,20 @@ test("reflows state-heavy content at a 320 pixel viewport", async ({
     name: "Confidence threshold exact value",
   });
   const unit = page.getByTestId("confidence-unit");
+  await expect
+    .poll(async () => {
+      const [exactBox, unitBox] = await Promise.all([
+        exactInput.boundingBox(),
+        unit.boundingBox(),
+      ]);
+      if (exactBox === null || unitBox === null)
+        return Number.POSITIVE_INFINITY;
+      const exactCenter = exactBox.y + exactBox.height / 2;
+      const unitCenter = unitBox.y + unitBox.height / 2;
+      return Math.abs(exactCenter - unitCenter);
+    })
+    .toBeLessThan(1);
+
   const [exactBox, unitBox] = await Promise.all([
     exactInput.boundingBox(),
     unit.boundingBox(),
@@ -856,9 +870,6 @@ test("reflows state-heavy content at a 320 pixel viewport", async ({
   expect(exactBox).not.toBeNull();
   expect(unitBox).not.toBeNull();
   if (exactBox !== null && unitBox !== null) {
-    const exactCenter = exactBox.y + exactBox.height / 2;
-    const unitCenter = unitBox.y + unitBox.height / 2;
-    expect(Math.abs(exactCenter - unitCenter)).toBeLessThan(1);
     expect(unitBox.x).toBeGreaterThanOrEqual(exactBox.x + exactBox.width);
   }
 
