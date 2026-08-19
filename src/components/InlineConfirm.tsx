@@ -24,26 +24,28 @@ export type InlineConfirmCancelReason = "cancel" | "escape";
 export interface InlineConfirmProps
   extends Omit<HTMLAttributes<HTMLElement>, "children" | "onCancel" | "title">,
     RefAttributes<HTMLElement> {
-  readonly busy?: boolean;
-  readonly cancelLabel?: ReactNode;
-  readonly cancelVariant?: ButtonVariant;
-  readonly confirmLabel?: ReactNode;
-  readonly confirmVariant?: Extract<ButtonVariant, "primary" | "danger">;
+  readonly busy?: boolean | undefined;
+  readonly cancelLabel?: ReactNode | undefined;
+  readonly cancelVariant?: ButtonVariant | undefined;
+  readonly confirmLabel?: ReactNode | undefined;
+  readonly confirmVariant?:
+    | Extract<ButtonVariant, "primary" | "danger">
+    | undefined;
   /** Sets the initial state only. Pass `open` to control the confirmation. */
-  readonly defaultOpen?: boolean;
-  readonly fallbackTitle?: ReactNode;
-  readonly headingLevel?: HeadingLevel;
+  readonly defaultOpen?: boolean | undefined;
+  readonly fallbackTitle?: ReactNode | undefined;
+  readonly headingLevel?: HeadingLevel | undefined;
   /** Focused on open instead of the region container. */
-  readonly initialFocusRef?: RefObject<HTMLElement | null>;
+  readonly initialFocusRef?: RefObject<HTMLElement | null> | undefined;
   /** Removes the region landmark and its naming when false. */
-  readonly landmark?: boolean;
+  readonly landmark?: boolean | undefined;
   readonly message: ReactNode;
   readonly onCancel: (reason: InlineConfirmCancelReason) => void;
   readonly onConfirm: () => void;
-  readonly open?: boolean;
+  readonly open?: boolean | undefined;
   /** Receives focus after close instead of the previously focused element. */
-  readonly returnFocusRef?: RefObject<HTMLElement | null>;
-  readonly title?: ReactNode;
+  readonly returnFocusRef?: RefObject<HTMLElement | null> | undefined;
+  readonly title?: ReactNode | undefined;
 }
 
 export function InlineConfirm({

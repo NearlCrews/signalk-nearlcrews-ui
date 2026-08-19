@@ -1,12 +1,13 @@
 import {
   type ReactNode,
   type RefAttributes,
+  useCallback,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { resolveLabel } from "../utils/labels.js";
-import { attachRef } from "../utils/ref.js";
+import { composeRef } from "../utils/ref.js";
 import { Button } from "./Button.js";
 import { TextInput, type TextInputProps } from "./Inputs.js";
 import {
@@ -108,6 +109,17 @@ export function SecretInput({
 
   const effectiveShowLabel = resolveLabel(showLabel, "Show");
   const effectiveHideLabel = resolveLabel(hideLabel, "Hide");
+  const attachInput = useCallback(
+    (node: HTMLInputElement): (() => void) => {
+      inputRef.current = node;
+      const releaseRef = composeRef(ref, node);
+      return () => {
+        inputRef.current = null;
+        releaseRef();
+      };
+    },
+    [ref],
+  );
 
   return (
     <InputGroup>
@@ -115,10 +127,7 @@ export function SecretInput({
         <TextInput
           {...props}
           disabled={disabled}
-          ref={(node) => {
-            inputRef.current = node;
-            return attachRef(ref, node);
-          }}
+          ref={attachInput}
           type={effectiveRevealed ? "text" : "password"}
         />
       </InputGroupControl>

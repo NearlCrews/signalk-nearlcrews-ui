@@ -44,6 +44,14 @@ body:
       required: true
 
   - type: textarea
+    id: packaging
+    attributes:
+      label: Entry point and bundle impact
+      description: Name the intended entry point, expected runtime dependencies, and likely effect on consumer bundles.
+    validations:
+      required: true
+
+  - type: textarea
     id: alternatives
     attributes:
       label: Alternatives considered

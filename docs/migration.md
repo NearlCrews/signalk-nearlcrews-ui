@@ -6,16 +6,86 @@ Adopt one plugin at a time. Wrap the panel in `PanelRoot`, replace local theme t
 
 ## Current conventions
 
-- Theme preference persists under one shared storage key, `signalk-nearlcrews-ui.theme.v1`. An explicit Auto, System, Light, Dark, or Night selection is written to that key. An unresolved preference stays Auto and writes nothing. Auto leaves `data-snui-theme` off the root, follows an explicit Bootstrap, CoreUI, or legacy `.dark-mode` host theme, and otherwise uses Light. System follows `prefers-color-scheme`. Panels on different library versions share the key, so a value this version does not recognize is ignored rather than treated as a clear; only an absent key returns a mounted panel to Auto.
-- React and React DOM are host-provided peer dependencies. A consumer remote shares both as Module Federation singletons, bundles this package and its React Aria dependencies, and never configures `signalk-nearlcrews-ui` as a runtime share.
-- `@signalk/server-admin-ui-dependencies` is the Signal K Admin host's own declaration of what it supplies to embedded webapps and configuration panels. Install it as a development dependency in each consumer plugin and import it from the build configuration, so the plugin fails loudly when its React version drifts from the host. Share only the modules that declaration names, and bundle everything else.
-- Components that accept a ref declare it as an ordinary `ref` prop, `SegmentedControl` and `InlineConfirm` included; neither takes `rootRef` any more. Object refs, callback refs, and callback-ref cleanup all resolve to the same native element. No component wraps in `forwardRef`. Components that render more than one host element, or that only coordinate their children, do not accept a ref.
+- Theme preference persists under one shared storage key, `signalk-nearlcrews-ui.theme.v1`. An explicit Auto, System, Light, Dark, or Night selection is written to that key. An unresolved preference stays Auto and writes nothing. Auto leaves `data-snui-theme` off the root, follows an optional Bootstrap, CoreUI, or legacy `.dark-mode` ancestor marker, and otherwise uses Light. Signal K Admin does not currently set or guarantee one of those markers. System follows `prefers-color-scheme`. Panels on different library versions share the key, so a value this version does not recognize is ignored rather than treated as a clear; only an absent key returns a mounted panel to Auto.
+- React and React DOM are host-provided peer dependencies. A Webpack consumer resolves both through the Module Federation host share scope as singletons. A Vite or other ESM consumer aliases the React entry points to the Signal K Admin `window.__SK_*` globals as documented upstream. Every consumer bundles this package and its React Aria dependencies, never configures `signalk-nearlcrews-ui` as a runtime share, and never embeds a second React implementation.
+- `@signalk/server-admin-ui-dependencies` is the Signal K Admin compatibility inventory for embedded webapps and configuration panels. Install it as a development dependency in each consumer plugin and import it from the build configuration, so the plugin fails loudly when its React version drifts from the host. Do not treat every listed peer as a federation share: the current Admin loader guarantees only React and React DOM in its Webpack-compatible share scope and only React entry points through its ESM globals.
+- Public components with a stable, documented owning element accept an ordinary React 19 `ref` prop. `SegmentedControl` and `InlineConfirm` are included, and neither takes `rootRef` any more. Object refs and callback refs resolve to the native target listed in the API reference, and callback refs support React 19 cleanup. The API reference is authoritative about which components expose a ref.
 - The package renders in the browser only and requires native CSS `@scope` support. Call `supportsNativeCssScope(window)` before mounting when a consumer must present a local compatibility message, render `UnsupportedBrowserNotice` instead of `PanelRoot` after a failed preflight, and verify support in every supported kiosk and embedded WebView deployment.
+- Prefer the standard Signal K schema-generated configuration form for simple fields whose schema behavior has been verified in every target Admin version. Give properties useful titles, descriptions, and defaults where appropriate, and use only `uiSchema` fields and widgets supported by the target host's React JSON Schema Form stack. The current host form does not preserve every root JSON Schema validation keyword. Adopt a custom panel when the interaction or validation requires behavior the target form does not provide. Expose its default component as `./PluginConfigurationPanel`, declare `signalk-plugin-configurator`, accept the host's `configuration` and `save` props, and keep configuration, Signal K access, units, validation, and save orchestration in the plugin. The host's `save` callback returns `void` and does not confirm persistence, so verified success, failure reporting, and retry behavior require a plugin-owned API.
+- Require Signal K 2.24 or newer for a React 19 Webpack configuration panel. Require Signal K 2.27 or newer for the documented ESM host-global React path. The dependency inventory's package version does not establish either minimum.
 
 ## Further reading
 
 - The [README](../README.md) documents installation, the component inventory, theming, and the package boundary.
+- The [API reference](api-reference.md) lists entry points, package-specific props, ref targets, defaults, and localization hooks.
 - The [design contract](design-contract.md) records the stable theme, token, accessibility, and isolation behavior consumers may rely on.
+
+## Adoption recipes
+
+For a Webpack consumer, start from the repository's production Module Federation fixtures instead of inventing a share configuration. The [classic `var` fixture](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/fixtures/federation/classic/webpack.config.cjs) and [output-module ESM fixture](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/fixtures/federation/esm/webpack.config.cjs) both resolve React and React DOM from the host and bundle this package into the remote. Derive a classic container's global from the consumer package name with `packageName.replace(/[-@/]/g, "_")`. For Vite or another ESM bundler, follow Signal K's [host-global React shim guidance](https://github.com/SignalK/signalk-server/blob/master/docs/develop/webapps.md#react-version-compatibility), set the consumer plugin package to `"type": "module"`, and use a `.cjs` `main` entry if its server-side implementation remains CommonJS.
+
+Replace a hand-built modal, focus trap, and Escape handler with `Dialog`. Keep the open state and action behavior in the consumer:
+
+```tsx
+import { useState } from "react";
+import { Button } from "signalk-nearlcrews-ui";
+import { Dialog } from "signalk-nearlcrews-ui/overlays";
+
+export function ConnectionDetails() {
+  const [detailsOpen, setDetailsOpen] = useState(false);
+
+  return (
+    <>
+      <Button onClick={() => setDetailsOpen(true)}>Show details</Button>
+      <Dialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        title="Connection details"
+        actions={<Button onClick={() => setDetailsOpen(false)}>Done</Button>}
+      >
+        Consumer-owned content
+      </Dialog>
+    </>
+  );
+}
+```
+
+Use a library `Button` for a popover trigger:
+
+```tsx
+import { Button } from "signalk-nearlcrews-ui";
+import { Popover } from "signalk-nearlcrews-ui/overlays";
+
+export function DetailsPopover() {
+  return (
+    <Popover trigger={<Button variant="secondary">Details</Button>}>
+      Consumer-owned content
+    </Popover>
+  );
+}
+```
+
+A custom trigger must render a semantic interactive element, forward its ref to that element, and spread every injected event and ARIA prop. Dropping any part of that contract can break opening, focus return, keyboard use, or accessible naming.
+
+Use `Accordion` only when at most one section may remain open and child order is static. Keep independent controlled `CollapsibleSection` instances when users must compare multiple open sections or when the list can be inserted, removed, or reordered.
+
+## Changes in 0.8.0
+
+### Required migration work
+
+1. Pass a readonly array to `DataGrid.columns`. Generic and one-shot iterables are no longer accepted because React may restart a StrictMode or concurrent render before commit. Replace a generator or `Set` with `Array.from(columns)` at the consumer boundary, and replace the array when its contents change.
+2. Render `Dialog`, `Menu`, and `Popover` inside the owning `PanelRoot`. They now throw instead of falling back to `document.body`, enforcing the versioned style, theme, CSP, and portal boundary. `ToastRegion` has enforced the same requirement since 0.7.0.
+3. Exercise each `Popover` and `LabeledField` in development or tests. A popover trigger must forward its ref and injected props to a semantic interactive element. A labeled field must render a supported labelable intrinsic control or use the documented render-prop contract. Invalid elements now throw actionable errors in both development and production builds.
+
+### Behavioral and type corrections
+
+- Virtualized `DataGrid` zebra rows use the same alternating presentation as direct rows, including when a row supplies a functional style.
+- Optional public props explicitly admit `undefined` under `exactOptionalPropertyTypes`; no prop names or runtime defaults changed.
+- Existing `Checkbox` and `SecretInput` refs keep stable attachment behavior across rerenders. `SegmentedControl` rejects empty option lists, blank labels, and duplicate values before they can produce ambiguous selection and form state.
+- Toast regions share one panel-contained viewport host, keep multiple queues isolated, and adapt to viewport and panel movement. Queue overflow remains bounded while preferring to preserve focused and sticky warning or danger notifications.
+- Oversized popovers remain scrollable within the available viewport.
+- Viewport-bottom action bars preserve the focused control's border and focus ring when focus moves or a viewport resize docks the bar, including through nested scroll containers.
+- Forced-colors mode preserves focus rings and maps links, library buttons, and consumer-supplied banner actions to readable system colors.
 
 ## Changes in 0.7.1
 
@@ -28,7 +98,7 @@ shared: {
 }
 ```
 
-`signalk-nearlcrews-ui/tokens.css` is new and requires no migration. A panel that already uses `PanelRoot` gets the same tokens from the component styles and should not also load the sheet.
+`signalk-nearlcrews-ui/tokens.css` is new and requires no migration. Importing it runs no JavaScript and does not import React. Installing this package still resolves its normal dependencies and React peer dependencies. A panel that already uses `PanelRoot` gets the same tokens from the component styles and should not also load the sheet.
 
 ## Changes in 0.7.0
 

@@ -5,7 +5,7 @@ import type { Ref } from "react";
  * callback ref opted into, so React 19 ref cleanup is preserved when a
  * component composes a caller ref with its own.
  */
-export function attachRef<T>(
+function attachRef<T>(
   ref: Ref<T> | undefined,
   node: T,
 ): (() => void) | undefined {

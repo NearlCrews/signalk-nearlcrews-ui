@@ -6,6 +6,40 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-08-19
+
+### Breaking
+
+- `DataGrid.columns` now requires a readonly array instead of a generic iterable. Arrays provide replay-safe column data across React StrictMode and concurrent render retries. Consumers must replace generators, sets, and other iterables with an array, then replace that array when the column data changes.
+- `Dialog`, `Menu`, and `Popover` now throw outside an owning `PanelRoot` instead of falling back to `document.body`. Overlays and toasts also reject nested portal providers that redirect them away from their exact owning root. This enforces the style, theme, CSP, portal, and version-isolation boundary. `ToastRegion` has required `PanelRoot` since 0.7.0.
+
+### Added
+
+- A packaged API reference covering entry points, package-specific props, ref targets, defaults, public values, and localization hooks.
+- Blocking documentation checks for Markdown structure, spelling, and repository-local links and anchors.
+- Read-only Signal K host-drift and locked React Aria dependency-contract checks.
+- Per-file coverage floors that complement the existing aggregate thresholds and prevent new source files from hiding severe test gaps.
+- Browser-console error capture, visual-baseline family enforcement, and maintained Light, Dark, Night, hover, active, reflow, right-to-left, collapsible, and forced-colors coverage.
+
+### Changed
+
+- Consumer guidance now documents the Popover trigger contract, schema-form boundary, Night theme status cues, token-scoping exception, toast layer ordering, and current adoption recipes.
+- Component guidance now correctly describes `loadingLabel` as a busy-state description and `CollapsibleSection` as a heading button with a named region.
+- The `tokens.css` guidance now distinguishes its lack of React execution from the package's install-time dependency and peer-dependency graph.
+- Popovers validate semantic interactive triggers, and labeled fields validate labelable controls at runtime. Optional public props also explicitly admit `undefined` for consumers using `exactOptionalPropertyTypes`.
+- Package validation now rejects stale lockfile roots and canonical metadata drift, checks the API reference's release line, enforces release metadata, and permits only maintained documents in the tarball.
+- Release publication now verifies an annotated tag's peeled commit and binds every required exact-commit check to the newest run of its trusted CI or CodeQL workflow before publishing the verified tarball.
+- Consumer integration guidance now distinguishes Webpack host-share containers from the host-global React shims required by Signal K's current Vite and ESM contract, records the corresponding Signal K 2.24 and 2.27 host floors, and documents current schema-form, theme-marker, and stylesheet-nonce limits.
+- Repository hardening now includes workflow security auditing, scheduled external-document link checks, and export-map-wide bundle and federation validation.
+- Compatible development dependencies were refreshed to current patch releases.
+
+### Fixed
+
+- `DataGrid` dynamic headers no longer consume one-shot column data before React Aria renders it, and virtualized zebra rows now match direct-row striping, including rows with functional styles.
+- Checkbox and secret-input refs remain stable across rerenders, while segmented controls reject empty option lists, blank labels, and duplicate values.
+- Toast regions now isolate viewport updates, multiple mounted queues, and overflow behavior within one panel-owned host. Queue overflow prefers to preserve focused and sticky-critical notifications while remaining bounded. Oversized popovers remain scrollable within the available viewport.
+- Viewport-bottom action bars retain visible focus when focus moves, when a viewport resize docks the bar, and when nested scroll containers have limited safe movement. Forced-colors mode also preserves focus rings and readable built-in and consumer-supplied banner actions.
+
 ## [0.7.1] - 2026-08-12
 
 ### Added
@@ -235,7 +269,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.1...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.2...v0.7.0
 [0.6.2]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.1...v0.6.2

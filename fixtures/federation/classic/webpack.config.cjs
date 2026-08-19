@@ -3,6 +3,8 @@ const { container } = require("webpack");
 const { FEDERATION_SHARED } = require("../shared.cjs");
 
 const { ModuleFederationPlugin } = container;
+const packageJson = require("../../../package.json");
+const moduleName = packageJson.name.replace(/[-@/]/g, "_");
 
 module.exports = {
   mode: "production",
@@ -14,7 +16,7 @@ module.exports = {
     clean: true,
     filename: "[name].js",
     chunkFilename: "[name].[contenthash].js",
-    library: { type: "var", name: "signalkNearlcrewsUiClassicFixture" },
+    library: { type: "var", name: moduleName },
     uniqueName: "signalkNearlcrewsUiClassicFixture",
   },
   module: {
@@ -38,11 +40,14 @@ module.exports = {
   },
   plugins: [
     new ModuleFederationPlugin({
-      name: "signalkNearlcrewsUiClassicFixture",
+      name: moduleName,
       filename: "remoteEntry.js",
-      library: { type: "var", name: "signalkNearlcrewsUiClassicFixture" },
+      library: { type: "var", name: moduleName },
       exposes: {
-        "./Panel": path.resolve(__dirname, "../Panel.tsx"),
+        "./PluginConfigurationPanel": path.resolve(
+          __dirname,
+          "../PluginConfigurationPanel.tsx",
+        ),
       },
       shared: FEDERATION_SHARED,
     }),

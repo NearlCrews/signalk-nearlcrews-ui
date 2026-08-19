@@ -1,10 +1,11 @@
 /**
  * Compares this package against the Signal K Admin host dependency contract.
  *
- * `@signalk/server-admin-ui-dependencies` is the upstream declaration of which
- * libraries the Signal K Admin UI supplies to embedded webapps and plugin
- * configuration panels. Its `peerDependencies` are the contract: a federated
- * remote may share those modules with the host and must bundle everything else.
+ * `@signalk/server-admin-ui-dependencies` is the upstream compatibility
+ * inventory for libraries used by the Signal K Admin UI, embedded webapps, and
+ * plugin configuration panels. Its peer dependencies do not promise that every
+ * entry exists in the host federation share scope. The current Admin loader's
+ * guaranteed Webpack-compatible shares are enforced separately below.
  *
  * The contract is compared against a committed baseline rather than installed,
  * because installing it pulls the whole Bootstrap and icon-font tree into a
@@ -22,21 +23,33 @@ import { createRequire } from "node:module";
 
 import { subset } from "semver";
 
+import {
+  contractsMatch,
+  fetchRegistryContract,
+  formatContractDiff,
+} from "./lib/host-contract.mjs";
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 
 const require = createRequire(import.meta.url);
 const baselinePath = repositoryPath("tests", "host-contract.baseline.json");
 const contractPackage = "@signalk/server-admin-ui-dependencies";
 const shouldUpdate = process.argv.includes("--update");
+const shouldCheckRegistry = process.argv.includes("--check-registry");
+
+if (shouldUpdate && shouldCheckRegistry) {
+  throw new Error("Choose either --update or --check-registry, not both.");
+}
 
 /** Both the registry result and the committed baseline carry this shape. */
 function assertContractShape(value, source) {
   if (
     value === null ||
     typeof value !== "object" ||
+    typeof value.package !== "string" ||
     typeof value.version !== "string" ||
     value.peerDependencies === null ||
     typeof value.peerDependencies !== "object" ||
+    Array.isArray(value.peerDependencies) ||
     Object.values(value.peerDependencies).some(
       (range) => typeof range !== "string",
     )
@@ -47,23 +60,14 @@ function assertContractShape(value, source) {
   }
 }
 
-async function refreshBaseline() {
-  // Only the update path reaches npm, so the common path never loads it.
+async function readRegistryContract() {
+  // Only registry modes reach npm, so the common local validation stays offline.
   const { runNpm } = await import("./lib/npm-pack.mjs");
-  const parsed = JSON.parse(
-    runNpm(["view", contractPackage, "version", "peerDependencies", "--json"]),
-  );
-  assertContractShape(parsed, "The npm registry result");
+  return fetchRegistryContract({ contractPackage, runNpm });
+}
 
-  const contract = {
-    package: contractPackage,
-    peerDependencies: Object.fromEntries(
-      Object.entries(parsed.peerDependencies).sort(([left], [right]) =>
-        left.localeCompare(right),
-      ),
-    ),
-    version: parsed.version,
-  };
+async function refreshBaseline() {
+  const contract = await readRegistryContract();
   await writeFile(baselinePath, `${JSON.stringify(contract, undefined, 2)}\n`);
   process.stdout.write(
     `Host contract baseline updated to ${contractPackage}@${contract.version}.\n`,
@@ -81,15 +85,32 @@ async function readBaseline() {
   }
 }
 
-// The three reads are unrelated, so they resolve together.
-const [baseline, { dependencies, peerDependencies }, migrationGuide] =
-  await Promise.all([
-    shouldUpdate ? refreshBaseline() : readBaseline(),
-    readPackageJson(),
-    readFile(repositoryPath("docs", "migration.md"), "utf8"),
-  ]);
+// These reads are unrelated, so they resolve together.
+const [
+  committedBaseline,
+  registryContract,
+  { dependencies, peerDependencies },
+  migrationGuide,
+] = await Promise.all([
+  shouldUpdate ? refreshBaseline() : readBaseline(),
+  shouldCheckRegistry ? readRegistryContract() : undefined,
+  readPackageJson(),
+  readFile(repositoryPath("docs", "migration.md"), "utf8"),
+]);
 
-assertContractShape(baseline, "The host contract baseline");
+assertContractShape(committedBaseline, "The committed host contract baseline");
+if (registryContract !== undefined) {
+  assertContractShape(registryContract, "The registry host contract");
+}
+
+if (
+  registryContract !== undefined &&
+  !contractsMatch(committedBaseline, registryContract)
+) {
+  throw new Error(formatContractDiff(committedBaseline, registryContract));
+}
+
+const baseline = registryContract ?? committedBaseline;
 if (baseline.package !== contractPackage) {
   throw new Error(
     `The host contract baseline must describe ${contractPackage}.`,
@@ -97,16 +118,26 @@ if (baseline.package !== contractPackage) {
 }
 
 const hostRanges = baseline.peerDependencies;
-const { FEDERATION_SHARED } = require("../fixtures/federation/shared.cjs");
+const {
+  FEDERATION_SHARED,
+  SIGNALK_HOST_SHARED_MODULES,
+} = require("../fixtures/federation/shared.cjs");
 const sharedNames = Object.keys(FEDERATION_SHARED).sort();
+const guaranteedHostShareNames = [...SIGNALK_HOST_SHARED_MODULES].sort();
 const peerNames = Object.keys(peerDependencies).sort();
 
-// Every peer dependency is a module the remote expects from the host, so the
-// two sets must match. Otherwise a third peer would silently escape the
-// per-module checks below.
-if (sharedNames.join() !== peerNames.join()) {
+if (sharedNames.join() !== guaranteedHostShareNames.join()) {
   throw new Error(
-    `The federation remotes share ${sharedNames.join(", ")}, but the peer dependencies are ${peerNames.join(", ")}. Every peer dependency must be shared with the host.`,
+    `The federation remotes share ${sharedNames.join(", ")}, but the Signal K Admin loader guarantees ${guaranteedHostShareNames.join(", ")}.`,
+  );
+}
+
+// Every peer dependency is a runtime implementation this library expects its
+// host to provide. Keep that set equal to the explicit host-share allowlist so
+// a new peer cannot silently escape the range and federation checks below.
+if (peerNames.join() !== guaranteedHostShareNames.join()) {
+  throw new Error(
+    `The peer dependencies are ${peerNames.join(", ")}, but the Signal K Admin loader guarantees ${guaranteedHostShareNames.join(", ")}. Review any new peer against the host loader before changing this allowlist.`,
   );
 }
 
@@ -136,13 +167,13 @@ for (const name of sharedNames) {
   }
 }
 
-const bundledHostModules = Object.keys(dependencies).filter((name) =>
+const hostInventoryDependencies = Object.keys(dependencies).filter((name) =>
   Object.hasOwn(hostRanges, name),
 );
-if (bundledHostModules.length > 0) {
+if (hostInventoryDependencies.length > 0) {
   throw new Error(
-    `${bundledHostModules.join(", ")} would ship as a runtime dependency, but the Signal K Admin host supplies it. ` +
-      "Share it with the host instead of bundling a second copy into every remote.",
+    `${hostInventoryDependencies.join(", ")} appears in the Signal K Admin compatibility inventory. ` +
+      "This host-independent design system must not adopt Admin UI libraries without an explicit contract review.",
   );
 }
 

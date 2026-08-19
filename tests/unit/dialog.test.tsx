@@ -6,6 +6,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, useState } from "react";
+import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { describe, expect, it, vi } from "vitest";
 
 import { Button, PanelRoot, type PanelRootProps } from "../../src/index.js";
@@ -38,6 +39,30 @@ function getScrim(container: HTMLElement): Element {
 }
 
 describe("Dialog", () => {
+  it("rejects rendering outside PanelRoot", () => {
+    expect(() =>
+      render(
+        <Dialog title="Connection settings" defaultOpen>
+          <p>Dialog body</p>
+        </Dialog>,
+      ),
+    ).toThrow("Dialog must be rendered inside PanelRoot.");
+  });
+
+  it("rejects a nested provider that redirects its portal outside PanelRoot", () => {
+    expect(() =>
+      render(
+        <PanelRoot>
+          <UNSAFE_PortalProvider getContainer={() => document.body}>
+            <Dialog title="Connection settings" defaultOpen>
+              <p>Dialog body</p>
+            </Dialog>
+          </UNSAFE_PortalProvider>
+        </PanelRoot>,
+      ),
+    ).toThrow("Dialog portal container must be its owning PanelRoot.");
+  });
+
   it("renders nothing while closed by default", () => {
     renderDialog();
     expect(screen.queryByRole("dialog")).toBeNull();

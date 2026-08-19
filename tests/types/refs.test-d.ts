@@ -17,9 +17,8 @@ import type {
 } from "../../src/index.js";
 
 /**
- * Stage 1 of the improvement plan requires an accurately typed `ref` on every
- * public prop contract. These assertions fail if a migrated component loses its
- * ref, or resolves to the wrong native element.
+ * Public ref targets are versioned API. These assertions fail if a component
+ * loses its documented ref or resolves it to the wrong native element.
  */
 describe("public ref types", () => {
   it("types each component ref against its native element", () => {

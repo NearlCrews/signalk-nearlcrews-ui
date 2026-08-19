@@ -14,6 +14,38 @@ body:has([data-snui-theme="night"]) {
   background: #050000;
 }
 
+/* Representative Bootstrap Reboot element rules. PanelRoot's scoped reset is
+   injected later and must neutralize these inside the panel. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  margin-top: 0;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+p {
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+legend {
+  float: left;
+  width: 100%;
+  padding: 0;
+  margin-bottom: 0.5rem;
+  font-size: 1.5rem;
+  line-height: inherit;
+}
+
+legend + * {
+  clear: left;
+}
+
 /* Mirrors Signal K Admin's unconstrained scrolling app-body host. */
 .app-body {
   overflow-x: hidden;
@@ -25,7 +57,9 @@ body:has([data-snui-theme="night"]) {
 }
 
 .admin-host__tall-panel-content {
+  display: flex;
   min-height: max(100vh, 50rem);
+  align-items: flex-end;
 }
 
 .admin-host__after-panel-content {

@@ -12,6 +12,18 @@ import {
 import { panel, renderInPanel } from "../helpers.js";
 
 describe("LabeledField control injection", () => {
+  it("rejects an intrinsic child that cannot be labeled", () => {
+    expect(() =>
+      renderInPanel(
+        <LabeledField label="Server URL">
+          <div />
+        </LabeledField>,
+      ),
+    ).toThrow(
+      "LabeledField element children must render a labelable form control. Use the render-prop form for composite controls.",
+    );
+  });
+
   it("injects name, disabled, and required into an element child", () => {
     renderInPanel(
       <LabeledField label="Server URL" name="serverUrl" disabled required>

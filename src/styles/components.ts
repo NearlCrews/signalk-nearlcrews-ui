@@ -209,20 +209,19 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
 }
 
 /*
- * Keep focused content clear of a sticky bar: the bar is one control height
- * plus its vertical padding, and one more gap keeps focus rings visible.
+ * Keep focus-scroll targets clear of nested sticky bars. Scroll margin stays
+ * with the target, so it works when the Signal K host or another ancestor,
+ * rather than PanelRoot itself, owns scrolling.
  */
-.snui-root:has(> .snui-root__content > .snui-action-bar--sticky-bottom),
-.snui-root:has(
-  > .snui-root__content > .snui-action-bar__viewport-anchor
-) {
-  scroll-padding-block-end: calc(
+.snui-root:has(.snui-action-bar--sticky-bottom) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]),
+.snui-root:has(.snui-action-bar__viewport-anchor) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]) {
+  scroll-margin-block-end: calc(
     var(--snui-control-min-height) + var(--snui-space-3) * 3
   );
 }
 
-.snui-root:has(> .snui-root__content > .snui-action-bar--sticky-top) {
-  scroll-padding-block-start: calc(
+.snui-root:has(.snui-action-bar--sticky-top) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]) {
+  scroll-margin-block-start: calc(
     var(--snui-control-min-height) + var(--snui-space-3) * 3
   );
 }

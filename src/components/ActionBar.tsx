@@ -16,8 +16,8 @@ export type ActionBarSticky = "bottom" | "top" | "viewport-bottom";
 export interface ActionBarProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   readonly actions: ReactNode;
-  readonly status?: ReactNode;
-  readonly statusRef?: Ref<HTMLDivElement>;
+  readonly status?: ReactNode | undefined;
+  readonly statusRef?: Ref<HTMLDivElement> | undefined;
   readonly sticky?: ActionBarSticky | undefined;
 }
 
@@ -26,6 +26,7 @@ interface ViewportPlacement {
   readonly docked: boolean;
   readonly height: number;
   readonly left: number;
+  readonly viewportBottom: number;
   readonly width: number;
 }
 
@@ -34,6 +35,7 @@ const NATURAL_VIEWPORT_PLACEMENT: ViewportPlacement = {
   docked: false,
   height: 0,
   left: 0,
+  viewportBottom: 0,
   width: 0,
 };
 
@@ -46,6 +48,7 @@ function placementsMatch(
     current.docked === next.docked &&
     current.height === next.height &&
     current.left === next.left &&
+    current.viewportBottom === next.viewportBottom &&
     current.width === next.width
   );
 }
@@ -66,6 +69,104 @@ function getResizeObserver(
   return Reflect.get(ownerWindow, "ResizeObserver") as
     | typeof ResizeObserver
     | undefined;
+}
+
+function isScrollable(element: HTMLElement): boolean {
+  const ownerWindow = element.ownerDocument.defaultView;
+  if (ownerWindow === null) return false;
+  const overflow = ownerWindow.getComputedStyle(element).overflowY;
+  return (
+    /^(auto|overlay|scroll)$/.test(overflow) &&
+    element.scrollHeight > element.clientHeight
+  );
+}
+
+function scrollFocusedTarget(
+  target: HTMLElement,
+  panelRoot: HTMLElement,
+  ownerWindow: Window,
+  delta: number,
+  clearance: number,
+): void {
+  let remaining = delta;
+  const targetRect = target.getBoundingClientRect();
+  let targetTop = targetRect.top;
+  let targetBottom = targetRect.bottom;
+  let ancestor = target.parentElement;
+  while (
+    remaining !== 0 &&
+    ancestor !== null &&
+    ancestor !== panelRoot.ownerDocument.body
+  ) {
+    if (isScrollable(ancestor)) {
+      const maximumScrollTop = Math.max(
+        0,
+        ancestor.scrollHeight - ancestor.clientHeight,
+      );
+      const scrollRange =
+        remaining > 0
+          ? maximumScrollTop - ancestor.scrollTop
+          : ancestor.scrollTop;
+      const ancestorRect = ancestor.getBoundingClientRect();
+      const visibleTop = ancestorRect.top + ancestor.clientTop;
+      const visibleBottom = visibleTop + ancestor.clientHeight;
+      const visibilityRange =
+        remaining > 0
+          ? targetTop - (visibleTop + clearance)
+          : visibleBottom - clearance - targetBottom;
+      const applied =
+        Math.sign(remaining) *
+        Math.min(
+          Math.abs(remaining),
+          Math.max(0, scrollRange),
+          Math.max(0, visibilityRange),
+        );
+      if (applied !== 0) {
+        if (typeof ancestor.scrollBy === "function") {
+          ancestor.scrollBy({ behavior: "auto", top: applied });
+        } else {
+          ancestor.scrollTop += applied;
+        }
+        remaining -= applied;
+        targetTop -= applied;
+        targetBottom -= applied;
+      }
+    }
+    ancestor = ancestor.parentElement;
+  }
+  if (remaining !== 0) {
+    ownerWindow.scrollBy({ behavior: "auto", top: remaining });
+  }
+}
+
+function keepFocusedTargetVisible(
+  target: HTMLElement,
+  bar: HTMLElement,
+  panelRoot: HTMLElement,
+  ownerWindow: Window,
+): void {
+  if (bar.contains(target)) return;
+  const panelContent = target.closest(".snui-root__content");
+  if (panelContent?.parentElement !== panelRoot) return;
+
+  const targetRect = target.getBoundingClientRect();
+  const barRect = bar.getBoundingClientRect();
+  // The bar's token-driven padding resolves to pixels in the computed style
+  // and leaves enough room for the target's outset focus ring.
+  const parsedClearance = Number.parseFloat(
+    ownerWindow.getComputedStyle(bar).paddingBlockStart,
+  );
+  const clearance = Number.isFinite(parsedClearance) ? parsedClearance : 0;
+  const visibleBottom = barRect.top - clearance;
+  if (targetRect.bottom <= visibleBottom) return;
+
+  scrollFocusedTarget(
+    target,
+    panelRoot,
+    ownerWindow,
+    targetRect.bottom - visibleBottom,
+    clearance,
+  );
 }
 
 interface ActionBarContentProps {
@@ -171,6 +272,7 @@ function ViewportBottomActionBar({
         docked,
         height: roundedLayoutValue(barRect.height),
         left: roundedLayoutValue(anchorRect.left),
+        viewportBottom: roundedLayoutValue(viewportBottom),
         width: roundedLayoutValue(anchorRect.width),
       };
       if (!placementsMatch(placementRef.current, nextPlacement)) {
@@ -188,6 +290,18 @@ function ViewportBottomActionBar({
       animationFrame = ownerWindow.requestAnimationFrame(measure);
     };
 
+    const keepFocusedContentVisible = (event: FocusEvent): void => {
+      if (!placementRef.current.docked) return;
+      const target = event.target;
+      if (
+        !(target instanceof ownerWindow.HTMLElement) ||
+        bar.contains(target)
+      ) {
+        return;
+      }
+      keepFocusedTargetVisible(target, bar, panelRoot, ownerWindow);
+    };
+
     const ResizeObserverConstructor = getResizeObserver(ownerWindow);
     const resizeObserver =
       ResizeObserverConstructor === undefined
@@ -198,6 +312,7 @@ function ViewportBottomActionBar({
     resizeObserver?.observe(panelRoot);
 
     ownerDocument.addEventListener("scroll", scheduleMeasure, true);
+    ownerDocument.addEventListener("focusin", keepFocusedContentVisible);
     ownerWindow.addEventListener("resize", scheduleMeasure);
     ownerWindow.addEventListener("scroll", scheduleMeasure);
     visualViewport?.addEventListener("resize", scheduleMeasure);
@@ -212,12 +327,31 @@ function ViewportBottomActionBar({
       }
       resizeObserver?.disconnect();
       ownerDocument.removeEventListener("scroll", scheduleMeasure, true);
+      ownerDocument.removeEventListener("focusin", keepFocusedContentVisible);
       ownerWindow.removeEventListener("resize", scheduleMeasure);
       ownerWindow.removeEventListener("scroll", scheduleMeasure);
       visualViewport?.removeEventListener("resize", scheduleMeasure);
       visualViewport?.removeEventListener("scroll", scheduleMeasure);
     };
   }, []);
+
+  useLayoutEffect(() => {
+    if (!placement.docked) return;
+    const anchor = anchorRef.current;
+    const bar = barRef.current;
+    if (anchor === null || bar === null) return;
+    const ownerWindow = anchor.ownerDocument.defaultView;
+    const panelRoot = anchor.closest<HTMLElement>("[data-snui-root]");
+    const target = anchor.ownerDocument.activeElement;
+    if (
+      ownerWindow === null ||
+      panelRoot === null ||
+      !(target instanceof ownerWindow.HTMLElement)
+    ) {
+      return;
+    }
+    keepFocusedTargetVisible(target, bar, panelRoot, ownerWindow);
+  }, [placement]);
 
   const anchorStyle = {
     "--snui-action-bar-fixed-bottom": `${String(placement.bottomInset)}px`,

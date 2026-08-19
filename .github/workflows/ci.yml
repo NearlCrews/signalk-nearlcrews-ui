@@ -36,6 +36,12 @@ jobs:
           tar --extract --gzip --file "$archive" actionlint
       - name: Validate workflows
         run: ./actionlint -color
+      - name: Audit workflow security
+        uses: zizmorcore/zizmor-action@3dc1ecc9bcb9e94e9b2c709687979e1298497054 # v0.6.2
+        with:
+          advanced-security: false
+          min-severity: medium
+          online-audits: false
 
   validate:
     name: Node ${{ matrix.node }}

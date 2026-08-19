@@ -28,9 +28,9 @@ export interface RadioGroupProps
     RefAttributes<HTMLDivElement> {
   readonly children: ReactNode;
   readonly defaultValue?: string | undefined;
-  readonly description?: ReactNode;
+  readonly description?: ReactNode | undefined;
   readonly disabled?: boolean | undefined;
-  readonly error?: ReactNode;
+  readonly error?: ReactNode | undefined;
   readonly errorLive?: RadioGroupErrorLive | undefined;
   readonly label: ReactNode;
   /** Applied to every radio input, so native form submission and reset work. */

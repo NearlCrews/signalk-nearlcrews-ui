@@ -8,6 +8,7 @@ export default defineConfig({
   outputDir: "./test-results/playwright",
   snapshotPathTemplate: `{testDir}/{testFilePath}-snapshots/{arg}-{projectName}-{platform}-${snapshotVariant}{ext}`,
   fullyParallel: true,
+  failOnFlakyTests: Boolean(process.env.CI),
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",

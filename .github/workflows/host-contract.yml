@@ -2,7 +2,7 @@ name: Host contract drift
 
 # npm run host-contract compares the package against a committed baseline, which
 # cannot notice that the Signal K Admin host itself has moved on. This job
-# refreshes the baseline from the registry on a schedule and fails when the
+# compares the baseline with the registry on a schedule and fails when the
 # result differs from what is committed, so a host that changes its supplied
 # libraries or its React range surfaces here rather than in a consumer's panel.
 
@@ -38,14 +38,22 @@ jobs:
           "${NPM_CONFIG_PREFIX}/bin/npm" --version
       - name: Install dependencies
         run: npm ci
-      - name: Refresh the baseline from the registry
-        run: npm run host-contract:update
-      - name: Fail when the committed baseline is stale
+      - name: Compare the baseline with the registry
+        id: registry
+        continue-on-error: true
+        run: npm run host-contract:drift
+      - name: Show baseline worktree diagnostics
+        if: ${{ always() }}
         run: |
           if ! git diff --quiet -- tests/host-contract.baseline.json; then
-            echo "The Signal K Admin host dependency declaration has changed:"
+            echo "The drift check unexpectedly changed the committed baseline:"
             git --no-pager diff -- tests/host-contract.baseline.json
-            echo "Run \`npm run host-contract:update\` and commit the result."
             exit 1
           fi
-          echo "The committed baseline matches the published declaration."
+          echo "The registry comparison did not mutate the committed baseline."
+      - name: Fail when the registry comparison failed
+        if: ${{ steps.registry.outcome != 'success' }}
+        run: |
+          echo "The Signal K Admin host dependency declaration could not be verified."
+          echo "Review the comparison diagnostics above. If it drifted, run \`npm run host-contract:update\` and commit the result."
+          exit 1

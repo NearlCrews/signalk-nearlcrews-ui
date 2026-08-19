@@ -5,6 +5,8 @@ on:
     types: [published]
 
 permissions:
+  actions: read
+  checks: read
   contents: read
 
 concurrency:
@@ -38,14 +40,6 @@ jobs:
           npm install --global npm@12.0.2
           echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
           "${NPM_CONFIG_PREFIX}/bin/npm" --version
-      - name: Cache npm downloads
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.npm
-          key: ${{ runner.os }}-npm-24-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            ${{ runner.os }}-npm-24-
-            ${{ runner.os }}-npm-
       - name: Verify release metadata
         id: package
         env:
@@ -56,6 +50,16 @@ jobs:
           EXPECTED_TAG="v${PACKAGE_VERSION}"
           if [ "$RELEASE_TAG" != "$EXPECTED_TAG" ]; then
             echo "Release tag ($RELEASE_TAG) must exactly match $EXPECTED_TAG." >&2
+            exit 1
+          fi
+          TAG_OBJECT_TYPE="$(git cat-file -t "$RELEASE_TAG")"
+          if [ "$TAG_OBJECT_TYPE" != "tag" ]; then
+            echo "Release tag $RELEASE_TAG must be an annotated tag, received object type $TAG_OBJECT_TYPE." >&2
+            exit 1
+          fi
+          TAG_COMMIT="$(git rev-parse "$RELEASE_TAG^{commit}")"
+          if [ "$TAG_COMMIT" != "$GITHUB_SHA" ]; then
+            echo "Release tag $RELEASE_TAG resolves to $TAG_COMMIT, not release commit $GITHUB_SHA." >&2
             exit 1
           fi
           git fetch origin main --no-tags
@@ -90,6 +94,11 @@ jobs:
           NODE
             echo "dist-tag=latest" >> "$GITHUB_OUTPUT"
           fi
+      - name: Verify exact-commit CI and CodeQL checks
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: node scripts/check-release-ci.mjs
       - name: Install dependencies
         run: npm ci
       - name: Install browser dependencies
@@ -215,4 +224,5 @@ jobs:
       - name: Publish verified package
         env:
           DIST_TAG: ${{ needs.verify.outputs.dist-tag }}
-        run: npm publish "${{ steps.package.outputs.tarball }}" --access public --tag "$DIST_TAG"
+          TARBALL: ${{ steps.package.outputs.tarball }}
+        run: npm publish "$TARBALL" --access public --tag "$DIST_TAG"

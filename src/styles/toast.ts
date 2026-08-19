@@ -15,30 +15,44 @@ export const TOAST_STYLES = scopeStyles(`
   }
 }
 
-.snui-toast-region {
-  position: absolute;
-  inset-block-end: max(
-    var(--snui-space-4),
-    env(safe-area-inset-bottom, 0px)
-  );
-  inset-inline-end: max(
-    var(--snui-space-4),
-    env(safe-area-inset-right, 0px)
-  );
+.snui-toast-region-host {
+  position: fixed;
+  inset-block-start: var(--snui-toast-host-top, 0px);
+  inset-block-end: var(--snui-toast-host-bottom, 0px);
+  /* JavaScript measures a physical viewport coordinate, including in RTL. */
+  left: var(--snui-toast-host-left, 0px);
   z-index: var(--snui-z-toast);
   display: flex;
-  width: min(
-    22rem,
-    calc(
-      100% -
-      max(var(--snui-space-4), env(safe-area-inset-left, 0px)) -
-      max(var(--snui-space-4), env(safe-area-inset-right, 0px))
-    )
-  );
+  width: var(--snui-toast-host-width, 100%);
   flex-direction: column;
+  align-items: flex-end;
   gap: var(--snui-space-2);
+  padding:
+    var(--snui-space-4)
+    max(var(--snui-space-4), env(safe-area-inset-right, 0px))
+    max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))
+    max(var(--snui-space-4), env(safe-area-inset-left, 0px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
   /* Clicks pass through the gaps between toasts to the panel below. */
   pointer-events: none;
+}
+
+.snui-toast-region-host:not([data-snui-toast-host-visible]) {
+  visibility: hidden;
+}
+
+.snui-toast-region {
+  display: flex;
+  width: min(22rem, 100%);
+  flex: none;
+  flex-direction: column;
+  gap: var(--snui-space-2);
+  pointer-events: none;
+}
+
+.snui-toast-region:first-child {
+  margin-block-start: auto;
 }
 
 .snui-toast {

@@ -2,6 +2,7 @@ import { render } from "@testing-library/react";
 import { createRef, type ReactElement, type Ref } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Cell, Column, DataGrid, Row } from "../../src/data-grid.js";
+import { SecretInput } from "../../src/forms.js";
 import {
   Banner,
   Button,
@@ -77,6 +78,11 @@ const REF_CASES: readonly {
     name: "Checkbox",
     tagName: "INPUT",
     render: (ref) => <Checkbox ref={ref} label="Enable provider" />,
+  },
+  {
+    name: "SecretInput",
+    tagName: "INPUT",
+    render: (ref) => <SecretInput ref={ref} aria-label="API token" />,
   },
   {
     name: "SegmentedControl",
@@ -265,5 +271,92 @@ describe("named root refs", () => {
     );
 
     expect(ref.current).toBeNull();
+  });
+});
+
+describe("stateful input refs", () => {
+  it("keeps the Checkbox ref attached while checked state changes", () => {
+    const calls: (HTMLInputElement | null)[] = [];
+    let cleanupCalls = 0;
+    const ref = (node: HTMLInputElement | null): (() => void) => {
+      calls.push(node);
+      return () => {
+        cleanupCalls += 1;
+      };
+    };
+    const tree = (checked: boolean, indeterminate: boolean): ReactElement => (
+      <PanelRoot>
+        <Checkbox
+          ref={ref}
+          checked={checked}
+          indeterminate={indeterminate}
+          label="Enable provider"
+          readOnly
+        />
+      </PanelRoot>
+    );
+    const view = render(tree(false, true));
+
+    view.rerender(tree(true, false));
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).not.toBeNull();
+    expect(cleanupCalls).toBe(0);
+    view.unmount();
+    expect(cleanupCalls).toBe(1);
+  });
+
+  it("keeps the SecretInput ref attached while reveal state changes", () => {
+    const calls: (HTMLInputElement | null)[] = [];
+    let cleanupCalls = 0;
+    const ref = (node: HTMLInputElement | null): (() => void) => {
+      calls.push(node);
+      return () => {
+        cleanupCalls += 1;
+      };
+    };
+    const tree = (revealed: boolean): ReactElement => (
+      <PanelRoot>
+        <SecretInput ref={ref} aria-label="API token" revealed={revealed} />
+      </PanelRoot>
+    );
+    const view = render(tree(false));
+
+    view.rerender(tree(true));
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).not.toBeNull();
+    expect(cleanupCalls).toBe(0);
+    view.unmount();
+    expect(cleanupCalls).toBe(1);
+  });
+
+  it("resets Checkbox from the latest controlled props", () => {
+    const tree = (checked: boolean, indeterminate: boolean): ReactElement => (
+      <PanelRoot>
+        <form data-testid="settings-form">
+          <Checkbox
+            checked={checked}
+            indeterminate={indeterminate}
+            label="Enable provider"
+            readOnly
+          />
+        </form>
+      </PanelRoot>
+    );
+    const view = render(tree(false, false));
+    const checkbox = view.getByRole("checkbox", {
+      name: "Enable provider",
+    }) as HTMLInputElement;
+
+    view.rerender(tree(true, true));
+    checkbox.checked = false;
+    checkbox.indeterminate = false;
+    (view.getByTestId("settings-form") as HTMLFormElement).reset();
+
+    return Promise.resolve().then(() => {
+      expect(checkbox).toBeChecked();
+      expect(checkbox).toBePartiallyChecked();
+    });
   });
 });

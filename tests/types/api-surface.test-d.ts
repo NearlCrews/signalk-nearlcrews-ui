@@ -13,8 +13,10 @@ import type {
   FormatRelativeAgeOptions,
   LabeledFieldChild,
   LabeledFieldControlProps,
+  LabeledFieldProps,
   SegmentedControlOption,
   SegmentedControlProps,
+  StackProps,
   StatusTone,
   TextInput,
   TextInputType,
@@ -22,6 +24,7 @@ import type {
   UnsupportedBrowserNoticeProps,
 } from "../../src/index.js";
 import { SegmentedControl } from "../../src/index.js";
+import type { DialogProps } from "../../src/overlays.js";
 
 /**
  * The public type surface is part of the package contract: these assertions
@@ -84,8 +87,10 @@ describe("labeled field children", () => {
     >().toExtend<LabeledFieldChild>();
   });
 
-  it("rejects plain text, unrelated elements, and wrong render functions", () => {
+  it("rejects plain text, incompatible declared props, and wrong render functions", () => {
     expectTypeOf<string>().not.toExtend<LabeledFieldChild>();
+    // JSX widens an instantiated element enough that TypeScript cannot prove
+    // its intrinsic control kind. Runtime validation covers that boundary.
     expectTypeOf<
       ReactElement<{ bogus: true }>
     >().not.toExtend<LabeledFieldChild>();
@@ -190,6 +195,31 @@ describe("data grid accessible name", () => {
     >();
     expectTypeOf<DataGridProps<unknown>["aria-labelledby"]>().toEqualTypeOf<
       string | undefined
+    >();
+  });
+
+  it("requires replay-safe dynamic column arrays", () => {
+    interface ColumnData {
+      readonly key: string;
+    }
+    expectTypeOf<DataGridProps<unknown, ColumnData>["columns"]>().toEqualTypeOf<
+      readonly ColumnData[] | undefined
+    >();
+    expectTypeOf<Set<ColumnData>>().not.toExtend<
+      DataGridProps<unknown, ColumnData>["columns"]
+    >();
+  });
+});
+
+describe("exact optional public props", () => {
+  it("accepts explicit undefined for custom optional props", () => {
+    expectTypeOf<{ gap: undefined }>().toExtend<Pick<StackProps, "gap">>();
+    expectTypeOf<{ density: undefined }>().toExtend<
+      Pick<DataGridProps<unknown>, "density">
+    >();
+    expectTypeOf<{ width: undefined }>().toExtend<Pick<DialogProps, "width">>();
+    expectTypeOf<{ layout: undefined }>().toExtend<
+      Pick<LabeledFieldProps, "layout">
     >();
   });
 });

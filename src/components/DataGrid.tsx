@@ -53,26 +53,26 @@ interface VirtualCollectionItem<T> {
 
 export interface DataGridProps<TRow, TColumn = unknown>
   extends RefAttributes<HTMLDivElement> {
-  readonly "aria-label"?: AriaAttributes["aria-label"];
-  readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"];
+  readonly "aria-label"?: AriaAttributes["aria-label"] | undefined;
+  readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"] | undefined;
   /**
    * Header columns as <Column> elements, or a render function when `columns`
    * provides the column data (the RAC dynamic collection shape).
    */
   readonly children: ReactNode | ((column: TColumn) => ReactElement);
-  readonly className?: string;
-  /** Column data for a dynamic header; pairs with function children. */
-  readonly columns?: Iterable<TColumn>;
-  readonly defaultSelectedKeys?: "all" | Iterable<Key>;
-  readonly density?: DataGridDensity;
+  readonly className?: string | undefined;
+  /** Replay-safe column data for a dynamic header; pairs with function children. */
+  readonly columns?: readonly TColumn[] | undefined;
+  readonly defaultSelectedKeys?: "all" | Iterable<Key> | undefined;
+  readonly density?: DataGridDensity | undefined;
   /**
    * Replaces the default empty content entirely. Render an EmptyState (or any
    * node) for full control over the empty table.
    */
-  readonly emptyState?: ReactNode;
+  readonly emptyState?: ReactNode | undefined;
   /** Title of the default EmptyState. */
-  readonly emptyTitle?: string;
-  readonly id?: string;
+  readonly emptyTitle?: string | undefined;
+  readonly id?: string | undefined;
   /**
    * Row data. Items should expose a stable `id` or `key` for selection.
    * Without one, virtualized rows key by index, so sorting or filtering a
@@ -88,19 +88,19 @@ export interface DataGridProps<TRow, TColumn = unknown>
   readonly onSortChange?: ((descriptor: SortDescriptor) => void) | undefined;
   /** Renders one row as a <Row> with <Cell> children. */
   readonly renderRow: (item: TRow) => ReactElement<RowProps<TRow>>;
-  readonly selectedKeys?: "all" | Iterable<Key>;
-  readonly selectionMode?: DataGridSelectionMode;
-  readonly sortDescriptor?: SortDescriptor;
-  readonly style?: CSSProperties;
+  readonly selectedKeys?: "all" | Iterable<Key> | undefined;
+  readonly selectionMode?: DataGridSelectionMode | undefined;
+  readonly sortDescriptor?: SortDescriptor | undefined;
+  readonly style?: CSSProperties | undefined;
   /**
    * Number of rows above which the body uses React Aria's TableLayout and
    * Virtualizer. The density row height is an estimate, and rows are observed
    * so wrapped or expanded content can use its measured height. Keyboard
    * navigation and accessibility metadata cover the complete collection.
    */
-  readonly virtualizeThreshold?: number;
+  readonly virtualizeThreshold?: number | undefined;
   /** Paints alternating row backgrounds. Off by default. */
-  readonly zebra?: boolean;
+  readonly zebra?: boolean | undefined;
 }
 
 function getRowKey(item: unknown, index: number): Key {
@@ -115,17 +115,19 @@ function getRowKey(item: unknown, index: number): Key {
   return index;
 }
 
-/** Reads the first item without materializing the rest of the iterable. */
-function firstOf<T>(items: Iterable<T>): T | undefined {
-  for (const item of items) return item;
-  return undefined;
-}
-
 function isPlainStyle(style: unknown): style is CSSProperties | undefined {
   return (
     style === undefined ||
     (typeof style === "object" && style !== null && !Array.isArray(style))
   );
+}
+
+function validateDynamicColumns(columns: unknown): void {
+  if (columns !== undefined && !Array.isArray(columns)) {
+    throw new Error(
+      "DataGrid columns must be a readonly array so React can replay concurrent and StrictMode renders safely.",
+    );
+  }
 }
 
 interface FragmentChildrenProps {
@@ -204,11 +206,11 @@ export function DataGrid<TRow, TColumn = unknown>({
   }
 
   const virtualized = items.length > virtualizeThreshold;
+  validateDynamicColumns(columns);
 
   let headerChildren: ReactNode | ((column: TColumn) => ReactElement);
   if (typeof children === "function") {
-    const firstColumnItem =
-      columns === undefined ? undefined : firstOf(columns);
+    const firstColumnItem = columns?.[0];
     headerChildren = (column: TColumn): ReactElement => {
       const element = children(column);
       // RAC requires one row-header column and throws without it; default the
@@ -287,9 +289,14 @@ export function DataGrid<TRow, TColumn = unknown>({
       >
         {(entry) => {
           const row = renderRow(entry.value);
+          const parityProps = {
+            "data-snui-zebra-odd": entry.odd || undefined,
+          } as Partial<RowProps<TRow>> & {
+            readonly "data-snui-zebra-odd"?: boolean | undefined;
+          };
           return isPlainStyle(row.props.style)
             ? cloneElement(row, {
-                "data-snui-zebra-odd": entry.odd || undefined,
+                ...parityProps,
                 style: {
                   width: "inherit",
                   height: "inherit",
@@ -298,7 +305,7 @@ export function DataGrid<TRow, TColumn = unknown>({
               } as Partial<RowProps<TRow>> & {
                 readonly "data-snui-zebra-odd"?: boolean | undefined;
               })
-            : row;
+            : cloneElement(row, parityProps);
         }}
       </TableBody>
     );

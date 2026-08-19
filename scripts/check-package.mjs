@@ -6,137 +6,37 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { parseNpmPackResult, runNpmPack } from "./lib/npm-pack.mjs";
+import {
+  PACKAGE_NAME,
+  validatePackageMetadata,
+  validatePackedFiles,
+} from "./lib/package-contract.mjs";
 
 const require = createRequire(import.meta.url);
 
 const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+const packageLock = JSON.parse(await readFile("package-lock.json", "utf8"));
 const versionSource = await readFile("src/version.ts", "utf8");
 const changelog = await readFile("CHANGELOG.md", "utf8");
 const readme = await readFile("README.md", "utf8");
+const apiReference = await readFile("docs/api-reference.md", "utf8");
+const designContract = await readFile("docs/design-contract.md", "utf8");
 
-if (packageJson.name !== "signalk-nearlcrews-ui") {
-  throw new Error(`Unexpected package name: ${packageJson.name}`);
-}
-
-if (packageJson.private === true) {
-  throw new Error(
-    "The package must remain publishable as a public npm dependency.",
-  );
-}
-
-const signalKDiscoveryKeywords = new Set([
-  "signalk-embeddable-webapp",
-  "signalk-node-server-addon",
-  "signalk-node-server-plugin",
-  "signalk-wasm-plugin",
-  "signalk-webapp",
-]);
-const forbiddenKeyword = packageJson.keywords?.find(
-  (keyword) =>
-    signalKDiscoveryKeywords.has(keyword) ||
-    keyword.startsWith("signalk-category-"),
-);
-if (forbiddenKeyword !== undefined) {
-  throw new Error(
-    `The npm-only UI library must not use Signal K discovery keyword ${forbiddenKeyword}.`,
-  );
-}
-
-for (const field of [
-  "signalk",
-  "signalk-plugin-enabled-by-default",
-  "wasmCapabilities",
-  "wasmManifest",
-]) {
-  if (Object.hasOwn(packageJson, field)) {
-    throw new Error(
-      `The npm-only UI library must not define Signal K package field ${field}.`,
-    );
-  }
-}
-
-const versionMatches = [
-  ...versionSource.matchAll(/^export const PACKAGE_VERSION = "([^"]+)";$/gm),
-];
-if (
-  versionMatches.length !== 1 ||
-  versionMatches[0]?.[1] !== packageJson.version
-) {
-  throw new Error(
-    `src/version.ts does not match package version ${packageJson.version}.`,
-  );
-}
-
-const [major, minor] = packageJson.version.split(".");
-for (const [documentName, document, expectedText] of [
-  [
-    "README.md installation",
-    readme,
-    `signalk-nearlcrews-ui@${packageJson.version}`,
-  ],
-  [
-    "README.md tarball example",
-    readme,
-    `signalk-nearlcrews-ui-${packageJson.version}.tgz`,
-  ],
-  ["README.md compatibility table", readme, `\`${major}.${minor}.x\``],
-  ["CHANGELOG.md release heading", changelog, `## [${packageJson.version}]`],
-]) {
-  if (!document.includes(expectedText)) {
-    throw new Error(`${documentName} must contain ${expectedText}.`);
-  }
-}
-
-if (process.env.SNUI_RELEASE_APPROVED === "true") {
-  const escapedVersion = packageJson.version.replaceAll(".", String.raw`\.`);
-  const datedHeading = new RegExp(
-    String.raw`^## \[${escapedVersion}\] - \d{4}-\d{2}-\d{2}$`,
-    "m",
-  );
-  if (!datedHeading.test(changelog)) {
-    throw new Error(
-      `CHANGELOG.md must date approved release ${packageJson.version}.`,
-    );
-  }
-
-  const releaseLink = changelog.match(
-    new RegExp(String.raw`^\[${escapedVersion}\]: (\S+)$`, "m"),
-  )?.[1];
-  if (
-    releaseLink === undefined ||
-    !releaseLink.endsWith(`...v${packageJson.version}`)
-  ) {
-    throw new Error(
-      `CHANGELOG.md must compare release ${packageJson.version} to v${packageJson.version}, not HEAD.`,
-    );
-  }
-}
+validatePackageMetadata({
+  apiReference,
+  changelog,
+  designContract,
+  packageJson,
+  packageLock,
+  readme,
+  releaseApproved: process.env.SNUI_RELEASE_APPROVED === "true",
+  versionSource,
+});
 
 const output = runNpmPack(["--dry-run", "--json", "--ignore-scripts"]);
 const packResult = parseNpmPackResult(output, packageJson.name);
 const files = new Set(packResult.files.map((file) => file.path));
-
-// Every target the exports map names must be inside the tarball, so a new entry
-// point is covered here the moment it is declared.
-const exportedFiles = Object.values(packageJson.exports).flatMap((target) =>
-  typeof target === "string" ? [target] : Object.values(target),
-);
-
-for (const requiredFile of [
-  ...exportedFiles.map((target) => target.replace(/^\.\//, "")),
-  "CHANGELOG.md",
-  "LICENSE",
-  "README.md",
-  "docs/design-contract.md",
-  "docs/migration.md",
-  "docs/repository-setup.md",
-  "docs/release-policy.md",
-  "package.json",
-]) {
-  if (!files.has(requiredFile)) {
-    throw new Error(`Packed artifact is missing ${requiredFile}.`);
-  }
-}
+validatePackedFiles(files, packageJson.exports);
 
 for (const file of files) {
   if (!file.endsWith(".map")) continue;
@@ -149,19 +49,6 @@ for (const file of files) {
     sourceMap.sourcesContent.some((source) => typeof source !== "string")
   ) {
     throw new Error(`Packed source map does not embed its sources: ${file}.`);
-  }
-}
-
-const forbiddenPrefixes = [
-  "coverage/",
-  "fixtures/",
-  "scripts/",
-  "src/",
-  "tests/",
-];
-for (const file of files) {
-  if (forbiddenPrefixes.some((prefix) => file.startsWith(prefix))) {
-    throw new Error(`Packed artifact unexpectedly includes ${file}.`);
   }
 }
 
@@ -180,7 +67,7 @@ try {
     "--pack-destination",
     temporaryDirectory,
   ]);
-  const packedArtifact = parseNpmPackResult(packedOutput, packageJson.name);
+  const packedArtifact = parseNpmPackResult(packedOutput, PACKAGE_NAME);
   const tarballPath = join(temporaryDirectory, packedArtifact.filename);
   const attwPackageJsonPath = require.resolve(
     "@arethetypeswrong/cli/package.json",
