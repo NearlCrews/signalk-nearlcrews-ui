@@ -10,7 +10,7 @@ jobs:
   update:
     name: Baselines (${{ matrix.variant }})
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -48,7 +48,8 @@ jobs:
       - name: Regenerate baselines
         env:
           SNUI_SNAPSHOT_VARIANT: ${{ matrix.snapshot_variant }}
-        run: npm run test:browser:update
+          SNUI_UPDATE_BASELINES: "true"
+        run: npm run test:browser:update -- --project=chromium
       - name: Upload baselines
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

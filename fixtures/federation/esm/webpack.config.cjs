@@ -46,7 +46,10 @@ module.exports = {
       filename: "remoteEntry.js",
       library: { type: "module" },
       exposes: {
-        "./Panel": path.resolve(__dirname, "../Panel.tsx"),
+        "./PluginConfigurationPanel": path.resolve(
+          __dirname,
+          "../PluginConfigurationPanel.tsx",
+        ),
       },
       shared: FEDERATION_SHARED,
     }),

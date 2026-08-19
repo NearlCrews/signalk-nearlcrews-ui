@@ -30,7 +30,7 @@ const FOCUS_MOVE_MODIFIER: "ctrlKey" | "metaKey" = /Mac/i.test(platformHint)
   : "ctrlKey";
 
 export interface SegmentedControlOption<Value extends string> {
-  readonly disabled?: boolean;
+  readonly disabled?: boolean | undefined;
   readonly label: ReactNode;
   readonly value: Value;
 }
@@ -38,16 +38,16 @@ export interface SegmentedControlOption<Value extends string> {
 export interface SegmentedControlProps<Value extends string>
   extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">,
     RefAttributes<HTMLDivElement> {
-  readonly defaultValue?: Value;
-  readonly disabled?: boolean;
+  readonly defaultValue?: Value | undefined;
+  readonly disabled?: boolean | undefined;
   readonly legend: ReactNode;
-  readonly legendVisibility?: SegmentedControlLegendVisibility;
+  readonly legendVisibility?: SegmentedControlLegendVisibility | undefined;
   /** Carries the selection into native form submission and form reset. */
-  readonly name?: string;
+  readonly name?: string | undefined;
   readonly onChange?: ((value: Value) => void) | undefined;
   readonly options: readonly SegmentedControlOption<Value>[];
-  readonly orientation?: SegmentedControlOrientation;
-  readonly value?: Value;
+  readonly orientation?: SegmentedControlOrientation | undefined;
+  readonly value?: Value | undefined;
 }
 
 export function SegmentedControl<Value extends string>({
@@ -66,6 +66,22 @@ export function SegmentedControl<Value extends string>({
   ...props
 }: SegmentedControlProps<Value>): React.JSX.Element {
   requireContent(legend, "SegmentedControl requires a non-empty legend.");
+  if (options.length === 0) {
+    throw new Error("SegmentedControl requires at least one option.");
+  }
+  const optionValues = new Set<Value>();
+  for (const option of options) {
+    requireContent(
+      option.label,
+      "SegmentedControl options require non-empty labels.",
+    );
+    if (optionValues.has(option.value)) {
+      throw new Error(
+        `SegmentedControl option values must be unique; received duplicate value "${option.value}".`,
+      );
+    }
+    optionValues.add(option.value);
+  }
 
   const legendId = useId();
   const buttons = useRef(new Map<Value, HTMLButtonElement>());

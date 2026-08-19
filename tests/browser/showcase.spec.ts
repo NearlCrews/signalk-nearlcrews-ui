@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.js";
 
 test("renders the showcase without console errors", async ({ page }) => {
   const errors: string[] = [];
@@ -41,6 +41,45 @@ test("keeps a nested popover above its dialog", async ({ page }) => {
 
   expect(popoverZIndex).toBeGreaterThan(dialogZIndex);
   await expect(popover).toBeVisible();
+});
+
+test("keeps tall popover content scrollable inside the visual viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.goto("/showcase.html");
+  await page.getByRole("button", { name: "Open dialog" }).click();
+  await page.getByRole("button", { name: "Show approach note" }).click();
+
+  const popover = page.getByRole("dialog", { name: "Show approach note" });
+  await popover.evaluate((element) => {
+    const spacer = document.createElement("div");
+    spacer.style.height = "900px";
+    spacer.setAttribute("aria-hidden", "true");
+    const finalAction = document.createElement("button");
+    finalAction.type = "button";
+    finalAction.textContent = "Final popover action";
+    element.append(spacer, finalAction);
+  });
+
+  await expect(popover).toHaveCSS("overflow-y", "auto");
+  const dimensions = await popover.evaluate((element) => ({
+    clientHeight: element.clientHeight,
+    scrollHeight: element.scrollHeight,
+  }));
+  expect(dimensions.scrollHeight).toBeGreaterThan(dimensions.clientHeight);
+  await popover.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(
+    popover.getByRole("button", { name: "Final popover action" }),
+  ).toBeVisible();
+  const box = await popover.boundingBox();
+  expect(box).not.toBeNull();
+  if (box !== null) {
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(568);
+  }
 });
 
 test("keeps secret input focus and selection while revealing", async ({

@@ -7,11 +7,11 @@ import { hasReactContent, requireContent } from "../utils/react-node.js";
 
 export interface SectionProps
   extends Omit<HTMLAttributes<HTMLElement>, "title"> {
-  readonly actions?: ReactNode;
-  readonly description?: ReactNode;
-  readonly headingLevel?: HeadingLevel;
+  readonly actions?: ReactNode | undefined;
+  readonly description?: ReactNode | undefined;
+  readonly headingLevel?: HeadingLevel | undefined;
   /** Removes the region landmark naming when false. */
-  readonly landmark?: boolean;
+  readonly landmark?: boolean | undefined;
   readonly title: ReactNode;
 }
 

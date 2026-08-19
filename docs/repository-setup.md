@@ -1,6 +1,6 @@
 # Repository and publication setup
 
-This checklist records the external settings that cannot be enforced by files in the repository. Review it after creating the repository and after changing GitHub or npm organization policy.
+This checklist records the external settings that cannot be enforced by files in the repository. Review it after changing GitHub, npm, repository, workflow, or ownership policy.
 
 ## GitHub repository
 
@@ -12,13 +12,13 @@ This checklist records the external settings that cannot be enforced by files in
 
 Restrict GitHub Actions to GitHub-owned actions, require full commit SHA pins, and give the default workflow token read-only permissions. Workflows must not approve pull requests.
 
-Enable Dependabot alerts and security updates, secret scanning, push protection, private vulnerability reporting, and CodeQL default setup for JavaScript and TypeScript.
+Enable Dependabot alerts and security updates, secret scanning, push protection, private vulnerability reporting, and CodeQL default setup for JavaScript/TypeScript and GitHub Actions workflows.
 
 ## Protected branches and tags
 
-After the first successful CI run, protect `main` with every required CI job, including workflow lint, all supported Node lines, Windows package validation, x64 and ARM64 browser tests, and both CodeQL analyses. Require pull requests, resolved conversations, linear history, and current branches. Block force pushes and deletion. Keep an administrator recovery path for repository-level emergencies.
+After the first successful CI run, protect `main` with every required CI job, including workflow lint, all supported Node lines, Windows package validation, x64 and ARM64 browser tests, and the JavaScript/TypeScript and Actions CodeQL analyses. Require pull requests, resolved conversations, linear history, and current branches. Block force pushes and deletion. Keep an administrator recovery path for repository-level emergencies.
 
-Protect tags matching `v*` from updates and deletion. A release tag must exactly match `v<package version>` and identify a commit contained in `main`.
+Protect tags matching `v*` from updates and deletion. A release tag must be annotated, exactly match `v<package version>`, and peel to the release commit contained in `main`.
 
 ## npm environment
 
@@ -26,41 +26,10 @@ Create a protected GitHub environment named `npm`. Require review by the reposit
 
 The package is an npm dependency only. Do not add Signal K plugin keywords, marketplace metadata, or a Signal K application entry.
 
-## One-time npm bootstrap
+## npm trusted publishing
 
-npm cannot create a trusted-publisher relationship for a package that does not exist yet. After explicit final publication approval, perform the initial publish from a trusted local machine with a short-lived npm session:
+The package is already established on npm. Keep one [GitHub Actions trusted publisher](https://docs.npmjs.com/trusted-publishers) for this package, configured with the `NearlCrews/signalk-nearlcrews-ui` repository, `.github/workflows/npm-publish.yml`, and the protected `npm` environment.
 
-```sh
-npm login
-npm whoami
-SNUI_RELEASE_APPROVED=true npm run release:check
-test -z "$(git status --porcelain)"
-test "$(git branch --show-current)" = "main"
-git fetch origin main --tags
-test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-PACKAGE_VERSION="$(node -p "require('./package.json').version")"
-git tag --annotate "v${PACKAGE_VERSION}" --message "v${PACKAGE_VERSION}"
-git push origin "v${PACKAGE_VERSION}"
-SNUI_RELEASE_APPROVED=true npm publish --access public --provenance=false
-```
+Normal publication starts with an approved `v<version>` GitHub Release. The workflow verifies, tests, packs, and publishes the exact artifact with OIDC provenance. Its publish job needs `id-token: write` and `contents: read`; it does not need an npm token. Do not publish a normal release from a local npm session.
 
-The tag and publish commands require separate explicit final approval. The clean-worktree, branch, and remote checks ensure the package is built from the exact tagged commit on `main`.
-
-The first local publication is the only provenance exception. It establishes package ownership so npm can accept the trusted-publisher relationship. Do not create a GitHub Release for that already-published version because the release event would attempt to publish it again.
-
-While the short-lived npm session is still active, create and verify the trusted-publisher relationship with npm 12 or newer:
-
-```sh
-npx --yes npm@12.0.2 trust github signalk-nearlcrews-ui \
-  --file npm-publish.yml \
-  --repo NearlCrews/signalk-nearlcrews-ui \
-  --env npm \
-  --allow-publish \
-  --yes
-npx --yes npm@12.0.2 trust list signalk-nearlcrews-ui
-npm logout
-```
-
-Revoke the short-lived credential after logout. Never paste it into a command, repository file, issue, pull request, workflow, or build log.
-
-Future versions must use an approved `v<version>` GitHub Release. The workflow verifies, tests, packs, and publishes the exact artifact with OIDC provenance.
+After changing the repository owner or name, workflow filename, environment name, package ownership, or npm organization policy, review the trusted-publisher configuration on npm before the next release. Confirm that the next approved publication carries provenance and that its `gitHead` matches the release commit.

@@ -14,21 +14,23 @@ import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { FieldError } from "./FieldError.js";
 
 export interface FieldControlProps {
-  readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
-  readonly "aria-errormessage"?: AriaAttributes["aria-errormessage"];
-  readonly "aria-invalid"?: AriaAttributes["aria-invalid"];
-  readonly disabled?: boolean;
-  readonly id?: string;
-  readonly name?: string;
-  readonly required?: boolean;
+  readonly "aria-describedby"?: AriaAttributes["aria-describedby"] | undefined;
+  readonly "aria-errormessage"?:
+    | AriaAttributes["aria-errormessage"]
+    | undefined;
+  readonly "aria-invalid"?: AriaAttributes["aria-invalid"] | undefined;
+  readonly disabled?: boolean | undefined;
+  readonly id?: string | undefined;
+  readonly name?: string | undefined;
+  readonly required?: boolean | undefined;
 }
 
 export interface LabeledFieldControlProps extends FieldControlProps {
   readonly id: string;
   /** Present only when the field renders description content. */
-  readonly descriptionId?: string;
+  readonly descriptionId?: string | undefined;
   /** Present only when the field renders error content. */
-  readonly errorId?: string;
+  readonly errorId?: string | undefined;
 }
 
 export type LabeledFieldLayout = "stacked" | "inline";
@@ -42,16 +44,42 @@ export type LabeledFieldChild =
 export interface LabeledFieldProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
   readonly children: LabeledFieldChild;
-  readonly density?: LabeledFieldDensity;
-  readonly description?: ReactNode;
-  readonly disabled?: boolean;
-  readonly error?: ReactNode;
-  readonly errorLive?: FieldErrorLive;
+  readonly density?: LabeledFieldDensity | undefined;
+  readonly description?: ReactNode | undefined;
+  readonly disabled?: boolean | undefined;
+  readonly error?: ReactNode | undefined;
+  readonly errorLive?: FieldErrorLive | undefined;
   readonly label: ReactNode;
-  readonly layout?: LabeledFieldLayout;
-  readonly name?: string;
-  readonly optionalLabel?: ReactNode;
-  readonly required?: boolean;
+  readonly layout?: LabeledFieldLayout | undefined;
+  readonly name?: string | undefined;
+  readonly optionalLabel?: ReactNode | undefined;
+  readonly required?: boolean | undefined;
+}
+
+const LABELABLE_INTRINSIC_ELEMENTS = new Set([
+  "button",
+  "input",
+  "meter",
+  "output",
+  "progress",
+  "select",
+  "textarea",
+]);
+
+function requireLabelableIntrinsicChild(
+  child: ReactElement<FieldControlProps>,
+): void {
+  if (typeof child.type !== "string") return;
+  if (
+    !LABELABLE_INTRINSIC_ELEMENTS.has(child.type) ||
+    (child.type === "input" &&
+      (child.props as FieldControlProps & { readonly type?: string }).type ===
+        "hidden")
+  ) {
+    throw new Error(
+      "LabeledField element children must render a labelable form control. Use the render-prop form for composite controls.",
+    );
+  }
 }
 
 export function LabeledField({
@@ -73,6 +101,9 @@ export function LabeledField({
 
   const generatedId = useId();
   const elementChild = typeof children === "function" ? undefined : children;
+  if (elementChild !== undefined) {
+    requireLabelableIntrinsicChild(elementChild);
+  }
   const controlId = elementChild?.props.id ?? `${generatedId}-control`;
   const hasDescription = hasReactContent(description);
   const hasError = hasReactContent(error);

@@ -15,6 +15,43 @@ const OPTIONS = [
 
 const noop = (): void => undefined;
 
+describe("SegmentedControl option validation", () => {
+  it("rejects an empty option collection", () => {
+    expect(() =>
+      render(<SegmentedControl legend="Units" options={[]} onChange={noop} />),
+    ).toThrow("SegmentedControl requires at least one option.");
+  });
+
+  it("rejects options without an accessible label", () => {
+    expect(() =>
+      render(
+        <SegmentedControl
+          legend="Units"
+          options={[{ label: "  ", value: "metric" }]}
+          onChange={noop}
+        />,
+      ),
+    ).toThrow("SegmentedControl options require non-empty labels.");
+  });
+
+  it("rejects duplicate option values", () => {
+    expect(() =>
+      render(
+        <SegmentedControl
+          legend="Units"
+          options={[
+            { label: "Metric", value: "metric" },
+            { label: "Meters", value: "metric" },
+          ]}
+          onChange={noop}
+        />,
+      ),
+    ).toThrow(
+      'SegmentedControl option values must be unique; received duplicate value "metric".',
+    );
+  });
+});
+
 describe("SegmentedControl selection modes", () => {
   it("selects options in uncontrolled mode from defaultValue", () => {
     const onChange = vi.fn();

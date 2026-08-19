@@ -36,6 +36,18 @@ jobs:
           tar --extract --gzip --file "$archive" actionlint
       - name: Validate workflows
         run: ./actionlint -color
+      - name: Install zizmor
+        env:
+          ZIZMOR_VERSION: 1.29.0
+          ZIZMOR_SHA256: dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839
+        run: |
+          archive="zizmor-x86_64-unknown-linux-gnu.tar.gz"
+          url="https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/${archive}"
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "$url"
+          echo "${ZIZMOR_SHA256}  ${archive}" | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" zizmor
+      - name: Audit workflow security
+        run: ./zizmor --min-severity medium --offline .
 
   validate:
     name: Node ${{ matrix.node }}

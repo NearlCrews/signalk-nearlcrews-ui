@@ -11,7 +11,7 @@ import {
 } from "react-aria-components";
 import { classNames } from "../utils/class-names.js";
 import { overlayZIndex, useOverlayLayer } from "../utils/overlay-layer.js";
-import { usePortalContainerReady } from "../utils/portal.js";
+import { usePanelPortalContainerReady } from "../utils/portal.js";
 import { requireContent } from "../utils/react-node.js";
 import { Button, type ButtonSize, type ButtonVariant } from "./Button.js";
 import {
@@ -49,7 +49,7 @@ export function Menu({
     "Menu requires a non-empty label to name its trigger button.",
   );
 
-  const portalReady = usePortalContainerReady();
+  const portalReady = usePanelPortalContainerReady("Menu");
   const overlayLayer = useOverlayLayer();
 
   return (

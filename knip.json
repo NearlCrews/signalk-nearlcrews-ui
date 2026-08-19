@@ -12,7 +12,7 @@
     "fixtures/browser/federation.tsx",
     "fixtures/browser/vite.config.ts",
     "fixtures/consumer/consumer.tsx",
-    "fixtures/federation/Panel.tsx",
+    "fixtures/federation/PluginConfigurationPanel.tsx",
     "tests/types/**/*.test-d.ts",
     "tests/unit/**/*.test.{ts,tsx,mjs}"
   ],

@@ -52,8 +52,9 @@ textarea {
  * Host applications ship global element styles that reach unclassed markup a
  * consumer renders inside a panel. Signal K Admin bundles Bootstrap Reboot,
  * whose legend, heading, and block margins visibly change panel content. These
- * rules make a panel render the same in every host. Package components carry
- * their own classes, so they are unaffected.
+ * rules neutralize the known element-level host styles. They do not override
+ * arbitrary higher-specificity selectors. Package components carry their own
+ * classes, so they are unaffected.
  */
 h1,
 h2,

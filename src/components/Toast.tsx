@@ -19,16 +19,14 @@ import {
 import { classNames } from "../utils/class-names.js";
 import { DEFAULT_DISMISS_LABEL, resolveLabel } from "../utils/labels.js";
 import { prefersReducedMotion } from "../utils/motion.js";
-import {
-  usePortalContainerReady,
-  useUNSAFE_PortalContext,
-} from "../utils/portal.js";
+import { usePanelPortalContainer } from "../utils/portal.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import {
   resolveToneLabel,
   type SemanticTone,
   TONE_GLYPHS,
 } from "../utils/tone.js";
+import { PACKAGE_VERSION } from "../version.js";
 import { Button } from "./Button.js";
 import { ToneAnnouncement } from "./ToneAnnouncement.js";
 
@@ -38,15 +36,232 @@ const DEFAULT_TOAST_DURATION_MS = 5000;
 /**
  * Maximum queued toasts. Sticky toasts (duration zero) never time out, so
  * without a cap a chatty caller grows the queue, the mounted DOM, and the
- * subscriber notification cost without bound. Beyond the cap the oldest
- * toast drops to make room.
+ * subscriber notification cost without bound. Beyond the cap, eviction
+ * prefers the oldest toast that is neither focused nor sticky-critical, with
+ * a bounded fallback when every existing toast is protected.
  */
 const MAX_QUEUED_TOASTS = 5;
 
 const TOAST_EXIT_FALLBACK_BUFFER_MS = 10;
+const FOCUSED_TOAST_COUNTS = new Map<string, number>();
+
+function retainFocusedToast(key: string): void {
+  FOCUSED_TOAST_COUNTS.set(key, (FOCUSED_TOAST_COUNTS.get(key) ?? 0) + 1);
+}
+
+function releaseFocusedToast(key: string): void {
+  const count = FOCUSED_TOAST_COUNTS.get(key);
+  if (count === undefined || count <= 1) {
+    FOCUSED_TOAST_COUNTS.delete(key);
+    return;
+  }
+  FOCUSED_TOAST_COUNTS.set(key, count - 1);
+}
+
+interface ToastHostRecord {
+  readonly dispose: () => void;
+  readonly element: HTMLDivElement;
+  references: number;
+}
+
+type ToastHostRegistry = Map<HTMLElement, ToastHostRecord>;
+
+const TOAST_HOST_REGISTRY_KEY = Symbol.for(
+  "signalk-nearlcrews-ui.toast-host-registry.v1",
+);
 
 /** Browser timer handle returned by window.setTimeout. */
 type TimerId = number;
+
+function getVisualViewport(ownerWindow: Window): VisualViewport | undefined {
+  return Reflect.get(ownerWindow, "visualViewport") as
+    | VisualViewport
+    | undefined;
+}
+
+function getResizeObserver(
+  ownerWindow: Window,
+): typeof ResizeObserver | undefined {
+  return Reflect.get(ownerWindow, "ResizeObserver") as
+    | typeof ResizeObserver
+    | undefined;
+}
+
+function roundedLayoutValue(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
+function getToastHostRegistry(ownerDocument: Document): ToastHostRegistry {
+  const existing = Reflect.get(ownerDocument, TOAST_HOST_REGISTRY_KEY) as
+    | ToastHostRegistry
+    | undefined;
+  if (existing !== undefined) return existing;
+
+  const registry: ToastHostRegistry = new Map();
+  Reflect.defineProperty(ownerDocument, TOAST_HOST_REGISTRY_KEY, {
+    configurable: true,
+    value: registry,
+  });
+  return registry;
+}
+
+function createToastHost(panelRoot: HTMLElement): ToastHostRecord {
+  const ownerDocument = panelRoot.ownerDocument;
+  const ownerWindow = ownerDocument.defaultView;
+  const element = ownerDocument.createElement("div");
+  element.className = "snui-toast-region-host";
+  element.dataset.snuiToastHost = PACKAGE_VERSION;
+  panelRoot.append(element);
+
+  if (ownerWindow === null) {
+    return {
+      dispose: () => element.remove(),
+      element,
+      references: 0,
+    };
+  }
+
+  const visualViewport = getVisualViewport(ownerWindow);
+  let animationFrame = 0;
+  let disposed = false;
+
+  const measure = (): void => {
+    animationFrame = 0;
+    if (disposed) return;
+
+    const viewport = getVisualViewport(ownerWindow);
+    const viewportTop = viewport?.offsetTop ?? 0;
+    const viewportLeft = viewport?.offsetLeft ?? 0;
+    const viewportBottom =
+      viewport === undefined
+        ? ownerWindow.innerHeight
+        : viewport.offsetTop + viewport.height;
+    const viewportRight =
+      viewport === undefined
+        ? ownerWindow.innerWidth
+        : viewport.offsetLeft + viewport.width;
+    const panelRect = panelRoot.getBoundingClientRect();
+    const visibleTop = Math.max(viewportTop, panelRect.top);
+    const visibleBottom = Math.min(viewportBottom, panelRect.bottom);
+    const visibleLeft = Math.max(viewportLeft, panelRect.left);
+    const visibleRight = Math.min(viewportRight, panelRect.right);
+    const visible = visibleBottom > visibleTop && visibleRight > visibleLeft;
+
+    element.toggleAttribute("data-snui-toast-host-visible", visible);
+    element.style.setProperty(
+      "--snui-toast-host-top",
+      `${String(roundedLayoutValue(Math.max(0, visibleTop)))}px`,
+    );
+    element.style.setProperty(
+      "--snui-toast-host-bottom",
+      `${String(
+        roundedLayoutValue(
+          Math.max(0, ownerWindow.innerHeight - visibleBottom),
+        ),
+      )}px`,
+    );
+    element.style.setProperty(
+      "--snui-toast-host-left",
+      `${String(roundedLayoutValue(Math.max(0, visibleLeft)))}px`,
+    );
+    element.style.setProperty(
+      "--snui-toast-host-width",
+      `${String(roundedLayoutValue(Math.max(0, visibleRight - visibleLeft)))}px`,
+    );
+  };
+
+  const scheduleMeasure = (): void => {
+    if (animationFrame !== 0 || disposed) return;
+    animationFrame = ownerWindow.requestAnimationFrame(measure);
+  };
+
+  const ResizeObserverConstructor = getResizeObserver(ownerWindow);
+  const resizeObserver =
+    ResizeObserverConstructor === undefined
+      ? undefined
+      : new ResizeObserverConstructor(scheduleMeasure);
+  resizeObserver?.observe(panelRoot);
+  ownerDocument.addEventListener("scroll", scheduleMeasure, true);
+  ownerWindow.addEventListener("resize", scheduleMeasure);
+  ownerWindow.addEventListener("scroll", scheduleMeasure);
+  visualViewport?.addEventListener("resize", scheduleMeasure);
+  visualViewport?.addEventListener("scroll", scheduleMeasure);
+  measure();
+  scheduleMeasure();
+
+  return {
+    dispose: () => {
+      disposed = true;
+      if (animationFrame !== 0) {
+        ownerWindow.cancelAnimationFrame(animationFrame);
+      }
+      resizeObserver?.disconnect();
+      ownerDocument.removeEventListener("scroll", scheduleMeasure, true);
+      ownerWindow.removeEventListener("resize", scheduleMeasure);
+      ownerWindow.removeEventListener("scroll", scheduleMeasure);
+      visualViewport?.removeEventListener("resize", scheduleMeasure);
+      visualViewport?.removeEventListener("scroll", scheduleMeasure);
+      element.remove();
+    },
+    element,
+    references: 0,
+  };
+}
+
+function acquireToastHost(panelRoot: HTMLElement): {
+  readonly element: HTMLDivElement;
+  readonly release: () => void;
+} {
+  const ownerDocument = panelRoot.ownerDocument;
+  const registry = getToastHostRegistry(ownerDocument);
+  let record = registry.get(panelRoot);
+  if (record === undefined) {
+    record = createToastHost(panelRoot);
+    registry.set(panelRoot, record);
+  } else if (!record.element.isConnected) {
+    panelRoot.append(record.element);
+  }
+  record.references += 1;
+
+  let released = false;
+  return {
+    element: record.element,
+    release: () => {
+      if (released) return;
+      released = true;
+      const current = registry.get(panelRoot);
+      if (current === undefined) return;
+      current.references -= 1;
+      if (current.references > 0) return;
+      current.dispose();
+      registry.delete(panelRoot);
+      if (registry.size === 0) {
+        Reflect.deleteProperty(ownerDocument, TOAST_HOST_REGISTRY_KEY);
+      }
+    },
+  };
+}
+
+function useToastHost(panelRoot: HTMLElement | null): HTMLDivElement | null {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  const subscribe = useCallback(
+    (onStoreChange: () => void): (() => void) => {
+      if (panelRoot === null) return () => undefined;
+      const acquired = acquireToastHost(panelRoot);
+      hostRef.current = acquired.element;
+      onStoreChange();
+      return () => {
+        hostRef.current = null;
+        acquired.release();
+      };
+    },
+    [panelRoot],
+  );
+  const getSnapshot = useCallback(() => hostRef.current, []);
+  const getServerSnapshot = useCallback(() => null, []);
+
+  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+}
 
 export interface ToastContent {
   readonly title: ReactNode;
@@ -75,7 +290,9 @@ export interface QueuedToast<T extends ToastContent = ToastContent> {
 export interface ToastQueue<T extends ToastContent = ToastContent> {
   /**
    * Adds a toast and returns its key. The queue holds at most five toasts;
-   * when it is full the oldest toast drops to make room.
+   * when full, it first evicts the oldest toast that is neither focused nor a
+   * sticky warning or danger. A bounded fallback always leaves room for the
+   * newly enqueued toast.
    */
   readonly enqueue: (content: T) => string;
   /** Removes one toast. Unknown keys are ignored. */
@@ -87,6 +304,34 @@ export interface ToastQueue<T extends ToastContent = ToastContent> {
 }
 
 let nextToastKey = 0;
+
+function toastRetentionPriority(content: ToastContent): number {
+  return content.duration === 0 &&
+    (content.tone === "danger" || content.tone === "warning")
+    ? 1
+    : 0;
+}
+
+function chooseToastToEvict<T extends ToastContent>(
+  items: readonly QueuedToast<T>[],
+): number {
+  let candidateIndex = -1;
+  let candidatePriority = Number.POSITIVE_INFINITY;
+  // The final item is the newly enqueued toast. Keep it visible so enqueue's
+  // public contract remains meaningful, and choose among the existing cards.
+  for (let index = 0; index < items.length - 1; index += 1) {
+    const item = items[index];
+    if (item === undefined || FOCUSED_TOAST_COUNTS.has(item.key)) continue;
+    const priority = toastRetentionPriority(item.content);
+    if (priority < candidatePriority) {
+      candidateIndex = index;
+      candidatePriority = priority;
+    }
+  }
+  // At most one toast can contain document focus. This fallback also keeps the
+  // queue bounded in synthetic environments that mark more than one key.
+  return candidateIndex === -1 ? 0 : candidateIndex;
+}
 
 /**
  * Creates a framework-light toast store. The snapshot array is replaced on
@@ -107,20 +352,24 @@ export function createToastQueue<
     enqueue: (content) => {
       nextToastKey += 1;
       const key = `snui-toast-${String(nextToastKey)}`;
-      snapshot = [
-        ...snapshot.slice(-(MAX_QUEUED_TOASTS - 1)),
-        { key, content },
-      ];
+      const next = [...snapshot, { key, content }];
+      if (next.length > MAX_QUEUED_TOASTS) {
+        const evicted = next.splice(chooseToastToEvict(next), 1)[0];
+        if (evicted !== undefined) FOCUSED_TOAST_COUNTS.delete(evicted.key);
+      }
+      snapshot = next;
       emit();
       return key;
     },
     dismiss: (key) => {
       if (!snapshot.some((queued) => queued.key === key)) return;
       snapshot = snapshot.filter((queued) => queued.key !== key);
+      FOCUSED_TOAST_COUNTS.delete(key);
       emit();
     },
     clear: () => {
       if (snapshot.length === 0) return;
+      for (const queued of snapshot) FOCUSED_TOAST_COUNTS.delete(queued.key);
       snapshot = [];
       emit();
     },
@@ -256,13 +505,17 @@ function ToastCard<T extends ToastContent>({
   useEffect(() => {
     startCountdown();
     return () => {
+      if (focusPausedRef.current) {
+        focusPausedRef.current = false;
+        releaseFocusedToast(key);
+      }
       stopCountdown();
       if (exitTimerRef.current !== null) {
         window.clearTimeout(exitTimerRef.current);
         exitTimerRef.current = null;
       }
     };
-  }, [startCountdown, stopCountdown]);
+  }, [key, startCountdown, stopCountdown]);
 
   const region = liveRegionProps(live);
   const effectiveToneLabel = resolveToneLabel(tone, content.toneLabel);
@@ -296,9 +549,12 @@ function ToastCard<T extends ToastContent>({
         setPaused("hover", false);
       }}
       onFocus={() => {
+        if (!focusPausedRef.current) retainFocusedToast(key);
         setPaused("focus", true);
       }}
-      onBlur={() => {
+      onBlur={(event) => {
+        if (event.currentTarget.contains(event.relatedTarget)) return;
+        if (focusPausedRef.current) releaseFocusedToast(key);
         setPaused("focus", false);
       }}
     >
@@ -381,16 +637,8 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
       />,
     );
   }
-  const { getContainer } = useUNSAFE_PortalContext();
-  const portalReady = usePortalContainerReady();
-  if (getContainer === undefined || getContainer === null) {
-    throw new Error("ToastRegion must be rendered inside PanelRoot.");
-  }
-  const resolveContainer = getContainer;
-
-  // The portal container reads the panel root lazily, so it only resolves
-  // once the commit has attached that ref.
-  const container = portalReady ? resolveContainer() : null;
+  const panelRoot = usePanelPortalContainer("ToastRegion");
+  const container = useToastHost(panelRoot);
 
   if (container === null) return null;
 

@@ -402,25 +402,348 @@ describe("chrome primitives", () => {
     }
   });
 
-  it("adds scroll padding so a sticky action bar never covers focused content", () => {
+  it("adds scroll margins so a nested sticky action bar never covers focused content", () => {
     renderInPanel(
-      <ActionBar sticky="bottom" actions={<Button>Save</Button>} />,
+      <Stack>
+        <Button>Earlier action</Button>
+        <ActionBar sticky="bottom" actions={<Button>Save</Button>} />
+      </Stack>,
     );
 
     const styles = document.head.querySelector("style[data-snui-styles]");
     expect(styles?.textContent).toContain(
-      ".snui-root:has(> .snui-root__content > .snui-action-bar--sticky-bottom)",
+      ".snui-root:has(.snui-action-bar--sticky-bottom) .snui-root__content",
     );
-    expect(styles?.textContent).toContain("scroll-padding-block-end");
+    expect(styles?.textContent).toContain("scroll-margin-block-end");
     expect(styles?.textContent).toContain(
-      ".snui-root:has(> .snui-root__content > .snui-action-bar--sticky-top)",
-    );
-    expect(styles?.textContent).not.toContain(
-      ".snui-root:has(> .snui-action-bar",
+      ".snui-root:has(.snui-action-bar--sticky-top) .snui-root__content",
     );
     expect(styles?.textContent).toContain(".snui-action-bar__viewport-anchor");
     expect(styles?.textContent).toContain(".snui-action-bar--viewport-docked");
     expect(styles?.textContent).toContain("env(safe-area-inset-bottom, 0px)");
-    expect(styles?.textContent).toContain("scroll-padding-block-start");
+    expect(styles?.textContent).toContain("scroll-margin-block-start");
+  });
+
+  it("clears focused content when a viewport resize docks the bar", async () => {
+    const originalVisualViewport = Object.getOwnPropertyDescriptor(
+      window,
+      "visualViewport",
+    );
+    const visualViewport = Object.assign(new EventTarget(), {
+      height: 600,
+      offsetLeft: 0,
+      offsetTop: 0,
+      pageLeft: 0,
+      pageTop: 0,
+      scale: 1,
+      width: 800,
+    }) as VisualViewport;
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: visualViewport,
+    });
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(800);
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+
+    const { container, unmount } = render(
+      <PanelRoot data-testid="resize-panel">
+        <Button data-testid="resize-focus-target">Earlier action</Button>
+        <ActionBar
+          sticky="viewport-bottom"
+          data-testid="resize-bar"
+          actions={<Button>Save</Button>}
+        />
+      </PanelRoot>,
+    );
+    const panel = screen.getByTestId("resize-panel");
+    const target = screen.getByTestId("resize-focus-target");
+    const bar = screen.getByTestId("resize-bar");
+    const anchor = container.querySelector<HTMLElement>(
+      ".snui-action-bar__viewport-anchor",
+    );
+    const safeAreaProbe = container.querySelector<HTMLElement>(
+      ".snui-action-bar__safe-area-probe",
+    );
+    expect(anchor).not.toBeNull();
+    expect(safeAreaProbe).not.toBeNull();
+    if (anchor === null || safeAreaProbe === null) return;
+
+    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(100, 0, 600, 1_200),
+    );
+    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(120, 500, 560, 60),
+    );
+    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
+      () =>
+        new DOMRect(
+          120,
+          bar.classList.contains("snui-action-bar--viewport-docked")
+            ? 340
+            : 500,
+          560,
+          60,
+        ),
+    );
+    vi.spyOn(target, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(140, 350, 200, 40),
+    );
+    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(800, 600, 0, 0),
+    );
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).not.toHaveAttribute("data-snui-docked"));
+    target.focus();
+    scrollBy.mockClear();
+
+    Reflect.set(visualViewport, "height", 400);
+    visualViewport.dispatchEvent(new Event("resize"));
+
+    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    await waitFor(() =>
+      expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 50 }),
+    );
+
+    unmount();
+    if (originalVisualViewport === undefined) {
+      Reflect.deleteProperty(window, "visualViewport");
+    } else {
+      Object.defineProperty(window, "visualViewport", originalVisualViewport);
+    }
+  });
+
+  it("propagates focus clearance after a nested scroller saturates", async () => {
+    const originalVisualViewport = Object.getOwnPropertyDescriptor(
+      window,
+      "visualViewport",
+    );
+    const visualViewport = Object.assign(new EventTarget(), {
+      height: 500,
+      offsetLeft: 0,
+      offsetTop: 0,
+      pageLeft: 0,
+      pageTop: 0,
+      scale: 1,
+      width: 800,
+    }) as VisualViewport;
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: visualViewport,
+    });
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(800);
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+
+    const { container, unmount } = render(
+      <PanelRoot data-testid="focus-panel">
+        <Stack>
+          <div data-testid="nested-scroll" style={{ overflowY: "auto" }}>
+            <Button data-testid="covered-target">Earlier action</Button>
+          </div>
+          <ActionBar
+            sticky="viewport-bottom"
+            data-testid="focus-bar"
+            actions={<Button>Save</Button>}
+          />
+        </Stack>
+      </PanelRoot>,
+    );
+    const panel = screen.getByTestId("focus-panel");
+    const nestedScroller = screen.getByTestId("nested-scroll");
+    const target = screen.getByTestId("covered-target");
+    const bar = screen.getByTestId("focus-bar");
+    const anchor = container.querySelector<HTMLElement>(
+      ".snui-action-bar__viewport-anchor",
+    );
+    const safeAreaProbe = container.querySelector<HTMLElement>(
+      ".snui-action-bar__safe-area-probe",
+    );
+    expect(anchor).not.toBeNull();
+    expect(safeAreaProbe).not.toBeNull();
+    if (anchor === null || safeAreaProbe === null) return;
+
+    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(100, 0, 600, 1_200),
+    );
+    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(120, 900, 560, 60),
+    );
+    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
+      () =>
+        new DOMRect(
+          120,
+          bar.classList.contains("snui-action-bar--viewport-docked")
+            ? 440
+            : 900,
+          560,
+          60,
+        ),
+    );
+    vi.spyOn(target, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(140, 450, 200, 40),
+    );
+    Object.defineProperties(nestedScroller, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 200 },
+      scrollTop: { configurable: true, value: 90, writable: true },
+    });
+    const nestedScrollBy = vi.fn(({ top = 0 }: ScrollToOptions): void => {
+      nestedScroller.scrollTop += top;
+    });
+    Object.defineProperty(nestedScroller, "scrollBy", {
+      configurable: true,
+      value: nestedScrollBy,
+    });
+    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(800, 600, 0, 0),
+    );
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    target.focus();
+
+    expect(nestedScrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 10 });
+    expect(nestedScroller.scrollTop).toBe(100);
+    expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 40 });
+
+    target.blur();
+    nestedScrollBy.mockClear();
+    scrollBy.mockClear();
+    target.focus();
+
+    expect(nestedScrollBy).not.toHaveBeenCalled();
+    expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 50 });
+
+    unmount();
+    if (originalVisualViewport === undefined) {
+      Reflect.deleteProperty(window, "visualViewport");
+    } else {
+      Object.defineProperty(window, "visualViewport", originalVisualViewport);
+    }
+  });
+
+  it("keeps focused content inside a nested scroller while clearing the bar", async () => {
+    const originalVisualViewport = Object.getOwnPropertyDescriptor(
+      window,
+      "visualViewport",
+    );
+    const visualViewport = Object.assign(new EventTarget(), {
+      height: 560,
+      offsetLeft: 0,
+      offsetTop: 0,
+      pageLeft: 0,
+      pageTop: 0,
+      scale: 1,
+      width: 800,
+    }) as VisualViewport;
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: visualViewport,
+    });
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(800);
+    let outerScroll = 0;
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation((optionsOrX: ScrollToOptions | number, y = 0) => {
+        outerScroll +=
+          typeof optionsOrX === "number" ? y : (optionsOrX.top ?? 0);
+      });
+
+    const { container, unmount } = render(
+      <PanelRoot data-testid="clipping-panel">
+        <Stack>
+          <div data-testid="clipping-scroll" style={{ overflowY: "auto" }}>
+            <Button data-testid="clipping-target">Earlier action</Button>
+          </div>
+          <ActionBar
+            sticky="viewport-bottom"
+            data-testid="clipping-bar"
+            style={{ paddingBlockStart: 4 }}
+            actions={<Button>Save</Button>}
+          />
+        </Stack>
+      </PanelRoot>,
+    );
+    const panel = screen.getByTestId("clipping-panel");
+    const nestedScroller = screen.getByTestId("clipping-scroll");
+    const target = screen.getByTestId("clipping-target");
+    const bar = screen.getByTestId("clipping-bar");
+    const anchor = container.querySelector<HTMLElement>(
+      ".snui-action-bar__viewport-anchor",
+    );
+    const safeAreaProbe = container.querySelector<HTMLElement>(
+      ".snui-action-bar__safe-area-probe",
+    );
+    expect(anchor).not.toBeNull();
+    expect(safeAreaProbe).not.toBeNull();
+    if (anchor === null || safeAreaProbe === null) return;
+
+    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(100, -outerScroll, 600, 1_200),
+    );
+    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(120, 900 - outerScroll, 560, 60),
+    );
+    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
+      () =>
+        new DOMRect(
+          120,
+          bar.classList.contains("snui-action-bar--viewport-docked")
+            ? 500
+            : 900 - outerScroll,
+          560,
+          60,
+        ),
+    );
+    vi.spyOn(nestedScroller, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(120, 500 - outerScroll, 560, 100),
+    );
+    vi.spyOn(target, "getBoundingClientRect").mockImplementation(
+      () =>
+        new DOMRect(140, 510 - nestedScroller.scrollTop - outerScroll, 200, 40),
+    );
+    Object.defineProperties(nestedScroller, {
+      clientHeight: { configurable: true, value: 100 },
+      clientTop: { configurable: true, value: 0 },
+      scrollHeight: { configurable: true, value: 200 },
+      scrollTop: { configurable: true, value: 0, writable: true },
+    });
+    const nestedScrollBy = vi.fn(({ top = 0 }: ScrollToOptions): void => {
+      nestedScroller.scrollTop += top;
+    });
+    Object.defineProperty(nestedScroller, "scrollBy", {
+      configurable: true,
+      value: nestedScrollBy,
+    });
+    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(800, 600, 0, 0),
+    );
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    target.focus();
+
+    expect(nestedScrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 6 });
+    expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 48 });
+    const targetRect = target.getBoundingClientRect();
+    const scrollerRect = nestedScroller.getBoundingClientRect();
+    const barRect = bar.getBoundingClientRect();
+    expect(targetRect.top).toBeGreaterThanOrEqual(scrollerRect.top + 4);
+    expect(targetRect.bottom).toBeLessThanOrEqual(scrollerRect.bottom);
+    expect(targetRect.bottom).toBeLessThanOrEqual(barRect.top);
+
+    unmount();
+    if (originalVisualViewport === undefined) {
+      Reflect.deleteProperty(window, "visualViewport");
+    } else {
+      Object.defineProperty(window, "visualViewport", originalVisualViewport);
+    }
   });
 });

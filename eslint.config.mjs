@@ -76,7 +76,7 @@ export default tseslint.config(
     files: [
       "src/**/*.{ts,tsx}",
       "fixtures/browser/{federation,main}.tsx",
-      "fixtures/federation/Panel.tsx",
+      "fixtures/federation/PluginConfigurationPanel.tsx",
       "tests/setup.ts",
       "tests/unit/**/*.{ts,tsx}",
     ],

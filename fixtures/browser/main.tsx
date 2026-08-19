@@ -30,6 +30,7 @@ import {
   TextInput,
   ThemeToggle,
 } from "signalk-nearlcrews-ui";
+import { createToastQueue, ToastRegion } from "signalk-nearlcrews-ui/overlays";
 
 type LogLevel = "minimal" | "normal" | "verbose";
 const fixtureParameters = new URLSearchParams(window.location.search);
@@ -38,6 +39,10 @@ const startBusy = fixtureParameters.has("busy");
 const becomeBusyOnConfirm = fixtureParameters.has("busy-on-confirm");
 const testFocusLoading = fixtureParameters.has("focus-loading");
 const simulateAdminHost = fixtureParameters.has("admin-host");
+const showHostResetFixture = fixtureParameters.has("host-reset");
+const showForcedColorActions = fixtureParameters.has("forced-color-actions");
+const engineToastQueue = createToastQueue();
+const networkToastQueue = createToastQueue();
 
 function Fixture(): React.JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -52,6 +57,16 @@ function Fixture(): React.JSX.Element {
   return (
     <PanelRoot {...(simulateAdminHost ? { width: "standard" } : {})}>
       <Stack gap={4}>
+        {showHostResetFixture ? (
+          <div data-testid="host-reset-fixture">
+            <h2>Consumer heading</h2>
+            <p>Consumer paragraph</p>
+            <fieldset>
+              <legend>Consumer legend</legend>
+              <input aria-label="Consumer input" />
+            </fieldset>
+          </div>
+        ) : null}
         <Cluster justify="between" gap={4}>
           <div>
             <h1 style={{ margin: 0, fontSize: "1.4rem" }}>Weather provider</h1>
@@ -60,10 +75,53 @@ function Fixture(): React.JSX.Element {
           <ThemeToggle />
         </Cluster>
 
+        {simulateAdminHost ? (
+          <Cluster gap={2}>
+            <Button
+              onClick={() =>
+                engineToastQueue.enqueue({
+                  duration: 0,
+                  title: "Engine notification",
+                  tone: "warning",
+                })
+              }
+            >
+              Show engine notification
+            </Button>
+            <Button
+              onClick={() =>
+                networkToastQueue.enqueue({
+                  duration: 0,
+                  title: "Network notification",
+                })
+              }
+            >
+              Show network notification
+            </Button>
+          </Cluster>
+        ) : null}
+
         {noticeVisible ? (
           <Banner
             tone="info"
             title="Server units apply"
+            actions={
+              showForcedColorActions ? (
+                <>
+                  <button
+                    type="button"
+                    style={{ background: "transparent", color: "#f5f7fa" }}
+                  >
+                    Raw banner action
+                  </button>
+                  <input
+                    type="button"
+                    value="Raw input action"
+                    style={{ background: "transparent", color: "#f5f7fa" }}
+                  />
+                </>
+              ) : undefined
+            }
             dismissFocusRef={saveRef}
             onDismiss={() => setNoticeVisible(false)}
           >
@@ -257,7 +315,11 @@ function Fixture(): React.JSX.Element {
         />
 
         {simulateAdminHost ? (
-          <div className="admin-host__tall-panel-content" aria-hidden="true" />
+          <div className="admin-host__tall-panel-content">
+            <Button data-testid="admin-host-focus-target">
+              Last panel action
+            </Button>
+          </div>
         ) : null}
 
         <ActionBar
@@ -277,6 +339,15 @@ function Fixture(): React.JSX.Element {
           }
         />
       </Stack>
+      {simulateAdminHost ? (
+        <>
+          <ToastRegion queue={engineToastQueue} label="Engine notifications" />
+          <ToastRegion
+            queue={networkToastQueue}
+            label="Network notifications"
+          />
+        </>
+      ) : null}
     </PanelRoot>
   );
 }

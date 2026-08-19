@@ -20,8 +20,8 @@ import { type HTMLAttributes, type ReactNode, type Ref } from "react";
 export type ActionBarSticky = "bottom" | "top" | "viewport-bottom";
 export interface ActionBarProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
     readonly actions: ReactNode;
-    readonly status?: ReactNode;
-    readonly statusRef?: Ref<HTMLDivElement>;
+    readonly status?: ReactNode | undefined;
+    readonly statusRef?: Ref<HTMLDivElement> | undefined;
     readonly sticky?: ActionBarSticky | undefined;
 }
 export declare function ActionBar({ actions, className, status, statusRef, sticky, ...props }: ActionBarProps): React.JSX.Element;
@@ -78,18 +78,18 @@ export type CollapsibleMountStrategy = "lazy-retain" | "retain" | "unmount";
 export type CollapsibleSummaryPlacement = "below" | "header";
 export type CollapsibleSummaryVisibility = "always" | "collapsed";
 export interface CollapsibleSectionProps extends Omit<HTMLAttributes<HTMLElement>, "onToggle" | "title"> {
-    readonly actions?: ReactNode;
-    readonly defaultOpen?: boolean;
-    readonly disabled?: boolean;
-    readonly headingLevel?: HeadingLevel;
+    readonly actions?: ReactNode | undefined;
+    readonly defaultOpen?: boolean | undefined;
+    readonly disabled?: boolean | undefined;
+    readonly headingLevel?: HeadingLevel | undefined;
     /** Hidden content stays mounted but pauses effects under "lazy-retain" and "retain". */
-    readonly mountStrategy?: CollapsibleMountStrategy;
-    readonly onOpenChange?: (open: boolean) => void;
-    readonly open?: boolean;
-    readonly summary?: ReactNode;
-    readonly summaryPlacement?: CollapsibleSummaryPlacement;
+    readonly mountStrategy?: CollapsibleMountStrategy | undefined;
+    readonly onOpenChange?: ((open: boolean) => void) | undefined;
+    readonly open?: boolean | undefined;
+    readonly summary?: ReactNode | undefined;
+    readonly summaryPlacement?: CollapsibleSummaryPlacement | undefined;
     /** Keeps the summary rendered while open under "always". */
-    readonly summaryVisibility?: CollapsibleSummaryVisibility;
+    readonly summaryVisibility?: CollapsibleSummaryVisibility | undefined;
     readonly title: ReactNode;
 }
 export declare function CollapsibleSection({ actions, "aria-labelledby": ariaLabelledBy, children, className, defaultOpen, disabled, headingLevel, mountStrategy, onOpenChange, open, summary, summaryPlacement, summaryVisibility, title, ...props }: CollapsibleSectionProps): React.JSX.Element;
@@ -102,26 +102,26 @@ export { Cell, Column, Row };
 export type DataGridDensity = "default" | "compact";
 export type DataGridSelectionMode = "none" | "single" | "multiple";
 export interface DataGridProps<TRow, TColumn = unknown> extends RefAttributes<HTMLDivElement> {
-    readonly "aria-label"?: AriaAttributes["aria-label"];
-    readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"];
+    readonly "aria-label"?: AriaAttributes["aria-label"] | undefined;
+    readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"] | undefined;
     /**
      * Header columns as <Column> elements, or a render function when `columns`
      * provides the column data (the RAC dynamic collection shape).
      */
     readonly children: ReactNode | ((column: TColumn) => ReactElement);
-    readonly className?: string;
-    /** Column data for a dynamic header; pairs with function children. */
-    readonly columns?: Iterable<TColumn>;
-    readonly defaultSelectedKeys?: "all" | Iterable<Key>;
-    readonly density?: DataGridDensity;
+    readonly className?: string | undefined;
+    /** Replay-safe column data for a dynamic header; pairs with function children. */
+    readonly columns?: readonly TColumn[] | undefined;
+    readonly defaultSelectedKeys?: "all" | Iterable<Key> | undefined;
+    readonly density?: DataGridDensity | undefined;
     /**
      * Replaces the default empty content entirely. Render an EmptyState (or any
      * node) for full control over the empty table.
      */
-    readonly emptyState?: ReactNode;
+    readonly emptyState?: ReactNode | undefined;
     /** Title of the default EmptyState. */
-    readonly emptyTitle?: string;
-    readonly id?: string;
+    readonly emptyTitle?: string | undefined;
+    readonly id?: string | undefined;
     /**
      * Row data. Items should expose a stable `id` or `key` for selection.
      * Without one, virtualized rows key by index, so sorting or filtering a
@@ -137,19 +137,19 @@ export interface DataGridProps<TRow, TColumn = unknown> extends RefAttributes<HT
     readonly onSortChange?: ((descriptor: SortDescriptor) => void) | undefined;
     /** Renders one row as a <Row> with <Cell> children. */
     readonly renderRow: (item: TRow) => ReactElement<RowProps<TRow>>;
-    readonly selectedKeys?: "all" | Iterable<Key>;
-    readonly selectionMode?: DataGridSelectionMode;
-    readonly sortDescriptor?: SortDescriptor;
-    readonly style?: CSSProperties;
+    readonly selectedKeys?: "all" | Iterable<Key> | undefined;
+    readonly selectionMode?: DataGridSelectionMode | undefined;
+    readonly sortDescriptor?: SortDescriptor | undefined;
+    readonly style?: CSSProperties | undefined;
     /**
      * Number of rows above which the body uses React Aria's TableLayout and
      * Virtualizer. The density row height is an estimate, and rows are observed
      * so wrapped or expanded content can use its measured height. Keyboard
      * navigation and accessibility metadata cover the complete collection.
      */
-    readonly virtualizeThreshold?: number;
+    readonly virtualizeThreshold?: number | undefined;
     /** Paints alternating row backgrounds. Off by default. */
-    readonly zebra?: boolean;
+    readonly zebra?: boolean | undefined;
 }
 export declare function DataGrid<TRow, TColumn = unknown>({ "aria-label": ariaLabel, "aria-labelledby": ariaLabelledBy, children, className, columns, defaultSelectedKeys, density, emptyState, emptyTitle, id, items, onSelectionChange, onSortChange, ref, renderRow, selectedKeys, selectionMode, sortDescriptor, style, virtualizeThreshold, zebra, }: DataGridProps<TRow, TColumn>): React.JSX.Element;
 
@@ -161,31 +161,31 @@ import { type OverlayOpenState } from "./overlay-placement.js";
 export type DialogWidth = "standard" | "wide";
 export interface DialogProps extends RefAttributes<HTMLElement>, OverlayOpenState {
     /** Footer slot for the dialog actions, usually library Buttons. */
-    readonly actions?: ReactNode;
-    readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
-    readonly "aria-details"?: AriaAttributes["aria-details"];
-    readonly "aria-label"?: AriaAttributes["aria-label"];
-    readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"];
+    readonly actions?: ReactNode | undefined;
+    readonly "aria-describedby"?: AriaAttributes["aria-describedby"] | undefined;
+    readonly "aria-details"?: AriaAttributes["aria-details"] | undefined;
+    readonly "aria-label"?: AriaAttributes["aria-label"] | undefined;
+    readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"] | undefined;
     /** Adds a backdrop blur to the scrim behind the dialog. */
-    readonly blurScrim?: boolean;
-    readonly children?: ReactNode;
-    readonly className?: string;
-    readonly description?: ReactNode;
+    readonly blurScrim?: boolean | undefined;
+    readonly children?: ReactNode | undefined;
+    readonly className?: string | undefined;
+    readonly description?: ReactNode | undefined;
     /** Allows dismissal through Escape and scrim presses. Defaults to true. */
-    readonly dismissable?: boolean;
-    readonly headingLevel?: HeadingLevel;
-    readonly id?: string;
-    readonly style?: CSSProperties;
+    readonly dismissable?: boolean | undefined;
+    readonly headingLevel?: HeadingLevel | undefined;
+    readonly id?: string | undefined;
+    readonly style?: CSSProperties | undefined;
     readonly title: ReactNode;
-    readonly width?: DialogWidth;
+    readonly width?: DialogWidth | undefined;
 }
 export interface AlertDialogProps extends Omit<DialogProps, "actions"> {
     /** Supplemental actions, such as the destructive confirmation. */
-    readonly actions?: ReactNode;
+    readonly actions?: ReactNode | undefined;
     /** Required label for the always-enabled escape action. */
     readonly cancelLabel: ReactNode;
     /** Defaults to secondary. */
-    readonly cancelVariant?: ButtonVariant;
+    readonly cancelVariant?: ButtonVariant | undefined;
     readonly onCancel?: (() => void) | undefined;
 }
 export declare function Dialog(props: DialogProps): React.JSX.Element;
@@ -241,26 +241,26 @@ import { type HeadingLevel } from "../utils/heading.js";
 import { type ButtonVariant } from "./Button.js";
 export type InlineConfirmCancelReason = "cancel" | "escape";
 export interface InlineConfirmProps extends Omit<HTMLAttributes<HTMLElement>, "children" | "onCancel" | "title">, RefAttributes<HTMLElement> {
-    readonly busy?: boolean;
-    readonly cancelLabel?: ReactNode;
-    readonly cancelVariant?: ButtonVariant;
-    readonly confirmLabel?: ReactNode;
-    readonly confirmVariant?: Extract<ButtonVariant, "primary" | "danger">;
+    readonly busy?: boolean | undefined;
+    readonly cancelLabel?: ReactNode | undefined;
+    readonly cancelVariant?: ButtonVariant | undefined;
+    readonly confirmLabel?: ReactNode | undefined;
+    readonly confirmVariant?: Extract<ButtonVariant, "primary" | "danger"> | undefined;
     /** Sets the initial state only. Pass `open` to control the confirmation. */
-    readonly defaultOpen?: boolean;
-    readonly fallbackTitle?: ReactNode;
-    readonly headingLevel?: HeadingLevel;
+    readonly defaultOpen?: boolean | undefined;
+    readonly fallbackTitle?: ReactNode | undefined;
+    readonly headingLevel?: HeadingLevel | undefined;
     /** Focused on open instead of the region container. */
-    readonly initialFocusRef?: RefObject<HTMLElement | null>;
+    readonly initialFocusRef?: RefObject<HTMLElement | null> | undefined;
     /** Removes the region landmark and its naming when false. */
-    readonly landmark?: boolean;
+    readonly landmark?: boolean | undefined;
     readonly message: ReactNode;
     readonly onCancel: (reason: InlineConfirmCancelReason) => void;
     readonly onConfirm: () => void;
-    readonly open?: boolean;
+    readonly open?: boolean | undefined;
     /** Receives focus after close instead of the previously focused element. */
-    readonly returnFocusRef?: RefObject<HTMLElement | null>;
-    readonly title?: ReactNode;
+    readonly returnFocusRef?: RefObject<HTMLElement | null> | undefined;
+    readonly title?: ReactNode | undefined;
 }
 export declare function InlineConfirm({ "aria-describedby": ariaDescribedBy, "aria-labelledby": ariaLabelledBy, busy, cancelLabel, cancelVariant, className, confirmLabel, confirmVariant, defaultOpen, fallbackTitle, headingLevel, initialFocusRef, landmark, message, onKeyDown, onCancel, onConfirm, open, ref, returnFocusRef, title, ...props }: InlineConfirmProps): React.JSX.Element | null;
 
@@ -300,20 +300,20 @@ export declare function Checkbox({ "aria-describedby": ariaDescribedBy, "aria-er
 import { type AriaAttributes, type HTMLAttributes, type ReactElement, type ReactNode } from "react";
 import type { AnnouncementMode } from "../utils/announcement.js";
 export interface FieldControlProps {
-    readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
-    readonly "aria-errormessage"?: AriaAttributes["aria-errormessage"];
-    readonly "aria-invalid"?: AriaAttributes["aria-invalid"];
-    readonly disabled?: boolean;
-    readonly id?: string;
-    readonly name?: string;
-    readonly required?: boolean;
+    readonly "aria-describedby"?: AriaAttributes["aria-describedby"] | undefined;
+    readonly "aria-errormessage"?: AriaAttributes["aria-errormessage"] | undefined;
+    readonly "aria-invalid"?: AriaAttributes["aria-invalid"] | undefined;
+    readonly disabled?: boolean | undefined;
+    readonly id?: string | undefined;
+    readonly name?: string | undefined;
+    readonly required?: boolean | undefined;
 }
 export interface LabeledFieldControlProps extends FieldControlProps {
     readonly id: string;
     /** Present only when the field renders description content. */
-    readonly descriptionId?: string;
+    readonly descriptionId?: string | undefined;
     /** Present only when the field renders error content. */
-    readonly errorId?: string;
+    readonly errorId?: string | undefined;
 }
 export type LabeledFieldLayout = "stacked" | "inline";
 export type LabeledFieldDensity = "comfortable" | "compact";
@@ -321,16 +321,16 @@ export type FieldErrorLive = AnnouncementMode;
 export type LabeledFieldChild = ReactElement<FieldControlProps> | ((controlProps: LabeledFieldControlProps) => ReactNode);
 export interface LabeledFieldProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
     readonly children: LabeledFieldChild;
-    readonly density?: LabeledFieldDensity;
-    readonly description?: ReactNode;
-    readonly disabled?: boolean;
-    readonly error?: ReactNode;
-    readonly errorLive?: FieldErrorLive;
+    readonly density?: LabeledFieldDensity | undefined;
+    readonly description?: ReactNode | undefined;
+    readonly disabled?: boolean | undefined;
+    readonly error?: ReactNode | undefined;
+    readonly errorLive?: FieldErrorLive | undefined;
     readonly label: ReactNode;
-    readonly layout?: LabeledFieldLayout;
-    readonly name?: string;
-    readonly optionalLabel?: ReactNode;
-    readonly required?: boolean;
+    readonly layout?: LabeledFieldLayout | undefined;
+    readonly name?: string | undefined;
+    readonly optionalLabel?: ReactNode | undefined;
+    readonly required?: boolean | undefined;
 }
 export declare function LabeledField({ children, className, density, description, disabled, error, errorLive, label, layout, name, optionalLabel, required, ...props }: LabeledFieldProps): React.JSX.Element;
 
@@ -342,27 +342,27 @@ export type SpaceScale = 1 | 2 | 3 | 4 | 5 | 6;
 export type LayoutAlignment = "start" | "center" | "end" | "stretch";
 export type StackElement = "div" | "ul" | "ol" | "form" | "section" | "nav";
 export interface StackProps extends HTMLAttributes<HTMLDivElement> {
-    readonly align?: LayoutAlignment;
-    readonly as?: StackElement;
-    readonly gap?: SpaceScale;
+    readonly align?: LayoutAlignment | undefined;
+    readonly as?: StackElement | undefined;
+    readonly gap?: SpaceScale | undefined;
 }
 export declare function Stack({ align, as, children, className, gap, ...props }: StackProps): React.JSX.Element;
 export type ClusterElement = "div" | "ul" | "ol" | "section" | "nav";
 export interface ClusterProps extends HTMLAttributes<HTMLDivElement> {
-    readonly align?: LayoutAlignment;
-    readonly as?: ClusterElement;
-    readonly gap?: SpaceScale;
-    readonly justify?: "start" | "center" | "end" | "between" | "around" | "evenly";
+    readonly align?: LayoutAlignment | undefined;
+    readonly as?: ClusterElement | undefined;
+    readonly gap?: SpaceScale | undefined;
+    readonly justify?: "start" | "center" | "end" | "between" | "around" | "evenly" | undefined;
 }
 export declare function Cluster({ align, as, children, className, gap, justify, ...props }: ClusterProps): React.JSX.Element;
 export type InputGroupDensity = "comfortable" | "compact";
 export interface InputGroupProps extends HTMLAttributes<HTMLDivElement> {
-    readonly density?: InputGroupDensity;
+    readonly density?: InputGroupDensity | undefined;
 }
 export declare function InputGroup({ className, density, ...props }: InputGroupProps): React.JSX.Element;
 export type InputGroupControlWidth = "fixed" | "grow";
 export interface InputGroupControlProps extends HTMLAttributes<HTMLDivElement> {
-    readonly width?: InputGroupControlWidth;
+    readonly width?: InputGroupControlWidth | undefined;
 }
 export declare function InputGroupControl({ className, width, ...props }: InputGroupControlProps): React.JSX.Element;
 export type InputGroupAddonProps = HTMLAttributes<HTMLSpanElement>;
@@ -370,15 +370,15 @@ export declare function InputGroupAddon({ className, ...props }: InputGroupAddon
 export type CardElement = "div" | "section" | "nav";
 export type CardDensity = "default" | "compact";
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
-    readonly as?: CardElement;
-    readonly density?: CardDensity;
-    readonly footer?: ReactNode;
-    readonly header?: ReactNode;
+    readonly as?: CardElement | undefined;
+    readonly density?: CardDensity | undefined;
+    readonly footer?: ReactNode | undefined;
+    readonly header?: ReactNode | undefined;
 }
 export declare function Card({ as, children, className, density, footer, header, ...props }: CardProps): React.JSX.Element;
 export type MetricGridElement = "div" | "ul" | "ol";
 export interface MetricGridProps extends HTMLAttributes<HTMLDivElement> {
-    readonly as?: MetricGridElement;
+    readonly as?: MetricGridElement | undefined;
 }
 export declare function MetricGrid({ as, children, className, ...props }: MetricGridProps): React.JSX.Element;
 export interface MetricProps extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
@@ -445,14 +445,17 @@ export declare function PanelRoot(props: PanelRootProps): React.JSX.Element;
 
 === components/Popover.d.ts ===
 import type { ReactElement, ReactNode, RefAttributes } from "react";
-import type { ButtonProps } from "./Button.js";
 import { type OverlayOpenState, type OverlayPlacement } from "./overlay-placement.js";
 export interface PopoverProps extends RefAttributes<HTMLDivElement>, OverlayOpenState {
     readonly children: ReactNode;
     readonly className?: string | undefined;
     readonly placement?: OverlayPlacement | undefined;
-    /** Rendered as the popover trigger; typically a library Button. */
-    readonly trigger: ReactElement<ButtonProps>;
+    /**
+     * Rendered as the popover trigger. Prefer a library Button. A custom
+     * trigger must render a semantic interactive element, forward its ref to
+     * that element, and spread every injected event and ARIA prop onto it.
+     */
+    readonly trigger: ReactElement;
     /** Fixed pixel width; "auto" sizes to the content. */
     readonly width?: number | "auto" | undefined;
 }
@@ -483,9 +486,9 @@ export type RadioGroupErrorLive = AnnouncementMode;
 export interface RadioGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">, RefAttributes<HTMLDivElement> {
     readonly children: ReactNode;
     readonly defaultValue?: string | undefined;
-    readonly description?: ReactNode;
+    readonly description?: ReactNode | undefined;
     readonly disabled?: boolean | undefined;
-    readonly error?: ReactNode;
+    readonly error?: ReactNode | undefined;
     readonly errorLive?: RadioGroupErrorLive | undefined;
     readonly label: ReactNode;
     /** Applied to every radio input, so native form submission and reset work. */
@@ -525,11 +528,11 @@ export declare function SecretInput({ defaultRevealed, disabled, hideLabel, onRe
 import { type HTMLAttributes, type ReactNode } from "react";
 import { type HeadingLevel } from "../utils/heading.js";
 export interface SectionProps extends Omit<HTMLAttributes<HTMLElement>, "title"> {
-    readonly actions?: ReactNode;
-    readonly description?: ReactNode;
-    readonly headingLevel?: HeadingLevel;
+    readonly actions?: ReactNode | undefined;
+    readonly description?: ReactNode | undefined;
+    readonly headingLevel?: HeadingLevel | undefined;
     /** Removes the region landmark naming when false. */
-    readonly landmark?: boolean;
+    readonly landmark?: boolean | undefined;
     readonly title: ReactNode;
 }
 export declare function Section({ actions, "aria-labelledby": ariaLabelledBy, children, className, description, headingLevel, landmark, title, ...props }: SectionProps): React.JSX.Element;
@@ -539,21 +542,21 @@ import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
 export type SegmentedControlLegendVisibility = "hidden" | "visible";
 export type SegmentedControlOrientation = "horizontal" | "vertical";
 export interface SegmentedControlOption<Value extends string> {
-    readonly disabled?: boolean;
+    readonly disabled?: boolean | undefined;
     readonly label: ReactNode;
     readonly value: Value;
 }
 export interface SegmentedControlProps<Value extends string> extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">, RefAttributes<HTMLDivElement> {
-    readonly defaultValue?: Value;
-    readonly disabled?: boolean;
+    readonly defaultValue?: Value | undefined;
+    readonly disabled?: boolean | undefined;
     readonly legend: ReactNode;
-    readonly legendVisibility?: SegmentedControlLegendVisibility;
+    readonly legendVisibility?: SegmentedControlLegendVisibility | undefined;
     /** Carries the selection into native form submission and form reset. */
-    readonly name?: string;
+    readonly name?: string | undefined;
     readonly onChange?: ((value: Value) => void) | undefined;
     readonly options: readonly SegmentedControlOption<Value>[];
-    readonly orientation?: SegmentedControlOrientation;
-    readonly value?: Value;
+    readonly orientation?: SegmentedControlOrientation | undefined;
+    readonly value?: Value | undefined;
 }
 export declare function SegmentedControl<Value extends string>({ className, defaultValue, disabled, legend, legendVisibility, name, onChange, options, orientation, ref, value, "aria-labelledby": ariaLabelledBy, ...props }: SegmentedControlProps<Value>): React.JSX.Element;
 
@@ -598,9 +601,9 @@ import type { ReactNode } from "react";
 import { type ThemeChoice } from "../theme/contract.js";
 export interface ThemeToggleProps {
     readonly choices?: readonly ThemeChoice[] | undefined;
-    readonly className?: string;
-    readonly labels?: Partial<Readonly<Record<ThemeChoice, ReactNode>>>;
-    readonly legend?: ReactNode;
+    readonly className?: string | undefined;
+    readonly labels?: Partial<Readonly<Record<ThemeChoice, ReactNode>>> | undefined;
+    readonly legend?: ReactNode | undefined;
     readonly onChange?: ((theme: ThemeChoice) => void) | undefined;
 }
 export declare function ThemeToggle({ choices, className, labels, legend, onChange, }: ThemeToggleProps): React.JSX.Element;
@@ -634,7 +637,9 @@ export interface QueuedToast<T extends ToastContent = ToastContent> {
 export interface ToastQueue<T extends ToastContent = ToastContent> {
     /**
      * Adds a toast and returns its key. The queue holds at most five toasts;
-     * when it is full the oldest toast drops to make room.
+     * when full, it first evicts the oldest toast that is neither focused nor a
+     * sticky warning or danger. A bounded fallback always leaves room for the
+     * newly enqueued toast.
      */
     readonly enqueue: (content: T) => string;
     /** Removes one toast. Unknown keys are ignored. */
@@ -1012,17 +1017,24 @@ export declare function useOverlayLayer(): number;
 export declare function overlayZIndex(layer: number): string;
 
 === utils/portal.d.ts ===
-export { UNSAFE_PortalProvider, useUNSAFE_PortalContext, } from "react-aria/PortalProvider";
+import { type ReactNode } from "react";
+type PortalContainerResolver = () => HTMLElement | null;
+interface PanelPortalProviderProps {
+    readonly children: ReactNode;
+    readonly getContainer: PortalContainerResolver;
+}
+/** Installs both React Aria's portal target and its private owning-root proof. */
+export declare function PanelPortalProvider({ children, getContainer, }: PanelPortalProviderProps): React.JSX.Element;
 /**
- * Defers an overlay by one commit so it mounts against a resolved portal
- * container.
+ * Requires the in-panel portal host and defers mounting until its ref resolves.
  *
- * PanelRoot's portal container reads its root element lazily, so it is null on
- * the very first render, before refs attach. An overlay that mounted in that
- * commit would mount react-aria's inner overlay before the container resolves,
- * permanently breaking its role and focus effects.
+ * Overlays outside PanelRoot would otherwise fall back to document.body, where
+ * the owning panel's scoped styles and theme tokens do not apply.
  */
-export declare function usePortalContainerReady(): boolean;
+export declare function usePanelPortalContainerReady(componentName: string): boolean;
+/** Resolves and verifies the exact PanelRoot that owns a portal consumer. */
+export declare function usePanelPortalContainer(componentName: string): HTMLElement | null;
+export {};
 
 === utils/react-node.d.ts ===
 import { type ReactNode } from "react";
@@ -1036,12 +1048,6 @@ export declare function hasReactContent(node: ReactNode): boolean;
 
 === utils/ref.d.ts ===
 import type { Ref } from "react";
-/**
- * Attaches a node to a caller-supplied ref and returns the cleanup that a
- * callback ref opted into, so React 19 ref cleanup is preserved when a
- * component composes a caller ref with its own.
- */
-export declare function attachRef<T>(ref: Ref<T> | undefined, node: T): (() => void) | undefined;
 /**
  * Attaches a caller-supplied ref and returns the one cleanup that releases it,
  * preferring the callback ref's own cleanup when it opted into React 19 ref
@@ -1070,11 +1076,11 @@ export declare function resolveToneLabel(tone: SemanticTone, toneLabel: string |
 
 === version.d.ts ===
 /** The package version used to isolate styles from other loaded versions. */
-export declare const PACKAGE_VERSION = "0.7.1";
+export declare const PACKAGE_VERSION = "0.8.0";
 /** The root class is private and may change without notice. */
 export declare const ROOT_CLASS = "snui-root";
 /** The exact selector prevents styles from crossing package-version roots. */
-export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.7.1\"]";
+export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.8.0\"]";
 /** A versioned global name prevents keyframe collisions between package copies. */
 export declare function versionedAnimationName(suffix: string): string;
 export declare const SPINNER_ANIMATION_NAME: string;

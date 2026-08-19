@@ -1,7 +1,12 @@
-import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
 import { build } from "esbuild";
+
+import {
+  assertPublicBundleBudgets,
+  assertPublicCssExport,
+} from "./lib/bundle-contract.mjs";
+import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 
 const { FEDERATION_SHARED } = createRequire(import.meta.url)(
   "../fixtures/federation/shared.cjs",
@@ -21,9 +26,13 @@ const entryBudgets = {
   overlays: 60 * 1024,
 };
 
-for (const [entry, maximumGzipBytes] of Object.entries(entryBudgets)) {
+const manifest = await readPackageJson();
+const publicEntries = assertPublicBundleBudgets(manifest.exports, entryBudgets);
+
+for (const [entry, entryTarget] of publicEntries) {
+  const maximumGzipBytes = entryBudgets[entry];
   const result = await build({
-    entryPoints: [`dist/${entry}.js`],
+    entryPoints: [repositoryPath(entryTarget)],
     bundle: true,
     format: "esm",
     minify: true,
@@ -70,12 +79,36 @@ for (const [entry, maximumGzipBytes] of Object.entries(entryBudgets)) {
   console.log(`${entry} bundle is ${gzipBytes} gzip bytes.`);
 }
 
-// The token stylesheet is shipped as-is, so it gets the same kind of gate the
-// JavaScript entry points have. It grows with every token added.
+// The public token stylesheet must stay framework-neutral. Bundling the public
+// export catches imported script or React inputs in addition to measuring its
+// actual standalone consumer output.
 const TOKENS_CSS_GZIP_BUDGET = 2 * 1024;
-const tokensGzipBytes = gzipSync(await readFile("dist/tokens.css"), {
-  level: 9,
-}).byteLength;
+const tokensTarget = "./dist/tokens.css";
+assertPublicCssExport(manifest.exports, tokensTarget);
+const tokensResult = await build({
+  entryPoints: [repositoryPath(tokensTarget)],
+  bundle: true,
+  minify: true,
+  platform: "browser",
+  target: "es2022",
+  write: false,
+  metafile: true,
+});
+const tokensOutput = tokensResult.outputFiles[0]?.contents;
+if (tokensOutput === undefined) {
+  throw new Error("esbuild did not produce the tokens.css bundle.");
+}
+
+const tokensScriptInputs = Object.keys(tokensResult.metafile.inputs).filter(
+  (input) => /(?:^|[\\/])react(?:-dom)?(?:[\\/]|$)|\.[cm]?[jt]sx?$/.test(input),
+);
+if (tokensScriptInputs.length > 0) {
+  throw new Error(
+    `tokens.css contains script or React inputs: ${tokensScriptInputs.join(", ")}.`,
+  );
+}
+
+const tokensGzipBytes = gzipSync(tokensOutput, { level: 9 }).byteLength;
 
 if (tokensGzipBytes > TOKENS_CSS_GZIP_BUDGET) {
   throw new Error(

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.js";
 
 const CSP_NONCE = "snui-csp-fixture";
 
@@ -11,13 +11,18 @@ for (const fixture of [
     const response = await page.goto(`/csp.html?mode=${fixture.mode}`);
 
     expect(response?.headers()["content-security-policy"]).toContain(
-      `style-src 'nonce-${CSP_NONCE}'`,
+      `style-src-elem 'nonce-${CSP_NONCE}'`,
+    );
+    expect(response?.headers()["content-security-policy"]).toContain(
+      "style-src-attr 'unsafe-inline'",
     );
 
     const button = page.getByRole("button", { name: "CSP target" });
     const style = page.locator("style[data-snui-styles]");
+    const progressFill = page.locator(".snui-progress__fill");
     await expect(button).toBeVisible();
     await expect(style).toHaveCount(1);
+    await expect(progressFill).toHaveAttribute("style", /inline-size: 50%/);
 
     await expect(style).toHaveJSProperty("nonce", fixture.styleNonce ?? "");
 

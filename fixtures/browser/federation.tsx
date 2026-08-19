@@ -22,9 +22,14 @@ interface ShareScope {
   readonly "react-dom": Record<string, SharedModule<typeof ReactDOM>>;
 }
 
+interface ConfigurationPanelProps {
+  readonly configuration: unknown;
+  readonly save: (configuration: unknown) => void;
+}
+
 declare global {
   interface Window {
-    signalkNearlcrewsUiClassicFixture?: RemoteContainer;
+    signalk_nearlcrews_ui?: RemoteContainer;
     unmountFederationFixture?: (rootId: string) => void;
   }
 }
@@ -53,7 +58,7 @@ function loadClassicContainer(): Promise<RemoteContainer> {
     const script = document.createElement("script");
     script.src = __CLASSIC_REMOTE_URL__;
     script.addEventListener("load", () => {
-      const container = window.signalkNearlcrewsUiClassicFixture;
+      const container = window.signalk_nearlcrews_ui;
       if (container === undefined) {
         reject(new Error("Classic container was not registered."));
         return;
@@ -78,14 +83,24 @@ async function renderRemote(
   rootId: string,
 ): Promise<Root> {
   await container.init(shareScope);
-  const factory = await container.get("./Panel");
+  const factory = await container.get("./PluginConfigurationPanel");
   const module = factory();
   const root = document.querySelector(`#${rootId}`);
   if (!(root instanceof HTMLElement)) {
     throw new Error(`Missing federation fixture root: ${rootId}`);
   }
   const reactRoot = createRoot(root);
-  reactRoot.render(<module.default />);
+  const RemotePanel =
+    module.default as React.ComponentType<ConfigurationPanelProps>;
+  function HostBoundary(): React.JSX.Element {
+    const [configuration, setConfiguration] = React.useState<unknown>({
+      saveCount: 0,
+    });
+    return (
+      <RemotePanel configuration={configuration} save={setConfiguration} />
+    );
+  }
+  reactRoot.render(<HostBoundary />);
   return reactRoot;
 }
 

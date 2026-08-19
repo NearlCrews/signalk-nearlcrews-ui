@@ -1,6 +1,6 @@
-import { screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef } from "react";
+import { type ComponentProps, createElement, createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Button } from "../../src/index.js";
 import {
@@ -13,6 +13,16 @@ import {
 import { panel, renderInPanel } from "../helpers.js";
 
 describe("Menu", () => {
+  it("rejects rendering outside PanelRoot", () => {
+    expect(() =>
+      render(
+        <Menu label="File">
+          <MenuItem id="open">Open</MenuItem>
+        </Menu>,
+      ),
+    ).toThrow("Menu must be rendered inside PanelRoot.");
+  });
+
   it("throws when the label is empty", () => {
     expect(() =>
       renderInPanel(
@@ -333,6 +343,56 @@ describe("Menu", () => {
 });
 
 describe("Popover", () => {
+  it("rejects rendering outside PanelRoot", () => {
+    expect(() =>
+      render(
+        <Popover trigger={<Button>Details</Button>}>
+          <p>Depth details</p>
+        </Popover>,
+      ),
+    ).toThrow("Popover must be rendered inside PanelRoot.");
+  });
+
+  it("rejects a roleless trigger element", () => {
+    expect(() =>
+      renderInPanel(
+        <Popover trigger={<span>Details</span>}>
+          <p>Depth details</p>
+        </Popover>,
+      ),
+    ).toThrow(
+      "Popover trigger must render a semantic interactive element or an element with an interactive ARIA role.",
+    );
+  });
+
+  it("rejects an anchor without a link destination", () => {
+    expect(() =>
+      renderInPanel(
+        <Popover trigger={createElement("a", undefined, "Details")}>
+          <p>Depth details</p>
+        </Popover>,
+      ),
+    ).toThrow(
+      "Popover trigger must render a semantic interactive element or an element with an interactive ARIA role.",
+    );
+  });
+
+  it("supports a custom trigger that forwards native props and its ref", async () => {
+    const user = userEvent.setup();
+    function CustomTrigger(props: ComponentProps<"button">) {
+      return <button {...props} />;
+    }
+
+    renderInPanel(
+      <Popover trigger={<CustomTrigger>Details</CustomTrigger>}>
+        <p>Depth details</p>
+      </Popover>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Details" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Depth details");
+  });
+
   it("opens on trigger click and forwards ref to the popover element", async () => {
     const user = userEvent.setup();
     const ref = createRef<HTMLDivElement>();

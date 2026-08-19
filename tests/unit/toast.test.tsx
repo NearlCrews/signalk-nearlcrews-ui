@@ -6,8 +6,9 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
+import { PanelRoot } from "../../src/index.js";
 import {
   createToastQueue,
   type ToastContent,
@@ -167,6 +168,15 @@ describe("ToastRegion", () => {
     expect(styles?.textContent).toContain("env(safe-area-inset-bottom, 0px)");
     expect(styles?.textContent).toContain("env(safe-area-inset-right, 0px)");
     expect(styles?.textContent).toContain("env(safe-area-inset-left, 0px)");
+    expect(styles?.textContent).toContain(".snui-toast-region-host");
+    expect(styles?.textContent).toContain("position: fixed");
+    expect(styles?.textContent).toContain(
+      "left: var(--snui-toast-host-left, 0px)",
+    );
+    expect(styles?.textContent).not.toContain(
+      "inset-inline-start: var(--snui-toast-host-left, 0px)",
+    );
+    expect(styles?.textContent).toContain("overscroll-behavior: contain");
   });
 
   it("renders enqueued toasts inside the panel root portal", () => {
@@ -335,6 +345,77 @@ describe("ToastRegion", () => {
     expect(screen.getByText("Six")).toBeInTheDocument();
   });
 
+  it("retains the focused toast when the queue overflows", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    for (const title of ["One", "Two", "Three", "Four", "Five"]) {
+      enqueue(queue, { title, duration: 0 });
+    }
+    const oldestCard = screen.getByText("One").closest(".snui-toast");
+    expect(oldestCard).not.toBeNull();
+    if (oldestCard === null) return;
+    const dismiss = within(oldestCard as HTMLElement).getByRole("button", {
+      name: "Dismiss",
+    });
+    dismiss.focus();
+    expect(dismiss).toHaveFocus();
+
+    enqueue(queue, { title: "Six", duration: 0 });
+
+    expect(screen.getByText("One")).toBeInTheDocument();
+    expect(screen.queryByText("Two")).toBeNull();
+    expect(dismiss).toHaveFocus();
+  });
+
+  it("retains shared-queue focus when an unfocused duplicate card unmounts", () => {
+    const queue = createToastQueue();
+    const tree = (showPrimary: boolean) => (
+      <PanelRoot>
+        {showPrimary ? (
+          <ToastRegion key="primary" queue={queue} label="Primary" />
+        ) : null}
+        <ToastRegion key="secondary" queue={queue} label="Secondary" />
+      </PanelRoot>
+    );
+    const view = render(tree(true));
+    flush();
+    enqueue(queue, { title: "Focused", duration: 0 });
+
+    const secondary = screen.getByRole("region", { name: "Secondary" });
+    const dismiss = within(secondary).getByRole("button", { name: "Dismiss" });
+    dismiss.focus();
+    expect(dismiss).toHaveFocus();
+
+    view.rerender(tree(false));
+    flush();
+    expect(dismiss).toHaveFocus();
+    for (const title of ["Two", "Three", "Four", "Five", "Six"]) {
+      enqueue(queue, { title, duration: 0 });
+    }
+
+    expect(screen.getByText("Focused")).toBeInTheDocument();
+    expect(screen.queryByText("Two")).toBeNull();
+  });
+
+  it("retains a sticky critical toast ahead of ordinary queued notices", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    enqueue(queue, {
+      title: "Anchor alarm",
+      duration: 0,
+      tone: "danger",
+    });
+    for (const title of ["Two", "Three", "Four", "Five"]) {
+      enqueue(queue, { title });
+    }
+
+    enqueue(queue, { title: "Six" });
+
+    expect(screen.getByText("Anchor alarm")).toBeInTheDocument();
+    expect(screen.queryByText("Two")).toBeNull();
+    expect(screen.getByText("Six")).toBeInTheDocument();
+  });
+
   it("keeps the dismiss button outside the live region", () => {
     const queue = createToastQueue();
     renderToastRegion(queue);
@@ -435,6 +516,12 @@ describe("ToastRegion", () => {
     expect(within(network).queryByText("Oil pressure")).toBeNull();
 
     enqueue(second, { title: "Link lost" });
+    const host = engine.parentElement;
+    expect(host).toHaveClass("snui-toast-region-host");
+    expect(host).toBe(network.parentElement);
+    expect(host?.querySelectorAll(":scope > .snui-toast-region")).toHaveLength(
+      2,
+    );
     act(() => {
       first.clear();
     });
@@ -453,6 +540,19 @@ describe("ToastRegion", () => {
     expect(() => render(<ToastRegion queue={queue} />)).toThrow(
       "ToastRegion must be rendered inside PanelRoot.",
     );
+  });
+
+  it("rejects a nested provider that redirects its portal outside PanelRoot", () => {
+    const queue = createToastQueue();
+    expect(() =>
+      render(
+        <PanelRoot>
+          <UNSAFE_PortalProvider getContainer={() => document.body}>
+            <ToastRegion queue={queue} />
+          </UNSAFE_PortalProvider>
+        </PanelRoot>,
+      ),
+    ).toThrow("ToastRegion portal container must be its owning PanelRoot.");
   });
 
   it("finishes dismissal when the exit transition ends", () => {

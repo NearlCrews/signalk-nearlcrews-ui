@@ -42,9 +42,9 @@ function renderListItems(as: string, children: ReactNode): ReactNode {
 export type StackElement = "div" | "ul" | "ol" | "form" | "section" | "nav";
 
 export interface StackProps extends HTMLAttributes<HTMLDivElement> {
-  readonly align?: LayoutAlignment;
-  readonly as?: StackElement;
-  readonly gap?: SpaceScale;
+  readonly align?: LayoutAlignment | undefined;
+  readonly as?: StackElement | undefined;
+  readonly gap?: SpaceScale | undefined;
 }
 
 export function Stack({
@@ -73,16 +73,17 @@ export function Stack({
 export type ClusterElement = "div" | "ul" | "ol" | "section" | "nav";
 
 export interface ClusterProps extends HTMLAttributes<HTMLDivElement> {
-  readonly align?: LayoutAlignment;
-  readonly as?: ClusterElement;
-  readonly gap?: SpaceScale;
+  readonly align?: LayoutAlignment | undefined;
+  readonly as?: ClusterElement | undefined;
+  readonly gap?: SpaceScale | undefined;
   readonly justify?:
     | "start"
     | "center"
     | "end"
     | "between"
     | "around"
-    | "evenly";
+    | "evenly"
+    | undefined;
 }
 
 export function Cluster({
@@ -113,7 +114,7 @@ export function Cluster({
 export type InputGroupDensity = "comfortable" | "compact";
 
 export interface InputGroupProps extends HTMLAttributes<HTMLDivElement> {
-  readonly density?: InputGroupDensity;
+  readonly density?: InputGroupDensity | undefined;
 }
 
 export function InputGroup({
@@ -136,7 +137,7 @@ export function InputGroup({
 export type InputGroupControlWidth = "fixed" | "grow";
 
 export interface InputGroupControlProps extends HTMLAttributes<HTMLDivElement> {
-  readonly width?: InputGroupControlWidth;
+  readonly width?: InputGroupControlWidth | undefined;
 }
 
 export function InputGroupControl({
@@ -174,10 +175,10 @@ export type CardElement = "div" | "section" | "nav";
 export type CardDensity = "default" | "compact";
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  readonly as?: CardElement;
-  readonly density?: CardDensity;
-  readonly footer?: ReactNode;
-  readonly header?: ReactNode;
+  readonly as?: CardElement | undefined;
+  readonly density?: CardDensity | undefined;
+  readonly footer?: ReactNode | undefined;
+  readonly header?: ReactNode | undefined;
 }
 
 export function Card({
@@ -208,7 +209,7 @@ export function Card({
 export type MetricGridElement = "div" | "ul" | "ol";
 
 export interface MetricGridProps extends HTMLAttributes<HTMLDivElement> {
-  readonly as?: MetricGridElement;
+  readonly as?: MetricGridElement | undefined;
 }
 
 export function MetricGrid({

@@ -19,7 +19,7 @@ import {
   overlayZIndex,
   useOverlayLayer,
 } from "../utils/overlay-layer.js";
-import { usePortalContainerReady } from "../utils/portal.js";
+import { usePanelPortalContainerReady } from "../utils/portal.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { Button, type ButtonVariant } from "./Button.js";
 import {
@@ -33,32 +33,32 @@ export interface DialogProps
   extends RefAttributes<HTMLElement>,
     OverlayOpenState {
   /** Footer slot for the dialog actions, usually library Buttons. */
-  readonly actions?: ReactNode;
-  readonly "aria-describedby"?: AriaAttributes["aria-describedby"];
-  readonly "aria-details"?: AriaAttributes["aria-details"];
-  readonly "aria-label"?: AriaAttributes["aria-label"];
-  readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"];
+  readonly actions?: ReactNode | undefined;
+  readonly "aria-describedby"?: AriaAttributes["aria-describedby"] | undefined;
+  readonly "aria-details"?: AriaAttributes["aria-details"] | undefined;
+  readonly "aria-label"?: AriaAttributes["aria-label"] | undefined;
+  readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"] | undefined;
   /** Adds a backdrop blur to the scrim behind the dialog. */
-  readonly blurScrim?: boolean;
-  readonly children?: ReactNode;
-  readonly className?: string;
-  readonly description?: ReactNode;
+  readonly blurScrim?: boolean | undefined;
+  readonly children?: ReactNode | undefined;
+  readonly className?: string | undefined;
+  readonly description?: ReactNode | undefined;
   /** Allows dismissal through Escape and scrim presses. Defaults to true. */
-  readonly dismissable?: boolean;
-  readonly headingLevel?: HeadingLevel;
-  readonly id?: string;
-  readonly style?: CSSProperties;
+  readonly dismissable?: boolean | undefined;
+  readonly headingLevel?: HeadingLevel | undefined;
+  readonly id?: string | undefined;
+  readonly style?: CSSProperties | undefined;
   readonly title: ReactNode;
-  readonly width?: DialogWidth;
+  readonly width?: DialogWidth | undefined;
 }
 
 export interface AlertDialogProps extends Omit<DialogProps, "actions"> {
   /** Supplemental actions, such as the destructive confirmation. */
-  readonly actions?: ReactNode;
+  readonly actions?: ReactNode | undefined;
   /** Required label for the always-enabled escape action. */
   readonly cancelLabel: ReactNode;
   /** Defaults to secondary. */
-  readonly cancelVariant?: ButtonVariant;
+  readonly cancelVariant?: ButtonVariant | undefined;
   readonly onCancel?: (() => void) | undefined;
 }
 
@@ -92,7 +92,7 @@ function DialogSurface({
   requireContent(title, "Dialog requires a non-empty title.");
 
   const generatedId = useId();
-  const portalReady = usePortalContainerReady();
+  const portalReady = usePanelPortalContainerReady("Dialog");
   const parentOverlayLayer = useOverlayLayer();
   const dialogLayer = Math.max(1, parentOverlayLayer);
 

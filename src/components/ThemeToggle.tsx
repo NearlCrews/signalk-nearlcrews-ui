@@ -6,9 +6,11 @@ import { SegmentedControl } from "./SegmentedControl.js";
 
 export interface ThemeToggleProps {
   readonly choices?: readonly ThemeChoice[] | undefined;
-  readonly className?: string;
-  readonly labels?: Partial<Readonly<Record<ThemeChoice, ReactNode>>>;
-  readonly legend?: ReactNode;
+  readonly className?: string | undefined;
+  readonly labels?:
+    | Partial<Readonly<Record<ThemeChoice, ReactNode>>>
+    | undefined;
+  readonly legend?: ReactNode | undefined;
   readonly onChange?: ((theme: ThemeChoice) => void) | undefined;
 }
 

@@ -680,6 +680,24 @@ ${DISABLED_DECLARATIONS}
     outline-offset: 1px;
   }
 
+  /*
+   * These controls opt out of automatic forced-color adjustment to preserve
+   * their selected or danger state. Rebuild focus with system colors so the
+   * author theme token cannot blend into Highlight.
+   */
+  .snui-button--primary:focus-visible,
+  .snui-segmented__option[aria-checked="true"]:focus-visible {
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+
+  .snui-button--danger:focus-visible {
+    outline: 3px solid CanvasText;
+    outline-offset: 3px;
+    box-shadow: none;
+  }
+
   .snui-button__spinner {
     forced-color-adjust: none;
     border-color: CanvasText;
@@ -761,6 +779,13 @@ ${DISABLED_DECLARATIONS}
   .snui-radio__button[data-selected] .snui-radio__control::before {
     forced-color-adjust: none;
     background: HighlightText;
+  }
+
+  .snui-radio__button[data-focus-visible] .snui-radio__control,
+  .snui-switch__button[data-focus-visible] .snui-switch__track {
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
+    box-shadow: none;
   }
 
   .snui-radio__button[data-hovered]:not([data-disabled]) .snui-radio__control,

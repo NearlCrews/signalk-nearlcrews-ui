@@ -12,6 +12,8 @@ export const POPOVER_STYLES = scopeStyles(`
   width: var(--snui-popover-width, auto);
   max-width: min(24rem, 100%);
   padding: var(--snui-space-3);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 ${RAISED_OVERLAY_DECLARATIONS}
 }
 

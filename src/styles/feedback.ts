@@ -90,5 +90,16 @@ export const FEEDBACK_STYLES = scopeStyles(`
     background: Canvas;
     color: CanvasText;
   }
+
+  /*
+   * The banner opts out as a surface, so ordinary links and the unrestricted
+   * action slot must opt back in or consumer controls can disappear against
+   * Canvas. Primary and danger buttons explicitly reconstruct their own
+   * system colors, which overrides this inherited action-slot value.
+   */
+  .snui-banner a:any-link,
+  .snui-banner__actions {
+    forced-color-adjust: auto;
+  }
 }
 `);

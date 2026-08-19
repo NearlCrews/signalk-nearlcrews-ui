@@ -1,12 +1,64 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { basename, dirname, extname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, type TestInfo, test } from "@playwright/test";
+import { expect, type Page, type TestInfo, test } from "./fixtures.js";
 
 async function expectNoAxeViolations(page: Page): Promise<void> {
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
 }
+
+const CI_SNAPSHOT_VARIANTS = ["x64", "ubuntu24-x64", "ubuntu24-arm64"] as const;
+
+function snapshotProject(snapshot: string): string {
+  if (snapshot === "panel-mobile-light.png") return "mobile-chromium";
+  if (snapshot === "panel-native-controls-webkit.png") return "webkit";
+  return "chromium";
+}
+
+test("has every required CI visual baseline family", ({
+  browserErrorCapture,
+}, testInfo) => {
+  expect(browserErrorCapture).toBeUndefined();
+  test.skip(testInfo.project.name !== "chromium");
+  test.skip(
+    process.env.SNUI_UPDATE_BASELINES === "true",
+    "The refresh run must generate missing baselines before this check can pass.",
+  );
+  const sourcePath = fileURLToPath(import.meta.url);
+  const source = readFileSync(sourcePath, "utf8");
+  const snapshots = new Set<string>();
+  const literalSnapshotCall =
+    /(?:toHaveScreenshot|withActiveSave)\(\s*(?:page,\s*)?["']([^"']+\.png)["']/g;
+  for (const match of source.matchAll(literalSnapshotCall)) {
+    const snapshot = match[1];
+    if (snapshot !== undefined) snapshots.add(snapshot);
+  }
+
+  const snapshotDirectory = join(
+    dirname(sourcePath),
+    `${basename(sourcePath)}-snapshots`,
+  );
+  const missing: string[] = [];
+  for (const snapshot of snapshots) {
+    const stem = basename(snapshot, extname(snapshot));
+    const project = snapshotProject(snapshot);
+    for (const variant of CI_SNAPSHOT_VARIANTS) {
+      const candidate = join(
+        snapshotDirectory,
+        `${stem}-${project}-linux-${variant}.png`,
+      );
+      if (!existsSync(candidate)) missing.push(basename(candidate));
+    }
+  }
+
+  expect(
+    missing,
+    "Every visual spec needs linux-x64, ubuntu24-x64, and ubuntu24-arm64 baselines from the manual refresh workflow.",
+  ).toEqual([]);
+});
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
@@ -146,6 +198,43 @@ test("uses the light fallback while Auto is selected without a host theme", asyn
   await expect(root).not.toHaveAttribute("data-snui-theme");
   await expect(root).toHaveCSS("background-color", "rgb(244, 246, 248)");
   await expect(root).toHaveCSS("color", "rgb(24, 32, 44)");
+});
+
+test("neutralizes representative Bootstrap Reboot rules inside the panel", async ({
+  page,
+}) => {
+  await page.goto("/?host-reset=1");
+
+  const fixture = page.getByTestId("host-reset-fixture");
+  const styles = await fixture.evaluate((element) => {
+    const heading = element.querySelector("h2");
+    const paragraph = element.querySelector("p");
+    const legend = element.querySelector("legend");
+    if (heading === null || paragraph === null || legend === null) {
+      throw new Error("Missing hostile-host reset fixture elements.");
+    }
+    const headingStyle = getComputedStyle(heading);
+    const paragraphStyle = getComputedStyle(paragraph);
+    const legendStyle = getComputedStyle(legend);
+    return {
+      headingMargin: headingStyle.margin,
+      paragraphMargin: paragraphStyle.margin,
+      legendFloat: legendStyle.float,
+      legendMarginBottom: legendStyle.marginBottom,
+      legendFontMatchesParent:
+        legend.parentElement !== null &&
+        legendStyle.fontSize ===
+          getComputedStyle(legend.parentElement).fontSize,
+    };
+  });
+
+  expect(styles).toEqual({
+    headingMargin: "0px",
+    paragraphMargin: "0px",
+    legendFloat: "none",
+    legendMarginBottom: "0px",
+    legendFontMatchesParent: true,
+  });
 });
 
 test("uses the operating-system theme while System is selected", async ({
@@ -357,7 +446,7 @@ test("supports action-bearing collapsible status content", async ({ page }) => {
   await expectNoAxeViolations(page);
 });
 
-test.skip("provides hover and active feedback for raw action controls", async ({
+test("provides hover and active feedback for raw action controls", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -760,6 +849,20 @@ test("reflows state-heavy content at a 320 pixel viewport", async ({
     name: "Confidence threshold exact value",
   });
   const unit = page.getByTestId("confidence-unit");
+  await expect
+    .poll(async () => {
+      const [exactBox, unitBox] = await Promise.all([
+        exactInput.boundingBox(),
+        unit.boundingBox(),
+      ]);
+      if (exactBox === null || unitBox === null)
+        return Number.POSITIVE_INFINITY;
+      const exactCenter = exactBox.y + exactBox.height / 2;
+      const unitCenter = unitBox.y + unitBox.height / 2;
+      return Math.abs(exactCenter - unitCenter);
+    })
+    .toBeLessThan(1);
+
   const [exactBox, unitBox] = await Promise.all([
     exactInput.boundingBox(),
     unit.boundingBox(),
@@ -767,9 +870,6 @@ test("reflows state-heavy content at a 320 pixel viewport", async ({
   expect(exactBox).not.toBeNull();
   expect(unitBox).not.toBeNull();
   if (exactBox !== null && unitBox !== null) {
-    const exactCenter = exactBox.y + exactBox.height / 2;
-    const unitCenter = unitBox.y + unitBox.height / 2;
-    expect(Math.abs(exactCenter - unitCenter)).toBeLessThan(1);
     expect(unitBox.x).toBeGreaterThanOrEqual(exactBox.x + exactBox.width);
   }
 
@@ -864,6 +964,36 @@ test("docks the viewport action bar inside an unconstrained Admin host", async (
     );
   }
 
+  const focusTarget = page.getByTestId("admin-host-focus-target");
+  const focusTargetDocumentTop = await focusTarget.evaluate(
+    (element) => element.getBoundingClientRect().top + window.scrollY,
+  );
+  await page.evaluate((documentTop) => {
+    window.scrollTo(0, documentTop - (window.innerHeight - 40));
+  }, focusTargetDocumentTop);
+  await expect
+    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
+    .toBe("fixed");
+  await focusTarget.evaluate((element) => {
+    if (!(element instanceof HTMLElement)) {
+      throw new Error("Expected an HTML focus target.");
+    }
+    element.focus({ preventScroll: true });
+  });
+  await expect
+    .poll(async () => {
+      const [targetBox, currentBarBox] = await Promise.all([
+        focusTarget.boundingBox(),
+        bar.boundingBox(),
+      ]);
+      return (
+        targetBox !== null &&
+        currentBarBox !== null &&
+        targetBox.y + targetBox.height <= currentBarBox.y
+      );
+    })
+    .toBe(true);
+
   const anchorDocumentTop = await anchor.evaluate(
     (element) => element.getBoundingClientRect().top + window.scrollY,
   );
@@ -886,6 +1016,30 @@ test("docks the viewport action bar inside an unconstrained Admin host", async (
     expect(naturalBoxes[1].y).toBeCloseTo(naturalBoxes[0].y, 1);
   }
 
+  await focusTarget.evaluate((element) => {
+    if (!(element instanceof HTMLElement)) {
+      throw new Error("Expected an HTML focus target.");
+    }
+    element.focus({ preventScroll: true });
+  });
+  await page.setViewportSize({ width: 760, height: 420 });
+  await expect
+    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
+    .toBe("fixed");
+  await expect
+    .poll(async () => {
+      const [targetBox, currentBarBox] = await Promise.all([
+        focusTarget.boundingBox(),
+        bar.boundingBox(),
+      ]);
+      return (
+        targetBox !== null &&
+        currentBarBox !== null &&
+        targetBox.y + targetBox.height <= currentBarBox.y
+      );
+    })
+    .toBe(true);
+
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
   await expect
     .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
@@ -895,6 +1049,72 @@ test("docks the viewport action bar inside an unconstrained Admin host", async (
       bar.evaluate((element) => element.getBoundingClientRect().bottom),
     )
     .toBeLessThanOrEqual(1);
+});
+
+test("keeps multiple toast regions visible inside the current panel viewport", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 900, height: 600 });
+  await page.goto("/?admin-host=1");
+
+  await page.getByRole("button", { name: "Show engine notification" }).click();
+  await page.getByRole("button", { name: "Show network notification" }).click();
+
+  const panel = page.locator("[data-snui-root]");
+  const host = page.locator(".snui-toast-region-host");
+  const engine = page.getByRole("region", { name: "Engine notifications" });
+  const network = page.getByRole("region", {
+    name: "Network notifications",
+  });
+  await expect(host).toHaveCSS("position", "fixed");
+  await expect(engine).toBeVisible();
+  await expect(network).toBeVisible();
+
+  const [panelBox, hostBox, engineBox, networkBox] = await Promise.all([
+    panel.boundingBox(),
+    host.boundingBox(),
+    engine.boundingBox(),
+    network.boundingBox(),
+  ]);
+  expect(panelBox).not.toBeNull();
+  expect(hostBox).not.toBeNull();
+  expect(engineBox).not.toBeNull();
+  expect(networkBox).not.toBeNull();
+  if (
+    panelBox === null ||
+    hostBox === null ||
+    engineBox === null ||
+    networkBox === null
+  ) {
+    return;
+  }
+  expect(hostBox.x).toBeGreaterThanOrEqual(panelBox.x);
+  expect(hostBox.x + hostBox.width).toBeLessThanOrEqual(
+    panelBox.x + panelBox.width,
+  );
+  expect(hostBox.y).toBeGreaterThanOrEqual(0);
+  expect(hostBox.y + hostBox.height).toBeLessThanOrEqual(600);
+  expect(engineBox.y + engineBox.height).toBeLessThanOrEqual(networkBox.y);
+
+  await panel.evaluate((element) => {
+    document.documentElement.dir = "rtl";
+    if (!(element instanceof HTMLElement)) {
+      throw new Error("Expected an HTML panel root.");
+    }
+    element.style.marginLeft = "140px";
+    window.dispatchEvent(new Event("resize"));
+  });
+  await expect
+    .poll(async () => {
+      const [currentPanelBox, currentHostBox] = await Promise.all([
+        panel.boundingBox(),
+        host.boundingBox(),
+      ]);
+      return currentPanelBox === null || currentHostBox === null
+        ? null
+        : currentHostBox.x - currentPanelBox.x;
+    })
+    .toBeCloseTo(0, 1);
 });
 
 test("honors reduced-motion preferences", async ({ page }) => {
@@ -921,7 +1141,7 @@ test("keeps native controls and focus visible in forced colors", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
-  await page.goto("/?states=1");
+  await page.goto("/?states=1&forced-color-actions=1");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("radio", { name: "Dark" }).click();
   await page.getByRole("button", { name: "Advanced settings" }).click();
@@ -972,6 +1192,54 @@ test("keeps native controls and focus visible in forced colors", async ({
       }),
     )
     .toEqual(selectedColors);
+  await selectedSegment.focus();
+  await page.keyboard.press("Space");
+  await expect(selectedSegment).toHaveCSS("outline-style", "solid");
+  await expect(selectedSegment).toHaveCSS("outline-width", "2px");
+
+  const primary = page.getByRole("button", { name: "Save" });
+  await primary.focus();
+  await expect(primary).toHaveCSS("forced-color-adjust", "none");
+  await expect(primary).toHaveCSS("outline-style", "solid");
+  await expect(primary).toHaveCSS("outline-width", "2px");
+
+  const danger = page.getByRole("button", { name: "Reset", exact: true });
+  await expect(danger).toHaveCSS("outline-style", "dashed");
+  await danger.focus();
+  await expect(danger).toHaveCSS("forced-color-adjust", "none");
+  await expect(danger).toHaveCSS("outline-style", "solid");
+  await expect(danger).toHaveCSS("outline-width", "3px");
+
+  const systemColors = await page.evaluate(() => {
+    const probe = document.createElement("span");
+    probe.style.color = "LinkText";
+    document.body.append(probe);
+    const link = getComputedStyle(probe).color;
+    probe.style.color = "ButtonText";
+    const button = getComputedStyle(probe).color;
+    probe.remove();
+    return { button, link };
+  });
+  const banner = page.locator(".snui-banner");
+  const bannerLink = banner.getByRole("link", {
+    name: "Read the Signal K documentation",
+  });
+  const bannerDismiss = banner.getByRole("button", { name: "Dismiss" });
+  const rawBannerAction = banner.getByRole("button", {
+    name: "Raw banner action",
+  });
+  const rawInputAction = banner.getByRole("button", {
+    name: "Raw input action",
+  });
+  await expect(bannerLink).toHaveCSS("forced-color-adjust", "auto");
+  await expect(bannerLink).toHaveCSS("color", systemColors.link);
+  await expect(bannerDismiss).toHaveCSS("forced-color-adjust", "auto");
+  await expect(bannerDismiss).toHaveCSS("color", systemColors.button);
+  await expect(rawBannerAction).toHaveCSS("forced-color-adjust", "auto");
+  await expect(rawBannerAction).toHaveCSS("color", systemColors.button);
+  await expect(rawInputAction).toHaveCSS("forced-color-adjust", "auto");
+  await expect(rawInputAction).toHaveCSS("color", systemColors.button);
+
   for (const control of [
     page.getByLabel("API token"),
     page.getByRole("combobox", { name: "Provider mode" }),
@@ -1063,8 +1331,9 @@ test("matches the WebKit native-control baseline", async ({
  * reason instead of failing on a missing snapshot.
  */
 function skipWithoutBaseline(testInfo: TestInfo, snapshot: string): void {
+  const updatingBaselines = process.env.SNUI_UPDATE_BASELINES === "true";
   test.skip(
-    !existsSync(testInfo.snapshotPath(snapshot)),
+    !updatingBaselines && !existsSync(testInfo.snapshotPath(snapshot)),
     `No committed ${snapshot} baseline for this project, platform, and snapshot variant; refresh baselines through the manual CI workflow.`,
   );
 }

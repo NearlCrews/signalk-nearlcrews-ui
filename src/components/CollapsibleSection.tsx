@@ -19,18 +19,18 @@ export type CollapsibleSummaryVisibility = "always" | "collapsed";
 
 export interface CollapsibleSectionProps
   extends Omit<HTMLAttributes<HTMLElement>, "onToggle" | "title"> {
-  readonly actions?: ReactNode;
-  readonly defaultOpen?: boolean;
-  readonly disabled?: boolean;
-  readonly headingLevel?: HeadingLevel;
+  readonly actions?: ReactNode | undefined;
+  readonly defaultOpen?: boolean | undefined;
+  readonly disabled?: boolean | undefined;
+  readonly headingLevel?: HeadingLevel | undefined;
   /** Hidden content stays mounted but pauses effects under "lazy-retain" and "retain". */
-  readonly mountStrategy?: CollapsibleMountStrategy;
-  readonly onOpenChange?: (open: boolean) => void;
-  readonly open?: boolean;
-  readonly summary?: ReactNode;
-  readonly summaryPlacement?: CollapsibleSummaryPlacement;
+  readonly mountStrategy?: CollapsibleMountStrategy | undefined;
+  readonly onOpenChange?: ((open: boolean) => void) | undefined;
+  readonly open?: boolean | undefined;
+  readonly summary?: ReactNode | undefined;
+  readonly summaryPlacement?: CollapsibleSummaryPlacement | undefined;
   /** Keeps the summary rendered while open under "always". */
-  readonly summaryVisibility?: CollapsibleSummaryVisibility;
+  readonly summaryVisibility?: CollapsibleSummaryVisibility | undefined;
   readonly title: ReactNode;
 }
 

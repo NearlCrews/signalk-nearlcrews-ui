@@ -5,7 +5,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef, type ReactElement, useState } from "react";
+import { createRef, type ReactElement, StrictMode, useState } from "react";
 import { describe, expect, it, type Mock, vi } from "vitest";
 
 import {
@@ -180,6 +180,88 @@ describe("DataGrid", () => {
       expect(
         screen.getByRole("columnheader", { name: "name" }),
       ).toBeInTheDocument();
+      expect(
+        screen.getByRole("columnheader", { name: "depth" }),
+      ).toBeInTheDocument();
+    });
+
+    it("replays a readonly column array across StrictMode renders", () => {
+      const columns = Object.freeze([{ key: "name" }, { key: "depth" }]);
+      render(
+        <StrictMode>
+          <PanelRoot>
+            <DataGrid
+              aria-label="Boats"
+              columns={columns}
+              items={BOATS}
+              renderRow={renderBoatRow}
+            >
+              {(column) => <Column id={column.key}>{column.key}</Column>}
+            </DataGrid>
+          </PanelRoot>
+        </StrictMode>,
+      );
+
+      expect(
+        screen.getByRole("columnheader", { name: "name" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("columnheader", { name: "depth" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("rowheader", { name: "Aster" }),
+      ).toBeInTheDocument();
+    });
+
+    it("rejects non-array iterables before acquiring them", () => {
+      let acquisitions = 0;
+      const invalidColumns: Iterable<{ readonly key: string }> = {
+        [Symbol.iterator]() {
+          acquisitions += 1;
+          return [{ key: "name" }, { key: "depth" }][Symbol.iterator]();
+        },
+      };
+
+      expect(() =>
+        render(
+          <PanelRoot>
+            <DataGrid
+              aria-label="Boats"
+              columns={
+                invalidColumns as unknown as readonly { readonly key: string }[]
+              }
+              items={BOATS}
+              renderRow={renderBoatRow}
+            >
+              {(column) => <Column id={column.key}>{column.key}</Column>}
+            </DataGrid>
+          </PanelRoot>,
+        ),
+      ).toThrow(
+        "DataGrid columns must be a readonly array so React can replay concurrent and StrictMode renders safely.",
+      );
+      expect(acquisitions).toBe(0);
+    });
+
+    it("renders a replacement column array after commit", () => {
+      const tree = (
+        columns: readonly { readonly key: string }[],
+      ): ReactElement => (
+        <PanelRoot>
+          <DataGrid
+            aria-label="Boats"
+            columns={columns}
+            items={[] as readonly Boat[]}
+            renderRow={renderBoatRow}
+          >
+            {(column) => <Column id={column.key}>{column.key}</Column>}
+          </DataGrid>
+        </PanelRoot>
+      );
+      const view = render(tree([{ key: "name" }]));
+
+      view.rerender(tree([{ key: "name" }, { key: "depth" }]));
+
       expect(
         screen.getByRole("columnheader", { name: "depth" }),
       ).toBeInTheDocument();
@@ -586,6 +668,26 @@ describe("DataGrid", () => {
       });
 
       expect(rowAt(container, 0)).toHaveStyle({ height: "72px" });
+    });
+
+    it("adds virtualized zebra parity when row style is a function", () => {
+      const { container } = renderGrid({
+        items: fleet,
+        renderRow: (boat) => (
+          <Row style={() => ({ color: "red" })}>
+            <Cell>{boat.name}</Cell>
+            <Cell>{boat.depth}</Cell>
+          </Row>
+        ),
+        virtualizeThreshold: 10,
+        zebra: true,
+      });
+
+      expect(rowAt(container, 0)).not.toHaveAttribute("data-snui-zebra-odd");
+      expect(rowAt(container, 1)).toHaveAttribute(
+        "data-snui-zebra-odd",
+        "true",
+      );
     });
 
     it("falls back to index keys for items without id", () => {

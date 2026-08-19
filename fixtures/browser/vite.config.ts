@@ -30,6 +30,7 @@ function cspFixtureServer(): Plugin {
         import { createElement } from "react";
         import { createRoot } from "react-dom/client";
         import { Button, PanelRoot } from "signalk-nearlcrews-ui";
+        import { Progress } from "signalk-nearlcrews-ui/composites";
 
         const mode = new URLSearchParams(window.location.search).get("mode");
         const styleNonce =
@@ -49,6 +50,7 @@ function cspFixtureServer(): Plugin {
             PanelRoot,
             { styleNonce },
             createElement(Button, { variant: "primary" }, "CSP target"),
+            createElement(Progress, { label: "CSP progress", value: 50 }),
           ),
         );
       `;
@@ -86,7 +88,9 @@ function cspFixtureServer(): Plugin {
               [
                 "default-src 'self'",
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-                `style-src 'nonce-${CSP_FIXTURE_NONCE}'`,
+                "style-src 'none'",
+                `style-src-elem 'nonce-${CSP_FIXTURE_NONCE}'`,
+                "style-src-attr 'unsafe-inline'",
                 "connect-src 'self' ws:",
                 "img-src 'self' data:",
                 "object-src 'none'",

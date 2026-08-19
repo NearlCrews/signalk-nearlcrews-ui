@@ -47,7 +47,7 @@ const classicRemote = classicFiles.find(
 );
 const esmRemote = esmFiles.find((file) => file.name === "remoteEntry.js");
 
-if (!classicRemote?.source.includes("signalkNearlcrewsUiClassicFixture")) {
+if (!classicRemote?.source.includes("signalk_nearlcrews_ui")) {
   throw new Error(
     "Classic remoteEntry.js does not expose the global container.",
   );
@@ -55,6 +55,17 @@ if (!classicRemote?.source.includes("signalkNearlcrewsUiClassicFixture")) {
 
 if (!esmRemote?.source.includes("export")) {
   throw new Error("ESM remoteEntry.js does not contain module exports.");
+}
+
+for (const [format, remote] of [
+  ["classic", classicRemote],
+  ["esm", esmRemote],
+]) {
+  if (!remote?.source.includes("./PluginConfigurationPanel")) {
+    throw new Error(
+      `${format} remoteEntry.js does not expose ./PluginConfigurationPanel.`,
+    );
+  }
 }
 
 for (const [format, files, stats] of [
@@ -78,8 +89,18 @@ for (const [format, files, stats] of [
   const moduleNames = collectModuleNames(stats.modules ?? []).filter(
     (name) => typeof name === "string",
   );
-  if (!moduleNames.some((name) => name.includes("dist/index.js"))) {
-    throw new Error(`${format} fixture did not consume the built package.`);
+  for (const entryPoint of [
+    "composites.js",
+    "data-grid.js",
+    "forms.js",
+    "index.js",
+    "overlays.js",
+  ]) {
+    if (!moduleNames.some((name) => name.includes(`dist/${entryPoint}`))) {
+      throw new Error(
+        `${format} fixture did not consume the ${entryPoint} package entry point.`,
+      );
+    }
   }
   for (const shared of hostSharedModules) {
     if (

@@ -43,7 +43,7 @@ body:
     id: package-version
     attributes:
       label: Package version
-      placeholder: 0.7.0
+      placeholder: 0.8.0
     validations:
       required: true
 
@@ -71,6 +71,14 @@ body:
     validations:
       required: true
 
+  - type: input
+    id: import-path
+    attributes:
+      label: Package entry point
+      description: Include the exact import path, such as signalk-nearlcrews-ui/overlays.
+    validations:
+      required: true
+
   - type: dropdown
     id: remote-format
     attributes:
@@ -86,7 +94,15 @@ body:
   - type: input
     id: browser
     attributes:
-      label: Browser and version
+      label: Browser or embedded WebView and version
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and architecture
+      description: Include the operating system, CPU architecture, and device class when known.
     validations:
       required: true
 

@@ -219,6 +219,8 @@ export function Checkbox({
   requireContent(label, "Checkbox requires a non-empty label.");
 
   const inputElement = useRef<HTMLInputElement | null>(null);
+  const checkedRef = useRef(checked);
+  const indeterminateRef = useRef(indeterminate);
 
   // One callback ref owns the node so the caller ref and the form reset
   // listener attach and release exactly once per mount.
@@ -233,8 +235,10 @@ export function Checkbox({
         // prop-driven state once the reset lands.
         queueMicrotask(() => {
           if (!node.isConnected) return;
-          if (checked !== undefined) node.checked = checked;
-          node.indeterminate = indeterminate ?? false;
+          if (checkedRef.current !== undefined) {
+            node.checked = checkedRef.current;
+          }
+          node.indeterminate = indeterminateRef.current ?? false;
         });
       };
       form?.addEventListener("reset", handleReset);
@@ -244,14 +248,16 @@ export function Checkbox({
         releaseRef();
       };
     },
-    [checked, indeterminate, ref],
+    [ref],
   );
 
   useLayoutEffect(() => {
+    checkedRef.current = checked;
+    indeterminateRef.current = indeterminate;
     if (inputElement.current !== null) {
       inputElement.current.indeterminate = indeterminate ?? false;
     }
-  });
+  }, [checked, indeterminate]);
 
   const generatedId = useId();
   const controlId = id ?? generatedId;
