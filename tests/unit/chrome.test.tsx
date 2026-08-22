@@ -16,7 +16,11 @@ import {
   THEME_STORAGE_KEY,
   ThemeToggle,
 } from "../../src/index.js";
-import { installVisualViewport, renderInPanel } from "../helpers.js";
+import {
+  flushAnimationFrames,
+  installVisualViewport,
+  renderInPanel,
+} from "../helpers.js";
 
 describe("chrome primitives", () => {
   it("renders a neutral banner without a tone glyph or label", () => {
@@ -659,7 +663,7 @@ describe("chrome primitives", () => {
     restore();
   });
 
-  it("holds focus clearance until a pointer press releases", async () => {
+  it("skips focus clearance for a pointer-sourced focus", async () => {
     const { restore, visualViewport } = installVisualViewport({ height: 500 });
     const scrollBy = vi
       .spyOn(window, "scrollBy")
@@ -717,18 +721,19 @@ describe("chrome primitives", () => {
 
     // A press focuses its target before the release lands. Scrolling now would
     // move the control out from under the pointer and the click would never
-    // reach it.
+    // reach it, and a scroll after the release would move content under a
+    // pointer that is still there, so the clearance is dropped rather than
+    // deferred.
     document.dispatchEvent(new Event("pointerdown"));
     target.focus();
     expect(scrollBy).not.toHaveBeenCalled();
 
     document.dispatchEvent(new Event("pointerup"));
-    await waitFor(() =>
-      expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 50 }),
-    );
+    await flushAnimationFrames();
+    expect(scrollBy).not.toHaveBeenCalled();
 
-    // Key input recovers the deferral even when no release ever arrives.
-    scrollBy.mockClear();
+    // Key input ends the press even when no release ever arrives, so keyboard
+    // focus still clears immediately.
     document.dispatchEvent(new Event("pointerdown"));
     document.dispatchEvent(new Event("keydown"));
     target.blur();
@@ -739,7 +744,7 @@ describe("chrome primitives", () => {
     restore();
   });
 
-  it("settles a docking geometry that alternates within a frame budget", () => {
+  it("settles an alternating docking geometry inside one animation frame", () => {
     const { restore, visualViewport } = installVisualViewport({ height: 600 });
 
     const frames: FrameRequestCallback[] = [];
@@ -779,8 +784,8 @@ describe("chrome primitives", () => {
       () => new DOMRect(120, 500, 560, 60),
     );
     // Docking changes the bar's wrapping, and the shorter docked bar undocks
-    // itself again. The measurement chain has to stop even though no geometry
-    // ever holds still.
+    // itself again. The measurement chain has to stop inside the frame it
+    // started in, even though no geometry ever holds still.
     vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
       () =>
         new DOMRect(
@@ -805,8 +810,68 @@ describe("chrome primitives", () => {
       });
     }
 
-    expect(flushed).toBeGreaterThan(1);
+    expect(flushed).toBe(1);
     expect(frames).toHaveLength(0);
+
+    unmount();
+    restore();
+  });
+
+  it("holds a docking state that sits on the threshold", async () => {
+    const { restore, visualViewport } = installVisualViewport({ height: 500 });
+
+    const { container, unmount } = render(
+      <PanelRoot data-testid="threshold-panel">
+        <ActionBar
+          sticky="viewport-bottom"
+          data-testid="threshold-bar"
+          actions={<Button>Save</Button>}
+        />
+      </PanelRoot>,
+    );
+    const panel = screen.getByTestId("threshold-panel");
+    const bar = screen.getByTestId("threshold-bar");
+    const anchor = container.querySelector<HTMLElement>(
+      ".snui-action-bar__viewport-anchor",
+    );
+    const safeAreaProbe = container.querySelector<HTMLElement>(
+      ".snui-action-bar__safe-area-probe",
+    );
+    expect(anchor).not.toBeNull();
+    expect(safeAreaProbe).not.toBeNull();
+    if (anchor === null || safeAreaProbe === null) return;
+
+    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(100, 0, 600, 1_200),
+    );
+    // Reserving the bar's height moves the anchor across the dock line by less
+    // than the hysteresis band, so the raw predicate answers differently on
+    // each side of the change.
+    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
+      () =>
+        new DOMRect(
+          120,
+          bar.classList.contains("snui-action-bar--viewport-docked")
+            ? 439.6
+            : 441.6,
+          560,
+          60,
+        ),
+    );
+    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(120, 440, 560, 60),
+    );
+    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(800, 600, 0, 0),
+    );
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+
+    document.dispatchEvent(new Event("scroll"));
+    await flushAnimationFrames();
+    expect(anchor).toHaveAttribute("data-snui-docked");
+    expect(bar).toHaveClass("snui-action-bar--viewport-docked");
 
     unmount();
     restore();

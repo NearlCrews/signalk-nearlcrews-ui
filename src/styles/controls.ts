@@ -109,7 +109,13 @@ ${PRESSED_FILL_DECLARATION}
   animation: ${SPINNER_ANIMATION_NAME} var(--snui-motion-spin) linear infinite;
 }
 
+/*
+ * A compact button holding one glyph sizes to that glyph, which clears the
+ * target floor in height and misses it in width. The floor belongs to the
+ * control, so it carries the same token in both axes and stays at least square.
+ */
 .snui-button--size-compact {
+  min-inline-size: var(--snui-control-min-height);
   padding-inline: var(--snui-space-3);
 }
 
@@ -123,6 +129,7 @@ ${PRESSED_FILL_DECLARATION}
 
 .snui-button--icon-only {
   width: var(--snui-control-min-height);
+  min-inline-size: var(--snui-control-min-height);
   height: var(--snui-control-min-height);
   padding: 0;
 }

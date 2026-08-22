@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-08-22
+
+### Changed
+
+- A viewport-bottom `ActionBar` no longer scrolls a control clear when a pointer press moves focus to it. A pointer user can see the control they pressed, and the deferred scroll 0.8.1 introduced still moved content under a pointer that was often still there for a second press. Keyboard and programmatic focus keep immediate clearance, and the bar still clears a focused control when a viewport resize docks it.
+
+### Fixed
+
+- Viewport-bottom docking measurement now reaches its final geometry inside the animation frame that the focus, scroll, or resize event scheduled, rather than over a chain of frames. A control sitting immediately above the docked bar therefore reports a stable box on the next frame, and a browser that requires two consecutive stable frames before delivering a press no longer waits, retries, or times out on it.
+- The viewport-bottom docking decision now carries a hysteresis band, so geometry that lands on the docking threshold keeps the state it has instead of alternating between docked and natural flow.
+- Compact and icon-only buttons now take their minimum width from the control size token, so a button holding a single glyph meets the 40-pixel fine-pointer and 44-pixel coarse-pointer target floor in width as well as height.
+- A panel revealed inside a retained `CollapsibleSection` now re-reads the shared theme, so a theme another panel selected while this one was hidden reaches it on reveal instead of leaving it on the choice it had when it was first mounted.
+
 ## [0.8.1] - 2026-08-22
 
 ### Changed
@@ -282,7 +295,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.8.2...HEAD
+[0.8.2]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.0...v0.7.1
