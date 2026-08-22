@@ -15,7 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Fixed
 
-- A viewport-bottom `ActionBar` no longer scrolls the panel while a pointer is pressed. The first click on a control the docked bar overlaps now reaches that control instead of dispatching on an ancestor after the control moved out from under the pointer. Keyboard and programmatic focus keep immediate clearance, and a clearance deferred by a press runs as soon as the press ends.
+- A viewport-bottom `ActionBar` no longer scrolls the panel while a pointer is pressed. The first click on a control the docked bar overlaps now reaches that control instead of dispatching on an ancestor after the control moved out from under the pointer. Keyboard and programmatic focus keep immediate clearance, and a clearance a press defers runs on the frame after the release, which puts the scroll after that press's click.
 - Viewport-bottom docking measurement now settles within a bounded number of frames when a docked and an undocked geometry alternate, so one focus change can no longer leave the bar moving on every frame.
 - A named `SegmentedControl` now always submits the selection it displays. A native form reset previously left the hidden input holding a value the control did not show, both for a controlled selection the reset must not change and for a control sitting in a collapsed `CollapsibleSection` whose paused effects never saw the reset.
 

@@ -21,7 +21,7 @@ Version 0.8.1 corrects pointer behavior in the viewport-bottom `ActionBar`. It i
 
 - **First click lands**: a docked action bar no longer scrolls the panel during a press, so a control the bar overlaps receives its first click instead of losing it to an ancestor.
 - **Settled docking**: docking measurement stops within a bounded number of frames when a docked and an undocked geometry alternate, so a focus change leaves the bar's geometry stable.
-- **Unchanged clearance**: keyboard and programmatic focus still scroll a covered control clear immediately, and a clearance deferred by a press runs as soon as the press ends.
+- **Unchanged clearance**: keyboard and programmatic focus still scroll a covered control clear immediately, and a clearance a press defers runs after that press's click rather than during it.
 - **Documented retain semantics**: `CollapsibleSection.mountStrategy` now spells out that a retaining strategy keeps hidden state while running the subtree's effect cleanups on collapse and its effects again on expand, along with the consumer rules that follow.
 - **Consistent form values**: a named `SegmentedControl` always submits the selection it displays, including after a native form reset it could not observe.
 

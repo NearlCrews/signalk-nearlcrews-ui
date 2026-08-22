@@ -77,7 +77,7 @@ These changes are backward compatible. No consuming code requires modification.
 
 - A viewport-bottom `ActionBar` no longer scrolls the panel while a pointer is pressed, so the first click on a control the docked bar overlaps reaches that control. A consumer test that worked around this by focusing a control before clicking it, by clicking twice, or by dispatching a synthetic click can drop that workaround and click the control directly.
 - Docking measurement settles within a bounded number of frames when a docked and an undocked geometry alternate. A consumer test that waits for a stable bounding box before clicking, which is what Playwright does by default, no longer times out on that wait.
-- Keyboard and programmatic focus keep the clearance behavior 0.8.0 introduced. A clearance a press defers runs as soon as that press ends.
+- Keyboard and programmatic focus keep the clearance behavior 0.8.0 introduced. A clearance a press defers runs on the frame after the release, so the scroll follows that press's click instead of interrupting it.
 - `CollapsibleSection.mountStrategy` now documents what its retaining strategies do to effects, including the run-once-on-mount trap and the two failure shapes above. The behavior is unchanged and the default is still `"retain"`, so no code needs to move; audit retained subtrees against the API reference rules.
 - A named `SegmentedControl` now always submits the selection it displays after a native form reset, including a reset that lands while the control sits in a collapsed section. A consumer that compensated by rerendering the control or by rereading its value after a reset can drop that workaround.
 
