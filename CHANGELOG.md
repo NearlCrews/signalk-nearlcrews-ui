@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-08-22
+
+### Changed
+
+- `CollapsibleSection.mountStrategy` now documents what its retaining strategies do to a hidden subtree. State and refs survive a collapse while every effect in the subtree runs its cleanup and runs again on the next expand, so an effect with an empty dependency list runs once per expand rather than once per lifetime. The behavior and the `"retain"` default are unchanged; the prop documentation, API reference, design contract, and adoption guidance now state the rule and the failure shapes it produces for validity reporting, abortable requests, and one-time initialization.
+- Adoption guidance now records that the Signal K Admin dependency inventory declares a wider React peer range than this package requires. A consumer keeps its own React and React DOM development dependencies and its Module Federation share requirement at `^19.2.0` rather than deriving them from the inventory.
+
+### Fixed
+
+- A viewport-bottom `ActionBar` no longer scrolls the panel while a pointer is pressed. The first click on a control the docked bar overlaps now reaches that control instead of dispatching on an ancestor after the control moved out from under the pointer. Keyboard and programmatic focus keep immediate clearance, and a clearance a press defers runs on the frame after the release, which puts the scroll after that press's click.
+- Viewport-bottom docking measurement now settles within a bounded number of frames when a docked and an undocked geometry alternate, so one focus change can no longer leave the bar moving on every frame.
+- A named `SegmentedControl` now always submits the selection it displays. A native form reset previously left the hidden input holding a value the control did not show, both for a controlled selection the reset must not change and for a control sitting in a collapsed `CollapsibleSection` whose paused effects never saw the reset.
+
 ## [0.8.0] - 2026-08-19
 
 ### Breaking
@@ -269,7 +282,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.8.1...HEAD
+[0.8.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.1...v0.8.0
 [0.7.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.6.2...v0.7.0

@@ -138,7 +138,7 @@ That class is the one documented exception to version-scoped styling. It carries
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.8.0"])
+@scope (.snui-root[data-snui-version="0.8.1"])
   to ([data-snui-version]) {
   /* component rules */
 }
@@ -158,7 +158,9 @@ The public z-index tokens define the base overlay, modal, and toast layers. The 
 
 Dialogs size against the visual viewport and safe-area insets, including the narrow-panel bottom-sheet layout. Every mounted toast region in one panel shares a single panel-owned host. That host tracks the intersection of the panel and visual viewport, respects safe-area insets, keeps independent queues from overlapping, and is removed after the final region unmounts. Toast exit removal follows the transition end, with a token-derived fallback timer for engines that omit the event and an immediate path for reduced motion.
 
-`ActionBar` retains ordinary `"top"` and `"bottom"` sticky modes. Its `"viewport-bottom"` mode remains inside the versioned root rather than portaling, measures the `PanelRoot` column, reserves the bar's natural-flow height, and uses fixed positioning only while the viewport edge lies between the panel's leading edge and the bar's anchor. It accounts for `visualViewport`, safe-area insets, nested scroll events, and resizing. When a focused panel control would be covered after focus movement or docking, the bar scrolls nested containers only as far as the control and its focus ring remain visible, then propagates any remaining clearance to outer scrolling. The bar returns to natural flow at its anchor and does not linger after the panel leaves the viewport.
+`ActionBar` retains ordinary `"top"` and `"bottom"` sticky modes. Its `"viewport-bottom"` mode remains inside the versioned root rather than portaling, measures the `PanelRoot` column, reserves the bar's natural-flow height, and uses fixed positioning only while the viewport edge lies between the panel's leading edge and the bar's anchor. It accounts for `visualViewport`, safe-area insets, nested scroll events, and resizing. When a focused panel control would be covered after focus movement or docking, the bar scrolls nested containers only as far as the control and its focus ring remain visible, then propagates any remaining clearance to outer scrolling. That clearance never runs while a pointer is pressed, because moving a control out from under a pointer would cost it the click. A clearance a press defers runs on the frame after the release, so for a pointer interaction the scroll follows that press's click instead of interrupting it, while keyboard and programmatic focus still clear immediately. Docking measurement settles within a bounded number of frames, so a geometry that alternates between docked and undocked states leaves the bar's box stable rather than moving on every frame. The bar returns to natural flow at its anchor and does not linger after the panel leaves the viewport.
+
+`CollapsibleSection` keeps hidden content mounted under its retaining strategies, which is a behavior consumers may rely on and must design for. State and refs survive a collapse, while every effect and layout effect in the retained subtree runs its cleanup on collapse and runs again on the next expand. An empty dependency list is therefore a per-expand effect rather than a per-lifetime one, and a cleanup that mutates validity, busy state, or any other state expected to outlive the hidden period will lose it. The unmounting strategy discards the subtree and its state instead. The API reference records the consumer-side rules that follow.
 
 ## Density and responsive behavior
 

@@ -3,11 +3,74 @@ import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import AxeBuilder from "@axe-core/playwright";
-import { expect, type Page, type TestInfo, test } from "./fixtures.js";
+import {
+  expect,
+  type Locator,
+  type Page,
+  type TestInfo,
+  test,
+} from "./fixtures.js";
 
 async function expectNoAxeViolations(page: Page): Promise<void> {
   const results = await new AxeBuilder({ page }).analyze();
   expect(results.violations).toEqual([]);
+}
+
+/** Pixels of the last panel action the docked bar is scrolled to cover. */
+const DOCKED_BAR_OVERLAP = 8;
+
+/** Frames a focus change may take to leave the docked bar's box unchanged. */
+const SETTLED_FRAME_BUDGET = 10;
+
+interface DockedBarOverlap {
+  readonly action: Locator;
+  readonly bar: Locator;
+}
+
+/**
+ * Opens the unconstrained Admin host, waits for the bar to dock, then scrolls
+ * the last panel action until the bar covers its bottom edge. The action's
+ * centre stays clear of the bar, so a press lands on the action itself and the
+ * clearance its focus triggers is the only thing that can move it.
+ */
+async function overlapDockedActionBar(
+  page: Page,
+  width: number,
+): Promise<DockedBarOverlap> {
+  await page.setViewportSize({ width, height: 600 });
+  await page.goto("/?admin-host=1");
+
+  const bar = page.locator(".snui-action-bar");
+  const action = page.getByTestId("admin-host-focus-target");
+  await expect
+    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
+    .toBe("fixed");
+
+  const [barBox, actionBox] = await Promise.all([
+    bar.boundingBox(),
+    action.boundingBox(),
+  ]);
+  if (barBox === null || actionBox === null) {
+    throw new Error("Expected a docked action bar and a last panel action.");
+  }
+  await page.evaluate(
+    (top) => window.scrollBy({ behavior: "auto", top }),
+    actionBox.y + actionBox.height - barBox.y - DOCKED_BAR_OVERLAP,
+  );
+  return { action, bar };
+}
+
+/** Reports whether the action's bottom edge sits clear of the docked bar. */
+async function actionClearsBar({
+  action,
+  bar,
+}: DockedBarOverlap): Promise<boolean> {
+  const [barBox, actionBox] = await Promise.all([
+    bar.boundingBox(),
+    action.boundingBox(),
+  ]);
+  if (barBox === null || actionBox === null) return false;
+  return actionBox.y + actionBox.height <= barBox.y;
 }
 
 const CI_SNAPSHOT_VARIANTS = ["x64", "ubuntu24-x64", "ubuntu24-arm64"] as const;
@@ -1049,6 +1112,85 @@ test("docks the viewport action bar inside an unconstrained Admin host", async (
       bar.evaluate((element) => element.getBoundingClientRect().bottom),
     )
     .toBeLessThanOrEqual(1);
+});
+
+test("delivers the first click to a control the docked bar overlaps", async ({
+  page,
+}) => {
+  const overlap = await overlapDockedActionBar(page, 900);
+
+  await expect.poll(() => actionClearsBar(overlap)).toBe(false);
+  await expect(overlap.action).toHaveAttribute("data-activation-count", "0");
+
+  await overlap.action.click();
+
+  await expect(overlap.action).toHaveAttribute("data-activation-count", "1");
+  await expect.poll(() => actionClearsBar(overlap)).toBe(true);
+});
+
+test("clears a keyboard-focused control from the docked bar", async ({
+  page,
+}) => {
+  const overlap = await overlapDockedActionBar(page, 900);
+
+  // Focus starts on a control inside the bar, which the clearance ignores, so
+  // the overlap survives until the keyboard moves focus back onto the action.
+  await page.getByRole("button", { name: "Reset" }).focus();
+  await expect.poll(() => actionClearsBar(overlap)).toBe(false);
+
+  await page.keyboard.press("Shift+Tab");
+
+  await expect(overlap.action).toBeFocused();
+  await expect.poll(() => actionClearsBar(overlap)).toBe(true);
+  await expect(overlap.action).toHaveAttribute("data-activation-count", "0");
+});
+
+test("settles the docked action bar after a focus change", async ({ page }) => {
+  const { action } = await overlapDockedActionBar(page, 320);
+
+  const framesToSettle = await action.evaluate(async (element) => {
+    const bar = document.querySelector(".snui-action-bar");
+    if (!(element instanceof HTMLElement) || !(bar instanceof HTMLElement)) {
+      throw new Error("Expected an HTML action and docked action bar.");
+    }
+    const box = (): string => {
+      const rect = bar.getBoundingClientRect();
+      return [rect.x, rect.y, rect.width, rect.height].join();
+    };
+    // Playwright dispatches a click only after two consecutive frames report
+    // the same box, so that pair is what settling means here. The count is the
+    // frame the pair completed on, or null when the box never held still.
+    const framesUntilStable = async (limit: number): Promise<number | null> => {
+      let previous = "";
+      let stable = 0;
+      for (let frame = 1; frame <= limit; frame += 1) {
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+        const current = box();
+        if (current !== previous) {
+          previous = current;
+          stable = 0;
+          continue;
+        }
+        stable += 1;
+        if (stable === 2) return frame;
+      }
+      return null;
+    };
+
+    await framesUntilStable(30);
+    element.focus({ preventScroll: true });
+    return framesUntilStable(30);
+  });
+
+  expect(
+    framesToSettle,
+    "The docked action bar never settled after a focus change.",
+  ).not.toBeNull();
+  expect(framesToSettle ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
+    SETTLED_FRAME_BUDGET,
+  );
 });
 
 test("keeps multiple toast regions visible inside the current panel viewport", async ({

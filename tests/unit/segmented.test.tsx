@@ -1,11 +1,18 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import * as ReactActual from "react";
 import { createRef } from "react";
 import * as JSXDevRuntime from "react/jsx-dev-runtime";
 import * as JSXRuntime from "react/jsx-runtime";
 import { describe, expect, it, vi } from "vitest";
 
-import { SegmentedControl } from "../../src/index.js";
+import { CollapsibleSection, SegmentedControl } from "../../src/index.js";
 
 const OPTIONS = [
   { label: "Metric", value: "metric" },
@@ -253,7 +260,7 @@ describe("SegmentedControl form participation", () => {
     expect(new FormData(form).get("units")).toBe("metric");
   });
 
-  it("leaves a controlled selection to the parent on form reset", () => {
+  it("leaves a controlled selection to the parent on form reset", async () => {
     render(
       <form data-testid="units-form">
         <SegmentedControl
@@ -275,6 +282,43 @@ describe("SegmentedControl form participation", () => {
       "aria-checked",
       "true",
     );
+    await waitFor(() =>
+      expect(new FormData(form).get("units")).toBe("imperial"),
+    );
+  });
+
+  it("keeps the submitted value on the displayed selection through a collapse", async () => {
+    const user = userEvent.setup();
+    render(
+      <form data-testid="units-form">
+        <CollapsibleSection title="Units" defaultOpen>
+          <SegmentedControl
+            legend="Units"
+            name="units"
+            defaultValue="metric"
+            onChange={noop}
+            options={OPTIONS}
+          />
+        </CollapsibleSection>
+      </form>,
+    );
+    const toggle = screen.getByRole("button", { name: "Units" });
+    const form = screen.getByTestId<HTMLFormElement>("units-form");
+    await user.click(screen.getByRole("radio", { name: "Imperial" }));
+
+    // A retained subtree keeps its state while its effects and refs are torn
+    // down, so this reset reaches the input but not the control's listener.
+    await user.click(toggle);
+    act(() => {
+      form.reset();
+    });
+    await user.click(toggle);
+
+    expect(screen.getByRole("radio", { name: "Imperial" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(new FormData(form).get("units")).toBe("imperial");
   });
 });
 

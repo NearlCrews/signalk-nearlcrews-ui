@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
@@ -16,7 +16,7 @@ import {
   THEME_STORAGE_KEY,
   ThemeToggle,
 } from "../../src/index.js";
-import { renderInPanel } from "../helpers.js";
+import { installVisualViewport, renderInPanel } from "../helpers.js";
 
 describe("chrome primitives", () => {
   it("renders a neutral banner without a tone glyph or label", () => {
@@ -318,25 +318,7 @@ describe("chrome primitives", () => {
   });
 
   it("docks a viewport action bar only between the panel edge and its flow anchor", async () => {
-    const originalVisualViewport = Object.getOwnPropertyDescriptor(
-      window,
-      "visualViewport",
-    );
-    const visualViewport = Object.assign(new EventTarget(), {
-      height: 500,
-      offsetLeft: 0,
-      offsetTop: 0,
-      pageLeft: 0,
-      pageTop: 0,
-      scale: 1,
-      width: 800,
-    }) as VisualViewport;
-    Object.defineProperty(window, "visualViewport", {
-      configurable: true,
-      value: visualViewport,
-    });
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
-    vi.spyOn(window, "innerWidth", "get").mockReturnValue(800);
+    const { restore, visualViewport } = installVisualViewport({ height: 500 });
 
     let anchorTop = 900;
     let panelTop = 0;
@@ -395,11 +377,7 @@ describe("chrome primitives", () => {
     await waitFor(() => expect(anchor).not.toHaveAttribute("data-snui-docked"));
 
     unmount();
-    if (originalVisualViewport === undefined) {
-      Reflect.deleteProperty(window, "visualViewport");
-    } else {
-      Object.defineProperty(window, "visualViewport", originalVisualViewport);
-    }
+    restore();
   });
 
   it("adds scroll margins so a nested sticky action bar never covers focused content", () => {
@@ -425,25 +403,7 @@ describe("chrome primitives", () => {
   });
 
   it("clears focused content when a viewport resize docks the bar", async () => {
-    const originalVisualViewport = Object.getOwnPropertyDescriptor(
-      window,
-      "visualViewport",
-    );
-    const visualViewport = Object.assign(new EventTarget(), {
-      height: 600,
-      offsetLeft: 0,
-      offsetTop: 0,
-      pageLeft: 0,
-      pageTop: 0,
-      scale: 1,
-      width: 800,
-    }) as VisualViewport;
-    Object.defineProperty(window, "visualViewport", {
-      configurable: true,
-      value: visualViewport,
-    });
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
-    vi.spyOn(window, "innerWidth", "get").mockReturnValue(800);
+    const { restore, visualViewport } = installVisualViewport({ height: 600 });
     const scrollBy = vi
       .spyOn(window, "scrollBy")
       .mockImplementation(() => undefined);
@@ -509,33 +469,11 @@ describe("chrome primitives", () => {
     );
 
     unmount();
-    if (originalVisualViewport === undefined) {
-      Reflect.deleteProperty(window, "visualViewport");
-    } else {
-      Object.defineProperty(window, "visualViewport", originalVisualViewport);
-    }
+    restore();
   });
 
   it("propagates focus clearance after a nested scroller saturates", async () => {
-    const originalVisualViewport = Object.getOwnPropertyDescriptor(
-      window,
-      "visualViewport",
-    );
-    const visualViewport = Object.assign(new EventTarget(), {
-      height: 500,
-      offsetLeft: 0,
-      offsetTop: 0,
-      pageLeft: 0,
-      pageTop: 0,
-      scale: 1,
-      width: 800,
-    }) as VisualViewport;
-    Object.defineProperty(window, "visualViewport", {
-      configurable: true,
-      value: visualViewport,
-    });
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
-    vi.spyOn(window, "innerWidth", "get").mockReturnValue(800);
+    const { restore, visualViewport } = installVisualViewport({ height: 500 });
     const scrollBy = vi
       .spyOn(window, "scrollBy")
       .mockImplementation(() => undefined);
@@ -621,33 +559,11 @@ describe("chrome primitives", () => {
     expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 50 });
 
     unmount();
-    if (originalVisualViewport === undefined) {
-      Reflect.deleteProperty(window, "visualViewport");
-    } else {
-      Object.defineProperty(window, "visualViewport", originalVisualViewport);
-    }
+    restore();
   });
 
   it("keeps focused content inside a nested scroller while clearing the bar", async () => {
-    const originalVisualViewport = Object.getOwnPropertyDescriptor(
-      window,
-      "visualViewport",
-    );
-    const visualViewport = Object.assign(new EventTarget(), {
-      height: 560,
-      offsetLeft: 0,
-      offsetTop: 0,
-      pageLeft: 0,
-      pageTop: 0,
-      scale: 1,
-      width: 800,
-    }) as VisualViewport;
-    Object.defineProperty(window, "visualViewport", {
-      configurable: true,
-      value: visualViewport,
-    });
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(600);
-    vi.spyOn(window, "innerWidth", "get").mockReturnValue(800);
+    const { restore, visualViewport } = installVisualViewport({ height: 560 });
     let outerScroll = 0;
     const scrollBy = vi
       .spyOn(window, "scrollBy")
@@ -740,10 +656,159 @@ describe("chrome primitives", () => {
     expect(targetRect.bottom).toBeLessThanOrEqual(barRect.top);
 
     unmount();
-    if (originalVisualViewport === undefined) {
-      Reflect.deleteProperty(window, "visualViewport");
-    } else {
-      Object.defineProperty(window, "visualViewport", originalVisualViewport);
+    restore();
+  });
+
+  it("holds focus clearance until a pointer press releases", async () => {
+    const { restore, visualViewport } = installVisualViewport({ height: 500 });
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+
+    const { container, unmount } = render(
+      <PanelRoot data-testid="press-panel">
+        <Button data-testid="press-target">Earlier action</Button>
+        <ActionBar
+          sticky="viewport-bottom"
+          data-testid="press-bar"
+          actions={<Button>Save</Button>}
+        />
+      </PanelRoot>,
+    );
+    const panel = screen.getByTestId("press-panel");
+    const target = screen.getByTestId("press-target");
+    const bar = screen.getByTestId("press-bar");
+    const anchor = container.querySelector<HTMLElement>(
+      ".snui-action-bar__viewport-anchor",
+    );
+    const safeAreaProbe = container.querySelector<HTMLElement>(
+      ".snui-action-bar__safe-area-probe",
+    );
+    expect(anchor).not.toBeNull();
+    expect(safeAreaProbe).not.toBeNull();
+    if (anchor === null || safeAreaProbe === null) return;
+
+    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(100, 0, 600, 1_200),
+    );
+    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(120, 900, 560, 60),
+    );
+    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
+      () =>
+        new DOMRect(
+          120,
+          bar.classList.contains("snui-action-bar--viewport-docked")
+            ? 440
+            : 900,
+          560,
+          60,
+        ),
+    );
+    vi.spyOn(target, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(140, 450, 200, 40),
+    );
+    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(800, 600, 0, 0),
+    );
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+
+    // A press focuses its target before the release lands. Scrolling now would
+    // move the control out from under the pointer and the click would never
+    // reach it.
+    document.dispatchEvent(new Event("pointerdown"));
+    target.focus();
+    expect(scrollBy).not.toHaveBeenCalled();
+
+    document.dispatchEvent(new Event("pointerup"));
+    await waitFor(() =>
+      expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 50 }),
+    );
+
+    // Key input recovers the deferral even when no release ever arrives.
+    scrollBy.mockClear();
+    document.dispatchEvent(new Event("pointerdown"));
+    document.dispatchEvent(new Event("keydown"));
+    target.blur();
+    target.focus();
+    expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 50 });
+
+    unmount();
+    restore();
+  });
+
+  it("settles a docking geometry that alternates within a frame budget", () => {
+    const { restore, visualViewport } = installVisualViewport({ height: 600 });
+
+    const frames: FrameRequestCallback[] = [];
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.push(callback);
+      return frames.length;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(
+      () => undefined,
+    );
+
+    const { container, unmount } = render(
+      <PanelRoot data-testid="settle-panel">
+        <ActionBar
+          sticky="viewport-bottom"
+          data-testid="settle-bar"
+          actions={<Button>Save</Button>}
+        />
+      </PanelRoot>,
+    );
+    const panel = screen.getByTestId("settle-panel");
+    const bar = screen.getByTestId("settle-bar");
+    const anchor = container.querySelector<HTMLElement>(
+      ".snui-action-bar__viewport-anchor",
+    );
+    const safeAreaProbe = container.querySelector<HTMLElement>(
+      ".snui-action-bar__safe-area-probe",
+    );
+    expect(anchor).not.toBeNull();
+    expect(safeAreaProbe).not.toBeNull();
+    if (anchor === null || safeAreaProbe === null) return;
+
+    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(100, 0, 600, 1_200),
+    );
+    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(120, 500, 560, 60),
+    );
+    // Docking changes the bar's wrapping, and the shorter docked bar undocks
+    // itself again. The measurement chain has to stop even though no geometry
+    // ever holds still.
+    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
+      () =>
+        new DOMRect(
+          120,
+          500,
+          560,
+          bar.classList.contains("snui-action-bar--viewport-docked") ? 60 : 120,
+        ),
+    );
+    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
+      () => new DOMRect(800, 600, 0, 0),
+    );
+
+    const frameBudget = 12;
+    let flushed = 0;
+    visualViewport.dispatchEvent(new Event("resize"));
+    while (frames.length > 0 && flushed < frameBudget) {
+      const pending = frames.splice(0, frames.length);
+      flushed += 1;
+      act(() => {
+        for (const frame of pending) frame(0);
+      });
     }
+
+    expect(flushed).toBeGreaterThan(1);
+    expect(frames).toHaveLength(0);
+
+    unmount();
+    restore();
   });
 });

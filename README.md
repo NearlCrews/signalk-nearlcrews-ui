@@ -15,14 +15,15 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or marketplace package. The initial API may change during the `0.x` series, so consumers should pin an exact version.
 
-## What's new in 0.8.0
+## What's new in 0.8.1
 
-Version 0.8.0 strengthens concurrent rendering, overlay isolation, notification behavior, focus visibility, and the release contract. It contains two intentional breaking changes for consumers upgrading from 0.7.x. See the [0.8.0 changelog](CHANGELOG.md#080---2026-08-19) and [migration guide](docs/migration.md#changes-in-080) for the complete release notes and required work.
+Version 0.8.1 corrects pointer behavior in the viewport-bottom `ActionBar`. It is a bug-fix release with no API change, so upgrading from 0.8.0 requires no consumer work. See the [0.8.1 changelog](CHANGELOG.md#081---2026-08-22) and [migration guide](docs/migration.md#changes-in-081) for the complete release notes.
 
-- **Replay-safe grids**: dynamic `DataGrid.columns` now requires a readonly array. Replace generators and sets with `Array.from(columns)`, and replace the array when the column data changes.
-- **Owned overlays**: `Dialog`, `Menu`, and `Popover` now require an owning `PanelRoot`, matching the style, theme, CSP, and version-isolation boundary that `ToastRegion` already enforced.
-- **More resilient interaction**: toast regions share one panel-contained viewport host, overflow protects focused and sticky-critical notices when possible, viewport action bars preserve focus visibility through resize and nested scrolling, and forced-colors actions remain readable.
-- **Stronger contracts**: the package now validates popover triggers, labeled controls, segmented options, exact-commit release checks, package metadata, documentation, dependency compatibility, and per-file coverage.
+- **First click lands**: a docked action bar no longer scrolls the panel during a press, so a control the bar overlaps receives its first click instead of losing it to an ancestor.
+- **Settled docking**: docking measurement stops within a bounded number of frames when a docked and an undocked geometry alternate, so a focus change leaves the bar's geometry stable.
+- **Unchanged clearance**: keyboard and programmatic focus still scroll a covered control clear immediately, and a clearance a press defers runs after that press's click rather than during it.
+- **Documented retain semantics**: `CollapsibleSection.mountStrategy` now spells out that a retaining strategy keeps hidden state while running the subtree's effect cleanups on collapse and its effects again on expand, along with the consumer rules that follow.
+- **Consistent form values**: a named `SegmentedControl` always submits the selection it displays, including after a native form reset it could not observe.
 
 ## Compatibility
 
@@ -83,7 +84,7 @@ The repository checks the declaration against that committed baseline rather tha
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.8.0
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.8.1
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball:
@@ -91,7 +92,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.8.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.8.1.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while resolving React and React DOM from the Signal K Admin host through the integration supported by its bundler.
@@ -229,7 +230,7 @@ The host must supply the nonce through its own trusted bootstrap. Do not read it
 - `LabeledField`, `InputGroup`, `InputGroupControl`, `InputGroupAddon`, `TextInput`, `NumberInput`, `RangeInput`, `Select`, `Textarea`, and `Checkbox` provide accessible form structure. Render-prop fields identify the primary labeled control while allowing paired inputs, unit suffixes, and adjacent actions, and the render-prop control props carry `descriptionId` and `errorId` so paired controls can reference field text directly. Fields forward `name` and `disabled` to their control, and `optionalLabel` marks optional fields beside the required marker. Fields and checkboxes accept validation messages and opt-in live announcement modes. `TextInput` covers text, email, password, search, tel, url, date, time, datetime-local, month, and week entry. `Checkbox` drives the native mixed state through `indeterminate`, and `RangeInput` shows a filled progress track in every supported engine.
 - `SecretInput` composes `TextInput`, `InputGroup`, and an explicit Show or Hide button. It supports controlled and uncontrolled reveal state, customizable labels, trailing content, and an input ref. Pointer activation preserves the input focus, caret, and selection. The consumer still owns the secret value, storage, redaction, and authorization policy.
 - `FieldGroup` provides a native fieldset and legend with description, action, validation error, and disabled support.
-- `Section` and `CollapsibleSection` provide semantic content grouping. `CollapsibleSection` renders a heading button and a named content region with controlled or uncontrolled state, summaries below the header or trailing within it that stay visible while open through `summaryVisibility`, sibling actions, retained, lazily retained, or unmounted content through `mountStrategy`, and focus restoration.
+- `Section` and `CollapsibleSection` provide semantic content grouping. `CollapsibleSection` renders a heading button and a named content region with controlled or uncontrolled state, summaries below the header or trailing within it that stay visible while open through `summaryVisibility`, sibling actions, retained, lazily retained, or unmounted content through `mountStrategy`, and focus restoration. A retaining strategy keeps hidden state alive while pausing the subtree's effects, so an effect there runs its cleanup on collapse and runs again on expand. The [API reference](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md) records the rules that follow for validity reporting, abortable work, and one-time initialization.
 - `Accordion` coordinates `CollapsibleSection` children so at most one section stays open at a time.
 - `Banner` and `StatusIndicator` provide text-backed feedback that does not rely on color alone. Banners span the neutral tone plus the semantic tones, and accept actions, dismissal, a post-dismissal focus destination, localized severity text, and consumer-selected roles such as `note`. `StatusIndicator` varies its dot shape per tone and accepts `live` for opt-in announcements, and both accept `toneLabel` to localize the announced severity.
 - `Progress` reports determinate or indeterminate progress with a required label, an optional tone, and `valueText` for assistive technology.
@@ -326,11 +327,11 @@ An inline token override applies in every selected theme. Use it only when that 
 
 The repository ships a fixture page that renders every exported component. The top of that page in each theme:
 
-![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.0/docs/screenshots/showcase-light.png)
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.1/docs/screenshots/showcase-light.png)
 
-![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.0/docs/screenshots/showcase-dark.png)
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.1/docs/screenshots/showcase-dark.png)
 
-![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.0/docs/screenshots/showcase-night.png)
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.1/docs/screenshots/showcase-night.png)
 
 The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
 

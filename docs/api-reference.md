@@ -29,7 +29,23 @@ The stylesheet entry point has no React import or execution requirement. Install
 | `ActionBar`          | Required `actions`; `status`; `statusRef`; `sticky` is `"top"`, `"bottom"`, or `"viewport-bottom"`                                                                                                                   | None             |
 | `InlineConfirm`      | Required `message`, `onCancel`, and `onConfirm`; controlled or uncontrolled open state; labels and variants; `busy`; focus destination refs; heading and landmark options                                            | `HTMLElement`    |
 
-`statusRef`, `initialFocusRef`, `returnFocusRef`, and `dismissFocusRef` are focus destinations. They are not aliases for a component's own `ref`. `ActionBar` makes its status destination programmatically focusable but does not move focus automatically; the consumer calls `statusRef.current?.focus()` after the initiating control disappears or becomes unavailable. A viewport-bottom bar scrolls a focused panel control clear when focus moves or a viewport resize docks the bar, preserving focus-ring clearance through nested scroll containers.
+`statusRef`, `initialFocusRef`, `returnFocusRef`, and `dismissFocusRef` are focus destinations. They are not aliases for a component's own `ref`. `ActionBar` makes its status destination programmatically focusable but does not move focus automatically; the consumer calls `statusRef.current?.focus()` after the initiating control disappears or becomes unavailable. A viewport-bottom bar scrolls a focused panel control clear when focus moves or a viewport resize docks the bar, preserving focus-ring clearance through nested scroll containers. It never scrolls while a pointer is pressed, so a press on a control the bar overlaps keeps its click. A clearance a press defers runs on the frame after the release, which is after that press has produced its click, so a pointer interaction sees the scroll follow the click rather than interrupt it. Keyboard and programmatic focus clear immediately.
+
+#### CollapsibleSection mountStrategy and effects
+
+`mountStrategy` decides what happens to hidden content, and the two retaining values have consequences a consumer must design for.
+
+- `"retain"`, the default, and `"lazy-retain"` keep hidden content mounted inside React `Activity`. State and `useRef` values survive a collapse, and so does uncontrolled DOM value state. Every effect and layout effect in that subtree runs its cleanup when the section collapses, refs detach, and all of them run again when it reopens.
+- `"unmount"` removes hidden content. Effects unmount for real and state is discarded, so nothing survives a collapse.
+
+The consequence that surprises consumers is that an effect with an empty dependency list is not a run-once effect under a retaining strategy. It runs once per expand, against state that survived from the previous expand. Guard genuinely one-time work with a `useRef` flag, which survives the collapse with the state it protects.
+
+Two failure shapes follow from the same rule, both observed in consumer panels:
+
+- A field that reports validity from an effect, and clears that report in the effect's cleanup, silently drops its invalid state when the section collapses. Re-running the effect on expand then reinitializes the field from props and discards an edit the user had in progress, because the edit survived but the effect treated the expand as a fresh mount.
+- A request that starts in an effect and aborts in that effect's cleanup is aborted when the section collapses, so the completion path that would clear a busy flag never runs and a control stays `aria-busy` forever.
+
+Keep each cleanup symmetric with its own setup: unsubscribe what the effect subscribed, and do not use a cleanup to mutate reported validity, busy state, or other state that must outlive the hidden period. Initialize from props only behind a ref guard. An effect-registered listener also observes nothing while the section is collapsed, so a subtree that must see events during that time, a form reset for example, belongs outside the collapsible or in a consumer-owned store. Choose `"unmount"` when a subtree cannot tolerate paused effects and its state is disposable, and keep a retaining strategy when the state must survive.
 
 ### Buttons and fields
 
