@@ -49,6 +49,7 @@ function Fixture(): React.JSX.Element {
   const [confirmBusy, setConfirmBusy] = useState(startBusy);
   const [focusLoading, setFocusLoading] = useState(false);
   const [focusLoadingActivations, setFocusLoadingActivations] = useState(0);
+  const [lastActionActivations, setLastActionActivations] = useState(0);
   const [logLevel, setLogLevel] = useState<LogLevel>("normal");
   const [noticeVisible, setNoticeVisible] = useState(true);
   const [statusOpen, setStatusOpen] = useState(false);
@@ -316,7 +317,11 @@ function Fixture(): React.JSX.Element {
 
         {simulateAdminHost ? (
           <div className="admin-host__tall-panel-content">
-            <Button data-testid="admin-host-focus-target">
+            <Button
+              data-testid="admin-host-focus-target"
+              data-activation-count={lastActionActivations}
+              onClick={() => setLastActionActivations((count) => count + 1)}
+            >
               Last panel action
             </Button>
           </div>

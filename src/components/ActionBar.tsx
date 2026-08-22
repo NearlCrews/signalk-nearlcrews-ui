@@ -39,6 +39,26 @@ const NATURAL_VIEWPORT_PLACEMENT: ViewportPlacement = {
   width: 0,
 };
 
+/**
+ * Upper bound on the measurements one placement change may schedule for
+ * itself. A settling docking change costs one recheck for the class React
+ * commits and one for the anchor geometry that class changes, so a bound of
+ * four leaves headroom above a legitimate settle and still stops a geometry
+ * that alternates between two placements from remeasuring on every frame.
+ */
+const MAXIMUM_SETTLING_MEASUREMENTS = 4;
+
+/**
+ * Pointer state shared by the focus-clearance paths. A pointer press focuses
+ * its target before the release lands, so a clearance scroll during the press
+ * would move the control out from under the pointer and the resulting click
+ * would dispatch on an ancestor instead of the control.
+ */
+interface PointerClearance {
+  active: boolean;
+  pending: boolean;
+}
+
 function placementsMatch(
   current: ViewportPlacement,
   next: ViewportPlacement,
@@ -71,12 +91,14 @@ function getResizeObserver(
     | undefined;
 }
 
+const SCROLLABLE_OVERFLOW = /^(auto|overlay|scroll)$/;
+
 function isScrollable(element: HTMLElement): boolean {
   const ownerWindow = element.ownerDocument.defaultView;
   if (ownerWindow === null) return false;
   const overflow = ownerWindow.getComputedStyle(element).overflowY;
   return (
-    /^(auto|overlay|scroll)$/.test(overflow) &&
+    SCROLLABLE_OVERFLOW.test(overflow) &&
     element.scrollHeight > element.clientHeight
   );
 }
@@ -169,6 +191,29 @@ function keepFocusedTargetVisible(
   );
 }
 
+function requestFocusClearance(
+  target: HTMLElement,
+  bar: HTMLElement,
+  panelRoot: HTMLElement,
+  ownerWindow: Window,
+  pointer: PointerClearance,
+): void {
+  if (pointer.active) {
+    pointer.pending = true;
+    return;
+  }
+  keepFocusedTargetVisible(target, bar, panelRoot, ownerWindow);
+}
+
+/** The focused element, when the owning document has focused one at all. */
+function focusedElement(
+  ownerDocument: Document,
+  ownerWindow: Window & typeof globalThis,
+): HTMLElement | null {
+  const target = ownerDocument.activeElement;
+  return target instanceof ownerWindow.HTMLElement ? target : null;
+}
+
 interface ActionBarContentProps {
   readonly actions: ReactNode;
   readonly status: ReactNode;
@@ -204,6 +249,10 @@ function ViewportBottomActionBar({
   const barRef = useRef<HTMLDivElement>(null);
   const safeAreaProbeRef = useRef<HTMLSpanElement>(null);
   const placementRef = useRef<ViewportPlacement>(NATURAL_VIEWPORT_PLACEMENT);
+  const pointerRef = useRef<PointerClearance>({
+    active: false,
+    pending: false,
+  });
   const [placement, setPlacement] = useState<ViewportPlacement>(
     NATURAL_VIEWPORT_PLACEMENT,
   );
@@ -222,7 +271,10 @@ function ViewportBottomActionBar({
     if (ownerWindow === null || panelRoot === null) return undefined;
     const visualViewport = getVisualViewport(ownerWindow);
 
+    const pointer = pointerRef.current;
     let animationFrame = 0;
+    let clearanceFrame = 0;
+    let settlingMeasurements = 0;
     let disposed = false;
 
     const measure = (): void => {
@@ -275,12 +327,17 @@ function ViewportBottomActionBar({
         viewportBottom: roundedLayoutValue(viewportBottom),
         width: roundedLayoutValue(anchorRect.width),
       };
-      if (!placementsMatch(placementRef.current, nextPlacement)) {
-        placementRef.current = nextPlacement;
-        setPlacement(nextPlacement);
-        // Recheck after React applies the docking class. WebKit does not
-        // reliably deliver a ResizeObserver notification when that position
-        // change also alters the bar's wrapping or its anchor geometry.
+      if (placementsMatch(placementRef.current, nextPlacement)) {
+        settlingMeasurements = 0;
+        return;
+      }
+      placementRef.current = nextPlacement;
+      setPlacement(nextPlacement);
+      // Recheck after React applies the docking class. WebKit does not
+      // reliably deliver a ResizeObserver notification when that position
+      // change also alters the bar's wrapping or its anchor geometry.
+      if (settlingMeasurements < MAXIMUM_SETTLING_MEASUREMENTS) {
+        settlingMeasurements += 1;
         scheduleMeasure();
       }
     };
@@ -299,7 +356,32 @@ function ViewportBottomActionBar({
       ) {
         return;
       }
+      requestFocusClearance(target, bar, panelRoot, ownerWindow, pointer);
+    };
+
+    const flushPendingClearance = (): void => {
+      clearanceFrame = 0;
+      pointer.pending = false;
+      if (disposed || !placementRef.current.docked) return;
+      const target = focusedElement(ownerDocument, ownerWindow);
+      if (target === null) return;
       keepFocusedTargetVisible(target, bar, panelRoot, ownerWindow);
+    };
+
+    const beginPointerPress = (): void => {
+      pointer.active = true;
+    };
+
+    // Runs on release and on key input, because a key press means the pointer
+    // is no longer the thing driving focus. Waiting a frame puts the deferred
+    // clearance after the release has produced its compatibility mouse events
+    // and its click, so the scroll can no longer change where that click
+    // lands. Key input also recovers the state when a release never arrives,
+    // which keeps keyboard clearance immediate in every case.
+    const endPointerPress = (): void => {
+      pointer.active = false;
+      if (!pointer.pending || clearanceFrame !== 0) return;
+      clearanceFrame = ownerWindow.requestAnimationFrame(flushPendingClearance);
     };
 
     const ResizeObserverConstructor = getResizeObserver(ownerWindow);
@@ -313,6 +395,10 @@ function ViewportBottomActionBar({
 
     ownerDocument.addEventListener("scroll", scheduleMeasure, true);
     ownerDocument.addEventListener("focusin", keepFocusedContentVisible);
+    ownerDocument.addEventListener("pointerdown", beginPointerPress, true);
+    ownerDocument.addEventListener("pointerup", endPointerPress, true);
+    ownerDocument.addEventListener("pointercancel", endPointerPress, true);
+    ownerDocument.addEventListener("keydown", endPointerPress, true);
     ownerWindow.addEventListener("resize", scheduleMeasure);
     ownerWindow.addEventListener("scroll", scheduleMeasure);
     visualViewport?.addEventListener("resize", scheduleMeasure);
@@ -322,12 +408,21 @@ function ViewportBottomActionBar({
 
     return () => {
       disposed = true;
+      pointer.active = false;
+      pointer.pending = false;
       if (animationFrame !== 0) {
         ownerWindow.cancelAnimationFrame(animationFrame);
+      }
+      if (clearanceFrame !== 0) {
+        ownerWindow.cancelAnimationFrame(clearanceFrame);
       }
       resizeObserver?.disconnect();
       ownerDocument.removeEventListener("scroll", scheduleMeasure, true);
       ownerDocument.removeEventListener("focusin", keepFocusedContentVisible);
+      ownerDocument.removeEventListener("pointerdown", beginPointerPress, true);
+      ownerDocument.removeEventListener("pointerup", endPointerPress, true);
+      ownerDocument.removeEventListener("pointercancel", endPointerPress, true);
+      ownerDocument.removeEventListener("keydown", endPointerPress, true);
       ownerWindow.removeEventListener("resize", scheduleMeasure);
       ownerWindow.removeEventListener("scroll", scheduleMeasure);
       visualViewport?.removeEventListener("resize", scheduleMeasure);
@@ -342,15 +437,16 @@ function ViewportBottomActionBar({
     if (anchor === null || bar === null) return;
     const ownerWindow = anchor.ownerDocument.defaultView;
     const panelRoot = anchor.closest<HTMLElement>("[data-snui-root]");
-    const target = anchor.ownerDocument.activeElement;
-    if (
-      ownerWindow === null ||
-      panelRoot === null ||
-      !(target instanceof ownerWindow.HTMLElement)
-    ) {
-      return;
-    }
-    keepFocusedTargetVisible(target, bar, panelRoot, ownerWindow);
+    if (ownerWindow === null || panelRoot === null) return;
+    const target = focusedElement(anchor.ownerDocument, ownerWindow);
+    if (target === null) return;
+    requestFocusClearance(
+      target,
+      bar,
+      panelRoot,
+      ownerWindow,
+      pointerRef.current,
+    );
   }, [placement]);
 
   const anchorStyle = {
