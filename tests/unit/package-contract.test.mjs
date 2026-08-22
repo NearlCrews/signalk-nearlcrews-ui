@@ -6,7 +6,7 @@ import {
   validatePackedFiles,
 } from "../../scripts/lib/package-contract.mjs";
 
-const version = "0.8.0";
+const version = "0.8.1";
 const packageJson = {
   name: "signalk-nearlcrews-ui",
   version,

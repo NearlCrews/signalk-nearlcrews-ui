@@ -138,7 +138,7 @@ That class is the one documented exception to version-scoped styling. It carries
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.8.0"])
+@scope (.snui-root[data-snui-version="0.8.1"])
   to ([data-snui-version]) {
   /* component rules */
 }

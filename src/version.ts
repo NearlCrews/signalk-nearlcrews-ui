@@ -1,5 +1,5 @@
 /** The package version used to isolate styles from other loaded versions. */
-export const PACKAGE_VERSION = "0.8.0";
+export const PACKAGE_VERSION = "0.8.1";
 
 /** The root class is private and may change without notice. */
 export const ROOT_CLASS = "snui-root";
