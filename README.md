@@ -15,15 +15,15 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or marketplace package. The initial API may change during the `0.x` series, so consumers should pin an exact version.
 
-## What's new in 0.8.1
+## What's new in 0.8.2
 
-Version 0.8.1 corrects pointer behavior in the viewport-bottom `ActionBar`. It is a bug-fix release with no API change, so upgrading from 0.8.0 requires no consumer work. See the [0.8.1 changelog](CHANGELOG.md#081---2026-08-22) and [migration guide](docs/migration.md#changes-in-081) for the complete release notes.
+Version 0.8.2 finishes the viewport-bottom `ActionBar` work, gives compact buttons their own target-size floor, and keeps a revealed panel's theme current. It is a bug-fix release with no API change, so upgrading from 0.8.1 requires no consumer work. See the [0.8.2 changelog](CHANGELOG.md#082---2026-08-22) and [migration guide](docs/migration.md#changes-in-082) for the complete release notes.
 
-- **First click lands**: a docked action bar no longer scrolls the panel during a press, so a control the bar overlaps receives its first click instead of losing it to an ancestor.
-- **Settled docking**: docking measurement stops within a bounded number of frames when a docked and an undocked geometry alternate, so a focus change leaves the bar's geometry stable.
-- **Unchanged clearance**: keyboard and programmatic focus still scroll a covered control clear immediately, and a clearance a press defers runs after that press's click rather than during it.
-- **Documented retain semantics**: `CollapsibleSection.mountStrategy` now spells out that a retaining strategy keeps hidden state while running the subtree's effect cleanups on collapse and its effects again on expand, along with the consumer rules that follow.
-- **Consistent form values**: a named `SegmentedControl` always submits the selection it displays, including after a native form reset it could not observe.
+- **One measuring pass**: docking reaches its final geometry inside the frame the event scheduled, so a control immediately above the docked bar is stable on the next frame and a press on it needs no settle or retry.
+- **Stable docking threshold**: geometry that lands on the docking threshold keeps the state it has, so the bar no longer alternates between docked and natural flow.
+- **No scroll under the pointer**: a pointer press that moves focus no longer produces a clearance scroll at all, while keyboard and programmatic focus still clear a covered control immediately.
+- **Square compact targets**: compact and icon-only buttons take their minimum width from the control size token, so a single-glyph button meets the target floor in width as well as height.
+- **Theme on reveal**: a panel revealed inside a retained `CollapsibleSection` re-reads the shared theme, so a choice made while it was hidden reaches it.
 
 ## Compatibility
 
@@ -84,7 +84,7 @@ The repository checks the declaration against that committed baseline rather tha
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.8.1
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.8.2
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball:
@@ -92,7 +92,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.8.1.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.8.2.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while resolving React and React DOM from the Signal K Admin host through the integration supported by its bundler.
@@ -327,11 +327,11 @@ An inline token override applies in every selected theme. Use it only when that 
 
 The repository ships a fixture page that renders every exported component. The top of that page in each theme:
 
-![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.1/docs/screenshots/showcase-light.png)
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.2/docs/screenshots/showcase-light.png)
 
-![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.1/docs/screenshots/showcase-dark.png)
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.2/docs/screenshots/showcase-dark.png)
 
-![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.1/docs/screenshots/showcase-night.png)
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.8.2/docs/screenshots/showcase-night.png)
 
 The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
 

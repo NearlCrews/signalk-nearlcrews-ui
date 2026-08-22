@@ -1,10 +1,24 @@
 /** Shared helpers for the unit specs. */
 
-import { type RenderResult, render } from "@testing-library/react";
+import { act, type RenderResult, render } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { vi } from "vitest";
 
 import { PanelRoot, type PanelRootProps } from "../src/index.js";
+
+/**
+ * Awaits two animation frames, which is longer than any frame a component
+ * schedules for itself, so a spec can assert that nothing further happened.
+ */
+export async function flushAnimationFrames(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  });
+}
 
 /** A stub visual viewport together with the restore its spec must run. */
 export interface VisualViewportStub {

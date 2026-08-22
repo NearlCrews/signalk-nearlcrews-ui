@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
+  CollapsibleSection,
   PanelRoot,
   SegmentedControl,
   supportsNativeCssScope,
@@ -557,6 +558,32 @@ describe("PanelRoot themes", () => {
 
     expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
     expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
+  });
+
+  it("re-reads the shared theme when a retained section reveals a panel", async () => {
+    const user = userEvent.setup();
+    render(
+      <CollapsibleSection title="Provider settings" defaultOpen>
+        <PanelRoot data-testid="retained-panel">
+          <ThemeToggle />
+        </PanelRoot>
+      </CollapsibleSection>,
+    );
+    const panel = screen.getByTestId("retained-panel");
+    const toggle = screen.getByRole("button", { name: "Provider settings" });
+    expect(panel).not.toHaveAttribute("data-snui-theme");
+
+    // The retained subtree keeps its state while hidden and its listeners are
+    // gone for that whole period, so a theme another panel writes meanwhile is
+    // only visible to the effects the reveal runs again.
+    await user.click(toggle);
+    window.localStorage.setItem(THEME_STORAGE_KEY, "night");
+    await user.click(toggle);
+
+    await waitFor(() =>
+      expect(panel).toHaveAttribute("data-snui-theme", "night"),
+    );
+    expect(screen.getByRole("radio", { name: "Night" })).toBeChecked();
   });
 
   it("uses Auto without persisting when browser storage cannot be read", () => {

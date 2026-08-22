@@ -71,6 +71,17 @@ Use `Accordion` only when at most one section may remain open and child order is
 
 Before moving panel content into a `CollapsibleSection`, read the `mountStrategy` rules in the API reference. Under the default retaining strategy the hidden subtree keeps its state while every effect in it runs its cleanup on collapse and runs again on expand, so an effect written to run once on mount runs once per expand. Two consumer panels have already lost work to that rule: a field that reported validity from an effect dropped its invalid state when the section collapsed and then discarded an in-progress edit on the next expand, and an abortable request left its control permanently `aria-busy` because the cleanup aborted the request while the completion path that clears the flag never ran. Audit any subtree that reports validity, starts abortable work, or registers a listener it expects to keep observing while hidden.
 
+## Changes in 0.8.2
+
+These changes are backward compatible. No consuming code requires modification.
+
+- A viewport-bottom `ActionBar` no longer scrolls a control clear when a pointer press moves focus to it. 0.8.1 deferred that scroll until after the click; 0.8.2 skips it, because a pointer user can see the control they pressed and the deferred scroll still moved content under a pointer that was often still there. A consumer test that asserted a scroll after a click on a control the docked bar overlaps should now assert the scroll position is unchanged.
+- Docking measurement reaches its final geometry inside the animation frame the focus, scroll, or resize event scheduled. A consumer test that added a settle wait, a retry, or a longer actionability timeout around a control immediately above the docked bar can drop that workaround.
+- The docking decision carries a hysteresis band, so a panel whose geometry sits on the docking threshold no longer alternates between the docked and natural-flow presentations.
+- Compact and icon-only buttons carry the control size token as a minimum width. A consumer that added `min-width: var(--snui-control-min-height)` to reach the target-size floor on a single-glyph button can drop that override.
+- Keyboard and programmatic focus keep the clearance behavior 0.8.0 introduced, and a viewport resize that docks the bar still clears the focused control.
+- A `PanelRoot` nested in a retained `CollapsibleSection` re-reads the shared theme when the section reveals it. A consumer that remounted the panel to pick up a theme change made while the section was collapsed can drop that workaround.
+
 ## Changes in 0.8.1
 
 These changes are backward compatible. No consuming code requires modification.

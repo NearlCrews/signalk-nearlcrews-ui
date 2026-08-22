@@ -19,19 +19,103 @@ async function expectNoAxeViolations(page: Page): Promise<void> {
 /** Pixels of the last panel action the docked bar is scrolled to cover. */
 const DOCKED_BAR_OVERLAP = 8;
 
-/** Frames a focus change may take to leave the docked bar's box unchanged. */
-const SETTLED_FRAME_BUDGET = 10;
+/**
+ * Pixels past the docking line the return-to-flow check scrolls. The docking
+ * decision holds its state inside a hysteresis band, so the check has to clear
+ * that band rather than rest on the line.
+ */
+const DOCK_RELEASE_MARGIN = 4;
+
+/**
+ * Frames an event may take to leave a box unchanged. Two consecutive equal
+ * frames are what settling means, so three is the floor and four leaves room
+ * for the single measuring pass the bar is allowed after the event.
+ */
+const SETTLED_FRAME_BUDGET = 4;
+
+/** Milliseconds one press may spend waiting for a control to become stable. */
+const ACTIONABILITY_TIMEOUT = 2_000;
+
+const ACTION_BAR_SELECTOR = ".snui-action-bar";
+const PANEL_ACTION_SELECTOR = '[data-testid="admin-host-focus-target"]';
 
 interface DockedBarOverlap {
   readonly action: Locator;
   readonly bar: Locator;
 }
 
+interface StabilityProbe {
+  /** Selector of a control to focus before the frames are counted. */
+  readonly focus?: string;
+  readonly limit: number;
+  /** Selector of the element whose box has to hold still. */
+  readonly measure: string;
+}
+
+/**
+ * Counts the frames an element's box takes to hold still, or reports null when
+ * it never does. Playwright dispatches a click only after two consecutive
+ * frames report the same box, so that pair is what settling means here, and the
+ * count is the frame the pair completed on. The optional focus runs in the same
+ * task as the count so the frames after it are the ones measured.
+ */
+async function framesUntilStable(
+  page: Page,
+  probe: StabilityProbe,
+): Promise<number | null> {
+  return page.evaluate(async ({ focus, limit, measure }: StabilityProbe) => {
+    const element = document.querySelector(measure);
+    if (!(element instanceof HTMLElement)) {
+      throw new Error(`Expected an HTML element matching ${measure}.`);
+    }
+    if (focus !== undefined) {
+      const focusTarget = document.querySelector(focus);
+      if (!(focusTarget instanceof HTMLElement)) {
+        throw new Error(`Expected an HTML element matching ${focus}.`);
+      }
+      focusTarget.focus({ preventScroll: true });
+    }
+
+    const box = (): string => {
+      const rect = element.getBoundingClientRect();
+      return [rect.x, rect.y, rect.width, rect.height].join();
+    };
+    let previous = "";
+    let stable = 0;
+    for (let frame = 1; frame <= limit; frame += 1) {
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+      const current = box();
+      if (current !== previous) {
+        previous = current;
+        stable = 0;
+        continue;
+      }
+      stable += 1;
+      if (stable === 2) return frame;
+    }
+    return null;
+  }, probe);
+}
+
+/** Waits two frames, which is longer than any scroll the bar schedules. */
+async function settleFrames(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  });
+}
+
 /**
  * Opens the unconstrained Admin host, waits for the bar to dock, then scrolls
  * the last panel action until the bar covers its bottom edge. The action's
- * centre stays clear of the bar, so a press lands on the action itself and the
- * clearance its focus triggers is the only thing that can move it.
+ * centre stays clear of the bar, so a press lands on the action itself, and a
+ * clearance scroll, which only keyboard and programmatic focus ask for, is the
+ * one thing that could move it afterwards.
  */
 async function overlapDockedActionBar(
   page: Page,
@@ -40,7 +124,7 @@ async function overlapDockedActionBar(
   await page.setViewportSize({ width, height: 600 });
   await page.goto("/?admin-host=1");
 
-  const bar = page.locator(".snui-action-bar");
+  const bar = page.locator(ACTION_BAR_SELECTOR);
   const action = page.getByTestId("admin-host-focus-target");
   await expect
     .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
@@ -474,6 +558,33 @@ test("applies the control target floor to every interactive primitive", async ({
   for (const target of targets) {
     const box = await target.boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(minimumHeight - 0.01);
+  }
+
+  // A button holding a single glyph has no text to widen it, so the floor has
+  // to come from the control itself in both axes.
+  await page
+    .locator("[data-snui-root] .snui-root__content")
+    .evaluate((content) => {
+      const glyphButton = document.createElement("button");
+      glyphButton.id = "compact-glyph-button";
+      glyphButton.type = "button";
+      glyphButton.className =
+        "snui-button snui-button--ghost snui-button--size-compact";
+      glyphButton.textContent = "+";
+      const iconButton = document.createElement("button");
+      iconButton.id = "compact-icon-button";
+      iconButton.type = "button";
+      iconButton.className =
+        "snui-button snui-button--ghost snui-button--size-compact snui-button--icon-only";
+      iconButton.setAttribute("aria-label", "Add waypoint");
+      iconButton.textContent = "+";
+      content.append(glyphButton, iconButton);
+    });
+
+  for (const id of ["#compact-glyph-button", "#compact-icon-button"]) {
+    const box = await page.locator(id).boundingBox();
+    expect(box?.height).toBeGreaterThanOrEqual(minimumHeight - 0.01);
+    expect(box?.width).toBeGreaterThanOrEqual(minimumHeight - 0.01);
   }
 });
 
@@ -1061,10 +1172,14 @@ test("docks the viewport action bar inside an unconstrained Admin host", async (
     (element) => element.getBoundingClientRect().top + window.scrollY,
   );
   await page.evaluate(
-    ({ documentTop, height }) => {
-      window.scrollTo(0, documentTop - window.innerHeight + height + 1);
+    ({ documentTop, height, margin }) => {
+      window.scrollTo(0, documentTop - window.innerHeight + height + margin);
     },
-    { documentTop: anchorDocumentTop, height: barBox.height },
+    {
+      documentTop: anchorDocumentTop,
+      height: barBox.height,
+      margin: DOCK_RELEASE_MARGIN,
+    },
   );
   await expect
     .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
@@ -1121,11 +1236,49 @@ test("delivers the first click to a control the docked bar overlaps", async ({
 
   await expect.poll(() => actionClearsBar(overlap)).toBe(false);
   await expect(overlap.action).toHaveAttribute("data-activation-count", "0");
+  const scrollBeforeClick = await page.evaluate(() => window.scrollY);
 
   await overlap.action.click();
 
   await expect(overlap.action).toHaveAttribute("data-activation-count", "1");
-  await expect.poll(() => actionClearsBar(overlap)).toBe(true);
+  // A pointer user can see the control they pressed, so the press keeps the
+  // panel where they put it. A scroll after the click would move content under
+  // a pointer that is still there for a second press.
+  await settleFrames(page);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBeforeClick);
+  expect(await actionClearsBar(overlap)).toBe(false);
+});
+
+test("keeps a control above the docked bar actionable without a retry", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "webkit",
+    "The stability window this covers is WebKit's.",
+  );
+  const overlap = await overlapDockedActionBar(page, 900);
+  // Rest the action's bottom edge on the bar's top edge, the position the
+  // press timed out at, then act on it without settling or retrying first.
+  await page.evaluate(
+    (top) => window.scrollBy({ behavior: "auto", top }),
+    -DOCKED_BAR_OVERLAP,
+  );
+
+  const framesToSettle = await framesUntilStable(page, {
+    limit: 30,
+    measure: PANEL_ACTION_SELECTOR,
+  });
+  expect(
+    framesToSettle,
+    "The control above the docked bar never held still.",
+  ).not.toBeNull();
+  expect(framesToSettle ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(
+    SETTLED_FRAME_BUDGET,
+  );
+
+  await overlap.action.click({ timeout: ACTIONABILITY_TIMEOUT });
+
+  await expect(overlap.action).toHaveAttribute("data-activation-count", "1");
 });
 
 test("clears a keyboard-focused control from the docked bar", async ({
@@ -1146,42 +1299,13 @@ test("clears a keyboard-focused control from the docked bar", async ({
 });
 
 test("settles the docked action bar after a focus change", async ({ page }) => {
-  const { action } = await overlapDockedActionBar(page, 320);
+  await overlapDockedActionBar(page, 320);
+  await framesUntilStable(page, { limit: 30, measure: ACTION_BAR_SELECTOR });
 
-  const framesToSettle = await action.evaluate(async (element) => {
-    const bar = document.querySelector(".snui-action-bar");
-    if (!(element instanceof HTMLElement) || !(bar instanceof HTMLElement)) {
-      throw new Error("Expected an HTML action and docked action bar.");
-    }
-    const box = (): string => {
-      const rect = bar.getBoundingClientRect();
-      return [rect.x, rect.y, rect.width, rect.height].join();
-    };
-    // Playwright dispatches a click only after two consecutive frames report
-    // the same box, so that pair is what settling means here. The count is the
-    // frame the pair completed on, or null when the box never held still.
-    const framesUntilStable = async (limit: number): Promise<number | null> => {
-      let previous = "";
-      let stable = 0;
-      for (let frame = 1; frame <= limit; frame += 1) {
-        await new Promise<void>((resolve) => {
-          requestAnimationFrame(() => resolve());
-        });
-        const current = box();
-        if (current !== previous) {
-          previous = current;
-          stable = 0;
-          continue;
-        }
-        stable += 1;
-        if (stable === 2) return frame;
-      }
-      return null;
-    };
-
-    await framesUntilStable(30);
-    element.focus({ preventScroll: true });
-    return framesUntilStable(30);
+  const framesToSettle = await framesUntilStable(page, {
+    focus: PANEL_ACTION_SELECTOR,
+    limit: 30,
+    measure: ACTION_BAR_SELECTOR,
   });
 
   expect(

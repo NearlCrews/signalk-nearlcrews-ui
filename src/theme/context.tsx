@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useEffectEvent,
   useMemo,
   useState,
 } from "react";
@@ -74,6 +75,18 @@ export function ThemeProvider({
     () => readStorage(THEME_STORAGE_KEY) ?? "auto",
   );
 
+  // The state initializer above runs once per mount, while the effect below
+  // also runs again when React reveals a retained subtree. Adopting the stored
+  // theme as the subscription opens picks up a choice another panel wrote while
+  // this one was hidden, which the initializer alone misses because the hidden
+  // panel kept its state and had no listener for the whole hidden period.
+  const adoptSharedTheme = useEffectEvent((): void => {
+    const sharedTheme = readStorage(THEME_STORAGE_KEY);
+    if (sharedTheme === undefined) return;
+
+    setThemeState(sharedTheme ?? "auto");
+  });
+
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
@@ -83,10 +96,7 @@ export function ThemeProvider({
         return;
       }
 
-      const sharedTheme = readStorage(THEME_STORAGE_KEY);
-      if (sharedTheme === undefined) return;
-
-      setThemeState(sharedTheme ?? "auto");
+      adoptSharedTheme();
     };
     const handleStorage = (event: StorageEvent): void => {
       if (
@@ -99,6 +109,12 @@ export function ThemeProvider({
 
     window.addEventListener("storage", handleStorage);
     window.addEventListener(THEME_CHANGE_EVENT, syncTheme);
+    // Reading the shared value as the subscription opens is what this effect is
+    // for, not state derived from a render: no event reports a theme written
+    // while the panel was hidden, and an unchanged value bails out before it
+    // reaches a render at all.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    adoptSharedTheme();
 
     return () => {
       window.removeEventListener("storage", handleStorage);

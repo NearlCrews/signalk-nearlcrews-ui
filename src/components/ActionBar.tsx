@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
@@ -40,24 +41,22 @@ const NATURAL_VIEWPORT_PLACEMENT: ViewportPlacement = {
 };
 
 /**
- * Upper bound on the measurements one placement change may schedule for
- * itself. A settling docking change costs one recheck for the class React
- * commits and one for the anchor geometry that class changes, so a bound of
- * four leaves headroom above a legitimate settle and still stops a geometry
- * that alternates between two placements from remeasuring on every frame.
+ * Upper bound on the measurements one settling pass may take. A settling
+ * docking change costs one recheck for the class React commits and one for the
+ * anchor geometry that class changes, so four leaves headroom above a
+ * legitimate settle. The bound is also even, which matters for a geometry that
+ * never settles because docking undoes its own condition: an alternating pair
+ * of placements then ends every pass on the same one of the two, so the bar's
+ * box is identical from frame to frame instead of moving on each.
  */
 const MAXIMUM_SETTLING_MEASUREMENTS = 4;
 
 /**
- * Pointer state shared by the focus-clearance paths. A pointer press focuses
- * its target before the release lands, so a clearance scroll during the press
- * would move the control out from under the pointer and the resulting click
- * would dispatch on an ancestor instead of the control.
+ * Half-width, in CSS pixels, of the band around every docking edge. Geometry
+ * inside the band keeps the docking state it already has, so a value that lands
+ * on an edge cannot alternate the bar between docked and natural flow.
  */
-interface PointerClearance {
-  active: boolean;
-  pending: boolean;
-}
+const DOCKING_HYSTERESIS = 1;
 
 function placementsMatch(
   current: ViewportPlacement,
@@ -191,17 +190,22 @@ function keepFocusedTargetVisible(
   );
 }
 
+/**
+ * A pointer press focuses its target before the release lands, so a clearance
+ * scroll during the press would move the control out from under the pointer and
+ * the resulting click would dispatch on an ancestor instead of the control. The
+ * clearance is skipped rather than deferred: a pointer user can already see the
+ * control they pressed, and a scroll that arrives after the click would move
+ * content under a pointer that is still there for a second press.
+ */
 function requestFocusClearance(
   target: HTMLElement,
   bar: HTMLElement,
   panelRoot: HTMLElement,
   ownerWindow: Window,
-  pointer: PointerClearance,
+  pointerPressed: boolean,
 ): void {
-  if (pointer.active) {
-    pointer.pending = true;
-    return;
-  }
+  if (pointerPressed) return;
   keepFocusedTargetVisible(target, bar, panelRoot, ownerWindow);
 }
 
@@ -249,10 +253,7 @@ function ViewportBottomActionBar({
   const barRef = useRef<HTMLDivElement>(null);
   const safeAreaProbeRef = useRef<HTMLSpanElement>(null);
   const placementRef = useRef<ViewportPlacement>(NATURAL_VIEWPORT_PLACEMENT);
-  const pointerRef = useRef<PointerClearance>({
-    active: false,
-    pending: false,
-  });
+  const pointerPressRef = useRef(false);
   const [placement, setPlacement] = useState<ViewportPlacement>(
     NATURAL_VIEWPORT_PLACEMENT,
   );
@@ -271,16 +272,14 @@ function ViewportBottomActionBar({
     if (ownerWindow === null || panelRoot === null) return undefined;
     const visualViewport = getVisualViewport(ownerWindow);
 
-    const pointer = pointerRef.current;
     let animationFrame = 0;
-    let clearanceFrame = 0;
-    let settlingMeasurements = 0;
     let disposed = false;
 
-    const measure = (): void => {
-      animationFrame = 0;
-      if (disposed) return;
-
+    /**
+     * Reads the current geometry and adopts it. Returns the placement React
+     * still has to render, or null once the geometry holds still.
+     */
+    const takePlacement = (): ViewportPlacement | null => {
       const viewport = getVisualViewport(ownerWindow);
       const viewportTop = viewport?.offsetTop ?? 0;
       const viewportLeft = viewport?.offsetLeft ?? 0;
@@ -309,15 +308,20 @@ function ViewportBottomActionBar({
       // Dock only while the target viewport edge lies between the panel's
       // leading edge and the bar's natural-flow anchor. This makes the bar
       // enter with the panel, return to flow at the anchor, and leave with the
-      // panel instead of lingering over unrelated Admin pages.
+      // panel instead of lingering over unrelated Admin pages. Every edge
+      // carries the hysteresis band, because docking moves the anchor and the
+      // bar and so feeds back into the geometry the next measurement reads.
+      const band = placementRef.current.docked
+        ? -DOCKING_HYSTERESIS
+        : DOCKING_HYSTERESIS;
       const docked =
         barRect.height > 0 &&
         anchorRect.width > 0 &&
-        panelRect.top < dockingTop &&
-        anchorRect.top > dockingTop &&
-        panelRect.bottom > viewportTop &&
-        panelRect.left < viewportRight &&
-        panelRect.right > viewportLeft;
+        panelRect.top < dockingTop - band &&
+        anchorRect.top > dockingTop + band &&
+        panelRect.bottom > viewportTop + band &&
+        panelRect.left < viewportRight - band &&
+        panelRect.right > viewportLeft + band;
 
       const nextPlacement: ViewportPlacement = {
         bottomInset: roundedLayoutValue(bottomInset),
@@ -327,18 +331,28 @@ function ViewportBottomActionBar({
         viewportBottom: roundedLayoutValue(viewportBottom),
         width: roundedLayoutValue(anchorRect.width),
       };
-      if (placementsMatch(placementRef.current, nextPlacement)) {
-        settlingMeasurements = 0;
-        return;
-      }
+      if (placementsMatch(placementRef.current, nextPlacement)) return null;
       placementRef.current = nextPlacement;
-      setPlacement(nextPlacement);
-      // Recheck after React applies the docking class. WebKit does not
-      // reliably deliver a ResizeObserver notification when that position
-      // change also alters the bar's wrapping or its anchor geometry.
-      if (settlingMeasurements < MAXIMUM_SETTLING_MEASUREMENTS) {
-        settlingMeasurements += 1;
-        scheduleMeasure();
+      return nextPlacement;
+    };
+
+    const measure = (): void => {
+      animationFrame = 0;
+      if (disposed) return;
+      // Settle inside this frame. Each pass commits its placement
+      // synchronously, so the next pass reads the layout that placement
+      // produced rather than waiting for another frame, and the bar's box is
+      // final by the time the frame paints. A browser that checks a control's
+      // box across consecutive frames before delivering a press therefore sees
+      // it hold still immediately, and WebKit, which does not reliably report
+      // a docking change through its ResizeObserver, needs no extra frames to
+      // catch up.
+      for (let pass = 0; pass < MAXIMUM_SETTLING_MEASUREMENTS; pass += 1) {
+        const nextPlacement = takePlacement();
+        if (nextPlacement === null) return;
+        flushSync(() => {
+          setPlacement(nextPlacement);
+        });
       }
     };
 
@@ -356,32 +370,25 @@ function ViewportBottomActionBar({
       ) {
         return;
       }
-      requestFocusClearance(target, bar, panelRoot, ownerWindow, pointer);
-    };
-
-    const flushPendingClearance = (): void => {
-      clearanceFrame = 0;
-      pointer.pending = false;
-      if (disposed || !placementRef.current.docked) return;
-      const target = focusedElement(ownerDocument, ownerWindow);
-      if (target === null) return;
-      keepFocusedTargetVisible(target, bar, panelRoot, ownerWindow);
+      requestFocusClearance(
+        target,
+        bar,
+        panelRoot,
+        ownerWindow,
+        pointerPressRef.current,
+      );
     };
 
     const beginPointerPress = (): void => {
-      pointer.active = true;
+      pointerPressRef.current = true;
     };
 
     // Runs on release and on key input, because a key press means the pointer
-    // is no longer the thing driving focus. Waiting a frame puts the deferred
-    // clearance after the release has produced its compatibility mouse events
-    // and its click, so the scroll can no longer change where that click
-    // lands. Key input also recovers the state when a release never arrives,
-    // which keeps keyboard clearance immediate in every case.
+    // is no longer the thing driving focus. Key input also recovers the state
+    // when a release never arrives, which keeps keyboard clearance immediate in
+    // every case.
     const endPointerPress = (): void => {
-      pointer.active = false;
-      if (!pointer.pending || clearanceFrame !== 0) return;
-      clearanceFrame = ownerWindow.requestAnimationFrame(flushPendingClearance);
+      pointerPressRef.current = false;
     };
 
     const ResizeObserverConstructor = getResizeObserver(ownerWindow);
@@ -403,18 +410,17 @@ function ViewportBottomActionBar({
     ownerWindow.addEventListener("scroll", scheduleMeasure);
     visualViewport?.addEventListener("resize", scheduleMeasure);
     visualViewport?.addEventListener("scroll", scheduleMeasure);
-    measure();
+    // React is already committing here, so this first placement lands through
+    // an ordinary state update and the scheduled frame settles the rest.
+    const mountPlacement = takePlacement();
+    if (mountPlacement !== null) setPlacement(mountPlacement);
     scheduleMeasure();
 
     return () => {
       disposed = true;
-      pointer.active = false;
-      pointer.pending = false;
+      pointerPressRef.current = false;
       if (animationFrame !== 0) {
         ownerWindow.cancelAnimationFrame(animationFrame);
-      }
-      if (clearanceFrame !== 0) {
-        ownerWindow.cancelAnimationFrame(clearanceFrame);
       }
       resizeObserver?.disconnect();
       ownerDocument.removeEventListener("scroll", scheduleMeasure, true);
@@ -445,7 +451,7 @@ function ViewportBottomActionBar({
       bar,
       panelRoot,
       ownerWindow,
-      pointerRef.current,
+      pointerPressRef.current,
     );
   }, [placement]);
 
