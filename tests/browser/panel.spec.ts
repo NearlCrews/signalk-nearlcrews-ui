@@ -1128,6 +1128,23 @@ test("delivers the first click to a control the docked bar overlaps", async ({
   await expect.poll(() => actionClearsBar(overlap)).toBe(true);
 });
 
+test("clears a keyboard-focused control from the docked bar", async ({
+  page,
+}) => {
+  const overlap = await overlapDockedActionBar(page, 900);
+
+  // Focus starts on a control inside the bar, which the clearance ignores, so
+  // the overlap survives until the keyboard moves focus back onto the action.
+  await page.getByRole("button", { name: "Reset" }).focus();
+  await expect.poll(() => actionClearsBar(overlap)).toBe(false);
+
+  await page.keyboard.press("Shift+Tab");
+
+  await expect(overlap.action).toBeFocused();
+  await expect.poll(() => actionClearsBar(overlap)).toBe(true);
+  await expect(overlap.action).toHaveAttribute("data-activation-count", "0");
+});
+
 test("settles the docked action bar after a focus change", async ({ page }) => {
   const { action } = await overlapDockedActionBar(page, 320);
 
