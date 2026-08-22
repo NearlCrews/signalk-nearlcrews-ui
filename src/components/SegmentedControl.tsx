@@ -5,6 +5,7 @@ import {
   type RefAttributes,
   useCallback,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -98,20 +99,50 @@ export function SegmentedControl<Value extends string>({
   // Keep the hidden input's default value aligned so a native form reset
   // restores the defaultValue selection even before React re-renders, and
   // mirror platform radio groups by restoring the selection on reset.
+  const hiddenInput = useRef<HTMLInputElement | null>(null);
   const setHiddenInputRef = useCallback(
     (node: HTMLInputElement | null): (() => void) | undefined => {
+      hiddenInput.current = node;
       if (node === null) return undefined;
       node.defaultValue = defaultValue ?? "";
       const form = node.form;
-      if (form === null) return undefined;
+      if (form === null) {
+        return () => {
+          hiddenInput.current = null;
+        };
+      }
       const onReset = (): void => {
-        if (value === undefined) setInternalValue(defaultValue);
+        if (value === undefined) {
+          setInternalValue(defaultValue);
+          return;
+        }
+        // A controlled selection belongs to the parent, so the reset leaves it
+        // alone. The native reset still rewrites the input, and no rerender
+        // follows to correct it, so restore the submitted value once the reset
+        // has finished dispatching.
+        queueMicrotask(() => {
+          if (node.isConnected) node.value = value;
+        });
       };
       form.addEventListener("reset", onReset);
-      return () => form.removeEventListener("reset", onReset);
+      return () => {
+        form.removeEventListener("reset", onReset);
+        hiddenInput.current = null;
+      };
     },
     [defaultValue, value],
   );
+
+  // A reset that lands while this control sits in a paused subtree, inside a
+  // collapsed CollapsibleSection for example, restores the input's default in
+  // the DOM without reaching the listener above, and React does not rewrite a
+  // value prop it believes is unchanged. Resyncing here keeps the submitted
+  // value equal to the selection the control displays.
+  useLayoutEffect(() => {
+    const node = hiddenInput.current;
+    const selected = effectiveValue ?? "";
+    if (node !== null && node.value !== selected) node.value = selected;
+  });
 
   const select = (nextValue: Value): void => {
     if (value === undefined) setInternalValue(nextValue);
