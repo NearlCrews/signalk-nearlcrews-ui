@@ -1,6 +1,6 @@
 import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef } from "react";
+import { createRef, useEffect, useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Accordion } from "../../src/composites.js";
@@ -392,6 +392,72 @@ describe("section landmark opt-out", () => {
     expect(section).not.toBeNull();
     expect(section).not.toHaveAttribute("aria-labelledby");
     expect(screen.getByRole("heading", { name: "Connection" })).toBeVisible();
+  });
+
+  it("pauses retained effects on collapse while keeping child state", async () => {
+    const user = userEvent.setup();
+    const lifecycle: string[] = [];
+
+    function Child(): React.JSX.Element {
+      const runs = useRef(0);
+      const [value, setValue] = useState("initial");
+      useEffect(() => {
+        runs.current += 1;
+        lifecycle.push(`run ${String(runs.current)}`);
+        return () => {
+          lifecycle.push("cleanup");
+        };
+      }, []);
+      return (
+        <input
+          aria-label="Draft"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
+      );
+    }
+
+    renderInPanel(
+      <CollapsibleSection title="Advanced settings" defaultOpen>
+        <Child />
+      </CollapsibleSection>,
+    );
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    await user.clear(screen.getByLabelText("Draft"));
+    await user.type(screen.getByLabelText("Draft"), "edited");
+    expect(lifecycle).toEqual(["run 1"]);
+
+    await user.click(toggle);
+    // Collapsing tears the subtree's effects down without unmounting it, so a
+    // cleanup that discards state the consumer expects to outlive the hidden
+    // period loses it. The API reference records the rules that follow.
+    expect(lifecycle).toEqual(["run 1", "cleanup"]);
+
+    await user.click(toggle);
+    expect(lifecycle).toEqual(["run 1", "cleanup", "run 2"]);
+    expect(screen.getByLabelText("Draft")).toHaveValue("edited");
+  });
+
+  it("discards child state under the unmounting strategy", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <CollapsibleSection
+        title="Advanced settings"
+        defaultOpen
+        mountStrategy="unmount"
+      >
+        <input aria-label="Draft" defaultValue="initial" />
+      </CollapsibleSection>,
+    );
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    await user.clear(screen.getByLabelText("Draft"));
+    await user.type(screen.getByLabelText("Draft"), "edited");
+
+    await user.click(toggle);
+    expect(screen.queryByLabelText("Draft")).toBeNull();
+
+    await user.click(toggle);
+    expect(screen.getByLabelText("Draft")).toHaveValue("initial");
   });
 
   it("drops consumer label references when landmark is false", () => {

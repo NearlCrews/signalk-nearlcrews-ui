@@ -82,7 +82,16 @@ export interface CollapsibleSectionProps extends Omit<HTMLAttributes<HTMLElement
     readonly defaultOpen?: boolean | undefined;
     readonly disabled?: boolean | undefined;
     readonly headingLevel?: HeadingLevel | undefined;
-    /** Hidden content stays mounted but pauses effects under "lazy-retain" and "retain". */
+    /**
+     * Decides what happens to hidden content. Under "lazy-retain" and "retain"
+     * it stays mounted inside React `Activity`: state and refs survive, every
+     * effect and layout effect in the subtree runs its cleanup on collapse, and
+     * all of them run again on the next expand. An effect with an empty
+     * dependency list therefore runs once per expand rather than once per
+     * lifetime, so guard one-time work with a ref and keep each cleanup
+     * symmetric with its own setup. Under "unmount" hidden content is removed
+     * and its state is discarded. The API reference records the failure shapes.
+     */
     readonly mountStrategy?: CollapsibleMountStrategy | undefined;
     readonly onOpenChange?: ((open: boolean) => void) | undefined;
     readonly open?: boolean | undefined;
