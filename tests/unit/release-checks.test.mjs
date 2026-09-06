@@ -6,6 +6,7 @@ import {
   parseCheckRunsPage,
   parseWorkflowRunsPage,
   REQUIRED_RELEASE_CHECKS,
+  resolveDistTag,
 } from "../../scripts/lib/release-checks.mjs";
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -240,5 +241,42 @@ describe("release check parser", () => {
         totalCount: 101,
       }),
     ).toBe(false);
+  });
+});
+
+describe("registry ordering", () => {
+  it("publishes prereleases under next without consulting latest", () => {
+    expect(resolveDistTag("0.9.0-rc.1", "0.8.2")).toBe("next");
+    expect(resolveDistTag("1.0.0-beta.2", "not-a-version")).toBe("next");
+  });
+
+  it("publishes a newer stable version under latest", () => {
+    expect(resolveDistTag("0.9.0", "0.8.2")).toBe("latest");
+    expect(resolveDistTag("0.8.10", "0.8.9")).toBe("latest");
+    expect(resolveDistTag("1.0.0", "0.99.99")).toBe("latest");
+  });
+
+  it("refuses a stable version that would move latest backward or repeat it", () => {
+    expect(() => resolveDistTag("0.8.2", "0.8.2")).toThrow(
+      "0.8.2 must be newer than npm latest 0.8.2.",
+    );
+    expect(() => resolveDistTag("0.8.1", "0.8.2")).toThrow(
+      "0.8.1 must be newer than npm latest 0.8.2.",
+    );
+    expect(() => resolveDistTag("0.9.0", "1.0.0")).toThrow(
+      "0.9.0 must be newer than npm latest 1.0.0.",
+    );
+  });
+
+  it("rejects malformed versions on either side", () => {
+    expect(() => resolveDistTag("0.9", "0.8.2")).toThrow(
+      "Expected a stable semantic version for the candidate, received 0.9.",
+    );
+    expect(() => resolveDistTag("0.9.0", "")).toThrow(
+      "Expected a stable semantic version for npm latest, received .",
+    );
+    expect(() => resolveDistTag("", "0.8.2")).toThrow(
+      "A candidate version is required.",
+    );
   });
 });

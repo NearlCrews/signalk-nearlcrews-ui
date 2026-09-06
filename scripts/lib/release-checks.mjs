@@ -196,6 +196,41 @@ export function parseWorkflowRunsPage(value) {
   return value;
 }
 
+const STABLE_VERSION = /^(\d+)\.(\d+)\.(\d+)$/;
+
+function parseStableVersion(value, label) {
+  const match = STABLE_VERSION.exec(value);
+  if (match === null) {
+    throw new Error(
+      `Expected a stable semantic version for ${label}, received ${String(value)}.`,
+    );
+  }
+  return match.slice(1).map(Number);
+}
+
+/**
+ * Returns the dist-tag a candidate publishes under. A prerelease publishes
+ * under `next`. A stable version publishes under `latest` only when it is
+ * newer than the version `latest` currently points at, so a re-run or a
+ * delayed release can never move `latest` backward.
+ */
+export function resolveDistTag(candidate, latestPublished) {
+  if (typeof candidate !== "string" || candidate.length === 0) {
+    throw new Error("A candidate version is required.");
+  }
+  if (candidate.includes("-")) return "next";
+
+  const candidateParts = parseStableVersion(candidate, "the candidate");
+  const currentParts = parseStableVersion(latestPublished, "npm latest");
+  for (let index = 0; index < candidateParts.length; index += 1) {
+    if (candidateParts[index] > currentParts[index]) return "latest";
+    if (candidateParts[index] < currentParts[index]) break;
+  }
+  throw new Error(
+    `${candidate} must be newer than npm latest ${latestPublished}.`,
+  );
+}
+
 export function hasMoreCheckRunPages({
   collectedCount,
   pageCount,
