@@ -37,7 +37,9 @@ export {
 export {
   Checkbox,
   type CheckboxErrorLive,
+  type CheckboxLabelVisibility,
   type CheckboxProps,
+  type MonospaceControlProps,
   NumberInput,
   type NumberInputProps,
   RangeInput,
@@ -99,6 +101,7 @@ export {
 export { Section, type SectionProps } from "./components/Section.js";
 export {
   SegmentedControl,
+  type SegmentedControlLabelVisibility,
   type SegmentedControlLegendVisibility,
   type SegmentedControlOption,
   type SegmentedControlOrientation,

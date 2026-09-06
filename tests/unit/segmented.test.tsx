@@ -322,6 +322,98 @@ describe("SegmentedControl form participation", () => {
   });
 });
 
+describe("SegmentedControl label and value callbacks", () => {
+  it("names the group from label and falls back to the deprecated legend", () => {
+    render(
+      <>
+        <SegmentedControl label="Units" options={OPTIONS} />
+        <SegmentedControl legend="Legacy units" options={OPTIONS} />
+      </>,
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "Units" })).toBeVisible();
+    expect(
+      screen.getByRole("radiogroup", { name: "Legacy units" }),
+    ).toBeVisible();
+  });
+
+  it("rejects a control with neither label nor legend content", () => {
+    expect(() =>
+      render(<SegmentedControl label="  " options={OPTIONS} />),
+    ).toThrow("SegmentedControl requires a non-empty label.");
+  });
+
+  it("reports the value through onValueChange beside the deprecated onChange", () => {
+    const onValueChange = vi.fn();
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl
+        label="Units"
+        options={OPTIONS}
+        onValueChange={onValueChange}
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Nautical" }));
+    expect(onValueChange).toHaveBeenCalledWith("nautical");
+    expect(onChange).toHaveBeenCalledWith("nautical");
+  });
+
+  it("shows the label through labelVisibility and the deprecated legendVisibility", () => {
+    render(
+      <>
+        <SegmentedControl
+          label="Units"
+          labelVisibility="visible"
+          options={OPTIONS}
+        />
+        <SegmentedControl
+          label="Legacy units"
+          legendVisibility="visible"
+          options={OPTIONS}
+        />
+      </>,
+    );
+
+    expect(screen.getByText("Units")).toHaveClass("snui-segmented__legend");
+    expect(screen.getByText("Legacy units")).toHaveClass(
+      "snui-segmented__legend",
+    );
+  });
+
+  it("keeps the hidden input attached while the controlled value changes", () => {
+    const addListener = vi.spyOn(HTMLFormElement.prototype, "addEventListener");
+    const tree = (
+      value: (typeof OPTIONS)[number]["value"],
+    ): ReactActual.ReactElement => (
+      <form>
+        <SegmentedControl
+          label="Units"
+          name="units"
+          value={value}
+          onValueChange={noop}
+          options={OPTIONS}
+        />
+      </form>
+    );
+    const view = render(tree("metric"));
+    const resetListeners = (): number =>
+      addListener.mock.calls.filter(([type]) => type === "reset").length;
+    expect(resetListeners()).toBe(1);
+
+    view.rerender(tree("imperial"));
+    view.rerender(tree("nautical"));
+
+    // A stable callback ref means the reset listener registered once.
+    expect(resetListeners()).toBe(1);
+    expect(view.container.querySelector("input[type=hidden]")).toHaveProperty(
+      "value",
+      "nautical",
+    );
+  });
+});
+
 describe("SegmentedControl legend visibility", () => {
   it("keeps the legend visually hidden by default", () => {
     render(
