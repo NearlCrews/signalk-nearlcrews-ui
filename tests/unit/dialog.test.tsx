@@ -68,7 +68,7 @@ describe("Dialog", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("opens from defaultOpen and is labelled by the title", () => {
+  it("opens from defaultOpen and is labeled by the title", () => {
     renderDialog({ defaultOpen: true });
 
     const dialog = screen.getByRole("dialog", {
@@ -142,7 +142,7 @@ describe("Dialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("ignores scrim presses when dismissable is false", async () => {
+  it("ignores scrim presses when dismissable is false and still closes on Escape", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const { container } = renderDialog({
@@ -154,8 +154,66 @@ describe("Dialog", () => {
     await user.click(getScrim(container));
     expect(onOpenChange).not.toHaveBeenCalled();
 
+    // A scrim press parks focus on the body until react-aria restores it on
+    // the next frame; focus the dialog so Escape reaches it now.
+    screen.getByRole("dialog").focus();
+    await user.keyboard("{Escape}");
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("keeps Escape disabled when keyboardDismissable is false", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const { container } = renderDialog({
+      defaultOpen: true,
+      keyboardDismissable: false,
+      onOpenChange,
+    });
+
     await user.keyboard("{Escape}");
     expect(onOpenChange).not.toHaveBeenCalled();
+
+    // Scrim dismissal is a separate switch and stays on.
+    await user.click(getScrim(container));
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("reports Escape and scrim dismissal through onCancel", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    const onOpenChange = vi.fn();
+    const { container, unmount } = renderDialog({
+      defaultOpen: true,
+      onCancel,
+      onOpenChange,
+    });
+
+    await user.keyboard("{Escape}");
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    unmount();
+
+    const scrimView = renderDialog({ defaultOpen: true, onCancel });
+    await user.click(getScrim(scrimView.container));
+    expect(onCancel).toHaveBeenCalledTimes(2);
+    expect(container).toBeDefined();
+  });
+
+  it("lets an uncontrolled dialog close from its actions without canceling", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    const onOpenChange = vi.fn();
+    renderDialog({
+      actions: (close) => <Button onClick={close}>Done</Button>,
+      defaultOpen: true,
+      onCancel,
+      onOpenChange,
+    });
+
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(onCancel).not.toHaveBeenCalled();
   });
 
   it("traps focus inside the dialog while open", async () => {
@@ -351,14 +409,16 @@ describe("AlertDialog", () => {
     );
   });
 
-  it("is not dismissable by default", async () => {
+  it("ignores scrim presses by default but declines on Escape", async () => {
     const user = userEvent.setup();
+    const onCancel = vi.fn();
     const onOpenChange = vi.fn();
     const { container } = renderInPanel(
       <AlertDialog
         title="Discard route?"
         defaultOpen
         cancelLabel="Keep route"
+        onCancel={onCancel}
         onOpenChange={onOpenChange}
         actions={<Button variant="danger">Discard</Button>}
       >
@@ -366,11 +426,59 @@ describe("AlertDialog", () => {
       </AlertDialog>,
     );
 
-    await user.keyboard("{Escape}");
-    expect(onOpenChange).not.toHaveBeenCalled();
-
     await user.click(getScrim(container));
     expect(onOpenChange).not.toHaveBeenCalled();
+    expect(onCancel).not.toHaveBeenCalled();
+
+    screen.getByRole("alertdialog").focus();
+    await user.keyboard("{Escape}");
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("keeps Escape disabled when keyboardDismissable is false", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderInPanel(
+      <AlertDialog
+        title="Discard route?"
+        defaultOpen
+        cancelLabel="Keep route"
+        keyboardDismissable={false}
+        onOpenChange={onOpenChange}
+      >
+        <p>This cannot be undone.</p>
+      </AlertDialog>,
+    );
+
+    await user.keyboard("{Escape}");
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
+  });
+
+  it("closes from a supplemental action's close without canceling", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    renderInPanel(
+      <AlertDialog
+        title="Discard route?"
+        defaultOpen
+        cancelLabel="Keep route"
+        onCancel={onCancel}
+        actions={(close) => (
+          <Button variant="danger" onClick={close}>
+            Discard
+          </Button>
+        )}
+      >
+        <p>This cannot be undone.</p>
+      </AlertDialog>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(onCancel).not.toHaveBeenCalled();
   });
 
   it("forwards the ref to the alertdialog element", () => {
