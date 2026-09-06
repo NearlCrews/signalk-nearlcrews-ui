@@ -2,6 +2,7 @@ import {
   type ReactNode,
   type RefAttributes,
   useCallback,
+  useId,
   useLayoutEffect,
   useRef,
   useState,
@@ -39,17 +40,27 @@ interface SelectionSnapshot {
 }
 
 export function SecretInput({
+  // A revealed secret is an ordinary text field to the browser, so the
+  // defaults keep password managers, form history, keyboards, and spelling
+  // services from capturing it. Each is a plain prop the caller can override.
+  autoCapitalize = "off",
+  autoComplete = "new-password",
+  autoCorrect = "off",
   defaultRevealed = false,
   disabled,
   hideLabel = "Hide",
+  id,
   onRevealedChange,
   ref,
   revealed,
   showLabel = "Show",
+  spellCheck = false,
   trailingContent,
   width = "grow",
   ...props
 }: SecretInputProps): React.JSX.Element {
+  const generatedId = useId();
+  const inputId = id ?? generatedId;
   const [internalRevealed, setInternalRevealed] = useState(defaultRevealed);
   const effectiveRevealed = revealed ?? internalRevealed;
   const inputRef = useRef<HTMLInputElement | null>(null);
@@ -126,8 +137,13 @@ export function SecretInput({
       <InputGroupControl width={width}>
         <TextInput
           {...props}
+          autoCapitalize={autoCapitalize}
+          autoComplete={autoComplete}
+          autoCorrect={autoCorrect}
           disabled={disabled}
+          id={inputId}
           ref={attachInput}
+          spellCheck={spellCheck}
           type={effectiveRevealed ? "text" : "password"}
         />
       </InputGroupControl>
@@ -135,6 +151,9 @@ export function SecretInput({
       <Button
         type="button"
         size="compact"
+        // Ties the toggle to its field, so a form with several secrets does
+        // not announce a row of unrelated Show buttons.
+        aria-controls={inputId}
         disabled={disabled}
         onPointerDown={(event) => {
           const selection = captureSelection();
