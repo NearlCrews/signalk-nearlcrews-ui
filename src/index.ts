@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-deprecated -- deprecated aliases stay exported for one minor release */
 export {
   ActionBar,
   type ActionBarProps,
@@ -53,22 +54,6 @@ export {
   type TextInputType,
 } from "./components/Inputs.js";
 export {
-  type NumberDraft,
-  type NumberDraftInputProps,
-  type NumberDraftInvalidReason,
-  type NumberDraftOptions,
-  type NumberDraftResolution,
-  resolveNumberDraft,
-  type UseNumberDraftOptions,
-  useNumberDraft,
-} from "./hooks/use-number-draft.js";
-export {
-  NumberField,
-  type NumberFieldInputProps,
-  type NumberFieldMessages,
-  type NumberFieldProps,
-} from "./components/NumberField.js";
-export {
   type FieldControlProps,
   type FieldErrorLive,
   LabeledField,
@@ -110,6 +95,12 @@ export {
   type StackProps,
 } from "./components/Layout.js";
 export {
+  NumberField,
+  type NumberFieldInputProps,
+  type NumberFieldMessages,
+  type NumberFieldProps,
+} from "./components/NumberField.js";
+export {
   PanelRoot,
   type PanelRootProps,
   type PanelWidth,
@@ -136,6 +127,16 @@ export {
   UnsupportedBrowserNotice,
   type UnsupportedBrowserNoticeProps,
 } from "./components/UnsupportedBrowserNotice.js";
+export {
+  type NumberDraft,
+  type NumberDraftInputProps,
+  type NumberDraftInvalidReason,
+  type NumberDraftOptions,
+  type NumberDraftResolution,
+  resolveNumberDraft,
+  type UseNumberDraftOptions,
+  useNumberDraft,
+} from "./hooks/use-number-draft.js";
 export {
   supportsNativeCssScope,
   UnsupportedBrowserError,

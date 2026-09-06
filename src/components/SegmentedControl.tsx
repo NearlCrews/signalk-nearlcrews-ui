@@ -76,9 +76,12 @@ export function SegmentedControl<Value extends string>({
   disabled = false,
   label,
   labelVisibility,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
   legend,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
   legendVisibility,
   name,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
   onChange,
   onValueChange,
   options,

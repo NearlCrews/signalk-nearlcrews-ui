@@ -25,7 +25,9 @@ const noop = (): void => undefined;
 describe("SegmentedControl option validation", () => {
   it("rejects an empty option collection", () => {
     expect(() =>
-      render(<SegmentedControl legend="Units" options={[]} onChange={noop} />),
+      render(
+        <SegmentedControl label="Units" options={[]} onValueChange={noop} />,
+      ),
     ).toThrow("SegmentedControl requires at least one option.");
   });
 
@@ -33,9 +35,9 @@ describe("SegmentedControl option validation", () => {
     expect(() =>
       render(
         <SegmentedControl
-          legend="Units"
+          label="Units"
           options={[{ label: "  ", value: "metric" }]}
-          onChange={noop}
+          onValueChange={noop}
         />,
       ),
     ).toThrow("SegmentedControl options require non-empty labels.");
@@ -45,12 +47,12 @@ describe("SegmentedControl option validation", () => {
     expect(() =>
       render(
         <SegmentedControl
-          legend="Units"
+          label="Units"
           options={[
             { label: "Metric", value: "metric" },
             { label: "Meters", value: "metric" },
           ]}
-          onChange={noop}
+          onValueChange={noop}
         />,
       ),
     ).toThrow(
@@ -64,9 +66,9 @@ describe("SegmentedControl selection modes", () => {
     const onChange = vi.fn();
     render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         defaultValue="metric"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -102,9 +104,9 @@ describe("SegmentedControl selection modes", () => {
     const onChange = vi.fn();
     const view = render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         name="units"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -136,9 +138,9 @@ describe("SegmentedControl selection modes", () => {
     const onChange = vi.fn();
     const view = render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         value="metric"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -154,9 +156,9 @@ describe("SegmentedControl selection modes", () => {
 
     view.rerender(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         value="imperial"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -180,10 +182,10 @@ describe("SegmentedControl form participation", () => {
         }}
       >
         <SegmentedControl
-          legend="Units"
+          label="Units"
           name="units"
           defaultValue="metric"
-          onChange={noop}
+          onValueChange={noop}
           options={OPTIONS}
         />
       </form>,
@@ -202,9 +204,9 @@ describe("SegmentedControl form participation", () => {
   it("omits the hidden input when no name is given", () => {
     const view = render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         defaultValue="metric"
-        onChange={noop}
+        onValueChange={noop}
         options={OPTIONS}
       />,
     );
@@ -217,7 +219,7 @@ describe("SegmentedControl form participation", () => {
       <form data-testid="units-form">
         <SegmentedControl
           disabled
-          legend="Units"
+          label="Units"
           name="units"
           defaultValue="metric"
           options={OPTIONS}
@@ -233,10 +235,10 @@ describe("SegmentedControl form participation", () => {
     render(
       <form data-testid="units-form">
         <SegmentedControl
-          legend="Units"
+          label="Units"
           name="units"
           defaultValue="metric"
-          onChange={noop}
+          onValueChange={noop}
           options={OPTIONS}
         />
       </form>,
@@ -264,10 +266,10 @@ describe("SegmentedControl form participation", () => {
     render(
       <form data-testid="units-form">
         <SegmentedControl
-          legend="Units"
+          label="Units"
           name="units"
           value="imperial"
-          onChange={noop}
+          onValueChange={noop}
           options={OPTIONS}
         />
       </form>,
@@ -293,10 +295,10 @@ describe("SegmentedControl form participation", () => {
       <form data-testid="units-form">
         <CollapsibleSection title="Units" defaultOpen>
           <SegmentedControl
-            legend="Units"
+            label="Units"
             name="units"
             defaultValue="metric"
-            onChange={noop}
+            onValueChange={noop}
             options={OPTIONS}
           />
         </CollapsibleSection>
@@ -327,6 +329,7 @@ describe("SegmentedControl label and value callbacks", () => {
     render(
       <>
         <SegmentedControl label="Units" options={OPTIONS} />
+        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep naming the group */}
         <SegmentedControl legend="Legacy units" options={OPTIONS} />
       </>,
     );
@@ -351,6 +354,7 @@ describe("SegmentedControl label and value callbacks", () => {
         label="Units"
         options={OPTIONS}
         onValueChange={onValueChange}
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
         onChange={onChange}
       />,
     );
@@ -370,6 +374,7 @@ describe("SegmentedControl label and value callbacks", () => {
         />
         <SegmentedControl
           label="Legacy units"
+          // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep showing the label
           legendVisibility="visible"
           options={OPTIONS}
         />
@@ -418,9 +423,9 @@ describe("SegmentedControl legend visibility", () => {
   it("keeps the legend visually hidden by default", () => {
     render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         value="metric"
-        onChange={noop}
+        onValueChange={noop}
         options={OPTIONS}
       />,
     );
@@ -435,10 +440,10 @@ describe("SegmentedControl legend visibility", () => {
   it("shows the legend when legendVisibility is visible", () => {
     render(
       <SegmentedControl
-        legend="Units"
-        legendVisibility="visible"
+        label="Units"
+        labelVisibility="visible"
         value="metric"
-        onChange={noop}
+        onValueChange={noop}
         options={OPTIONS}
       />,
     );
@@ -456,10 +461,10 @@ describe("SegmentedControl orientation", () => {
     const onChange = vi.fn();
     render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         orientation="vertical"
         defaultValue="metric"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -499,9 +504,9 @@ describe("SegmentedControl orientation", () => {
     const onChange = vi.fn();
     render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         defaultValue="metric"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -525,9 +530,9 @@ describe("SegmentedControl focus-only movement", () => {
     const onChange = vi.fn();
     render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         defaultValue="metric"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -571,9 +576,9 @@ describe("SegmentedControl focus-only movement", () => {
       const onChange = vi.fn();
       render(
         <MacSegmentedControl
-          legend="Units"
+          label="Units"
           defaultValue="metric"
-          onChange={onChange}
+          onValueChange={onChange}
           options={OPTIONS}
         />,
       );
@@ -608,9 +613,9 @@ describe("SegmentedControl ref", () => {
     render(
       <SegmentedControl
         ref={ref}
-        legend="Units"
+        label="Units"
         value="metric"
-        onChange={noop}
+        onValueChange={noop}
         options={OPTIONS}
       />,
     );

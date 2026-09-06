@@ -17,7 +17,9 @@ export type Density = "default" | "compact";
 export type LegacyDensity = Density | "comfortable";
 
 /** Normalizes a density prop, mapping the deprecated "comfortable" to "default". */
-export function resolveDensity(density: LegacyDensity | undefined): Density {
+export function resolveDensity(
+  density: Density | "comfortable" | undefined,
+): Density {
   return density === undefined || density === "comfortable"
     ? "default"
     : density;

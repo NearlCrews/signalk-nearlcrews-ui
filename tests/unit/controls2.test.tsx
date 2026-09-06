@@ -58,7 +58,7 @@ describe("RadioGroup", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderInPanel(
-      <RadioGroup label="Mode" value="sail" onChange={onChange}>
+      <RadioGroup label="Mode" value="sail" onValueChange={onChange}>
         <Radio value="sail">Sail</Radio>
         <Radio value="motor">Motor</Radio>
       </RadioGroup>,
@@ -81,6 +81,7 @@ describe("RadioGroup", () => {
         label="Mode"
         defaultValue="sail"
         onValueChange={onValueChange}
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
         onChange={onChange}
       >
         <Radio value="sail" label="Sail" />
@@ -231,7 +232,7 @@ describe("RadioGroup", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderInPanel(
-      <RadioGroup label="Mode" disabled onChange={onChange}>
+      <RadioGroup label="Mode" disabled onValueChange={onChange}>
         <Radio value="sail">Sail</Radio>
       </RadioGroup>,
     );
@@ -307,6 +308,7 @@ describe("Switch", () => {
       <Switch
         label="Autopilot"
         onCheckedChange={onCheckedChange}
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
         onChange={onChange}
       />,
     );
@@ -330,7 +332,7 @@ describe("Switch", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderInPanel(
-      <Switch checked onChange={onChange}>
+      <Switch checked onCheckedChange={onChange}>
         Autopilot
       </Switch>,
     );
@@ -345,7 +347,7 @@ describe("Switch", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderInPanel(
-      <Switch disabled onChange={onChange}>
+      <Switch disabled onCheckedChange={onChange}>
         Autopilot
       </Switch>,
     );
@@ -677,7 +679,9 @@ describe("ThemeToggle root", () => {
     renderInPanel(
       <>
         <ThemeToggle label="Display" />
+        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep naming the group */}
         <ThemeToggle legend="Legacy display" />
+        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- blank label and blank alias fall back together */}
         <ThemeToggle label="  " legend="  " />
       </>,
     );
@@ -696,7 +700,11 @@ describe("ThemeToggle root", () => {
     const onValueChange = vi.fn();
     const onChange = vi.fn();
     renderInPanel(
-      <ThemeToggle onValueChange={onValueChange} onChange={onChange} />,
+      <ThemeToggle
+        onValueChange={onValueChange}
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
+        onChange={onChange}
+      />,
     );
 
     await user.click(screen.getByRole("radio", { name: "Night" }));

@@ -11,7 +11,6 @@ import {
   splitLabeledFieldControlProps,
   TextInput,
 } from "../../src/index.js";
-import type { Density } from "../../src/utils/variants.js";
 import { panel, renderInPanel } from "../helpers.js";
 
 describe("LabeledField root", () => {
@@ -37,7 +36,7 @@ describe("LabeledField root", () => {
   it("maps the deprecated comfortable density onto default", () => {
     const { container } = renderInPanel(
       <>
-        <LabeledField label="Legacy" density={"comfortable" as Density}>
+        <LabeledField label="Legacy" density="comfortable">
           <TextInput />
         </LabeledField>
         <LabeledField label="Compact" density="compact">

@@ -752,6 +752,6 @@ describe("SegmentedControl", () => {
           options={[{ label: "Auto", value: "auto" }]}
         />,
       ),
-    ).toThrow("SegmentedControl requires a non-empty legend.");
+    ).toThrow("SegmentedControl requires a non-empty label.");
   });
 });
