@@ -2,6 +2,7 @@ import {
   Activity,
   type HTMLAttributes,
   type ReactNode,
+  type RefAttributes,
   useEffect,
   useEffectEvent,
   useId,
@@ -16,13 +17,22 @@ import { hasReactContent, requireContent } from "../utils/react-node.js";
 export type CollapsibleMountStrategy = "lazy-retain" | "retain" | "unmount";
 export type CollapsibleSummaryPlacement = "below" | "header";
 export type CollapsibleSummaryVisibility = "always" | "collapsed";
+export type CollapsibleVariant = "default" | "embedded";
 
 export interface CollapsibleSectionProps
-  extends Omit<HTMLAttributes<HTMLElement>, "onToggle" | "title"> {
+  extends Omit<HTMLAttributes<HTMLElement>, "onToggle" | "title">,
+    RefAttributes<HTMLElement> {
   readonly actions?: ReactNode | undefined;
   readonly defaultOpen?: boolean | undefined;
   readonly disabled?: boolean | undefined;
   readonly headingLevel?: HeadingLevel | undefined;
+  /** Removes the region landmark naming when false. Accordion defaults it to false. */
+  readonly landmark?: boolean | undefined;
+  /**
+   * Content placed before the heading, such as an enable checkbox. It sits
+   * outside the toggle button, so it keeps its own semantics and hit area.
+   */
+  readonly leading?: ReactNode | undefined;
   /**
    * Decides what happens to hidden content. Under "lazy-retain" and "retain"
    * it stays mounted inside React `Activity`: state and refs survive, every
@@ -41,6 +51,8 @@ export interface CollapsibleSectionProps
   /** Keeps the summary rendered while open under "always". */
   readonly summaryVisibility?: CollapsibleSummaryVisibility | undefined;
   readonly title: ReactNode;
+  /** `"embedded"` drops the border, radius, and shadow for nesting inside a Card. */
+  readonly variant?: CollapsibleVariant | undefined;
 }
 
 export function CollapsibleSection({
@@ -51,13 +63,17 @@ export function CollapsibleSection({
   defaultOpen = false,
   disabled = false,
   headingLevel = 2,
+  landmark = true,
+  leading,
   mountStrategy = "retain",
   onOpenChange,
   open,
+  ref,
   summary,
   summaryPlacement = "below",
   summaryVisibility = "collapsed",
   title,
+  variant = "default",
   ...props
 }: CollapsibleSectionProps): React.JSX.Element {
   requireContent(title, "CollapsibleSection requires a non-empty title.");
@@ -131,11 +147,26 @@ export function CollapsibleSection({
   return (
     <section
       {...props}
-      className={classNames("snui-collapsible", className)}
-      aria-labelledby={joinIdReferences(ariaLabelledBy, titleId)}
+      ref={ref}
+      className={classNames(
+        "snui-collapsible",
+        variant === "embedded" && "snui-collapsible--embedded",
+        className,
+      )}
+      aria-labelledby={
+        landmark ? joinIdReferences(ariaLabelledBy, titleId) : undefined
+      }
     >
       <header className="snui-collapsible__header">
-        <Heading className="snui-collapsible__heading">
+        {hasReactContent(leading) ? (
+          <div className="snui-collapsible__leading">{leading}</div>
+        ) : null}
+        <Heading
+          className={classNames(
+            "snui-collapsible__heading",
+            `snui-collapsible__heading--level-${String(headingLevel)}`,
+          )}
+        >
           <button
             ref={toggleRef}
             type="button"

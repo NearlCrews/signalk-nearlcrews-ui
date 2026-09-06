@@ -7,7 +7,49 @@ import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
 export const COMPONENT_STYLES = scopeStyles(`
+/*
+ * The tone glyph ToneMark renders for every tone-badged component. Blocks
+ * refine size or spacing with their own glyph class; the shape stays shared.
+ */
+.snui-tone-glyph {
+  display: inline-flex;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: var(--snui-font-size-xs);
+  font-weight: var(--snui-font-weight-bold);
+  line-height: 1;
+}
+
+/* The PanelShell title block: the heading reset supplies the type step. */
+.snui-panel-shell__header {
+  display: grid;
+  min-width: 0;
+  gap: var(--snui-space-1);
+}
+
+.snui-panel-shell__title {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.snui-panel-shell__description {
+  min-width: 0;
+  color: var(--snui-color-text-muted);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+/* One grid gap owns the rhythm between header and content. */
 .snui-section {
+  display: grid;
+  gap: var(--snui-space-4);
   padding: var(--snui-space-4);
   border: 1px solid var(--snui-color-border);
   border-radius: var(--snui-radius-lg);
@@ -22,7 +64,6 @@ export const COMPONENT_STYLES = scopeStyles(`
   gap: var(--snui-space-3);
   align-items: flex-start;
   justify-content: space-between;
-  margin-bottom: var(--snui-space-4);
 }
 
 .snui-section__header > * {
@@ -48,20 +89,19 @@ export const COMPONENT_STYLES = scopeStyles(`
   min-width: 0;
   margin: 0;
   color: var(--snui-color-text);
-  font-size: 1.125rem;
+  font-size: var(--snui-font-size-lg);
   line-height: 1.3;
   overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .snui-section__description {
   min-width: 0;
-  margin: var(--snui-space-1) 0 0;
+  margin: 0;
+  margin-block-start: var(--snui-space-1);
   color: var(--snui-color-text-muted);
   overflow-wrap: anywhere;
-}
-
-.snui-section > :not(.snui-section__header) + :not(.snui-section__header) {
-  margin-top: var(--snui-space-3);
+  text-wrap: pretty;
 }
 
 .snui-field {
@@ -114,9 +154,18 @@ ${visuallyHiddenDeclarations()}
   overflow-wrap: anywhere;
 }
 
+.snui-status--size-compact {
+  gap: var(--snui-space-1);
+}
+
+.snui-status__text {
+  min-width: 0;
+}
+
+/* Large enough for the per-tone shapes to read at a glance. */
 .snui-status__dot {
-  width: 0.7rem;
-  height: 0.7rem;
+  width: 0.75rem;
+  height: 0.75rem;
   flex: none;
   border: 2px solid currentColor;
   border-radius: 50%;
@@ -158,11 +207,11 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
 }
 
 .snui-action-bar--sticky-bottom {
-  bottom: 0;
+  inset-block-end: 0;
 }
 
 .snui-action-bar--sticky-top {
-  top: 0;
+  inset-block-start: 0;
 }
 
 .snui-action-bar--sticky-viewport-bottom {
@@ -184,8 +233,8 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
  */
 .snui-action-bar__safe-area-probe {
   position: fixed;
-  right: 0;
-  bottom: env(safe-area-inset-bottom, 0px);
+  inset-inline-end: 0;
+  inset-block-end: env(safe-area-inset-bottom, 0px);
   width: 0;
   height: 0;
   visibility: hidden;
@@ -196,11 +245,13 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
  * Fixed positioning is measured against the bar's natural-flow anchor. The
  * anchor reserves its height, while these values keep the fixed surface in
  * the PanelRoot column and above the visual viewport or device safe area.
+ * The inline offset stays physical: it is a measured client rectangle edge,
+ * not a writing-mode value.
  */
 .snui-action-bar--viewport-docked {
   position: fixed;
   z-index: var(--snui-z-sticky);
-  bottom: max(
+  inset-block-end: max(
     env(safe-area-inset-bottom, 0px),
     var(--snui-action-bar-fixed-bottom, 0px)
   );
@@ -253,10 +304,11 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
   background: var(--snui-color-surface-raised);
 }
 
+/* Weight, not size, sets the confirmation apart from the copy beneath it. */
 .snui-inline-confirm__title {
   min-width: 0;
   margin: 0;
-  font-size: 1rem;
+  font-size: var(--snui-font-size);
   font-weight: var(--snui-font-weight-bold);
   overflow-wrap: anywhere;
 }
@@ -322,6 +374,7 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
   color: var(--snui-color-text);
   font-weight: var(--snui-font-weight-bold);
   overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .snui-empty-state__description {
@@ -329,10 +382,11 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
   max-width: 100%;
   color: var(--snui-color-text-muted);
   overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .snui-empty-state__action {
-  margin-top: var(--snui-space-2);
+  margin-block-start: var(--snui-space-2);
 }
 
 @media (prefers-reduced-transparency: reduce) {
@@ -359,6 +413,14 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
     border-color: CanvasText;
     background: Canvas;
     color: CanvasText;
+  }
+
+  /*
+   * forced-color-adjust inherits, so the controls in the action slot opt back
+   * in or a secondary Cancel keeps the author palette under a system theme.
+   */
+  .snui-inline-confirm__actions {
+    forced-color-adjust: auto;
   }
 }
 `);

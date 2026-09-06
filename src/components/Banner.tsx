@@ -13,16 +13,12 @@ import {
 import { classNames } from "../utils/class-names.js";
 import { DEFAULT_DISMISS_LABEL, resolveLabel } from "../utils/labels.js";
 import { hasReactContent } from "../utils/react-node.js";
-import {
-  isSemanticTone,
-  resolveToneLabel,
-  type StatusTone,
-  TONE_GLYPHS,
-} from "../utils/tone.js";
+import type { StatusTone } from "../utils/tone.js";
 import { Button } from "./Button.js";
-import { ToneAnnouncement } from "./ToneAnnouncement.js";
+import { ToneMark } from "./ToneMark.js";
 
 export type BannerTone = StatusTone;
+/** @deprecated Use `AnnouncementMode`. */
 export type BannerLive = AnnouncementMode;
 
 export interface BannerProps
@@ -31,7 +27,7 @@ export interface BannerProps
   readonly actions?: ReactNode | undefined;
   readonly dismissFocusRef?: RefObject<HTMLElement | null> | undefined;
   readonly dismissLabel?: string | undefined;
-  readonly live?: BannerLive | undefined;
+  readonly live?: AnnouncementMode | undefined;
   readonly onDismiss?:
     | ((event: MouseEvent<HTMLButtonElement>) => void)
     | undefined;
@@ -61,10 +57,6 @@ export function Banner({
     dismissLabel,
     DEFAULT_DISMISS_LABEL,
   );
-  const semantic = isSemanticTone(tone);
-  const effectiveToneLabel = semantic
-    ? resolveToneLabel(tone, toneLabel)
-    : undefined;
 
   return (
     <div
@@ -75,13 +67,12 @@ export function Banner({
       aria-live={region["aria-live"]}
     >
       <div className="snui-banner__content">
-        {semantic ? (
-          <span className="snui-banner__tone-icon" aria-hidden="true">
-            {TONE_GLYPHS[tone]}
-          </span>
-        ) : null}
+        <ToneMark
+          className="snui-banner__tone-icon"
+          tone={tone}
+          toneLabel={toneLabel}
+        />
         <div className="snui-banner__text">
-          <ToneAnnouncement label={effectiveToneLabel} />
           {hasReactContent(title) ? (
             <div className="snui-banner__title">
               {title}

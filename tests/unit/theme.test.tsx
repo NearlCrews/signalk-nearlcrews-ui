@@ -603,9 +603,9 @@ describe("PanelRoot themes", () => {
     expect(setItem).not.toHaveBeenCalled();
   });
 
-  it("requires ThemeToggle to be inside PanelRoot", () => {
+  it("requires the theme context for ThemeToggle and usePanelTheme", () => {
     expect(() => render(<ThemeToggle />)).toThrow(
-      "ThemeToggle must be rendered inside PanelRoot.",
+      "usePanelTheme must be called inside PanelRoot",
     );
   });
 
