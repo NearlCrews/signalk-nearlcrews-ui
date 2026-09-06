@@ -15,6 +15,13 @@ import { PACKAGE_VERSION, ROOT_CLASS } from "../version.js";
 // The UNSAFE portal API is upstream's explicit no-stability marker, so every
 // internal consumer reaches it through this one module: an upstream rename or
 // removal touches a single file.
+//
+// One more react-aria internal lives outside this module: the toast host sets
+// the `data-react-aria-top-layer` attribute (Toast.tsx). react-aria's
+// ariaHideOutside and FocusScope treat nodes carrying it as part of the top
+// layer, so toasts stay visible, announced, and focusable while a modal is
+// open. An upstream rename of that marker would surface in the toast tests
+// that open a Dialog.
 
 type PortalContainerResolver = () => HTMLElement | null;
 

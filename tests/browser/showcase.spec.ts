@@ -1,4 +1,7 @@
-import { expect, test } from "./fixtures.js";
+import { expect, expectNoAxeViolations, test } from "./fixtures.js";
+
+/** Bootstrap's fixed header z-index in the Signal K Admin, mirrored by the fixture. */
+const HOST_HEADER_Z_INDEX = 1020;
 
 test("renders the showcase without console errors", async ({ page }) => {
   const errors: string[] = [];
@@ -192,4 +195,112 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
   await expect(lastRow).not.toHaveAttribute("data-snui-zebra-odd");
   await lastRow.click();
   await expect(lastRow).toHaveAttribute("aria-selected", "true");
+});
+
+test("audits open overlays and every toast tone with axe", async ({ page }) => {
+  test.slow();
+  await page.goto("/showcase.html");
+  await page.addStyleTag({ content: "* { transition: none !important; }" });
+
+  // Dialog with its nested popover open.
+  await page.getByRole("button", { name: "Open dialog" }).click();
+  await page.getByRole("button", { name: "Show approach note" }).click();
+  const popover = page.getByRole("dialog", { name: "Show approach note" });
+  await expect(popover).toBeVisible();
+  await expect(popover).toBeFocused();
+  await expectNoAxeViolations(page, {
+    disableRules: [
+      {
+        id: "scrollable-region-focusable",
+        reason:
+          "React Aria gives the popover tabindex -1 and moves focus onto it when it opens, so a scrolling popover with only text is keyboard scrollable; axe cannot see programmatic focus and reports this rule for exactly that pattern.",
+      },
+    ],
+  });
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // Menu open.
+  await page.getByRole("button", { name: "Panel actions" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expectNoAxeViolations(page);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  // One toast per tone, all present at once.
+  for (const tone of ["info", "success", "warning", "danger"]) {
+    await page.getByRole("button", { name: `${tone} toast` }).click();
+  }
+  const region = page.getByRole("region", { name: "Notifications" });
+  await expect(region.locator(".snui-toast")).toHaveCount(4);
+  await expectNoAxeViolations(page);
+});
+
+test("keeps toasts reachable while a dialog is open", async ({ page }) => {
+  await page.goto("/showcase.html");
+  await page.getByRole("button", { name: "danger toast" }).click();
+  await page.getByRole("button", { name: "Open dialog" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Anchorage details" }),
+  ).toBeVisible();
+
+  const region = page.getByRole("region", { name: "Notifications" });
+  const dismiss = region.getByRole("button", { name: "Dismiss" });
+  // The host is a top layer: not hidden, not inert, and focusable.
+  await expect(page.locator(".snui-toast-region-host")).toHaveAttribute(
+    "data-react-aria-top-layer",
+  );
+  await expect(region.getByRole("alert")).toBeVisible();
+  await dismiss.focus();
+  await expect(dismiss).toBeFocused();
+  await expectNoAxeViolations(page);
+});
+
+test("paints the dialog scrim and toasts above the Admin header and sidebar", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 720 });
+  await page.goto("/showcase.html?host-chrome=1");
+  const header = page.locator(".app-header");
+  const sidebar = page.locator(".sidebar");
+  await expect(header).toHaveCSS("position", "fixed");
+  await expect(header).toHaveCSS("z-index", String(HOST_HEADER_Z_INDEX));
+  await expect(sidebar).toHaveCSS("z-index", String(HOST_HEADER_Z_INDEX - 1));
+
+  await page.getByRole("button", { name: "Open dialog" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Anchorage details" }),
+  ).toBeVisible();
+
+  // The topmost element at a point inside the header, and at one inside the
+  // sidebar, belongs to the modal layer: the scrim itself, or the dialog it
+  // holds where the standard dialog width reaches over the sidebar.
+  const hits = await page.evaluate(() => {
+    const point = (selector: string): boolean | null => {
+      const box = document.querySelector(selector)?.getBoundingClientRect();
+      if (box === undefined) return null;
+      const element = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2,
+      );
+      return element !== null && element.closest(".snui-scrim") !== null;
+    };
+    return { header: point(".app-header"), sidebar: point(".sidebar") };
+  });
+  expect(hits).toEqual({ header: true, sidebar: true });
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // The toast host is a fixed box in the same stacking context as the header,
+  // so a larger z-index is what paints it above the header wherever the two
+  // overlap.
+  await page.getByRole("button", { name: "warning toast" }).click();
+  const host = page.locator(".snui-toast-region-host");
+  await expect(host).toHaveCSS("position", "fixed");
+  const hostZIndex = await host.evaluate((element) =>
+    Number(getComputedStyle(element).zIndex),
+  );
+  expect(hostZIndex).toBeGreaterThan(HOST_HEADER_Z_INDEX);
 });

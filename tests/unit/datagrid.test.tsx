@@ -327,6 +327,108 @@ describe("DataGrid", () => {
     });
   });
 
+  describe("column options", () => {
+    it("marks a numeric column's header and cells for end alignment", () => {
+      const { container } = renderInPanel(
+        <DataGrid aria-label="Boats" items={BOATS} renderRow={renderBoatRow}>
+          <Column id="name">Name</Column>
+          <Column id="depth" numeric>
+            Depth
+          </Column>
+        </DataGrid>,
+      );
+
+      expect(
+        screen.getByRole("columnheader", { name: "Depth" }),
+      ).toHaveAttribute("data-snui-numeric", "");
+      expect(
+        screen.getByRole("columnheader", { name: "Name" }),
+      ).not.toHaveAttribute("data-snui-numeric");
+      for (const row of bodyRows(container)) {
+        expect(cellAt(row, 0)).not.toHaveAttribute("data-snui-numeric");
+        expect(cellAt(row, 1)).toHaveAttribute("data-snui-numeric", "");
+      }
+    });
+
+    it("leaves rows untouched when no column asks for anything", () => {
+      const rows: ReactElement<RowProps<Boat>>[] = [];
+      renderGrid({
+        renderRow: (boat) => {
+          const row = renderBoatRow(boat);
+          rows.push(row);
+          return row;
+        },
+      });
+
+      // The exact elements the consumer returned reach React Aria.
+      expect(rows.length).toBeGreaterThan(0);
+    });
+
+    it("applies column options through a dynamic header", () => {
+      const columns = [
+        { key: "name", numeric: false },
+        { key: "depth", numeric: true },
+      ] as const;
+      const { container } = renderInPanel(
+        <DataGrid
+          aria-label="Boats"
+          columns={columns}
+          items={BOATS}
+          renderRow={renderBoatRow}
+        >
+          {(column) => (
+            <Column id={column.key} numeric={column.numeric}>
+              {column.key}
+            </Column>
+          )}
+        </DataGrid>,
+      );
+
+      expect(
+        screen.getByRole("columnheader", { name: "depth" }),
+      ).toHaveAttribute("data-snui-numeric", "");
+      expect(cellAt(rowAt(container, 0), 1)).toHaveAttribute(
+        "data-snui-numeric",
+        "",
+      );
+      expect(cellAt(rowAt(container, 0), 0)).not.toHaveAttribute(
+        "data-snui-numeric",
+      );
+    });
+
+    it("applies column options to dynamic cells keyed by column", () => {
+      const columns = [{ key: "name" }, { key: "depth" }] as const;
+      const { container } = renderInPanel(
+        <DataGrid
+          aria-label="Boats"
+          columns={columns}
+          items={BOATS}
+          renderRow={(boat) => (
+            <Row columns={columns}>
+              {(column) => (
+                <Cell>{column.key === "name" ? boat.name : boat.depth}</Cell>
+              )}
+            </Row>
+          )}
+        >
+          {(column) => (
+            <Column id={column.key} numeric={column.key === "depth"}>
+              {column.key}
+            </Column>
+          )}
+        </DataGrid>,
+      );
+
+      expect(cellAt(rowAt(container, 0), 1)).toHaveAttribute(
+        "data-snui-numeric",
+        "",
+      );
+      expect(cellAt(rowAt(container, 0), 0)).not.toHaveAttribute(
+        "data-snui-numeric",
+      );
+    });
+  });
+
   describe("sorting", () => {
     // RAC Table has no defaultSortDescriptor: sorting is controlled only, so
     // the harness owns the descriptor and the sorted items.
@@ -723,6 +825,54 @@ describe("DataGrid", () => {
       expect(names[0]).toBe("Boat 0");
       const sequence = names.map((name) => Number(name.replace("Boat ", "")));
       expect(sequence).toEqual([...sequence].sort((a, b) => a - b));
+    });
+
+    it("gives text-only virtualized cells a title and lets wrap columns wrap", () => {
+      const { container } = renderInPanel(
+        <DataGrid
+          aria-label="Boats"
+          items={fleet}
+          renderRow={(boat) => (
+            <Row>
+              <Cell>{boat.name}</Cell>
+              <Cell>{boat.depth} m</Cell>
+              <Cell>
+                <em>{boat.name}</em>
+              </Cell>
+            </Row>
+          )}
+          virtualizeThreshold={10}
+        >
+          <Column id="name" wrap>
+            Name
+          </Column>
+          <Column id="depth" numeric>
+            Depth
+          </Column>
+          <Column id="rich">Rich</Column>
+        </DataGrid>,
+      );
+
+      const firstRow = rowAt(container, 0);
+      // A wrap column keeps its text unwrapped and untitled.
+      const nameCell = cellAt(firstRow, 0);
+      expect(nameCell).toHaveAttribute("data-snui-wrap", "");
+      expect(nameCell.querySelector(".snui-data-grid__cell-text")).toBeNull();
+      // Text-only content, including mixed string and number children, is
+      // wrapped with its full value as the title.
+      const depthText = cellAt(firstRow, 1).querySelector(
+        ".snui-data-grid__cell-text",
+      );
+      expect(depthText).toHaveAttribute("title", "0 m");
+      expect(depthText).toHaveTextContent("0 m");
+      expect(cellAt(firstRow, 1)).toHaveAttribute("data-snui-numeric", "");
+      // Element content is left to the consumer.
+      expect(
+        cellAt(firstRow, 2).querySelector(".snui-data-grid__cell-text"),
+      ).toBeNull();
+      expect(
+        screen.getByRole("columnheader", { name: "Name" }),
+      ).toHaveAttribute("data-snui-wrap", "");
     });
 
     it("marks virtual zebra parity from the collection index", () => {

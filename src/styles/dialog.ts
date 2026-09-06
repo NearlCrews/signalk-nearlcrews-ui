@@ -18,7 +18,7 @@ export const DIALOG_STYLES = scopeStyles(`
   background: var(--snui-color-scrim);
   inset: 0;
   opacity: 1;
-  transition: opacity var(--snui-transition-fast);
+  transition: opacity var(--snui-transition-normal);
 }
 
 .snui-scrim--blur {
@@ -38,8 +38,8 @@ export const DIALOG_STYLES = scopeStyles(`
   opacity: 1;
   transform: none;
   transition:
-    opacity var(--snui-transition-fast),
-    transform var(--snui-transition-fast);
+    opacity var(--snui-transition-normal),
+    transform var(--snui-transition-normal);
 }
 
 .snui-dialog-frame[data-entering],
@@ -49,6 +49,11 @@ export const DIALOG_STYLES = scopeStyles(`
 }
 
 .snui-dialog {
+  /*
+   * The dialog is a raised surface, so hover fills painted inside it use the
+   * raised hover step; see the toast card for the same remap.
+   */
+  --snui-color-interactive-hover: var(--snui-color-hover-raised);
   display: flex;
   width: 100%;
   max-width: 100%;
@@ -78,6 +83,7 @@ export const DIALOG_STYLES = scopeStyles(`
 
 .snui-dialog__title {
   overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 .snui-dialog__description {
@@ -90,8 +96,8 @@ export const DIALOG_STYLES = scopeStyles(`
   min-width: 0;
 }
 
-.snui-dialog__body > :first-child { margin-top: 0; }
-.snui-dialog__body > :last-child { margin-bottom: 0; }
+.snui-dialog__body > :first-child { margin-block-start: 0; }
+.snui-dialog__body > :last-child { margin-block-end: 0; }
 
 .snui-dialog__actions {
   display: flex;

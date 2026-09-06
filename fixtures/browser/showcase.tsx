@@ -61,6 +61,10 @@ import {
   toast,
 } from "signalk-nearlcrews-ui/overlays";
 
+const showcaseParameters = new URLSearchParams(window.location.search);
+/** Mirrors the Admin's fixed header and sidebar around the panel. */
+const showHostChrome = showcaseParameters.has("host-chrome");
+
 const BANNER_TONES = [
   "neutral",
   "info",
@@ -293,7 +297,7 @@ function Showcase(): React.JSX.Element {
               name="units-source"
               description="Where displayed units come from."
               value={units}
-              onChange={setUnits}
+              onValueChange={setUnits}
             >
               <Radio value="server">Follow the server</Radio>
               <Radio value="metric">Force metric</Radio>
@@ -318,11 +322,11 @@ function Showcase(): React.JSX.Element {
         <Section title="Segmented control">
           <Stack gap={3}>
             <SegmentedControl
-              legend="Log detail"
-              legendVisibility="visible"
+              label="Log detail"
+              labelVisibility="visible"
               name="log-detail"
               defaultValue="normal"
-              onChange={() => undefined}
+              onValueChange={() => undefined}
               options={[
                 { value: "minimal", label: "Minimal" },
                 { value: "normal", label: "Normal" },
@@ -330,10 +334,10 @@ function Showcase(): React.JSX.Element {
               ]}
             />
             <SegmentedControl
-              legend="Panel density"
+              label="Panel density"
               orientation="vertical"
               defaultValue="comfortable"
-              onChange={() => undefined}
+              onValueChange={() => undefined}
               options={[
                 { value: "comfortable", label: "Comfortable" },
                 { value: "compact", label: "Compact" },
@@ -594,9 +598,19 @@ if (!(container instanceof HTMLElement)) {
   throw new Error("Browser showcase root was not found.");
 }
 
+if (showHostChrome) document.body.classList.add("host-chrome");
+
 createRoot(container).render(
   <StrictMode>
-    <main>
+    {showHostChrome ? (
+      <>
+        <header className="app-header">Signal K host header</header>
+        <nav className="sidebar" aria-label="Host navigation">
+          Host sidebar
+        </nav>
+      </>
+    ) : null}
+    <main className={showHostChrome ? "app-body" : undefined}>
       <Showcase />
     </main>
   </StrictMode>,

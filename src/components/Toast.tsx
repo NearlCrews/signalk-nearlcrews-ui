@@ -11,27 +11,42 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
+import { OVERLAY_STYLES } from "../styles/index.js";
 import { TRANSITION_FAST_MS } from "../styles/tokens.js";
+import { useModuleStyles } from "../styles/use-module-styles.js";
 import {
   type AnnouncementMode,
   liveRegionProps,
 } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
+import {
+  createDocumentRegistry,
+  type DocumentRegistryRecord,
+} from "../utils/document-registry.js";
 import { DEFAULT_DISMISS_LABEL, resolveLabel } from "../utils/labels.js";
 import { prefersReducedMotion } from "../utils/motion.js";
 import { usePanelPortalContainer } from "../utils/portal.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { composeRef } from "../utils/ref.js";
+import type { SemanticTone } from "../utils/tone.js";
 import {
-  resolveToneLabel,
-  type SemanticTone,
-  TONE_GLYPHS,
-} from "../utils/tone.js";
+  observePanelViewport,
+  readViewportEdges,
+  roundedLayoutValue,
+} from "../utils/viewport.js";
 import { PACKAGE_VERSION } from "../version.js";
 import { Button } from "./Button.js";
-import { ToneAnnouncement } from "./ToneAnnouncement.js";
+import { ToneMark } from "./ToneMark.js";
 
-/** Default auto-dismiss delay in milliseconds. */
+/** Default auto-dismiss delay, in milliseconds, for the info and success tones. */
 const DEFAULT_TOAST_DURATION_MS = 5000;
+
+/**
+ * Tones whose toasts stay until dismissed unless the caller sets a duration.
+ * A failure that vanishes after five seconds cannot be re-read by a screen
+ * reader user and is lost on a sighted user who looked away.
+ */
+const STICKY_TONES: ReadonlySet<SemanticTone> = new Set(["danger", "warning"]);
 
 /**
  * Maximum queued toasts. Sticky toasts (duration zero) never time out, so
@@ -43,6 +58,12 @@ const DEFAULT_TOAST_DURATION_MS = 5000;
 const MAX_QUEUED_TOASTS = 5;
 
 const TOAST_EXIT_FALLBACK_BUFFER_MS = 10;
+const TOAST_TITLE_MESSAGE = "Toast requires a non-empty title.";
+
+/** A card that is not already leaving; exiting cards are never focus targets. */
+const LIVE_TOAST_CARD_SELECTOR = ".snui-toast:not([data-exiting])";
+const TOAST_DISMISS_SELECTOR = ".snui-toast__dismiss";
+
 const FOCUSED_TOAST_COUNTS = new Map<string, number>();
 
 function retainFocusedToast(key: string): void {
@@ -58,93 +79,112 @@ function releaseFocusedToast(key: string): void {
   FOCUSED_TOAST_COUNTS.set(key, count - 1);
 }
 
-interface ToastHostRecord {
-  readonly dispose: () => void;
-  readonly element: HTMLDivElement;
-  references: number;
-}
-
-type ToastHostRegistry = Map<HTMLElement, ToastHostRecord>;
-
-const TOAST_HOST_REGISTRY_KEY = Symbol.for(
-  "signalk-nearlcrews-ui.toast-host-registry.v1",
-);
-
 /** Browser timer handle returned by window.setTimeout. */
 type TimerId = number;
 
-function getVisualViewport(ownerWindow: Window): VisualViewport | undefined {
-  return Reflect.get(ownerWindow, "visualViewport") as
-    | VisualViewport
-    | undefined;
+function resolveToastTone(content: ToastContent): SemanticTone {
+  return content.tone ?? "info";
 }
 
-function getResizeObserver(
-  ownerWindow: Window,
-): typeof ResizeObserver | undefined {
-  return Reflect.get(ownerWindow, "ResizeObserver") as
-    | typeof ResizeObserver
-    | undefined;
+/** Sticky for warning and danger, five seconds otherwise, unless overridden. */
+function resolveToastDuration(content: ToastContent): number {
+  return (
+    content.duration ??
+    (STICKY_TONES.has(resolveToastTone(content))
+      ? 0
+      : DEFAULT_TOAST_DURATION_MS)
+  );
 }
 
-function roundedLayoutValue(value: number): number {
-  return Math.round(value * 100) / 100;
+/** Assertive only for danger; a warning in a configuration panel can wait. */
+function resolveToastLive(content: ToastContent): AnnouncementMode {
+  return (
+    content.live ??
+    (resolveToastTone(content) === "danger" ? "assertive" : "polite")
+  );
 }
 
-function getToastHostRegistry(ownerDocument: Document): ToastHostRegistry {
-  const existing = Reflect.get(ownerDocument, TOAST_HOST_REGISTRY_KEY) as
-    | ToastHostRegistry
-    | undefined;
-  if (existing !== undefined) return existing;
-
-  const registry: ToastHostRegistry = new Map();
-  Reflect.defineProperty(ownerDocument, TOAST_HOST_REGISTRY_KEY, {
-    configurable: true,
-    value: registry,
-  });
-  return registry;
+/**
+ * The panel root is not normally focusable, so it borrows a tabindex for the
+ * one focus move that has no better destination and gives it back on blur.
+ * Focus never drops to the document body.
+ */
+function focusPanelRoot(panelRoot: HTMLElement): void {
+  if (!panelRoot.hasAttribute("tabindex")) {
+    panelRoot.setAttribute("tabindex", "-1");
+    panelRoot.addEventListener(
+      "blur",
+      () => {
+        panelRoot.removeAttribute("tabindex");
+      },
+      { once: true },
+    );
+  }
+  panelRoot.focus({ preventScroll: true });
 }
 
-function createToastHost(panelRoot: HTMLElement): ToastHostRecord {
+interface ToastHostHandle {
+  readonly element: HTMLDivElement;
+  /**
+   * Moves focus to the element that had it before focus entered the host,
+   * else to the panel root.
+   */
+  readonly restoreFocus: () => void;
+}
+
+/**
+ * The host precedes the panel content so the notifications landmark is one
+ * Tab from the panel start. It is fixed-positioned, so the position changes
+ * only the focus order.
+ */
+function insertToastHost(panelRoot: HTMLElement, element: HTMLElement): void {
+  panelRoot.insertBefore(
+    element,
+    panelRoot.querySelector(":scope > .snui-root__content"),
+  );
+}
+
+function createToastHost(
+  panelRoot: HTMLElement,
+): DocumentRegistryRecord<ToastHostHandle> {
   const ownerDocument = panelRoot.ownerDocument;
   const ownerWindow = ownerDocument.defaultView;
   const element = ownerDocument.createElement("div");
   element.className = "snui-toast-region-host";
   element.dataset.snuiToastHost = PACKAGE_VERSION;
-  panelRoot.append(element);
+  // React Aria's modal overlays hide and inert everything outside the modal
+  // except nodes carrying this marker, and its focus containment lets focus
+  // reach them. Without it a toast raised while a Dialog is open is neither
+  // announced nor dismissable.
+  element.setAttribute("data-react-aria-top-layer", "");
+  const attach = (): void => {
+    insertToastHost(panelRoot, element);
+  };
+  attach();
 
   if (ownerWindow === null) {
     return {
-      dispose: () => element.remove(),
+      attach,
+      dispose: () => {
+        element.remove();
+      },
       element,
-      references: 0,
+      value: {
+        element,
+        restoreFocus: () => {
+          focusPanelRoot(panelRoot);
+        },
+      },
     };
   }
 
-  const visualViewport = getVisualViewport(ownerWindow);
-  let animationFrame = 0;
-  let disposed = false;
-
   const measure = (): void => {
-    animationFrame = 0;
-    if (disposed) return;
-
-    const viewport = getVisualViewport(ownerWindow);
-    const viewportTop = viewport?.offsetTop ?? 0;
-    const viewportLeft = viewport?.offsetLeft ?? 0;
-    const viewportBottom =
-      viewport === undefined
-        ? ownerWindow.innerHeight
-        : viewport.offsetTop + viewport.height;
-    const viewportRight =
-      viewport === undefined
-        ? ownerWindow.innerWidth
-        : viewport.offsetLeft + viewport.width;
+    const viewport = readViewportEdges(ownerWindow);
     const panelRect = panelRoot.getBoundingClientRect();
-    const visibleTop = Math.max(viewportTop, panelRect.top);
-    const visibleBottom = Math.min(viewportBottom, panelRect.bottom);
-    const visibleLeft = Math.max(viewportLeft, panelRect.left);
-    const visibleRight = Math.min(viewportRight, panelRect.right);
+    const visibleTop = Math.max(viewport.top, panelRect.top);
+    const visibleBottom = Math.min(viewport.bottom, panelRect.bottom);
+    const visibleLeft = Math.max(viewport.left, panelRect.left);
+    const visibleRight = Math.min(viewport.right, panelRect.right);
     const visible = visibleBottom > visibleTop && visibleRight > visibleLeft;
 
     element.toggleAttribute("data-snui-toast-host-visible", visible);
@@ -170,89 +210,106 @@ function createToastHost(panelRoot: HTMLElement): ToastHostRecord {
     );
   };
 
-  const scheduleMeasure = (): void => {
-    if (animationFrame !== 0 || disposed) return;
-    animationFrame = ownerWindow.requestAnimationFrame(measure);
+  // Focus that enters the host remembers where it came from, so dismissing
+  // the last toast, or pressing F6 again, returns there rather than to the
+  // document body. A null origin (focus arrived from nowhere) clears it.
+  let lastFocusedOutside: HTMLElement | null = null;
+  const rememberFocusOrigin = (event: FocusEvent): void => {
+    const origin = event.relatedTarget;
+    if (origin === null) {
+      lastFocusedOutside = null;
+      return;
+    }
+    if (
+      origin instanceof ownerWindow.HTMLElement &&
+      !element.contains(origin)
+    ) {
+      lastFocusedOutside = origin;
+    }
   };
 
-  const ResizeObserverConstructor = getResizeObserver(ownerWindow);
-  const resizeObserver =
-    ResizeObserverConstructor === undefined
-      ? undefined
-      : new ResizeObserverConstructor(scheduleMeasure);
-  resizeObserver?.observe(panelRoot);
-  ownerDocument.addEventListener("scroll", scheduleMeasure, true);
-  ownerWindow.addEventListener("resize", scheduleMeasure);
-  ownerWindow.addEventListener("scroll", scheduleMeasure);
-  visualViewport?.addEventListener("resize", scheduleMeasure);
-  visualViewport?.addEventListener("scroll", scheduleMeasure);
+  const restoreFocus = (): void => {
+    const target = lastFocusedOutside;
+    lastFocusedOutside = null;
+    if (target?.isConnected) {
+      target.focus({ preventScroll: true });
+      if (ownerDocument.activeElement === target) return;
+    }
+    focusPanelRoot(panelRoot);
+  };
+
+  const firstToastControl = (): HTMLElement | null => {
+    for (const card of element.querySelectorAll(LIVE_TOAST_CARD_SELECTOR)) {
+      const control = card.querySelector<HTMLElement>(TOAST_DISMISS_SELECTOR);
+      if (control !== null) return control;
+    }
+    return null;
+  };
+
+  // F6 is the landmark shortcut React Aria's own toast region uses: it moves
+  // focus into the notifications, and F6 again (or Shift+F6) moves it back to
+  // where it was. The key is left alone while no toast is showing.
+  const handleLandmarkKey = (event: KeyboardEvent): void => {
+    if (
+      event.key !== "F6" ||
+      event.altKey ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.defaultPrevented
+    ) {
+      return;
+    }
+    if (element.contains(ownerDocument.activeElement)) {
+      event.preventDefault();
+      restoreFocus();
+      return;
+    }
+    const control = firstToastControl();
+    if (control === null) return;
+    event.preventDefault();
+    control.focus();
+  };
+
+  element.addEventListener("focusin", rememberFocusOrigin);
+  ownerDocument.addEventListener("keydown", handleLandmarkKey);
   measure();
-  scheduleMeasure();
+  const stopObserving = observePanelViewport(panelRoot, measure);
 
   return {
+    attach,
     dispose: () => {
-      disposed = true;
-      if (animationFrame !== 0) {
-        ownerWindow.cancelAnimationFrame(animationFrame);
-      }
-      resizeObserver?.disconnect();
-      ownerDocument.removeEventListener("scroll", scheduleMeasure, true);
-      ownerWindow.removeEventListener("resize", scheduleMeasure);
-      ownerWindow.removeEventListener("scroll", scheduleMeasure);
-      visualViewport?.removeEventListener("resize", scheduleMeasure);
-      visualViewport?.removeEventListener("scroll", scheduleMeasure);
+      stopObserving();
+      element.removeEventListener("focusin", rememberFocusOrigin);
+      ownerDocument.removeEventListener("keydown", handleLandmarkKey);
       element.remove();
     },
     element,
-    references: 0,
+    value: { element, restoreFocus },
   };
 }
 
-function acquireToastHost(panelRoot: HTMLElement): {
-  readonly element: HTMLDivElement;
-  readonly release: () => void;
-} {
-  const ownerDocument = panelRoot.ownerDocument;
-  const registry = getToastHostRegistry(ownerDocument);
-  let record = registry.get(panelRoot);
-  if (record === undefined) {
-    record = createToastHost(panelRoot);
-    registry.set(panelRoot, record);
-  } else if (!record.element.isConnected) {
-    panelRoot.append(record.element);
-  }
-  record.references += 1;
+// Version 2 of the key: the record shape stored on the document changed with
+// the shared registry, so a 0.8.x copy in the same document never reads it.
+const TOAST_HOSTS = createDocumentRegistry<HTMLElement, ToastHostHandle>(
+  "signalk-nearlcrews-ui.toast-host-registry.v2",
+);
 
-  let released = false;
-  return {
-    element: record.element,
-    release: () => {
-      if (released) return;
-      released = true;
-      const current = registry.get(panelRoot);
-      if (current === undefined) return;
-      current.references -= 1;
-      if (current.references > 0) return;
-      current.dispose();
-      registry.delete(panelRoot);
-      if (registry.size === 0) {
-        Reflect.deleteProperty(ownerDocument, TOAST_HOST_REGISTRY_KEY);
-      }
-    },
-  };
-}
-
-function useToastHost(panelRoot: HTMLElement | null): HTMLDivElement | null {
-  const hostRef = useRef<HTMLDivElement | null>(null);
+function useToastHost(panelRoot: HTMLElement | null): ToastHostHandle | null {
+  const hostRef = useRef<ToastHostHandle | null>(null);
   const subscribe = useCallback(
     (onStoreChange: () => void): (() => void) => {
       if (panelRoot === null) return () => undefined;
-      const acquired = acquireToastHost(panelRoot);
-      hostRef.current = acquired.element;
+      const ownerDocument = panelRoot.ownerDocument;
+      hostRef.current = TOAST_HOSTS.acquire(ownerDocument, panelRoot, () =>
+        createToastHost(panelRoot),
+      );
       onStoreChange();
+      let released = false;
       return () => {
+        if (released) return;
+        released = true;
         hostRef.current = null;
-        acquired.release();
+        TOAST_HOSTS.release(ownerDocument, panelRoot);
       };
     },
     [panelRoot],
@@ -269,13 +326,14 @@ export interface ToastContent {
   /** Defaults to "info". */
   readonly tone?: SemanticTone | undefined;
   /**
-   * Auto-dismiss delay in milliseconds. Defaults to 5000. Zero keeps the
-   * toast until it is dismissed explicitly.
+   * Auto-dismiss delay in milliseconds. Defaults to 5000 for the info and
+   * success tones and to zero for warning and danger. Zero keeps the toast
+   * until it is dismissed explicitly.
    */
   readonly duration?: number | undefined;
   /**
-   * Announcement mode. Defaults to assertive for the danger and warning
-   * tones, polite otherwise.
+   * Announcement mode. Defaults to assertive for the danger tone, polite
+   * otherwise.
    */
   readonly live?: AnnouncementMode | undefined;
   /** Overrides the localized tone name announced to assistive technology. */
@@ -289,8 +347,10 @@ export interface QueuedToast<T extends ToastContent = ToastContent> {
 
 export interface ToastQueue<T extends ToastContent = ToastContent> {
   /**
-   * Adds a toast and returns its key. The queue holds at most five toasts;
-   * when full, it first evicts the oldest toast that is neither focused nor a
+   * Adds a toast and returns its key. Throws synchronously when the title has
+   * no content, so a blank runtime message fails at the call site instead of
+   * inside the region's render. The queue holds at most five toasts; when
+   * full, it first evicts the oldest toast that is neither focused nor a
    * sticky warning or danger. A bounded fallback always leaves room for the
    * newly enqueued toast.
    */
@@ -306,8 +366,8 @@ export interface ToastQueue<T extends ToastContent = ToastContent> {
 let nextToastKey = 0;
 
 function toastRetentionPriority(content: ToastContent): number {
-  return content.duration === 0 &&
-    (content.tone === "danger" || content.tone === "warning")
+  return resolveToastDuration(content) === 0 &&
+    STICKY_TONES.has(resolveToastTone(content))
     ? 1
     : 0;
 }
@@ -350,6 +410,7 @@ export function createToastQueue<
 
   return {
     enqueue: (content) => {
+      requireContent(content.title, TOAST_TITLE_MESSAGE);
       nextToastKey += 1;
       const key = `snui-toast-${String(nextToastKey)}`;
       const next = [...snapshot, { key, content }];
@@ -398,13 +459,13 @@ function ToastCard<T extends ToastContent>({
   dismissLabel,
 }: ToastCardProps<T>): React.JSX.Element {
   const { content, key } = item;
-  const tone = content.tone ?? "info";
-  const duration = content.duration ?? DEFAULT_TOAST_DURATION_MS;
-  const live =
-    content.live ??
-    (tone === "danger" || tone === "warning" ? "assertive" : "polite");
+  const tone = resolveToastTone(content);
+  const duration = resolveToastDuration(content);
+  const live = resolveToastLive(content);
 
-  requireContent(content.title, "Toast requires a non-empty title.");
+  // The queue already rejected a blank title in enqueue; this guards content
+  // that reached the region without passing through it.
+  requireContent(content.title, TOAST_TITLE_MESSAGE);
 
   const [exiting, setExiting] = useState(false);
   const [contentReady, setContentReady] = useState(false);
@@ -518,7 +579,6 @@ function ToastCard<T extends ToastContent>({
   }, [key, startCountdown, stopCountdown]);
 
   const region = liveRegionProps(live);
-  const effectiveToneLabel = resolveToneLabel(tone, content.toneLabel);
   const effectiveDismissLabel = resolveLabel(
     dismissLabel,
     DEFAULT_DISMISS_LABEL,
@@ -560,7 +620,6 @@ function ToastCard<T extends ToastContent>({
     >
       <span className="snui-toast__tone" aria-hidden="true">
         <span className="snui-toast__tone-dot" />
-        <span className="snui-toast__tone-glyph">{TONE_GLYPHS[tone]}</span>
       </span>
       <div
         className="snui-toast__text"
@@ -569,8 +628,14 @@ function ToastCard<T extends ToastContent>({
       >
         {contentReady ? (
           <>
-            <ToneAnnouncement label={effectiveToneLabel} />
-            <div className="snui-toast__title">{content.title}</div>
+            <div className="snui-toast__title">
+              <ToneMark
+                tone={tone}
+                toneLabel={content.toneLabel}
+                className="snui-toast__tone-glyph"
+              />
+              {content.title}
+            </div>
             {hasReactContent(content.description) ? (
               <div className="snui-toast__description">
                 {content.description}
@@ -583,6 +648,7 @@ function ToastCard<T extends ToastContent>({
         variant="ghost"
         size="compact"
         iconOnly
+        className="snui-toast__dismiss"
         aria-label={effectiveDismissLabel}
         onClick={() => {
           beginExit();
@@ -606,13 +672,18 @@ export interface ToastRegionProps<T extends ToastContent = ToastContent>
 
 /**
  * Renders a queue's toasts, newest first, into the nearest PanelRoot portal
- * container so the scoped styles and theme reach them. Rendering outside a
- * PanelRoot throws because a body portal would lose scoped styles and tokens.
+ * container so the scoped styles and theme reach them. The notifications
+ * landmark exists only while the queue has toasts, so an empty region adds
+ * nothing to the landmark list, and the ref resolves only then. Rendering
+ * outside a PanelRoot throws because a body portal would lose scoped styles
+ * and tokens.
  */
 export function ToastRegion<T extends ToastContent = ToastContent>({
   className,
   dismissLabel,
   label = "Notifications",
+  onBlur,
+  onFocus,
   queue,
   ref,
   ...props
@@ -622,6 +693,7 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
     throw new Error("ToastRegion requires a non-empty label.");
   }
 
+  useModuleStyles(OVERLAY_STYLES, "ToastRegion");
   const toasts = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
   // Newest first, without copying the snapshot on every render.
   const cards: React.JSX.Element[] = [];
@@ -638,20 +710,91 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
     );
   }
   const panelRoot = usePanelPortalContainer("ToastRegion");
-  const container = useToastHost(panelRoot);
+  const host = useToastHost(panelRoot);
 
-  if (container === null) return null;
+  const regionRef = useRef<HTMLElement | null>(null);
+  const setRegionRef = useCallback(
+    (node: HTMLElement | null): (() => void) | undefined => {
+      if (node === null) return undefined;
+      regionRef.current = node;
+      const release = composeRef(ref, node);
+      return () => {
+        release();
+        regionRef.current = null;
+      };
+    },
+    [ref],
+  );
+
+  // Index, newest first, of the card that contains focus, or -1. A removed
+  // card fires no blur, so the index outlives the card and tells the effect
+  // below where focus was.
+  const focusedIndexRef = useRef(-1);
+  const previousKeysRef = useRef<readonly string[]>([]);
+
+  // When the focused card leaves the queue, focus moves to the card that now
+  // occupies its slot (the next older one, else the newest remaining), and
+  // when none remains it returns to where it was before entering the host.
+  useLayoutEffect(() => {
+    const previousKeys = previousKeysRef.current;
+    previousKeysRef.current = toasts.map((item) => item.key);
+    const focusedIndex = focusedIndexRef.current;
+    if (focusedIndex === -1 || host === null) return;
+    const focusedKey = previousKeys[previousKeys.length - 1 - focusedIndex];
+    if (
+      focusedKey === undefined ||
+      toasts.some((item) => item.key === focusedKey)
+    ) {
+      return;
+    }
+    focusedIndexRef.current = -1;
+    const survivors =
+      regionRef.current?.querySelectorAll<HTMLElement>(
+        LIVE_TOAST_CARD_SELECTOR,
+      ) ?? [];
+    const survivor = survivors[Math.min(focusedIndex, survivors.length - 1)];
+    const dismiss =
+      survivor?.querySelector<HTMLElement>(TOAST_DISMISS_SELECTOR) ?? null;
+    if (dismiss !== null) {
+      dismiss.focus();
+      return;
+    }
+    host.restoreFocus();
+  }, [host, toasts]);
+
+  // A region that unmounts while one of its toasts has focus hands focus back
+  // the same way, so the consumer removing a region never strands the user.
+  useLayoutEffect(() => {
+    return () => {
+      if (focusedIndexRef.current !== -1) host?.restoreFocus();
+    };
+  }, [host]);
+
+  if (host === null || cards.length === 0) return null;
 
   return createPortal(
-    // A labelled section is the notifications landmark.
+    // A labeled section is the notifications landmark.
     <section
       {...props}
-      ref={ref}
+      ref={setRegionRef}
       className={classNames("snui-toast-region", className)}
       aria-label={effectiveLabel}
+      onFocus={(event) => {
+        const card = event.target.closest(".snui-toast");
+        const rendered = event.currentTarget.querySelectorAll(".snui-toast");
+        focusedIndexRef.current =
+          card === null ? -1 : Array.prototype.indexOf.call(rendered, card);
+        onFocus?.(event);
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) {
+          focusedIndexRef.current = -1;
+        }
+        onBlur?.(event);
+      }}
     >
       {cards}
     </section>,
-    container,
+    host.element,
   );
 }
