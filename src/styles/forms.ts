@@ -131,7 +131,7 @@ export const FORM_STYLES = scopeStyles(`
   grid-column: 1;
   grid-row: 2;
   min-width: 0;
-  margin-top: var(--snui-space-1);
+  margin-block-start: var(--snui-space-1);
   color: var(--snui-color-text-muted);
   overflow-wrap: anywhere;
 }
@@ -140,16 +140,20 @@ export const FORM_STYLES = scopeStyles(`
   display: grid;
   grid-column: 1 / -1;
   gap: var(--snui-space-3);
-  margin-top: var(--snui-space-3);
+  margin-block-start: var(--snui-space-3);
 }
 
 .snui-field-group__error {
 ${FIELD_ERROR_DECLARATIONS}
 }
 
+/*
+ * Disabled text uses a measurable token rather than opacity, so the muted
+ * description stays readable on every theme surface, Night included.
+ */
 .snui-field-group:disabled > .snui-field-group__legend,
 .snui-field-group:disabled > .snui-field-group__description {
-  opacity: 0.68;
+  color: var(--snui-color-text-disabled);
 }
 
 @container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
@@ -175,7 +179,7 @@ ${FIELD_ERROR_DECLARATIONS}
     grid-column: 1;
     grid-row: 3;
     justify-content: flex-start;
-    margin-top: var(--snui-space-2);
+    margin-block-start: var(--snui-space-2);
   }
 
   .snui-field-group__content {
