@@ -1,4 +1,5 @@
 import { screen } from "@testing-library/react";
+import { createRef } from "react";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -7,9 +8,50 @@ import {
   LabeledField,
   type LabeledFieldControlProps,
   NumberInput,
+  splitLabeledFieldControlProps,
   TextInput,
 } from "../../src/index.js";
+import type { Density } from "../../src/utils/variants.js";
 import { panel, renderInPanel } from "../helpers.js";
+
+describe("LabeledField root", () => {
+  it("forwards the ref and native attributes to the root element", () => {
+    const ref = createRef<HTMLDivElement>();
+    renderInPanel(
+      <LabeledField
+        label="Server URL"
+        ref={ref}
+        data-testid="server-url-field"
+        id="server-url"
+      >
+        <TextInput />
+      </LabeledField>,
+    );
+
+    const root = screen.getByTestId("server-url-field");
+    expect(ref.current).toBe(root);
+    expect(root).toHaveAttribute("id", "server-url");
+    expect(root).toHaveClass("snui-field", "snui-field--default");
+  });
+
+  it("maps the deprecated comfortable density onto default", () => {
+    const { container } = renderInPanel(
+      <>
+        <LabeledField label="Legacy" density={"comfortable" as Density}>
+          <TextInput />
+        </LabeledField>
+        <LabeledField label="Compact" density="compact">
+          <TextInput />
+        </LabeledField>
+      </>,
+    );
+
+    const fields = container.querySelectorAll(".snui-field");
+    expect(fields[0]).toHaveClass("snui-field--default");
+    expect(fields[0]).not.toHaveClass("snui-field--comfortable");
+    expect(fields[1]).toHaveClass("snui-field--compact");
+  });
+});
 
 describe("LabeledField control injection", () => {
   it("rejects an intrinsic child that cannot be labeled", () => {
@@ -128,11 +170,12 @@ describe("LabeledField control injection", () => {
         description="Whole GiB"
         error="Choose at least 4 GiB."
       >
-        {(controlProps) => {
-          const { descriptionId, errorId, ...inputProps } = controlProps;
+        {(fieldProps) => {
+          const { controlProps, descriptionId, errorId } =
+            splitLabeledFieldControlProps(fieldProps);
           return (
             <>
-              <TextInput {...inputProps} />
+              <TextInput {...controlProps} />
               <NumberInput
                 aria-label="Cache limit exact value"
                 aria-describedby={[descriptionId, errorId].join(" ")}
@@ -146,6 +189,40 @@ describe("LabeledField control injection", () => {
     expect(
       screen.getByRole("spinbutton", { name: "Cache limit exact value" }),
     ).toHaveAccessibleDescription("Whole GiB Choose at least 4 GiB.");
+    // The primary control received the attributes and none of the lookups.
+    const primary = screen.getByRole("textbox", { name: "Cache limit" });
+    expect(primary).toHaveAttribute("aria-invalid", "true");
+    expect(primary).not.toHaveAttribute("descriptionId");
+    expect(primary).not.toHaveAttribute("errorId");
+  });
+
+  it("splits the render-prop argument into control props and region ids", () => {
+    const split = splitLabeledFieldControlProps({
+      id: "control",
+      "aria-describedby": "control-description control-error",
+      "aria-errormessage": "control-error",
+      "aria-invalid": true,
+      descriptionId: "control-description",
+      errorId: "control-error",
+      required: true,
+    });
+
+    expect(split).toEqual({
+      controlProps: {
+        id: "control",
+        "aria-describedby": "control-description control-error",
+        "aria-errormessage": "control-error",
+        "aria-invalid": true,
+        required: true,
+      },
+      descriptionId: "control-description",
+      errorId: "control-error",
+    });
+    expect(splitLabeledFieldControlProps({ id: "plain" })).toEqual({
+      controlProps: { id: "plain" },
+      descriptionId: undefined,
+      errorId: undefined,
+    });
   });
 });
 
@@ -159,9 +236,10 @@ describe("LabeledField optional marker", () => {
 
     const marker = container.querySelector(".snui-optional-mark");
     expect(marker).toHaveTextContent("(optional)");
-    expect(marker).toHaveAttribute("aria-hidden", "true");
+    // The marker is part of the label the user sees, so it stays in the name.
+    expect(marker).not.toHaveAttribute("aria-hidden");
     expect(
-      screen.getByRole("textbox", { name: "Nickname" }),
+      screen.getByRole("textbox", { name: "Nickname (optional)" }),
     ).not.toBeRequired();
   });
 
@@ -209,8 +287,10 @@ describe("FieldGroup group error", () => {
     expect(error).toHaveClass("snui-field-group__error");
     expect(error).not.toHaveAttribute("role");
     expect(error).toHaveAttribute("aria-live", "off");
-    expect(group).toHaveAttribute("aria-errormessage", error.id);
-    expect(group).toHaveAttribute("aria-invalid", "true");
+    // The group role supports neither attribute, so the description carries
+    // the error instead.
+    expect(group).not.toHaveAttribute("aria-errormessage");
+    expect(group).not.toHaveAttribute("aria-invalid");
   });
 
   it("mounts an announcing region before group error content arrives", () => {

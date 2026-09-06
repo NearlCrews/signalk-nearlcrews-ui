@@ -59,6 +59,8 @@ export {
   type LabeledFieldDensity,
   type LabeledFieldLayout,
   type LabeledFieldProps,
+  type SplitLabeledFieldControlProps,
+  splitLabeledFieldControlProps,
 } from "./components/LabeledField.js";
 export {
   Badge,
