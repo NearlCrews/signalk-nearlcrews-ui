@@ -631,7 +631,11 @@ test("supports action-bearing collapsible status content", async ({ page }) => {
 
 test("provides hover and active feedback for raw action controls", async ({
   page,
-}) => {
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name === "mobile-chromium",
+    "Hover feedback is gated on hover-capable pointers, which a touch device lacks.",
+  );
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("radio", { name: "Light" }).click();
   for (const control of [
@@ -667,7 +671,13 @@ test("provides hover and active feedback for raw action controls", async ({
   }
 });
 
-test("provides segmented hover and active feedback", async ({ page }) => {
+test("provides segmented hover and active feedback", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name === "mobile-chromium",
+    "Hover feedback is gated on hover-capable pointers, which a touch device lacks.",
+  );
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Advanced settings" }).click();
   const selected = page.getByRole("radio", { name: "Normal" });
@@ -712,10 +722,7 @@ test("keeps aria-disabled focus indicators fully opaque", async ({ page }) => {
   await page.goto("/?states=1");
   const button = page.getByRole("button", { name: "Unavailable here" });
 
-  const disabledText = await readTokenColor(
-    page,
-    "--snui-color-text-disabled",
-  );
+  const disabledText = await readTokenColor(page, "--snui-color-text-disabled");
   await expect(button).toHaveCSS("opacity", "1");
   await expect(button).toHaveCSS("color", disabledText);
   await expect(button.locator(".snui-button__content")).toHaveCSS(
@@ -972,7 +979,9 @@ test("renders compliant placeholders and a red-preserving Night accent", async (
 
   const night = page.getByRole("radio", { name: "Night" });
   await night.click();
-  await expect(night).toHaveCSS("background-color", "rgb(255, 64, 64)");
+  // Park the pointer so the selected option shows its rest fill, not hover.
+  await page.mouse.move(0, 0);
+  await expect(night).toHaveCSS("background-color", "rgb(236, 56, 56)");
   await expect(night).toHaveCSS("color", "rgb(16, 0, 0)");
 
   for (const checkbox of [
@@ -1519,7 +1528,9 @@ test("keeps native controls and focus visible in forced colors", async ({
   });
   await expect(bannerLink).toHaveCSS("forced-color-adjust", "auto");
   await expect(bannerLink).toHaveCSS("color", systemColors.link);
-  await expect(bannerDismiss).toHaveCSS("forced-color-adjust", "auto");
+  // Library buttons reconstruct themselves in system colors under forced
+  // colors, so the dismiss control opts out of adjustment and paints ButtonText.
+  await expect(bannerDismiss).toHaveCSS("forced-color-adjust", "none");
   await expect(bannerDismiss).toHaveCSS("color", systemColors.button);
   await expect(rawBannerAction).toHaveCSS("forced-color-adjust", "auto");
   await expect(rawBannerAction).toHaveCSS("color", systemColors.button);

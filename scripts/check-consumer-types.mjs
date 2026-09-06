@@ -15,6 +15,7 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -64,8 +65,12 @@ try {
     { cwd: packageDirectory },
   );
 
-  // Reuse the already-installed React types rather than reaching the network.
-  for (const dependency of ["react", "@types"]) {
+  // Reuse the repository's installed dependencies rather than reaching the
+  // network: a real consumer install resolves the package's own dependencies
+  // (React Aria Components and its type packages) beside it, and the packed
+  // declarations reach into them.
+  for (const dependency of readdirSync(repositoryPath("node_modules"))) {
+    if (dependency.startsWith(".") || dependency === packageName) continue;
     symlinkSync(
       repositoryPath("node_modules", dependency),
       join(modules, dependency),

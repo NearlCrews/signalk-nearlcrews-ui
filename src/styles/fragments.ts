@@ -94,6 +94,9 @@ export function focusRingDeclarations(
 export const DISABLED_DECLARATIONS = [
   "  cursor: not-allowed;",
   "  color: var(--snui-color-text-disabled);",
+  // Chromium dims a disabled select to 0.7 opacity in its own stylesheet; the
+  // token above carries the disabled state, so the control stays fully opaque.
+  "  opacity: 1;",
 ].join("\n");
 
 /** Pressed-state tint painted over the interactive hover fill. */

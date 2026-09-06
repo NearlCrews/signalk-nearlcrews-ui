@@ -1,3 +1,4 @@
+import { CONTAINER_BREAKPOINT_NARROW } from "../../src/styles/tokens.js";
 import { expect, type Locator, type Page, test } from "./fixtures.js";
 
 /*
@@ -204,13 +205,28 @@ test("keeps horizontal content padding at or above the safe-area inset", async (
 }) => {
   await page.goto("/showcase.html");
   const content = page.locator(".snui-root__content");
-  const padding = await content.evaluate((element) => {
+  const [padding, gutter] = await content.evaluate((element, breakpoint) => {
     const computed = getComputedStyle(element);
+    const probe = document.createElement("span");
+    element.append(probe);
+    // The narrow container step pads with space-3; wider panels use space-4.
+    probe.style.width = breakpoint;
+    const narrowBelow = Number.parseFloat(getComputedStyle(probe).width);
+    const root = element.closest(".snui-root") ?? element;
+    probe.style.width =
+      root.getBoundingClientRect().width <= narrowBelow
+        ? "var(--snui-space-3)"
+        : "var(--snui-space-4)";
+    const token = Number.parseFloat(getComputedStyle(probe).width);
+    probe.remove();
     return [
-      Number.parseFloat(computed.paddingLeft),
-      Number.parseFloat(computed.paddingRight),
+      [
+        Number.parseFloat(computed.paddingLeft),
+        Number.parseFloat(computed.paddingRight),
+      ],
+      token,
     ];
-  });
-  // With no inset reported, max() resolves to the spacing token (16px).
-  expect(padding).toEqual([16, 16]);
+  }, CONTAINER_BREAKPOINT_NARROW);
+  // With no inset reported, max() resolves to the spacing token in force.
+  expect(padding).toEqual([gutter, gutter]);
 });

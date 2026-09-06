@@ -7,7 +7,7 @@
  * with, the render-prop field contract, generic inference on SegmentedControl,
  * and the formatting utility with a typed options constant.
  */
-import { createRef, useRef } from "react";
+import { createRef, useRef, useState } from "react";
 import {
   Banner,
   Button,
@@ -266,6 +266,7 @@ export function UnitControl({
  * required prop fails this compile rather than a consumer build.
  */
 export function NewIn090(): React.JSX.Element {
+  const [port, setPort] = useState(3000);
   return (
     <PanelShell title="Provider">
       <VisuallyHidden>Provider settings</VisuallyHidden>
@@ -274,14 +275,21 @@ export function NewIn090(): React.JSX.Element {
       </Text>
       <Code>signalk-nearlcrews-ui</Code>
       <LiveRegion message="Saved" live="polite" />
-      <NumberField label="Port" min={1} max={65_535} integer />
-      <Tabs>
+      <NumberField
+        label="Port"
+        min={1}
+        max={65_535}
+        integer
+        value={port}
+        onValueChange={setPort}
+      />
+      <Tabs defaultValue="connection">
         <TabList aria-label="Provider sections">
-          <Tab id="connection">Connection</Tab>
-          <Tab id="advanced">Advanced</Tab>
+          <Tab value="connection">Connection</Tab>
+          <Tab value="advanced">Advanced</Tab>
         </TabList>
-        <TabPanel id="connection">Connection settings</TabPanel>
-        <TabPanel id="advanced">Advanced settings</TabPanel>
+        <TabPanel value="connection">Connection settings</TabPanel>
+        <TabPanel value="advanced">Advanced settings</TabPanel>
       </Tabs>
       <Table aria-label="Recent readings">
         <thead>
