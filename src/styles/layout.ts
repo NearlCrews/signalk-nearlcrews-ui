@@ -107,6 +107,19 @@ ${TONE_ACCENT_BAR_DECLARATIONS}
 
 ${toneAccentBarRules("snui-card")}
 
+/*
+ * A card with a decorative accent paints the same bar without a glyph or an
+ * announcement, for a row whose meaning another element already announces.
+ */
+.snui-card--accent-info,
+.snui-card--accent-success,
+.snui-card--accent-warning,
+.snui-card--accent-danger {
+${TONE_ACCENT_BAR_DECLARATIONS}
+}
+
+${toneAccentBarRules("snui-card", "accent-")}
+
 .snui-card__tone-glyph {
   margin-inline-end: 0.375em;
   vertical-align: middle;
@@ -256,7 +269,11 @@ ${toneAccentBarRules("snui-card")}
   .snui-card--info,
   .snui-card--success,
   .snui-card--warning,
-  .snui-card--danger {
+  .snui-card--danger,
+  .snui-card--accent-info,
+  .snui-card--accent-success,
+  .snui-card--accent-warning,
+  .snui-card--accent-danger {
     border-inline-start-color: ButtonText;
   }
 }

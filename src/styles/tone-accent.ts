@@ -6,11 +6,15 @@
 
 const SEMANTIC_TONES = ["info", "success", "warning", "danger"] as const;
 
-/** Rules painting `.${block}--<tone>` with a leading bar in the tone color. */
-export function toneAccentBarRules(block: string): string {
+/**
+ * Rules painting `.${block}--${modifierPrefix}<tone>` with a leading bar in
+ * the tone color. The prefix lets a block offer a decorative variant (`accent-`)
+ * beside its semantic one.
+ */
+export function toneAccentBarRules(block: string, modifierPrefix = ""): string {
   return SEMANTIC_TONES.map(
     (tone) =>
-      `.${block}--${tone} { border-inline-start-color: var(--snui-color-${tone}); }`,
+      `.${block}--${modifierPrefix}${tone} { border-inline-start-color: var(--snui-color-${tone}); }`,
   ).join("\n");
 }
 

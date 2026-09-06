@@ -224,6 +224,30 @@ describe("tone marks", () => {
 });
 
 describe("Card variants", () => {
+  it("paints a decorative accent bar without a glyph or announcement", () => {
+    const { container } = renderInPanel(
+      <Card accent="success" density="flush">
+        Body
+      </Card>,
+    );
+    const card = container.querySelector(".snui-card");
+    expect(card).toHaveClass("snui-card--accent-success");
+    expect(card?.className).not.toMatch(/snui-card--success/);
+    expect(container.querySelector(".snui-card__tone-glyph")).toBeNull();
+    expect(container.querySelector(".snui-visually-hidden")).toBeNull();
+  });
+
+  it("lets a semantic tone win over a decorative accent", () => {
+    const { container } = renderInPanel(
+      <Card tone="danger" accent="success">
+        Body
+      </Card>,
+    );
+    const card = container.querySelector(".snui-card");
+    expect(card).toHaveClass("snui-card--danger");
+    expect(card?.className).not.toMatch(/snui-card--accent-/);
+  });
+
   it("supports flush density and a toned accent with its glyph in the header", () => {
     const { container } = renderInPanel(
       <Card density="flush" tone="warning" header="Priority">

@@ -17,7 +17,11 @@ import {
   type PolymorphicProps,
 } from "../utils/polymorphic.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
-import { isSemanticTone, type StatusTone } from "../utils/tone.js";
+import {
+  isSemanticTone,
+  type SemanticTone,
+  type StatusTone,
+} from "../utils/tone.js";
 import { type Density, resolveDensity } from "../utils/variants.js";
 import { ToneMark } from "./ToneMark.js";
 
@@ -201,6 +205,12 @@ export type CardElement = "div" | "section" | "nav";
 export type CardDensity = Density | "flush";
 
 interface CardOwnProps {
+  /**
+   * Paints the leading bar in a tone color without the glyph or announcement,
+   * for a card whose meaning another element inside it already announces.
+   * Ignored when `tone` is semantic.
+   */
+  readonly accent?: SemanticTone | undefined;
   readonly children?: ReactNode | undefined;
   readonly className?: string | undefined;
   readonly density?: CardDensity | undefined;
@@ -214,6 +224,7 @@ interface CardOwnProps {
 export type CardProps = PolymorphicProps<CardElement, "div", CardOwnProps>;
 
 export function Card({
+  accent,
   as = "div",
   children,
   className,
@@ -241,6 +252,9 @@ export function Card({
         "snui-card",
         `snui-card--${density}`,
         isSemanticTone(tone) && `snui-card--${tone}`,
+        !isSemanticTone(tone) &&
+          accent !== undefined &&
+          `snui-card--accent-${accent}`,
         className,
       ),
     },

@@ -533,7 +533,7 @@ export declare function LabeledField({ children, className, density, description
 import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
 import { type AnnouncementMode } from "../utils/announcement.js";
 import { type PolymorphicProps } from "../utils/polymorphic.js";
-import { type StatusTone } from "../utils/tone.js";
+import { type SemanticTone, type StatusTone } from "../utils/tone.js";
 import { type Density } from "../utils/variants.js";
 export type SpaceScale = 1 | 2 | 3 | 4 | 5 | 6;
 export type LayoutAlignment = "start" | "center" | "end" | "stretch";
@@ -575,6 +575,12 @@ export type CardElement = "div" | "section" | "nav";
 /** Card admits `"flush"` (no padding) beside the shared density values. */
 export type CardDensity = Density | "flush";
 interface CardOwnProps {
+    /**
+     * Paints the leading bar in a tone color without the glyph or announcement,
+     * for a card whose meaning another element inside it already announces.
+     * Ignored when `tone` is semantic.
+     */
+    readonly accent?: SemanticTone | undefined;
     readonly children?: ReactNode | undefined;
     readonly className?: string | undefined;
     readonly density?: CardDensity | undefined;
@@ -585,7 +591,7 @@ interface CardOwnProps {
     readonly toneLabel?: string | undefined;
 }
 export type CardProps = PolymorphicProps<CardElement, "div", CardOwnProps>;
-export declare function Card({ as, children, className, density, footer, header, tone, toneLabel, ...props }: CardProps): React.JSX.Element;
+export declare function Card({ accent, as, children, className, density, footer, header, tone, toneLabel, ...props }: CardProps): React.JSX.Element;
 export type MetricGridElement = "div" | "ul" | "ol";
 interface MetricGridOwnProps {
     readonly children?: ReactNode | undefined;
