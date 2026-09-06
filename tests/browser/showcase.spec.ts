@@ -218,6 +218,12 @@ test("audits open overlays and every toast tone with axe", async ({ page }) => {
     ],
   });
   await page.keyboard.press("Escape");
+  // Focus returns to the trigger inside the dialog once the popover is gone;
+  // WebKit does that asynchronously, so wait for it before the next Escape.
+  await expect(popover).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Show approach note" }),
+  ).toBeFocused();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
 
