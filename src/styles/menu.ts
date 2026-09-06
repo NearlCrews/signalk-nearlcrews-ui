@@ -40,9 +40,11 @@ ${OVERLAY_TRANSITION_DECLARATIONS}
   outline: none;
 }
 
+/* The menu sits on the raised surface, so the raised hover step keeps the
+   hovered and focused item visible in Dark. */
 .snui-menu__item[data-hovered],
 .snui-menu__item[data-focused] {
-  background: var(--snui-color-interactive-hover);
+  background: var(--snui-color-hover-raised);
 }
 
 .snui-menu__item[data-focus-visible] {
@@ -64,19 +66,20 @@ ${DISABLED_DECLARATIONS}
 
 .snui-menu__separator {
   margin: var(--snui-space-1) var(--snui-space-2);
-  border-top: 1px solid var(--snui-color-border);
+  border-block-start: 1px solid var(--snui-color-border);
 }
 
 .snui-menu__section + .snui-menu__section {
-  border-top: 1px solid var(--snui-color-border);
-  margin-top: var(--snui-space-1);
-  padding-top: var(--snui-space-1);
+  border-block-start: 1px solid var(--snui-color-border);
+  margin-block-start: var(--snui-space-1);
+  padding-block-start: var(--snui-space-1);
 }
 
 .snui-menu__section-header {
-  padding: var(--snui-space-2) var(--snui-space-3) var(--snui-space-1);
+  padding-block: var(--snui-space-2) var(--snui-space-1);
+  padding-inline: var(--snui-space-3);
   color: var(--snui-color-text-muted);
-  font-size: 0.8125em;
+  font-size: var(--snui-font-size-xs);
   font-weight: var(--snui-font-weight-bold);
 }
 
