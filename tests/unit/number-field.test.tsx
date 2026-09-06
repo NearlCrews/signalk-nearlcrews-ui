@@ -184,6 +184,59 @@ describe("NumberField editing", () => {
     expect(input).not.toHaveAccessibleDescription();
   });
 
+  it.each([
+    [
+      "a fractional draft under integer",
+      { integer: true, max: undefined, min: undefined },
+      "1.5",
+      "Enter a whole number.",
+    ],
+    [
+      "a draft under a lone minimum",
+      { integer: false, max: undefined, min: 5 },
+      "1",
+      "Enter a number of at least 5.",
+    ],
+    [
+      "a draft on an exclusive minimum",
+      { exclusiveMin: true, integer: false, max: undefined, min: 5 },
+      "5",
+      "Enter a number greater than 5.",
+    ],
+    [
+      "a draft over a lone maximum",
+      { initial: 5, integer: false, max: 9, min: undefined },
+      "12",
+      "Enter a number of at most 9.",
+    ],
+    [
+      "a draft on an exclusive maximum",
+      {
+        exclusiveMax: true,
+        initial: 5,
+        integer: false,
+        max: 9,
+        min: undefined,
+      },
+      "9",
+      "Enter a number less than 9.",
+    ],
+    [
+      "a draft on an exclusive maximum with both bounds",
+      { exclusiveMax: true, integer: false },
+      "60",
+      "Enter a number less than 60.",
+    ],
+  ] as const)("explains %s", async (_, props, draft, message) => {
+    const user = userEvent.setup();
+    renderInPanel(<Harness {...props} />);
+
+    const input = screen.getByRole("spinbutton", { name: "Refresh interval" });
+    await user.clear(input);
+    await user.type(input, draft);
+    expect(input).toHaveAccessibleDescription(message);
+  });
+
   it("keeps an invalid draft on blur so the user can see what to fix", async () => {
     const user = userEvent.setup();
     renderInPanel(<Harness />);

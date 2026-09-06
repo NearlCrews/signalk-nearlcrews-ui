@@ -5,7 +5,6 @@ import {
   type StatusTone,
   TONE_GLYPHS,
 } from "../utils/tone.js";
-import { ToneAnnouncement } from "./ToneAnnouncement.js";
 
 export interface ToneMarkProps {
   /** Class for the decorative glyph element, normally the block's own glyph class. */
@@ -18,8 +17,9 @@ export interface ToneMarkProps {
 /**
  * The tone glyph and its announcement, rendered as one pair so every
  * tone-badged component shows and speaks a tone the same way. The glyph is
- * decorative and the visually hidden announcement carries the meaning, so
- * place the mark inside whatever live region or text the component announces.
+ * decorative and the visually hidden sentence carries the meaning, so place
+ * the mark inside whatever live region or text the component announces. The
+ * announcement wording lives here alone so it cannot drift per component.
  * Neutral carries no meaning and renders nothing, including any `toneLabel`.
  */
 export function ToneMark({
@@ -37,7 +37,9 @@ export function ToneMark({
       >
         {TONE_GLYPHS[tone]}
       </span>
-      <ToneAnnouncement label={resolveToneLabel(tone, toneLabel)} />
+      <span className="snui-visually-hidden">
+        {resolveToneLabel(tone, toneLabel)}.{" "}
+      </span>
     </>
   );
 }
