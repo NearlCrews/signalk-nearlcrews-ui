@@ -1,4 +1,7 @@
-import { FIELD_ERROR_DECLARATIONS } from "./fragments.js";
+import {
+  FIELD_ERROR_DECLARATIONS,
+  visuallyHiddenDeclarations,
+} from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
@@ -154,6 +157,39 @@ ${FIELD_ERROR_DECLARATIONS}
 .snui-field-group:disabled > .snui-field-group__legend,
 .snui-field-group:disabled > .snui-field-group__description {
   color: var(--snui-color-text-disabled);
+}
+
+/* The select-all box sits in the legend row, so it drops the row padding. */
+.snui-checkbox-group .snui-field-group__actions {
+  align-items: center;
+}
+
+.snui-checkbox-group__select-all {
+  min-height: 0;
+  padding-block: 0;
+}
+
+.snui-checkbox-group__options {
+  display: grid;
+  column-gap: var(--snui-space-4);
+}
+
+/* Columns fill the available width; a narrow panel collapses to one. */
+.snui-checkbox-group__options--grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+}
+
+.snui-checkbox-group__options--stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/*
+ * The warning region stays mounted so its announcement is not lost; while
+ * empty it leaves the flow rather than the accessibility tree, matching the
+ * field error regions.
+ */
+.snui-checkbox-group__warning:empty {
+${visuallyHiddenDeclarations()}
 }
 
 @container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
