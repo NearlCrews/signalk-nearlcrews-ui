@@ -5,6 +5,8 @@ export {
 } from "./components/ActionBar.js";
 export {
   Banner,
+  // Deprecated aliases stay exported for one minor so consumers can migrate.
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   type BannerLive,
   type BannerProps,
   type BannerTone,
@@ -24,6 +26,7 @@ export {
   type CollapsibleSectionProps,
   type CollapsibleSummaryPlacement,
   type CollapsibleSummaryVisibility,
+  type CollapsibleVariant,
 } from "./components/CollapsibleSection.js";
 export {
   FieldGroup,
@@ -76,6 +79,7 @@ export {
   InputGroupControl,
   type InputGroupControlProps,
   type InputGroupControlWidth,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated
   type InputGroupDensity,
   type InputGroupProps,
   type LayoutAlignment,
@@ -90,10 +94,30 @@ export {
   type StackProps,
 } from "./components/Layout.js";
 export {
+  LiveRegion,
+  type LiveRegionElement,
+  type LiveRegionProps,
+} from "./components/LiveRegion.js";
+export {
+  PanelErrorBoundary,
+  type PanelErrorBoundaryFallbackProps,
+  type PanelErrorBoundaryProps,
+} from "./components/PanelErrorBoundary.js";
+export {
   PanelRoot,
   type PanelRootProps,
   type PanelWidth,
 } from "./components/PanelRoot.js";
+export {
+  PanelShell,
+  type PanelShellProps,
+  type PanelShellThemeToggle,
+} from "./components/PanelShell.js";
+export {
+  RelativeAge,
+  type RelativeAgeElement,
+  type RelativeAgeProps,
+} from "./components/RelativeAge.js";
 export { Section, type SectionProps } from "./components/Section.js";
 export {
   SegmentedControl,
@@ -105,8 +129,18 @@ export {
 export {
   StatusIndicator,
   type StatusIndicatorProps,
-  type StatusTone,
+  type StatusIndicatorSize,
 } from "./components/StatusIndicator.js";
+export {
+  Code,
+  type CodeElement,
+  type CodeProps,
+  Text,
+  type TextElement,
+  type TextProps,
+  type TextSize,
+  type TextTone,
+} from "./components/Text.js";
 export {
   ThemeToggle,
   type ThemeToggleProps,
@@ -115,6 +149,12 @@ export {
   UnsupportedBrowserNotice,
   type UnsupportedBrowserNoticeProps,
 } from "./components/UnsupportedBrowserNotice.js";
+export {
+  VisuallyHidden,
+  type VisuallyHiddenElement,
+  type VisuallyHiddenProps,
+} from "./components/VisuallyHidden.js";
+export { useUnsavedChangesGuard } from "./hooks/use-unsaved-changes-guard.js";
 export {
   supportsNativeCssScope,
   UnsupportedBrowserError,
@@ -133,6 +173,7 @@ export {
   usePanelTheme,
 } from "./theme/context.js";
 export {
+  isThemeChoice,
   THEME_CHOICES,
   THEME_STORAGE_KEY,
   type ThemeChoice,
@@ -141,6 +182,12 @@ export type { AnnouncementMode } from "./utils/announcement.js";
 export {
   type FormatRelativeAgeOptions,
   formatRelativeAge,
+  formatRelativeAgeSince,
+  RELATIVE_AGE_NARROW,
+  type RelativeAgeNegative,
+  type RelativeAgeTimestamp,
 } from "./utils/format-relative-age.js";
 export type { HeadingLevel } from "./utils/heading.js";
-export type { SemanticTone } from "./utils/tone.js";
+export type { SemanticTone, StatusTone } from "./utils/tone.js";
+export type { Density, Orientation } from "./utils/variants.js";
+export { PACKAGE_VERSION } from "./version.js";
