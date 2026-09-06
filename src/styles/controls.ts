@@ -475,6 +475,18 @@ ${focusRingDeclarations("2px", true)}
 ${DISABLED_DECLARATIONS}
 }
 
+.snui-radio__button[data-disabled] .snui-radio__control {
+  border-color: var(--snui-color-text-disabled);
+}
+
+.snui-radio__button[data-disabled][data-selected] .snui-radio__control {
+  background: var(--snui-color-text-disabled);
+}
+
+.snui-radio__button[data-disabled][data-selected] .snui-radio__control::before {
+  background: var(--snui-color-surface);
+}
+
 .snui-radio__label {
   min-width: 0;
   color: var(--snui-color-text);
@@ -538,6 +550,22 @@ ${focusRingDeclarations("2px", true)}
 
 .snui-switch__button[data-disabled] {
 ${DISABLED_DECLARATIONS}
+}
+
+.snui-switch__button[data-disabled] .snui-switch__track {
+  border-color: var(--snui-color-text-disabled);
+}
+
+.snui-switch__button[data-disabled] .snui-switch__thumb {
+  background: var(--snui-color-text-disabled);
+}
+
+.snui-switch__button[data-disabled][data-selected] .snui-switch__track {
+  background: var(--snui-color-text-disabled);
+}
+
+.snui-switch__button[data-disabled][data-selected] .snui-switch__thumb {
+  background: var(--snui-color-surface);
 }
 
 .snui-switch__label {
@@ -687,20 +715,47 @@ ${PRESSED_FILL_DECLARATION}
   background: var(--snui-color-accent-fill-hover);
 }
 
+/*
+ * Disabled text is a measured token rather than an opacity, so the fragment
+ * recolors text and every control that paints an accent fill or a selected
+ * state repaints that fill in the same token. A busy button keeps its fill:
+ * the spinner and description already say why it is unavailable.
+ */
 .snui-button:disabled,
+.snui-button[aria-disabled="true"]:not([aria-busy="true"]),
 .snui-input:disabled,
 .snui-range:disabled,
 .snui-segmented:not([aria-disabled="true"]) .snui-segmented__option:disabled {
 ${DISABLED_DECLARATIONS}
 }
 
+.snui-button--secondary:disabled,
+.snui-button--secondary[aria-disabled="true"]:not([aria-busy="true"]),
+.snui-button--danger:disabled,
+.snui-button--danger[aria-disabled="true"]:not([aria-busy="true"]) {
+  border-color: var(--snui-color-text-disabled);
+}
+
+.snui-button--primary:disabled,
+.snui-button--primary[aria-disabled="true"]:not([aria-busy="true"]) {
+  background: var(--snui-color-text-disabled);
+  color: var(--snui-color-surface);
+}
+
 .snui-button[aria-disabled="true"] {
   cursor: not-allowed;
 }
 
-.snui-button[aria-disabled="true"]:not(:disabled):not([aria-busy="true"]) .snui-button__content,
-.snui-button[aria-disabled="true"]:not(:disabled):not([aria-busy="true"]) .snui-button__spinner {
-  opacity: 0.58;
+.snui-range:disabled {
+  --snui-range-progress-color: var(--snui-color-text-disabled);
+}
+
+.snui-range:disabled::-webkit-slider-thumb {
+  background: var(--snui-color-text-disabled);
+}
+
+.snui-range:disabled::-moz-range-thumb {
+  background: var(--snui-color-text-disabled);
 }
 
 .snui-checkbox:has(.snui-checkbox__input:disabled),
@@ -711,7 +766,26 @@ ${DISABLED_DECLARATIONS}
 .snui-checkbox:has(.snui-checkbox__input:disabled) .snui-checkbox__input,
 .snui-segmented[aria-disabled="true"] .snui-segmented__option {
   cursor: not-allowed;
-  opacity: 1;
+}
+
+.snui-checkbox__input:disabled {
+  border-color: var(--snui-color-text-disabled);
+}
+
+.snui-checkbox__input:disabled:checked,
+.snui-checkbox__input:disabled:indeterminate {
+  border-color: var(--snui-color-text-disabled);
+  background: var(--snui-color-text-disabled);
+}
+
+.snui-checkbox__input:disabled::before {
+  border-color: var(--snui-color-surface);
+}
+
+.snui-segmented__option:disabled[aria-checked="true"],
+.snui-segmented[aria-disabled="true"] .snui-segmented__option[aria-checked="true"] {
+  background: var(--snui-color-text-disabled);
+  color: var(--snui-color-surface);
 }
 
 @media (forced-colors: active) {

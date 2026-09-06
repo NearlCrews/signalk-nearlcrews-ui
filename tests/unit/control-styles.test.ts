@@ -1,7 +1,16 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { CONTROL_STYLES } from "../../src/styles/controls.js";
 import { FORM_STYLES } from "../../src/styles/forms.js";
+
+/** The module source, so assertions can exclude the shared fragments. */
+const CONTROLS_SOURCE = readFileSync(
+  join(process.cwd(), "src", "styles", "controls.ts"),
+  "utf8",
+);
 
 /**
  * Every `:hover` selector together with the at-rule preludes that enclose it,
@@ -77,6 +86,29 @@ describe("control and form stylesheets", () => {
       /\.snui-field-group:disabled > \.snui-field-group__description \{\s*color: var\(--snui-color-text-disabled\);/,
     );
     expect(forms).not.toContain("opacity: 0.68");
+  });
+
+  it("repaints disabled fills with the disabled text token instead of opacity", () => {
+    // The shared disabled fragment is owned elsewhere; this module itself
+    // writes no dimming opacity.
+    expect(CONTROLS_SOURCE).not.toContain("opacity: 0.58");
+    expect(controls).toMatch(
+      /\.snui-button--primary:disabled,\s*\.snui-button--primary\[aria-disabled="true"\]:not\(\[aria-busy="true"\]\) \{\s*background: var\(--snui-color-text-disabled\);\s*color: var\(--snui-color-surface\);/,
+    );
+    for (const selector of [
+      ".snui-range:disabled::-webkit-slider-thumb",
+      ".snui-checkbox__input:disabled:checked",
+      ".snui-radio__button[data-disabled][data-selected] .snui-radio__control",
+      ".snui-switch__button[data-disabled][data-selected] .snui-switch__track",
+      '.snui-segmented__option:disabled[aria-checked="true"]',
+    ]) {
+      expect(controls, `${selector} keeps its accent fill`).toContain(selector);
+    }
+    // Aria-disabled buttons that are busy keep their fill; the others share
+    // the native disabled rule.
+    expect(controls).toContain(
+      '.snui-button[aria-disabled="true"]:not([aria-busy="true"]),',
+    );
   });
 
   it("writes block-axis offsets with logical properties", () => {
