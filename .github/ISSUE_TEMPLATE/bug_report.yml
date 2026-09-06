@@ -43,7 +43,8 @@ body:
     id: package-version
     attributes:
       label: Package version
-      placeholder: 0.8.0
+      description: The exact version pinned in package.json.
+      placeholder: 0.9.0
     validations:
       required: true
 
@@ -84,8 +85,8 @@ body:
     attributes:
       label: Remote format
       options:
-        - Classic global Module Federation
-        - ESM Module Federation
+        - Classic var Module Federation remote
+        - Output-module ESM Module Federation remote
         - Standalone bundle
         - Other
     validations:

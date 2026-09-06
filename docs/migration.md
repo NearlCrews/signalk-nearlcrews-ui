@@ -13,6 +13,7 @@ Adopt one plugin at a time. Wrap the panel in `PanelRoot`, replace local theme t
 - The package renders in the browser only and requires native CSS `@scope` support. Call `supportsNativeCssScope(window)` before mounting when a consumer must present a local compatibility message, render `UnsupportedBrowserNotice` instead of `PanelRoot` after a failed preflight, and verify support in every supported kiosk and embedded WebView deployment.
 - Prefer the standard Signal K schema-generated configuration form for simple fields whose schema behavior has been verified in every target Admin version. Give properties useful titles, descriptions, and defaults where appropriate, and use only `uiSchema` fields and widgets supported by the target host's React JSON Schema Form stack. The current host form does not preserve every root JSON Schema validation keyword. Adopt a custom panel when the interaction or validation requires behavior the target form does not provide. Expose its default component as `./PluginConfigurationPanel`, declare `signalk-plugin-configurator`, accept the host's `configuration` and `save` props, and keep configuration, Signal K access, units, validation, and save orchestration in the plugin. The host's `save` callback returns `void` and does not confirm persistence, so verified success, failure reporting, and retry behavior require a plugin-owned API.
 - Require Signal K 2.24 or newer for a React 19 Webpack configuration panel. Require Signal K 2.27 or newer for the documented ESM host-global React path. The dependency inventory's package version does not establish either minimum.
+- Pin an exact version (`npm install --save-dev --save-exact signalk-nearlcrews-ui@<version>`). During `0.x`, minor releases carry breaking changes, and the [release policy](release-policy.md#versioning) records that rule and what each release type may contain. The shipped `snui-check-consumer` command asserts the pin against the installed package and the built remote; the README documents it.
 
 ## Further reading
 
@@ -112,7 +113,7 @@ These changes are backward compatible. No consuming code requires modification.
 
 ## Changes in 0.7.1
 
-The React and React DOM peer ranges narrowed from `>=19.2.0 <20.0.0` to `^19.2.0`. Every stable React 19 release keeps the meaning it had; the old range also accepted React 20 prereleases, which the Signal K Admin host declaration excludes. A consumer that copied the old range into its Module Federation `shared` block should copy the new one:
+The React and React DOM peer ranges narrowed from `>=19.2.0 <20.0.0` to `^19.2.0`. Every stable React 19 release keeps the meaning it had; the old range also accepted React 20 prereleases, which the Signal K Admin host declaration excludes. That difference appears only under prerelease-inclusive matching: with semver's default rules the two ranges accept the same versions, and `20.0.0-rc.1` satisfies `>=19.2.0 <20.0.0` but not `^19.2.0` only when a matcher includes prereleases, as a `semver` call with `includePrerelease: true` does. A consumer that copied the old range into its Module Federation `shared` block should copy the new one:
 
 ```js
 shared: {
@@ -201,6 +202,24 @@ These changes are backward compatible. No consuming code requires modification.
 
 These changes are backward compatible. No consuming code requires modification.
 
-- `SemanticTone` and `OverlayOpenState` are now exported from the package root. `SemanticTone` is the type of `ToastContent.tone`; `OverlayOpenState` is the shared open-state interface that `MenuProps`, `PopoverProps`, and `DialogProps` extend.
+- `SemanticTone` and `OverlayOpenState` are now exported from the package root (`OverlayOpenState` moved to `/overlays` in 0.7.0). `SemanticTone` is the type of `ToastContent.tone`; `OverlayOpenState` is the shared open-state interface that `MenuProps`, `PopoverProps`, and `DialogProps` extend.
 - `SegmentedControlProps.onChange` is now optional, matching `RadioGroup`, `Switch`, and `Checkbox`.
 - `DialogProps.open`, `defaultOpen`, and `onOpenChange` now explicitly admit `undefined`, consistent with every other optional public prop and with `exactOptionalPropertyTypes`.
+
+## Changes in 0.5.0
+
+### Required migration work
+
+1. Replace `Disclosure` with `CollapsibleSection`. The summary it carried moves to `summary`, and `summaryVisibility` chooses whether the summary stays visible while the section is open.
+2. Remove `legacyThemeStorageKeys`. Theme preference resolves from the single shared key, and no cross-version channel remains.
+3. Rename `rootRef` to `ref` on `InlineConfirm` and `SegmentedControl`. `InlineConfirm.onCancel` now receives a reason, `"escape"` or `"cancel"`, so a handler that ignored its argument keeps working and one that needs the source reads it.
+4. Give `SegmentedControl` either `value` or `defaultValue`; `value` is optional, and arrow keys move only along the control's `orientation`.
+5. Change `ActionBar.sticky` from a boolean to `"top"` or `"bottom"` (`true` becomes `"bottom"`).
+6. Replace `BannerTone` with `StatusTone`, which adds `"neutral"`.
+7. Pass `href` whenever `Button` renders with `as="a"`; the props are a discriminated union and the anchor form requires it.
+8. Audit effects inside a retained `CollapsibleSection`. Retaining strategies now pause the hidden subtree with `<Activity mode="hidden">`, so effects run their cleanup on collapse and run again on expand.
+9. Drop any code that reads a `forwardRef` wrapper. Every component declares `ref` as an ordinary prop, and the emitted declarations describe plain functions rather than `ForwardRefExoticComponent`.
+10. Expect a fresh panel to resolve to Auto rather than Light, following the host marker when one exists.
+11. Do not rely on `Button` rewriting its accessible name while loading; use `loadingLabel` for the busy description.
+12. Treat the `InlineConfirm` cancel action as `aria-disabled` while busy: it keeps focus and refuses activation rather than leaving the tab order.
+13. Remove any `aria-live` a consumer added beside a `Banner` role; the component no longer emits both.

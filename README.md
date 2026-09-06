@@ -13,11 +13,11 @@ The package is intentionally distinct from the official Signal K user interface 
 
 ## Status
 
-The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or marketplace package. The initial API may change during the `0.x` series, so consumers should pin an exact version.
+The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or App Store package. The initial API may change during the `0.x` series, so consumers should pin an exact version.
 
 ## What's new in 0.8.2
 
-Version 0.8.2 finishes the viewport-bottom `ActionBar` work, gives compact buttons their own target-size floor, and keeps a revealed panel's theme current. It is a bug-fix release with no API change, so upgrading from 0.8.1 requires no consumer work. See the [0.8.2 changelog](CHANGELOG.md#082---2026-08-22) and [migration guide](docs/migration.md#changes-in-082) for the complete release notes.
+Version 0.8.2 finishes the viewport-bottom `ActionBar` work, gives compact buttons their own target-size floor, and keeps a revealed panel's theme current. It is a bug-fix release with no API change, so upgrading from 0.8.1 requires no consumer work. See the [0.8.2 changelog](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/CHANGELOG.md#082---2026-08-22) and [migration guide](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/migration.md#changes-in-082) for the complete release notes.
 
 - **One measuring pass**: docking reaches its final geometry inside the frame the event scheduled, so a control immediately above the docked bar is stable on the next frame and a press on it needs no settle or retry.
 - **Stable docking threshold**: geometry that lands on the docking threshold keeps the state it has, so the bar no longer alternates between docked and natural flow.
@@ -27,16 +27,16 @@ Version 0.8.2 finishes the viewport-bottom `ActionBar` work, gives compact butto
 
 ## Compatibility
 
-| Package | React peers  | JavaScript | Remote output                            | Browser verification                                      | Signal K boundary                                                              |
-| ------- | ------------ | ---------- | ---------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| `0.8.x` | `^19.2.0`    | ES2022     | Webpack var and output-module ESM        | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
-| `0.7.x` | `^19.2.0`    | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
-| `0.6.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
-| `0.5.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
-| `0.4.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
-| `0.3.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
-| `0.2.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
-| `0.1.x` | `>=19.2 <20` | ES2022     | Classic global and ESM Module Federation | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
+| Package | React peers  | JavaScript | Remote output                                                 | Browser verification                                      | Signal K boundary                                                              |
+| ------- | ------------ | ---------- | ------------------------------------------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `0.8.x` | `^19.2.0`    | ES2022     | Classic `var` and output-module ESM Module Federation remotes | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
+| `0.7.x` | `^19.2.0`    | ES2022     | Classic `var` and output-module ESM Module Federation remotes | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
+| `0.6.x` | `>=19.2 <20` | ES2022     | Classic `var` and output-module ESM Module Federation remotes | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
+| `0.5.x` | `>=19.2 <20` | ES2022     | Classic `var` and output-module ESM Module Federation remotes | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
+| `0.4.x` | `>=19.2 <20` | ES2022     | Classic `var` and output-module ESM Module Federation remotes | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
+| `0.3.x` | `>=19.2 <20` | ES2022     | Classic `var` and output-module ESM Module Federation remotes | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
+| `0.2.x` | `>=19.2 <20` | ES2022     | Classic `var` and output-module ESM Module Federation remotes | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
+| `0.1.x` | `>=19.2 <20` | ES2022     | Classic `var` and output-module ESM Module Federation remotes | Playwright Chromium, Firefox, WebKit, and mobile Chromium | Presentational only; each consumer verifies its own Signal K Admin integration |
 
 ## Requirements
 
@@ -57,7 +57,7 @@ For a classic Webpack remote, derive the `var` library name from the consumer pa
 
 The consumer bundles this package and its React Aria dependencies into the remote rather than configuring this package as a shared runtime singleton. See the Signal K project's [embedded-component and React-sharing guidance](https://github.com/SignalK/signalk-server/blob/master/docs/develop/webapps.md#embedded-components-and-admin-ui--server-interfaces) for the host contract that each consumer build must follow.
 
-The repository builds real production Webpack remotes in classic `var` and output-module ESM formats. Its browser harness initializes those containers with a minimal host-equivalent React and React DOM share scope. It does not reproduce the complete Signal K Admin bootstrap or the ESM host-global shim path, so each consumer must retain a production remote-load check against its supported Signal K host.
+The repository builds real production classic `var` and output-module ESM Module Federation remotes. Its browser harness initializes those containers with a minimal host-equivalent React and React DOM share scope. It does not reproduce the complete Signal K Admin bootstrap or the ESM host-global shim path, so each consumer must retain a production remote-load check against its supported Signal K host.
 
 ## Signal K Admin host dependencies
 
@@ -75,6 +75,31 @@ import "@signalk/server-admin-ui-dependencies";
 
 For Webpack, this package shares React and React DOM, and nothing else. For Vite and other ESM builds, the consumer uses the host-global React shims described above. This package uses none of the Bootstrap-family or icon-font libraries, so a consumer remote must not add or share them on its behalf.
 
+### Federation share map
+
+The share definition is published, so a Webpack consumer reads it instead of copying the block and its host comment:
+
+```js
+const { shared, hostNotes } = require("signalk-nearlcrews-ui/federation");
+
+new ModuleFederationPlugin({
+  // ...
+  shared,
+});
+```
+
+`shared` declares `react` and `react-dom` as singletons with `requiredVersion` set to this package's peer range and `import: false`, and no `strictVersion`. `hostNotes` explains why: Signal K Admin releases up to at least 2.24.0 register their React share as 19.0.0 while shipping a newer React, and current master registers `React.version`, so a strict check would refuse a compatible host. The entry is CommonJS and carries its own declarations, and the repository's own fixtures build from it, so the map a consumer spreads is the map the package was verified with.
+
+### Checking a consumer build
+
+The package ships `snui-check-consumer`, which asserts that a consumer's build matches the release it installed:
+
+```sh
+npx snui-check-consumer --root . --remote public/remoteEntry.js --baseline scripts/panel-size-baseline.json
+```
+
+It checks, in order, that `package.json` pins an exact version equal to the installed `node_modules/signalk-nearlcrews-ui`, that every JavaScript file beside the remote entry carries that version's `data-snui-version` stamp and no other, that no React runtime was bundled, that the remote consumes exactly the published share map (and that `webpack.config.cjs` beside `--root` declares it, when one exists; pass `--webpack-config` to name another file), and, with `--baseline`, that the gzip size of the remote's JavaScript and CSS assets stays within the recorded allowance. The baseline is a JSON object with `gzipBytes` (the recorded size), `maximumIncreasePercent` (the growth the check allows over it), and an optional `approvedCeilingGzipBytes` (an explicitly approved size above that allowance). Run it after the panel build in the consumer's own check script.
+
 The repository checks the declaration against that committed baseline rather than installing the contract package, for the reason recorded in `scripts/check-host-contract.mjs`. The baseline tracks the published npm inventory; it does not prove an installed Signal K version, React runtime, or share scope. Signal K 2.23 still used React 16 in its active Admin UI even though version 2.23.0 of the inventory declared a React 19 peer. This package therefore requires Signal K 2.24 or newer for a React 19 Webpack panel, while the documented ESM globals require Signal K 2.27 or newer. A review of Signal K `master` is a separate forward-compatibility check because unpublished host changes must not silently rewrite the package contract. `npm run host-contract` compares package metadata with the committed baseline. `npm run host-contract:drift` compares the baseline with the current registry declaration without changing files, and `npm run host-contract:update` refreshes and verifies the baseline when reviewed drift should be accepted.
 
 `npm run dependency-contract` separately verifies that the locked React Aria packages remain deduplicated, mutually compatible, and compatible with their declared React peer ranges. It runs in `npm run validate` after the host contract check.
@@ -87,12 +112,12 @@ Install an exact version as a development dependency because the consumer bundle
 npm install --save-dev --save-exact signalk-nearlcrews-ui@0.8.2
 ```
 
-For unpublished local changes, build and pack this repository, then install the resulting tarball:
+For unpublished local changes, build and pack this repository, then install the resulting tarball. `--pack-destination ..` keeps the tarball out of the repository tree:
 
 ```sh
 npm run build
-npm pack --ignore-scripts
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui/signalk-nearlcrews-ui-0.8.2.tgz
+npm pack --ignore-scripts --pack-destination ..
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui-0.8.2.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while resolving React and React DOM from the Signal K Admin host through the integration supported by its bundler.
@@ -123,9 +148,11 @@ import {
 
 `Accordion`, `EmptyState`, and `Progress` are available only from `/composites`. `Radio`, `RadioGroup`, `SecretInput`, and `Switch` are available only from `/forms`. The complete data-grid collection API is available only from `/data-grid`, and dialogs, menus, popovers, and toasts are available only from `/overlays`. Imports of those APIs from the package root must be migrated when upgrading from 0.6.x.
 
-`signalk-nearlcrews-ui/tokens.css` is the one non-JavaScript entry point. Importing the stylesheet does not import or execute React, so panels in other frameworks can use the tokens described under theme preference below. Installing the package still resolves its declared dependencies and React peer dependencies; the stylesheet is not a dependency-free package split.
+`signalk-nearlcrews-ui/tokens.css` is the one stylesheet entry point. Importing the stylesheet does not import or execute React, so panels in other frameworks can use the tokens described under theme preference below. Installing the package still resolves its declared dependencies and React peer dependencies; the stylesheet is not a dependency-free package split.
 
-The [API reference](docs/api-reference.md) lists the complete entry-point inventory, package-specific props, ref targets, public values, defaults, and localization hooks.
+Two entries serve build tooling rather than the browser: `signalk-nearlcrews-ui/federation` is the CommonJS Module Federation share map described under the host dependencies above, and `signalk-nearlcrews-ui/package.json` exposes the manifest so a build script can read the installed version through Node resolution. Every JavaScript entry also carries a `default` condition, so a CommonJS consumer such as a Node test runner can `require` it on Node 22.12 or newer.
+
+The [API reference](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md) lists the complete entry-point inventory, the gzip size of each entry, package-specific props, ref targets, public values, defaults, and localization hooks.
 
 ### Browser preflight
 
@@ -251,11 +278,11 @@ The host must supply the nonce through its own trusted bootstrap. Do not read it
 
 ### Refs
 
-Refs are ordinary props and support object refs, callback refs, and React 19 callback-ref cleanup. `Button` resolves to an `HTMLButtonElement` or, with `as="a"`, an `HTMLAnchorElement`. A component exposes a ref only when it has a stable, documented owning element. The [API reference](docs/api-reference.md) lists every ref-capable component and its native target.
+Refs are ordinary props and support object refs, callback refs, and React 19 callback-ref cleanup. `Button` resolves to an `HTMLButtonElement` or, with `as="a"`, an `HTMLAnchorElement`. A component exposes a ref only when it has a stable, documented owning element. The [API reference](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md) lists every ref-capable component and its native target.
 
 `Banner.dismissFocusRef`, `ActionBar.statusRef`, and the `InlineConfirm` focus refs name focus destinations. They do not expose the component itself.
 
-Every package-owned user-visible string is overridable. The [localization table](docs/api-reference.md#localization-defaults) records the defaults for loading, dismissals, tone names, theme choices, empty data, toasts, compatibility notices, and relative-age fallbacks. `AlertDialog.cancelLabel` has no default and must be supplied by the consumer.
+Every package-owned user-visible string is overridable. The [localization table](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md#localization-defaults) records the defaults for loading, dismissals, tone names, theme choices, empty data, toasts, compatibility notices, and relative-age fallbacks. `AlertDialog.cancelLabel` has no default and must be supplied by the consumer.
 
 Persistent validation text defaults to `errorLive="off"`. Use `polite` or `assertive` only when a newly inserted message must be announced after an interaction:
 
@@ -391,9 +418,9 @@ npm run validate
 npm run test:browser
 ```
 
-Development supports Node 22.22.2 or newer in the Node 22 release line, Node 24.15.0 or newer in the Node 24 release line, or Node 26. npm 12.0.2 is preferred, and npm 11.16 or newer remains accepted during the transition. These are source-tooling requirements and do not impose a Node runtime on consumers of the browser bundle.
+Development supports Node 22.22.2 or newer in the Node 22 release line, Node 24.15.0 or newer in the Node 24 release line, or Node 26, with npm 11.16 or newer or npm 12; `devEngines` in `package.json` is the enforced statement of both ranges. These are source-tooling requirements and do not impose a Node runtime on consumers of the browser bundle; the published `engines.node` is the `>=22` floor Signal K server itself declares.
 
-`npm run validate` runs Biome and Prettier formatting, Markdown lint, spelling, repository-local link checks, Biome and type-aware ESLint rules, Knip dead-code analysis, TypeScript checks under both installed compilers, a Signal K Admin host dependency comparison against the committed contract baseline, and a locked React Aria compatibility check. It also runs unit and type-level coverage with aggregate and per-file floors, full and runtime dependency audits, compilation, packed-package validation, an emitted-declaration comparison against the committed baseline, a consumer type check against the packed artifact, export-map-wide bundle-size and React externalization checks, and classic and output-module ESM Webpack fixture builds.
+`npm run validate` runs Biome and Prettier formatting, Markdown lint, spelling, repository-local link checks, Biome and type-aware ESLint rules, Knip dead-code analysis, TypeScript checks under both installed compilers, a Signal K Admin host dependency comparison against the committed contract baseline, and a locked React Aria compatibility check. It also runs unit and type-level coverage with aggregate and per-file floors, the runtime dependency audit, compilation, packed-package validation, an emitted-declaration comparison against the committed baseline, a consumer type check against the packed artifact, export-map-wide bundle-size and React externalization checks, and classic `var` and output-module ESM Module Federation fixture builds. The full-tree dependency audit runs as a separate, non-blocking CI job.
 
 Two TypeScript compilers are installed on purpose. See the TypeScript toolchain section of `CONTRIBUTING.md` in the repository for why, and for the condition that collapses them back to one.
 

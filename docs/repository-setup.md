@@ -10,7 +10,7 @@ This checklist records the external settings that cannot be enforced by files in
 - Apply the repository topics listed in `package.json` where GitHub supports them.
 - Retain dependency, npm, and GitHub Actions labels for automated updates.
 
-Restrict GitHub Actions to GitHub-owned actions, require full commit SHA pins, and give the default workflow token read-only permissions. Workflows must not approve pull requests.
+Restrict GitHub Actions to GitHub-owned actions, require full commit SHA pins, and give the default workflow token read-only permissions. Workflows must not approve pull requests. Third-party tools the workflows need (actionlint, zizmor, and lychee) are therefore not run as actions: each workflow downloads a pinned release archive with `curl`, verifies its SHA-256, and runs the binary. A workflow that uses a third-party action under this policy never starts, and the failure is visible only in the Actions run list.
 
 Enable Dependabot alerts and security updates, secret scanning, push protection, private vulnerability reporting, and CodeQL default setup for JavaScript/TypeScript and GitHub Actions workflows.
 
@@ -24,7 +24,7 @@ Protect tags matching `v*` from updates and deletion. A release tag must be anno
 
 Create a protected GitHub environment named `npm`. Require review by the repository owner before its publish job can start. Do not store an npm token in the repository, organization, or environment.
 
-The package is an npm dependency only. Do not add Signal K plugin keywords, marketplace metadata, or a Signal K application entry.
+The package is an npm dependency only. Do not add Signal K plugin keywords, App Store metadata, or a Signal K application entry.
 
 ## npm trusted publishing
 

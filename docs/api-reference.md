@@ -4,18 +4,33 @@ This reference summarizes the public `0.8.x` API. The TypeScript declarations sh
 
 ## Entry points
 
-| Import path                        | Public surface                                                                                                                   |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `signalk-nearlcrews-ui`            | Panel roots, layout, native form controls, feedback, theme APIs, browser compatibility, token metadata, and formatting utilities |
-| `signalk-nearlcrews-ui/composites` | `Accordion`, `EmptyState`, and `Progress`                                                                                        |
-| `signalk-nearlcrews-ui/data-grid`  | `DataGrid` and the React Aria collection exports `Column`, `Row`, and `Cell`                                                     |
-| `signalk-nearlcrews-ui/forms`      | `RadioGroup`, `Radio`, `SecretInput`, and `Switch`                                                                               |
-| `signalk-nearlcrews-ui/overlays`   | Dialogs, menus, popovers, toast queues, and toast regions                                                                        |
-| `signalk-nearlcrews-ui/tokens.css` | Framework-neutral public tokens under the `snui-tokens` class; importing the sheet executes no JavaScript or React               |
+| Import path                          | Public surface                                                                                                                   |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `signalk-nearlcrews-ui`              | Panel roots, layout, native form controls, feedback, theme APIs, browser compatibility, token metadata, and formatting utilities |
+| `signalk-nearlcrews-ui/composites`   | `Accordion`, `EmptyState`, and `Progress`                                                                                        |
+| `signalk-nearlcrews-ui/data-grid`    | `DataGrid` and the React Aria collection exports `Column`, `Row`, and `Cell`                                                     |
+| `signalk-nearlcrews-ui/forms`        | `RadioGroup`, `Radio`, `SecretInput`, and `Switch`                                                                               |
+| `signalk-nearlcrews-ui/overlays`     | Dialogs, menus, popovers, toast queues, and toast regions                                                                        |
+| `signalk-nearlcrews-ui/tokens.css`   | Framework-neutral public tokens under the `snui-tokens` class; importing the sheet executes no JavaScript or React               |
+| `signalk-nearlcrews-ui/federation`   | CommonJS Module Federation share map: `shared`, `hostNotes`, and `SIGNALK_HOST_SHARED_MODULES`, with declarations                |
+| `signalk-nearlcrews-ui/package.json` | The package manifest, for build tooling that reads the installed version through Node resolution                                 |
 
-Focused-entry-point APIs are not also exported from the package root. Consumers bundle each JavaScript entry point they import into their remote. Webpack consumers share only React and React DOM with the Signal K Admin host; Vite and other ESM consumers resolve the React entry points through the host-global shims instead.
+Focused-entry-point APIs are not also exported from the package root. Consumers bundle each JavaScript entry point they import into their remote. Webpack consumers share only React and React DOM with the Signal K Admin host; Vite and other ESM consumers resolve the React entry points through the host-global shims instead. Every JavaScript entry declares `import` and `default` conditions with the same target, so CommonJS tooling on Node 22.12 or newer can `require` it as well.
 
 The stylesheet entry point has no React import or execution requirement. Installing the package still resolves the package's declared dependencies and React peer dependencies; `tokens.css` is an entry point, not a separate dependency-free package.
+
+### Entry point sizes
+
+The gzip size of each entry bundled alone, with React and React DOM external, as `node scripts/check-bundle-size.mjs --table` reports for the current release; the budget column is the ceiling that command enforces. A minimal panel that imports only the root entry adds about 24 KB gzip to its remote when bundled standalone; consumer remotes measure 16 to 17 KB after their own tree shaking, because the root entry carries React Aria's portal provider and the shared style modules that a panel without overlays does not otherwise need. Add the focused entries a panel imports to size its own ceiling.
+
+| Import path                        | Gzip bytes | Budget (bytes) |
+| ---------------------------------- | ---------: | -------------: |
+| `signalk-nearlcrews-ui`            |      24470 |          26624 |
+| `signalk-nearlcrews-ui/composites` |       6696 |           8192 |
+| `signalk-nearlcrews-ui/data-grid`  |      73330 |          77824 |
+| `signalk-nearlcrews-ui/forms`      |      21644 |          24576 |
+| `signalk-nearlcrews-ui/overlays`   |      57083 |          61440 |
+| `signalk-nearlcrews-ui/tokens.css` |       1341 |           2048 |
 
 ## Package root
 
@@ -100,7 +115,7 @@ The first `Accordion` child with `defaultOpen` wins. Keep child order static bec
 
 ## Data grid
 
-`DataGrid` requires an accessible name, column children, `items`, and `renderRow`. Its package-specific options are `columns`, `density`, `emptyState`, `emptyTitle`, selection state, controlled sorting state, `virtualizeThreshold`, and `zebra`. Dynamic `columns` must be a readonly array so React can replay StrictMode and concurrent renders safely; replace the array when the column data changes. The default empty title is `"No data"`, the default virtualization threshold is 100 rows, and the ref always resolves to the stable outer `HTMLDivElement`.
+`DataGrid` requires an accessible name, column children, `items`, and `renderRow`. Its package-specific options are `columns`, `density`, `emptyState`, `emptyTitle`, selection state, controlled sorting state, `virtualizeThreshold`, and `zebra`. Dynamic `columns` must be a readonly array so React can replay StrictMode and concurrent renders safely; replace the array when the column data changes. The default empty title is `"No data"`, the default virtualization threshold is 100 rows, and the ref always resolves to the stable outer `HTMLDivElement`. For any grid a user fills, pass `emptyState` with a description that says what the grid holds and an action that leads to the first row; the default title orients nobody and exists for prototypes and tests.
 
 `Column`, `Row`, `Cell`, `Key`, `Selection`, `SortDescriptor`, and their related public types come from React Aria Components. The first column becomes the row header when the consumer does not mark one explicitly. Give each row a stable `id` or `key`. Sorting remains consumer controlled: update `items` when `onSortChange` reports a new descriptor.
 
@@ -119,16 +134,18 @@ The first `Accordion` child with `defaultOpen` wins. Keep child order static bec
 
 All overlays render inside the nearest `PanelRoot`. `Dialog`, `AlertDialog`, `Menu`, and `Popover` share controlled or uncontrolled open-state props: `open`, `defaultOpen`, and `onOpenChange`.
 
-| Component       | Package-specific API                                                                                                                                                     | Ref target       |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
-| `Dialog`        | Required `title`; `actions`; `description`; dialog ARIA labeling; `blurScrim`; `dismissable`, default `true`; `headingLevel`, default `2`; `width`, default `"standard"` | `HTMLElement`    |
-| `AlertDialog`   | Dialog props; required `cancelLabel`; `cancelVariant`, default `"secondary"`; `onCancel`; supplemental `actions`; `dismissable`, default `false`                         | `HTMLElement`    |
-| `Menu`          | Required trigger `label` and item children; `onAction`; `placement`; trigger size and variant                                                                            | None             |
-| `MenuItem`      | Required `id` and content; `disabled`; `destructive`; `textValue`                                                                                                        | None             |
-| `MenuSection`   | Item children; optional `title`                                                                                                                                          | None             |
-| `MenuSeparator` | Optional `className`                                                                                                                                                     | None             |
-| `Popover`       | Required `trigger` and content; `placement`, default `"bottom"`; `width`, default `"auto"`                                                                               | `HTMLDivElement` |
-| `ToastRegion`   | Required `queue`; `label`; `dismissLabel`                                                                                                                                | `HTMLElement`    |
+| Component     | Package-specific API                                                                                                                                                     | Ref target    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------- |
+| `Dialog`      | Required `title`; `actions`; `description`; dialog ARIA labeling; `blurScrim`; `dismissable`, default `true`; `headingLevel`, default `2`; `width`, default `"standard"` | `HTMLElement` |
+| `AlertDialog` | Dialog props; required `cancelLabel`; `cancelVariant`, default `"secondary"`; `onCancel`; supplemental `actions`; `dismissable`, default `false`                         | `HTMLElement` |
+
+The `dismissable` prop keeps that spelling; it is public API, and prose about the behavior may say "dismissible".
+| `Menu` | Required trigger `label` and item children; `onAction`; `placement`; trigger size and variant | None |
+| `MenuItem` | Required `id` and content; `disabled`; `destructive`; `textValue` | None |
+| `MenuSection` | Item children; optional `title` | None |
+| `MenuSeparator` | Optional `className` | None |
+| `Popover` | Required `trigger` and content; `placement`, default `"bottom"`; `width`, default `"auto"` | `HTMLDivElement` |
+| `ToastRegion` | Required `queue`; `label`; `dismissLabel` | `HTMLElement` |
 
 Use the library `Button` as a `Popover` trigger. A custom trigger must render a semantic interactive element, forward its ref to that element, and spread every injected event and ARIA prop onto it. A trigger that drops any part of that contract can break opening, focus return, keyboard use, or accessible naming.
 
@@ -171,7 +188,9 @@ Common public unions include `AnnouncementMode` (`"off" | "polite" | "assertive"
 
 ## Localization defaults
 
-Every package-owned user-visible string can be replaced by a prop or option.
+Every package-owned user-visible string can be replaced by a prop or option. Announcements owned by React Aria Components, such as `DataGrid` sort and selection announcements and the built-in strings of `Dialog`, `Menu`, `Popover`, and `Progress`, follow the browser locale instead; pin them by wrapping the panel in React Aria Components' `I18nProvider` from the consumer's own dependency.
+
+Two defaults deserve a deliberate override. The `danger` tone announces "Error", so pass `toneLabel` (for example "Caution") on a danger `Banner`, `Badge`, or sticky toast that warns about a destructive action rather than reporting a failure. `InlineConfirm` defaults to "Confirm" under "Confirm action", so set `title` to the question being asked and `confirmLabel` to the action verb ("Delete route") wherever the region reaches a user; the defaults are for tests and prototypes.
 
 | Surface               | Default                                                     | Override                                                                          |
 | --------------------- | ----------------------------------------------------------- | --------------------------------------------------------------------------------- |
