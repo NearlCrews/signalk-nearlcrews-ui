@@ -17,38 +17,53 @@
     "design-system"
   ],
   "files": [
+    "bin",
     "dist",
     "docs",
     "CHANGELOG.md",
     "LICENSE",
     "README.md"
   ],
+  "bin": {
+    "snui-check-consumer": "bin/snui-check-consumer.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./composites": {
       "types": "./dist/composites.d.ts",
-      "import": "./dist/composites.js"
+      "import": "./dist/composites.js",
+      "default": "./dist/composites.js"
     },
     "./data-grid": {
       "types": "./dist/data-grid.d.ts",
-      "import": "./dist/data-grid.js"
+      "import": "./dist/data-grid.js",
+      "default": "./dist/data-grid.js"
+    },
+    "./federation": {
+      "types": "./dist/federation.d.cts",
+      "require": "./dist/federation.cjs",
+      "default": "./dist/federation.cjs"
     },
     "./forms": {
       "types": "./dist/forms.d.ts",
-      "import": "./dist/forms.js"
+      "import": "./dist/forms.js",
+      "default": "./dist/forms.js"
     },
     "./overlays": {
       "types": "./dist/overlays.d.ts",
-      "import": "./dist/overlays.js"
+      "import": "./dist/overlays.js",
+      "default": "./dist/overlays.js"
     },
+    "./package.json": "./package.json",
     "./tokens.css": "./dist/tokens.css"
   },
   "types": "./dist/index.d.ts",
   "engines": {
-    "node": "^22.22.2 || ^24.15.0 || ^26.0.0"
+    "node": ">=22"
   },
   "devEngines": {
     "runtime": {
@@ -62,7 +77,6 @@
       "onFail": "error"
     }
   },
-  "packageManager": "npm@12.0.2",
   "peerDependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -87,7 +101,7 @@
     "url": "https://github.com/NearlCrews/signalk-nearlcrews-ui/issues"
   },
   "scripts": {
-    "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/build-tokens-css.mjs",
+    "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/build-tokens-css.mjs && node scripts/build-federation-entry.mjs",
     "clean": "node scripts/clean.mjs",
     "format": "biome check --write . && prettier --write \"**/*.{md,yml,yaml}\"",
     "format:check": "biome format . && prettier --check \"**/*.{md,yml,yaml}\"",
@@ -120,11 +134,12 @@
     "test:federation:built": "webpack --config fixtures/federation/classic/webpack.config.cjs --json fixtures/federation/classic/dist/stats.json && webpack --config fixtures/federation/esm/webpack.config.cjs --json fixtures/federation/esm/dist/stats.json && node scripts/check-federation-build.mjs",
     "test:package": "npm run build && npm run test:package:built",
     "test:package:built": "node scripts/check-package.mjs && node scripts/check-declarations.mjs && node scripts/check-consumer-types.mjs",
+    "test:snapshot-families": "node scripts/check-snapshot-families.mjs",
     "declarations:update": "npm run build && node scripts/check-declarations.mjs --update",
     "validate": "npm run format:check && npm run docs:check && npm run host-contract && npm run dependency-contract && npm run lint && npm run knip && npm run type-check && npm run type-check:ts6 && npm run test:coverage && npm run audit:runtime && npm run build && npm run test:package:built && npm run test:bundle:built && npm run test:federation:built",
     "release:check": "node scripts/check-release-approval.mjs && npm run validate && npm run test:browser",
     "prepublishOnly": "node scripts/check-release-approval.mjs && npm run test:browser",
-    "prepack": "npm run validate"
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

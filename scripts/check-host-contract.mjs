@@ -19,10 +19,13 @@
  * moved away from this package's peer ranges fails immediately.
  */
 import { readFile, writeFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 
 import { subset } from "semver";
 
+import {
+  createFederationShared,
+  SIGNALK_HOST_SHARED_MODULES,
+} from "./lib/federation-share.mjs";
 import {
   contractsMatch,
   fetchRegistryContract,
@@ -30,7 +33,6 @@ import {
 } from "./lib/host-contract.mjs";
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 
-const require = createRequire(import.meta.url);
 const baselinePath = repositoryPath("tests", "host-contract.baseline.json");
 const contractPackage = "@signalk/server-admin-ui-dependencies";
 const shouldUpdate = process.argv.includes("--update");
@@ -118,10 +120,7 @@ if (baseline.package !== contractPackage) {
 }
 
 const hostRanges = baseline.peerDependencies;
-const {
-  FEDERATION_SHARED,
-  SIGNALK_HOST_SHARED_MODULES,
-} = require("../fixtures/federation/shared.cjs");
+const FEDERATION_SHARED = createFederationShared(peerDependencies);
 const sharedNames = Object.keys(FEDERATION_SHARED).sort();
 const guaranteedHostShareNames = [...SIGNALK_HOST_SHARED_MODULES].sort();
 const peerNames = Object.keys(peerDependencies).sort();

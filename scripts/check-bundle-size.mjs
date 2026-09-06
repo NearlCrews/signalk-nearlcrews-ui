@@ -1,22 +1,23 @@
-import { createRequire } from "node:module";
 import { gzipSync } from "node:zlib";
 import { build } from "esbuild";
 
+import { assertNoReactRuntime } from "../bin/lib/consumer-checks.mjs";
 import {
   assertPublicBundleBudgets,
   assertPublicCssExport,
 } from "./lib/bundle-contract.mjs";
+import { SIGNALK_HOST_SHARED_MODULES } from "./lib/federation-share.mjs";
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
-
-const { FEDERATION_SHARED } = createRequire(import.meta.url)(
-  "../fixtures/federation/shared.cjs",
-);
+import { formatSizeTable } from "./lib/size-table.mjs";
 
 /** Host-shared modules and their subpaths stay outside every bundle. */
-const hostExternals = Object.keys(FEDERATION_SHARED).flatMap((name) => [
+const hostExternals = SIGNALK_HOST_SHARED_MODULES.flatMap((name) => [
   name,
   `${name}/*`,
 ]);
+
+/** `--table` also prints the Markdown table docs/api-reference.md carries. */
+const printTable = process.argv.includes("--table");
 
 const entryBudgets = {
   composites: 8 * 1024,
@@ -28,6 +29,7 @@ const entryBudgets = {
 
 const manifest = await readPackageJson();
 const publicEntries = assertPublicBundleBudgets(manifest.exports, entryBudgets);
+const tableRows = [];
 
 for (const [entry, entryTarget] of publicEntries) {
   const maximumGzipBytes = entryBudgets[entry];
@@ -65,17 +67,12 @@ for (const [entry, entryTarget] of publicEntries) {
     );
   }
 
-  const source = Buffer.from(output).toString("utf8");
-  for (const marker of [
-    "__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE",
-    "react.production.min",
-    "react-dom.production.min",
-  ]) {
-    if (source.includes(marker)) {
-      throw new Error(`${entry} contains a React runtime marker: ${marker}`);
-    }
-  }
+  assertNoReactRuntime(
+    Buffer.from(output).toString("utf8"),
+    `The ${entry} entry`,
+  );
 
+  tableRows.push({ budgetBytes: maximumGzipBytes, entry, gzipBytes });
   console.log(`${entry} bundle is ${gzipBytes} gzip bytes.`);
 }
 
@@ -116,4 +113,13 @@ if (tokensGzipBytes > TOKENS_CSS_GZIP_BUDGET) {
   );
 }
 
+tableRows.push({
+  budgetBytes: TOKENS_CSS_GZIP_BUDGET,
+  entry: "tokens.css",
+  gzipBytes: tokensGzipBytes,
+});
 console.log(`tokens.css is ${tokensGzipBytes} gzip bytes.`);
+
+if (printTable) {
+  console.log(`\n${formatSizeTable(manifest.name, tableRows)}`);
+}

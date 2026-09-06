@@ -2,10 +2,28 @@ import { readdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 
-const { FEDERATION_SHARED } = createRequire(import.meta.url)(
-  "../fixtures/federation/shared.cjs",
-);
-const hostSharedModules = Object.keys(FEDERATION_SHARED);
+import {
+  assertConsumedShares,
+  assertNoReactRuntime,
+  assertVersionStamp,
+} from "../bin/lib/consumer-checks.mjs";
+import { createFederationShared } from "./lib/federation-share.mjs";
+import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
+
+const require = createRequire(import.meta.url);
+const { peerDependencies, version } = await readPackageJson();
+const expectedShared = createFederationShared(peerDependencies);
+const { parseRange } = require("webpack/lib/util/semver.js");
+
+// The fixtures build against the generated entry, so the entry has to exist
+// and carry the map rendered from this package.json before the remotes are
+// inspected.
+const federationEntry = require(repositoryPath("dist", "federation.cjs"));
+if (JSON.stringify(federationEntry.shared) !== JSON.stringify(expectedShared)) {
+  throw new Error(
+    "dist/federation.cjs does not carry the share map rendered from package.json peerDependencies.",
+  );
+}
 
 async function readJavaScript(directory) {
   const names = await readdir(directory);
@@ -38,10 +56,12 @@ function collectModuleNames(modules) {
   ]);
 }
 
-const classicFiles = await readJavaScript("fixtures/federation/classic/dist");
-const esmFiles = await readJavaScript("fixtures/federation/esm/dist");
-const classicStats = await readStats("fixtures/federation/classic/dist");
-const esmStats = await readStats("fixtures/federation/esm/dist");
+const classicDist = repositoryPath("fixtures", "federation", "classic", "dist");
+const esmDist = repositoryPath("fixtures", "federation", "esm", "dist");
+const classicFiles = await readJavaScript(classicDist);
+const esmFiles = await readJavaScript(esmDist);
+const classicStats = await readStats(classicDist);
+const esmStats = await readStats(esmDist);
 const classicRemote = classicFiles.find(
   (file) => file.name === "remoteEntry.js",
 );
@@ -66,25 +86,17 @@ for (const [format, remote] of [
       `${format} remoteEntry.js does not expose ./PluginConfigurationPanel.`,
     );
   }
+  // The same checks the shipped consumer bin runs against a consumer's remote.
+  assertConsumedShares(remote.source, expectedShared, parseRange);
 }
 
 for (const [format, files, stats] of [
   ["classic", classicFiles, classicStats],
   ["esm", esmFiles, esmStats],
 ]) {
-  const combined = files.map((file) => file.source).join("\n");
-  if (!combined.includes("data-snui-version")) {
-    throw new Error(`${format} fixture did not bundle the UI package.`);
-  }
-  for (const marker of [
-    "__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE",
-    "react.production.min",
-    "react-dom.production.min",
-  ]) {
-    if (combined.includes(marker)) {
-      throw new Error(`${format} fixture bundled React marker ${marker}.`);
-    }
-  }
+  const sources = files.map((file) => file.source);
+  assertVersionStamp(sources, version);
+  assertNoReactRuntime(sources.join("\n"), `The ${format} fixture`);
 
   const moduleNames = collectModuleNames(stats.modules ?? []).filter(
     (name) => typeof name === "string",
@@ -102,14 +114,11 @@ for (const [format, files, stats] of [
       );
     }
   }
-  for (const shared of hostSharedModules) {
-    if (
-      !moduleNames.some((name) =>
-        name.startsWith(`consume shared module (default) ${shared}@`),
-      )
-    ) {
+  for (const [shared, share] of Object.entries(expectedShared)) {
+    const consumed = `consume shared module (default) ${shared}@${share.requiredVersion} (singleton)`;
+    if (!moduleNames.includes(consumed)) {
       throw new Error(
-        `${format} fixture did not consume host-shared ${shared}.`,
+        `${format} fixture did not consume host-shared ${shared} at ${share.requiredVersion} as a singleton.`,
       );
     }
   }
@@ -129,4 +138,6 @@ for (const [format, files, stats] of [
   }
 }
 
-console.log("Classic and ESM Module Federation fixtures passed.");
+console.log(
+  "Classic var and output-module ESM Module Federation fixtures passed with the published share map.",
+);

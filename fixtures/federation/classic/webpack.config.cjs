@@ -1,9 +1,11 @@
 const path = require("node:path");
 const { container } = require("webpack");
-const { FEDERATION_SHARED } = require("../shared.cjs");
+// Resolved through this package's own exports map (Node package
+// self-reference), which is exactly the specifier a consumer writes.
+const { shared } = require("signalk-nearlcrews-ui/federation");
 
 const { ModuleFederationPlugin } = container;
-const packageJson = require("../../../package.json");
+const packageJson = require("signalk-nearlcrews-ui/package.json");
 const moduleName = packageJson.name.replace(/[-@/]/g, "_");
 
 module.exports = {
@@ -49,7 +51,7 @@ module.exports = {
           "../PluginConfigurationPanel.tsx",
         ),
       },
-      shared: FEDERATION_SHARED,
+      shared,
     }),
   ],
 };

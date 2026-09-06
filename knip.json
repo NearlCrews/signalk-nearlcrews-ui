@@ -7,6 +7,7 @@
     "src/forms.ts",
     "src/overlays.ts",
     "scripts/*.mjs",
+    "bin/*.mjs",
     "fixtures/browser/main.tsx",
     "fixtures/browser/showcase.tsx",
     "fixtures/browser/federation.tsx",
@@ -19,6 +20,7 @@
   "project": [
     "src/**/*.{ts,tsx}",
     "scripts/**/*.mjs",
+    "bin/**/*.mjs",
     "fixtures/**/*.{ts,tsx,cjs}",
     "tests/**/*.{ts,tsx,mjs}",
     "*.{ts,mjs}"
