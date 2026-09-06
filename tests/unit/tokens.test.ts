@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CONTROL_STYLES } from "../../src/styles/controls.js";
-import { PANEL_STYLES } from "../../src/styles/index.js";
+import { PANEL_STYLES, STYLE_MODULES } from "../../src/styles/index.js";
 import {
   CONTAINER_BREAKPOINT_NARROW,
   PUBLIC_TOKEN_NAMES,
@@ -67,15 +67,20 @@ describe("design token scales", () => {
   });
 
   it("keeps 999px behind the pill radius token", () => {
-    const occurrences = PANEL_STYLES.split("999px").length - 1;
+    const allStyles = STYLE_MODULES.map((module) => module.styles).join("\n");
+    const occurrences = allStyles.split("999px").length - 1;
     expect(occurrences).toBe(1);
     expect(PANEL_STYLES).toContain("--snui-radius-pill: 999px;");
   });
 
   it("routes every narrow-panel container query through the shared breakpoint", () => {
-    const queries = [
-      ...PANEL_STYLES.matchAll(/@container snui-panel \(max-width: ([^)]+)\)/g),
-    ].map((match) => match[1]);
+    const queries = STYLE_MODULES.flatMap((module) =>
+      [
+        ...module.styles.matchAll(
+          /@container snui-panel \(max-width: ([^)]+)\)/g,
+        ),
+      ].map((match) => match[1]),
+    );
 
     expect(queries.length).toBeGreaterThan(0);
     for (const query of queries) {
