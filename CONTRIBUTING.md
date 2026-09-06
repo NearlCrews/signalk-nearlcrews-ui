@@ -47,7 +47,7 @@ Never relabel an image generated on one platform as another platform's baseline.
 
 Two TypeScript compilers are installed on purpose, through npm aliases in `devDependencies`:
 
-- `@typescript/native` is the real `typescript` package at 7.x. It provides the `tsc` binary that `npm run build` and `npm run type-check` use.
+- `@typescript/native` is the real `typescript` package at 7.x. `npm run build` and `npm run type-check` run its compiler by path through `scripts/tsc7.mjs`. Both aliases declare a `tsc` binary and npm links `node_modules/.bin/tsc` to whichever it installed last, so a bare `tsc` call could silently compile with TypeScript 6 after a fresh install; never call bare `tsc` from a script.
 - `typescript` is aliased to `@typescript/typescript6`, which provides the TypeScript 6 JavaScript compiler API plus a `tsc6` binary.
 
 The alias exists because tools that import the compiler API, most importantly typescript-eslint, do not yet run under TypeScript 7. Resolving the bare `typescript` specifier to the TypeScript 6 API keeps type-aware linting working while builds use the native compiler.

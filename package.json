@@ -101,7 +101,7 @@
     "url": "https://github.com/NearlCrews/signalk-nearlcrews-ui/issues"
   },
   "scripts": {
-    "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/build-tokens-css.mjs && node scripts/build-federation-entry.mjs",
+    "build": "node scripts/clean.mjs && node scripts/tsc7.mjs -p tsconfig.build.json && node scripts/build-tokens-css.mjs && node scripts/build-federation-entry.mjs",
     "clean": "node scripts/clean.mjs",
     "format": "biome check --write . && prettier --write \"**/*.{md,yml,yaml}\"",
     "format:check": "biome format . && prettier --check \"**/*.{md,yml,yaml}\"",
@@ -117,7 +117,7 @@
     "host-contract:drift": "node scripts/check-host-contract.mjs --check-registry",
     "host-contract:update": "node scripts/check-host-contract.mjs --update",
     "dependency-contract": "node scripts/check-react-aria-contract.mjs",
-    "type-check": "tsc --noEmit",
+    "type-check": "node scripts/tsc7.mjs --noEmit",
     "type-check:ts6": "tsc6 --noEmit && tsc6 --noEmit -p tsconfig.build.json",
     "audit": "npm audit --audit-level=moderate",
     "audit:runtime": "npm audit --omit=dev --audit-level=moderate",
