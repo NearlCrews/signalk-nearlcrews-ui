@@ -215,6 +215,7 @@ export function SaveActionBar({
           <Button
             variant="primary"
             loading={saving}
+            loadingLabel={labels.saving}
             disabled={state.saveDisabled && !saving}
             onClick={() => runAndFocusStatus(onSave)}
           >

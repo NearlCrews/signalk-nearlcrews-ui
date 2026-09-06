@@ -174,6 +174,9 @@ describe("SaveActionBar", () => {
     expect(save).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("status")).toHaveTextContent("Saving changes");
     expect(screen.getByRole("button", { name: "Discard" })).toBeDisabled();
+    // The busy description reuses the saving status label so it stays
+    // overridable through `labels`.
+    expect(save).toHaveAccessibleDescription("Saving changes");
   });
 
   it("reports a requested save with the configurable message", () => {
