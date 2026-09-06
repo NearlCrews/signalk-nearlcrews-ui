@@ -1,26 +1,66 @@
 /**
  * Compiled against the packed tarball, not against src, so the emitted
  * declarations are what gets type checked. No path mapping applies here.
+ *
+ * The cases below are the shapes real consumer panels import: runtime
+ * components with refs and native attributes, the public types they annotate
+ * with, the render-prop field contract, generic inference on SegmentedControl,
+ * and the formatting utility with a typed options constant.
  */
 import { createRef, useRef } from "react";
 import {
   Banner,
   Button,
   Checkbox,
+  Code,
+  type Density,
+  type FieldControlProps,
+  type FieldErrorLive,
   FieldGroup,
+  type FormatRelativeAgeOptions,
+  formatRelativeAge,
+  type HeadingLevel,
+  InputGroup,
+  InputGroupAddon,
+  InputGroupControl,
+  isThemeChoice,
+  LabeledField,
+  type LabeledFieldControlProps,
+  LiveRegion,
+  NumberField,
   NumberInput,
+  type Orientation,
+  PACKAGE_VERSION,
   PanelRoot,
+  PanelShell,
   RangeInput,
+  RelativeAge,
+  SegmentedControl,
   Select,
+  type SemanticTone,
+  type StatusTone,
+  Text,
   Textarea,
   TextInput,
+  type ThemeChoice,
+  VisuallyHidden,
 } from "signalk-nearlcrews-ui";
-import { EmptyState, Progress } from "signalk-nearlcrews-ui/composites";
+import {
+  EmptyState,
+  Progress,
+  SaveActionBar,
+  Tab,
+  TabList,
+  Table,
+  TabPanel,
+  Tabs,
+} from "signalk-nearlcrews-ui/composites";
 import { Cell, Column, DataGrid, Row } from "signalk-nearlcrews-ui/data-grid";
 import { SecretInput, Switch } from "signalk-nearlcrews-ui/forms";
 import {
   createToastQueue,
   Dialog,
+  type OverlayOpenState,
   Popover,
   ToastRegion,
 } from "signalk-nearlcrews-ui/overlays";
@@ -128,5 +168,140 @@ export function FocusedEntryPoints(): React.JSX.Element {
       </Dialog>
       <ToastRegion queue={queue} />
     </PanelRoot>
+  );
+}
+
+/**
+ * The public types consumers annotate with must resolve from the packed
+ * declarations, from the entry each one is documented on.
+ */
+export const statusTones: readonly StatusTone[] = [
+  "neutral",
+  "info",
+  "success",
+  "warning",
+  "danger",
+];
+export const semanticTone: SemanticTone = "warning";
+export const errorLive: FieldErrorLive = "polite";
+export const savedTheme: ThemeChoice = "night";
+export const sectionLevel: HeadingLevel = 3;
+export const closedState: OverlayOpenState = { defaultOpen: false };
+export const density: Density = "compact";
+export const orientation: Orientation = "vertical";
+export const bundledVersion: string = PACKAGE_VERSION;
+export const restoredTheme: ThemeChoice | undefined = isThemeChoice("dark")
+  ? "dark"
+  : undefined;
+
+/** A typed options constant is how every consumer calls the formatter. */
+const RELATIVE_AGE_OPTIONS: FormatRelativeAgeOptions = {
+  fallback: "n/a",
+  numeric: "auto",
+  style: "long",
+};
+export const relativeAge: string = formatRelativeAge(
+  90_000,
+  RELATIVE_AGE_OPTIONS,
+);
+
+/** A custom control implements the documented field contract. */
+function DepthControl(props: FieldControlProps): React.JSX.Element {
+  return <input type="number" step={0.1} {...props} />;
+}
+
+/** The render-prop form hands the field's ids to a composite control. */
+export function RenderPropField(): React.JSX.Element {
+  return (
+    <PanelRoot>
+      <LabeledField label="Depth" description="Meters below the transducer">
+        {(controlProps: LabeledFieldControlProps) => (
+          <InputGroup density="compact">
+            <InputGroupControl width="grow">
+              <DepthControl {...controlProps} />
+            </InputGroupControl>
+            <InputGroupControl width="fixed">
+              <NumberInput
+                aria-label="Depth exact value"
+                aria-describedby={controlProps.descriptionId}
+              />
+              <InputGroupAddon>m</InputGroupAddon>
+            </InputGroupControl>
+          </InputGroup>
+        )}
+      </LabeledField>
+    </PanelRoot>
+  );
+}
+
+const UNIT_OPTIONS = [
+  { label: "Meters", value: "m" },
+  { label: "Feet", value: "ft" },
+] as const;
+type Unit = (typeof UNIT_OPTIONS)[number]["value"];
+
+/** `as const` options must narrow the value the change handler receives. */
+export function UnitControl({
+  onUnit,
+}: {
+  readonly onUnit: (unit: Unit) => void;
+}): React.JSX.Element {
+  return (
+    <PanelRoot>
+      <SegmentedControl
+        legend="Units"
+        options={UNIT_OPTIONS}
+        onChange={(value) => {
+          const unit: Unit = value;
+          onUnit(unit);
+        }}
+      />
+    </PanelRoot>
+  );
+}
+
+/**
+ * Exports new in 0.9.0. Each is imported from the entry it is documented on
+ * and rendered with its minimal props, so a dropped re-export or a changed
+ * required prop fails this compile rather than a consumer build.
+ */
+export function NewIn090(): React.JSX.Element {
+  return (
+    <PanelShell title="Provider">
+      <VisuallyHidden>Provider settings</VisuallyHidden>
+      <Text tone="muted" size="sm">
+        Last update <RelativeAge ageMs={90_000} />
+      </Text>
+      <Code>signalk-nearlcrews-ui</Code>
+      <LiveRegion message="Saved" live="polite" />
+      <NumberField label="Port" min={1} max={65_535} integer />
+      <Tabs>
+        <TabList aria-label="Provider sections">
+          <Tab id="connection">Connection</Tab>
+          <Tab id="advanced">Advanced</Tab>
+        </TabList>
+        <TabPanel id="connection">Connection settings</TabPanel>
+        <TabPanel id="advanced">Advanced settings</TabPanel>
+      </Tabs>
+      <Table aria-label="Recent readings">
+        <thead>
+          <tr>
+            <th scope="col">Path</th>
+            <th scope="col">Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>environment.depth.belowTransducer</td>
+            <td>12.4</td>
+          </tr>
+        </tbody>
+      </Table>
+      <SaveActionBar
+        dirty={false}
+        onSave={() => undefined}
+        onDiscard={() => undefined}
+      />
+    </PanelShell>
   );
 }

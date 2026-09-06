@@ -219,7 +219,11 @@ describe("package release metadata", () => {
   });
 
   it("requires a default condition beside every import or require target", () => {
-    const { default: _dropped, ...withoutDefault } = exportsMap["./forms"];
+    const withoutDefault = Object.fromEntries(
+      Object.entries(exportsMap["./forms"]).filter(
+        ([condition]) => condition !== "default",
+      ),
+    );
     expect(() =>
       validatePackageMetadata(
         withPackageJson({
@@ -239,7 +243,11 @@ describe("package release metadata", () => {
     ).toThrow(
       'must carry a "default" condition equal to its "import" or "require" target',
     );
-    const { "./package.json": _manifest, ...withoutManifest } = exportsMap;
+    const withoutManifest = Object.fromEntries(
+      Object.entries(exportsMap).filter(
+        ([subpath]) => subpath !== "./package.json",
+      ),
+    );
     expect(() =>
       validatePackageMetadata(withPackageJson({ exports: withoutManifest })),
     ).toThrow('must expose "./package.json"');

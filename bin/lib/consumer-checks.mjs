@@ -16,7 +16,7 @@ export const REACT_RUNTIME_MARKERS = Object.freeze([
 ]);
 
 /** The attribute every PanelRoot stamps with the package version it renders. */
-export const VERSION_STAMP_ATTRIBUTE = "data-snui-version";
+const VERSION_STAMP_ATTRIBUTE = "data-snui-version";
 
 const VERSION_STAMP_PATTERNS = [
   // JSX prop literal after minification: "data-snui-version":"0.9.0"
@@ -27,7 +27,7 @@ const VERSION_STAMP_PATTERNS = [
   /\[data-snui-version=\\?"(\d+\.\d+\.\d+)\\?"\]/g,
 ];
 
-export function assertExactVersion(version, source) {
+function assertExactVersion(version, source) {
   if (typeof version !== "string" || !EXACT_VERSION.test(version)) {
     throw new Error(
       `signalk-nearlcrews-ui in ${source} must be pinned to an exact version such as 0.9.0, got ${String(version)}. The package ships breaking changes in minor releases, so a range would let an unreviewed upgrade reach the panel.`,
