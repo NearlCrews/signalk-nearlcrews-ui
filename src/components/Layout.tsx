@@ -1,8 +1,8 @@
 import {
   Children,
-  createElement,
   type HTMLAttributes,
   type ReactNode,
+  type RefAttributes,
   useId,
 } from "react";
 
@@ -12,14 +12,14 @@ import {
 } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent, requireContent } from "../utils/react-node.js";
 import {
-  isSemanticTone,
-  resolveToneLabel,
-  type StatusTone,
-  TONE_GLYPHS,
-} from "../utils/tone.js";
-import { ToneAnnouncement } from "./ToneAnnouncement.js";
+  createPolymorphicElement,
+  type PolymorphicProps,
+} from "../utils/polymorphic.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { isSemanticTone, type StatusTone } from "../utils/tone.js";
+import type { Density } from "../utils/variants.js";
+import { ToneMark } from "./ToneMark.js";
 
 export type SpaceScale = 1 | 2 | 3 | 4 | 5 | 6;
 export type LayoutAlignment = "start" | "center" | "end" | "stretch";
@@ -41,11 +41,18 @@ function renderListItems(as: string, children: ReactNode): ReactNode {
 
 export type StackElement = "div" | "ul" | "ol" | "form" | "section" | "nav";
 
-export interface StackProps extends HTMLAttributes<HTMLDivElement> {
+interface StackOwnProps {
   readonly align?: LayoutAlignment | undefined;
-  readonly as?: StackElement | undefined;
+  readonly children?: ReactNode | undefined;
+  readonly className?: string | undefined;
   readonly gap?: SpaceScale | undefined;
 }
+
+/**
+ * Discriminated on `as`: a form stack accepts form attributes and its ref
+ * resolves to the form element. See {@link PolymorphicProps}.
+ */
+export type StackProps = PolymorphicProps<StackElement, "div", StackOwnProps>;
 
 export function Stack({
   align = "stretch",
@@ -55,7 +62,7 @@ export function Stack({
   gap = 4,
   ...props
 }: StackProps): React.JSX.Element {
-  return createElement(
+  return createPolymorphicElement(
     as,
     {
       ...props,
@@ -72,10 +79,7 @@ export function Stack({
 
 export type ClusterElement = "div" | "ul" | "ol" | "section" | "nav";
 
-export interface ClusterProps extends HTMLAttributes<HTMLDivElement> {
-  readonly align?: LayoutAlignment | undefined;
-  readonly as?: ClusterElement | undefined;
-  readonly gap?: SpaceScale | undefined;
+interface ClusterOwnProps extends StackOwnProps {
   readonly justify?:
     | "start"
     | "center"
@@ -86,6 +90,12 @@ export interface ClusterProps extends HTMLAttributes<HTMLDivElement> {
     | undefined;
 }
 
+export type ClusterProps = PolymorphicProps<
+  ClusterElement,
+  "div",
+  ClusterOwnProps
+>;
+
 export function Cluster({
   align = "center",
   as = "div",
@@ -95,7 +105,7 @@ export function Cluster({
   justify = "start",
   ...props
 }: ClusterProps): React.JSX.Element {
-  return createElement(
+  return createPolymorphicElement(
     as,
     {
       ...props,
@@ -111,23 +121,31 @@ export function Cluster({
   );
 }
 
-export type InputGroupDensity = "comfortable" | "compact";
+/** @deprecated Use `Density`; `"comfortable"` maps to `"default"`. */
+export type InputGroupDensity = Density | "comfortable";
 
-export interface InputGroupProps extends HTMLAttributes<HTMLDivElement> {
-  readonly density?: InputGroupDensity | undefined;
+export interface InputGroupProps
+  extends HTMLAttributes<HTMLDivElement>,
+    RefAttributes<HTMLDivElement> {
+  /** `"comfortable"` is a deprecated alias of `"default"`. */
+  readonly density?: Density | "comfortable" | undefined;
 }
 
 export function InputGroup({
   className,
-  density = "comfortable",
+  density = "default",
+  ref,
   ...props
 }: InputGroupProps): React.JSX.Element {
+  const effectiveDensity: Density =
+    density === "comfortable" ? "default" : density;
   return (
     <div
       {...props}
+      ref={ref}
       className={classNames(
         "snui-input-group",
-        `snui-input-group--${density}`,
+        `snui-input-group--${effectiveDensity}`,
         className,
       )}
     />
@@ -136,18 +154,22 @@ export function InputGroup({
 
 export type InputGroupControlWidth = "fixed" | "grow";
 
-export interface InputGroupControlProps extends HTMLAttributes<HTMLDivElement> {
+export interface InputGroupControlProps
+  extends HTMLAttributes<HTMLDivElement>,
+    RefAttributes<HTMLDivElement> {
   readonly width?: InputGroupControlWidth | undefined;
 }
 
 export function InputGroupControl({
   className,
+  ref,
   width = "grow",
   ...props
 }: InputGroupControlProps): React.JSX.Element {
   return (
     <div
       {...props}
+      ref={ref}
       className={classNames(
         "snui-input-group__control",
         `snui-input-group__control--${width}`,
@@ -157,29 +179,40 @@ export function InputGroupControl({
   );
 }
 
-export type InputGroupAddonProps = HTMLAttributes<HTMLSpanElement>;
+export interface InputGroupAddonProps
+  extends HTMLAttributes<HTMLSpanElement>,
+    RefAttributes<HTMLSpanElement> {}
 
 export function InputGroupAddon({
   className,
+  ref,
   ...props
 }: InputGroupAddonProps): React.JSX.Element {
   return (
     <span
       {...props}
+      ref={ref}
       className={classNames("snui-input-group__addon", className)}
     />
   );
 }
 
 export type CardElement = "div" | "section" | "nav";
-export type CardDensity = "default" | "compact";
+/** Card admits `"flush"` (no padding) beside the shared density values. */
+export type CardDensity = Density | "flush";
 
-export interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  readonly as?: CardElement | undefined;
+interface CardOwnProps {
+  readonly children?: ReactNode | undefined;
+  readonly className?: string | undefined;
   readonly density?: CardDensity | undefined;
   readonly footer?: ReactNode | undefined;
   readonly header?: ReactNode | undefined;
+  /** Paints a leading accent bar and marks the card with the tone glyph. */
+  readonly tone?: StatusTone | undefined;
+  readonly toneLabel?: string | undefined;
 }
+
+export type CardProps = PolymorphicProps<CardElement, "div", CardOwnProps>;
 
 export function Card({
   as = "div",
@@ -188,17 +221,38 @@ export function Card({
   density = "default",
   footer,
   header,
+  tone = "neutral",
+  toneLabel,
   ...props
 }: CardProps): React.JSX.Element {
-  return createElement(
+  const hasHeader = hasReactContent(header);
+  const mark = isSemanticTone(tone) ? (
+    <ToneMark
+      className="snui-card__tone-glyph"
+      tone={tone}
+      toneLabel={toneLabel}
+    />
+  ) : null;
+
+  return createPolymorphicElement(
     as,
     {
       ...props,
-      className: classNames("snui-card", `snui-card--${density}`, className),
+      className: classNames(
+        "snui-card",
+        `snui-card--${density}`,
+        isSemanticTone(tone) && `snui-card--${tone}`,
+        className,
+      ),
     },
-    hasReactContent(header) ? (
-      <div className="snui-card__header">{header}</div>
-    ) : null,
+    hasHeader ? (
+      <div className="snui-card__header">
+        {mark}
+        {header}
+      </div>
+    ) : (
+      mark
+    ),
     children,
     hasReactContent(footer) ? (
       <div className="snui-card__footer">{footer}</div>
@@ -208,9 +262,16 @@ export function Card({
 
 export type MetricGridElement = "div" | "ul" | "ol";
 
-export interface MetricGridProps extends HTMLAttributes<HTMLDivElement> {
-  readonly as?: MetricGridElement | undefined;
+interface MetricGridOwnProps {
+  readonly children?: ReactNode | undefined;
+  readonly className?: string | undefined;
 }
+
+export type MetricGridProps = PolymorphicProps<
+  MetricGridElement,
+  "div",
+  MetricGridOwnProps
+>;
 
 export function MetricGrid({
   as = "div",
@@ -218,7 +279,7 @@ export function MetricGrid({
   className,
   ...props
 }: MetricGridProps): React.JSX.Element {
-  return createElement(
+  return createPolymorphicElement(
     as,
     { ...props, className: classNames("snui-metric-grid", className) },
     renderListItems(as, children),
@@ -226,7 +287,8 @@ export function MetricGrid({
 }
 
 export interface MetricProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children">,
+    RefAttributes<HTMLDivElement> {
   readonly detail?: ReactNode | undefined;
   readonly label: ReactNode;
   readonly live?: AnnouncementMode | undefined;
@@ -242,6 +304,7 @@ export function Metric({
   detail,
   label,
   live,
+  ref,
   tone = "neutral",
   toneLabel,
   unit,
@@ -251,16 +314,13 @@ export function Metric({
   requireContent(label, "Metric requires a non-empty label.");
 
   const labelId = useId();
-  const semantic = isSemanticTone(tone);
-  const effectiveToneLabel = semantic
-    ? resolveToneLabel(tone, toneLabel)
-    : undefined;
   const valueRegion = liveRegionProps(live);
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: Metrics may render outside MetricGrid, and fieldset would imply form controls.
     <div
       {...props}
+      ref={ref}
       className={classNames("snui-metric", `snui-metric--${tone}`, className)}
       role="group"
       aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
@@ -273,12 +333,11 @@ export function Metric({
         role={valueRegion.role}
         aria-live={valueRegion["aria-live"]}
       >
-        {semantic ? (
-          <span className="snui-metric__tone-glyph" aria-hidden="true">
-            {TONE_GLYPHS[tone]}
-          </span>
-        ) : null}
-        <ToneAnnouncement label={effectiveToneLabel} />
+        <ToneMark
+          className="snui-metric__tone-glyph"
+          tone={tone}
+          toneLabel={toneLabel}
+        />
         {value}
         {hasReactContent(unit) ? (
           <>
@@ -294,7 +353,9 @@ export function Metric({
   );
 }
 
-export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
+export interface BadgeProps
+  extends HTMLAttributes<HTMLSpanElement>,
+    RefAttributes<HTMLSpanElement> {
   readonly tone?: StatusTone | undefined;
   readonly toneLabel?: string | undefined;
 }
@@ -302,26 +363,22 @@ export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
 export function Badge({
   children,
   className,
+  ref,
   tone = "neutral",
   toneLabel,
   ...props
 }: BadgeProps): React.JSX.Element {
-  const semantic = isSemanticTone(tone);
-  const effectiveToneLabel = semantic
-    ? resolveToneLabel(tone, toneLabel)
-    : undefined;
-
   return (
     <span
       {...props}
+      ref={ref}
       className={classNames("snui-badge", `snui-badge--${tone}`, className)}
     >
-      {semantic ? (
-        <span className="snui-badge__tone-glyph" aria-hidden="true">
-          {TONE_GLYPHS[tone]}
-        </span>
-      ) : null}
-      <ToneAnnouncement label={effectiveToneLabel} />
+      <ToneMark
+        className="snui-badge__tone-glyph"
+        tone={tone}
+        toneLabel={toneLabel}
+      />
       {children}
     </span>
   );

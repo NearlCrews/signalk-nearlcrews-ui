@@ -1,4 +1,8 @@
 import { scopeStyles } from "./scope.js";
+import {
+  TONE_ACCENT_BAR_DECLARATIONS,
+  toneAccentBarRules,
+} from "./tone-accent.js";
 
 const GAP_RULES = [1, 2, 3, 4, 5, 6]
   .map((space) => {
@@ -44,8 +48,14 @@ ${GAP_RULES}
 .snui-layout--justify-around { justify-content: space-around; }
 .snui-layout--justify-evenly { justify-content: space-evenly; }
 
+/*
+ * The card is a grid so one gap owns the rhythm between header, body, and
+ * footer; the slots carry padding and a rule, never a sibling margin.
+ */
 .snui-card {
+  display: grid;
   min-width: 0;
+  gap: var(--snui-space-3);
   padding: var(--snui-space-4);
   border: 1px solid var(--snui-color-border);
   border-radius: var(--snui-radius-md);
@@ -54,12 +64,16 @@ ${GAP_RULES}
 }
 
 .snui-card--compact {
+  gap: var(--snui-space-2);
   padding: var(--snui-space-3);
+}
+
+.snui-card--flush {
+  padding: 0;
 }
 
 .snui-card__header {
   min-width: 0;
-  margin-block-end: var(--snui-space-3);
   padding-block-end: var(--snui-space-3);
   border-block-end: 1px solid var(--snui-color-border);
   font-weight: var(--snui-font-weight-bold);
@@ -68,7 +82,6 @@ ${GAP_RULES}
 
 .snui-card__footer {
   min-width: 0;
-  margin-block-start: var(--snui-space-3);
   padding-block-start: var(--snui-space-3);
   border-block-start: 1px solid var(--snui-color-border);
   color: var(--snui-color-text-muted);
@@ -77,13 +90,26 @@ ${GAP_RULES}
 }
 
 .snui-card--compact .snui-card__header {
-  margin-block-end: var(--snui-space-2);
   padding-block-end: var(--snui-space-2);
 }
 
 .snui-card--compact .snui-card__footer {
-  margin-block-start: var(--snui-space-2);
   padding-block-start: var(--snui-space-2);
+}
+
+/* A toned card paints the Banner accent bar and carries the tone glyph. */
+.snui-card--info,
+.snui-card--success,
+.snui-card--warning,
+.snui-card--danger {
+${TONE_ACCENT_BAR_DECLARATIONS}
+}
+
+${toneAccentBarRules("snui-card")}
+
+.snui-card__tone-glyph {
+  margin-inline-end: 0.375em;
+  vertical-align: middle;
 }
 
 .snui-metric-grid {
@@ -110,10 +136,12 @@ ${GAP_RULES}
   overflow-wrap: anywhere;
 }
 
+/* Live values tick over; tabular digits keep the layout from shifting. */
 .snui-metric__value {
-  margin-top: var(--snui-space-1);
+  margin-block-start: var(--snui-space-1);
   color: var(--snui-color-text);
-  font-size: 1.125rem;
+  font-size: var(--snui-font-size-lg);
+  font-variant-numeric: tabular-nums;
   font-weight: var(--snui-font-weight-bold);
   line-height: 1.25;
   overflow-wrap: anywhere;
@@ -122,11 +150,12 @@ ${GAP_RULES}
 .snui-metric__unit {
   color: var(--snui-color-text-muted);
   font-size: var(--snui-font-size-xs);
+  font-variant-numeric: tabular-nums;
   font-weight: var(--snui-font-weight-semibold);
 }
 
 .snui-metric__detail {
-  margin-top: var(--snui-space-1);
+  margin-block-start: var(--snui-space-1);
   color: var(--snui-color-text-muted);
   font-size: var(--snui-font-size-xs);
   overflow-wrap: anywhere;
@@ -137,21 +166,9 @@ ${GAP_RULES}
 .snui-metric--warning .snui-metric__value { color: var(--snui-color-warning); }
 .snui-metric--danger .snui-metric__value { color: var(--snui-color-danger); }
 
-/* Tone glyphs keep the state visible when color is unavailable or unseen. */
 .snui-metric__tone-glyph,
 .snui-badge__tone-glyph {
-  display: inline-flex;
-  width: 1em;
-  height: 1em;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid currentColor;
-  border-radius: 50%;
   margin-inline-end: 0.375em;
-  font-size: 0.8em;
-  font-weight: var(--snui-font-weight-bold);
-  line-height: 1;
 }
 
 .snui-badge {
@@ -174,6 +191,57 @@ ${GAP_RULES}
 .snui-badge--warning { color: var(--snui-color-warning); }
 .snui-badge--danger { color: var(--snui-color-danger); }
 
+/*
+ * Text and code primitives: the hint, caption, identifier, and hidden-text
+ * roles every panel needs, so consumers stop restating the tokens by hand.
+ */
+.snui-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;
+}
+
+.snui-text--neutral { color: var(--snui-color-text); }
+.snui-text--muted { color: var(--snui-color-text-muted); }
+.snui-text--info { color: var(--snui-color-info); }
+.snui-text--success { color: var(--snui-color-success); }
+.snui-text--warning { color: var(--snui-color-warning); }
+.snui-text--danger { color: var(--snui-color-danger); }
+.snui-text--size-base { font-size: var(--snui-font-size); }
+.snui-text--size-sm { font-size: var(--snui-font-size-sm); }
+.snui-text--size-xs { font-size: var(--snui-font-size-xs); }
+
+.snui-code {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-family: var(--snui-font-family-mono);
+  font-size: var(--snui-font-size-sm);
+}
+
+.snui-code--inline {
+  overflow-wrap: anywhere;
+}
+
+/* A block keeps the author's line breaks and scrolls rather than wrapping. */
+.snui-code--block {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  padding: var(--snui-space-2) var(--snui-space-3);
+  border: 1px solid var(--snui-color-border);
+  border-radius: var(--snui-radius-sm);
+  background: var(--snui-color-surface-raised);
+  line-height: var(--snui-line-height);
+  white-space: pre;
+}
+
+.snui-relative-age {
+  font-variant-numeric: tabular-nums;
+}
+
 @media (forced-colors: active) {
   /*
    * Forced colors flattens the tone hue; keep the badge border and text
@@ -183,6 +251,13 @@ ${GAP_RULES}
     forced-color-adjust: none;
     border-color: CanvasText;
     color: CanvasText;
+  }
+
+  .snui-card--info,
+  .snui-card--success,
+  .snui-card--warning,
+  .snui-card--danger {
+    border-inline-start-color: ButtonText;
   }
 }
 `);

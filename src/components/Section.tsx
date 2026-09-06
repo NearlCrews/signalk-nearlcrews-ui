@@ -1,4 +1,9 @@
-import { type HTMLAttributes, type ReactNode, useId } from "react";
+import {
+  type HTMLAttributes,
+  type ReactNode,
+  type RefAttributes,
+  useId,
+} from "react";
 
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
@@ -6,7 +11,8 @@ import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 
 export interface SectionProps
-  extends Omit<HTMLAttributes<HTMLElement>, "title"> {
+  extends Omit<HTMLAttributes<HTMLElement>, "title">,
+    RefAttributes<HTMLElement> {
   readonly actions?: ReactNode | undefined;
   readonly description?: ReactNode | undefined;
   readonly headingLevel?: HeadingLevel | undefined;
@@ -23,6 +29,7 @@ export function Section({
   description,
   headingLevel = 2,
   landmark = true,
+  ref,
   title,
   ...props
 }: SectionProps): React.JSX.Element {
@@ -34,6 +41,7 @@ export function Section({
   return (
     <section
       {...props}
+      ref={ref}
       className={classNames("snui-section", className)}
       aria-labelledby={
         landmark ? joinIdReferences(ariaLabelledBy, titleId) : undefined
