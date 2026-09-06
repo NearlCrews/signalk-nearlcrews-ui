@@ -210,9 +210,9 @@ function Fixture(): React.JSX.Element {
             </FieldGroup>
             <CollapsibleSection title="Advanced settings">
               <SegmentedControl
-                legend="Log detail"
+                label="Log detail"
                 value={logLevel}
-                onChange={setLogLevel}
+                onValueChange={setLogLevel}
                 options={[
                   { value: "minimal", label: "Minimal" },
                   { value: "normal", label: "Normal" },

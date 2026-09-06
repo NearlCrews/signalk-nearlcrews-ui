@@ -65,3 +65,29 @@ legend + * {
 .admin-host__after-panel-content {
   min-height: 100vh;
 }
+
+/* Signal K Admin chrome: Bootstrap's fixed header at z-index 1020 and the
+   sidebar one below, mirrored so the suite can prove the library's overlay
+   layers paint above the host. Opt in with the host-chrome body class. */
+.host-chrome .app-header {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 1020;
+  height: 55px;
+  background: #3a4149;
+  color: #ffffff;
+}
+
+.host-chrome .sidebar {
+  position: fixed;
+  inset: 55px auto 0 0;
+  z-index: 1019;
+  width: 200px;
+  background: #2f353a;
+  color: #ffffff;
+}
+
+.host-chrome .app-body {
+  margin-top: 55px;
+  margin-left: 200px;
+}

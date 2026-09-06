@@ -2,19 +2,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
+  expectNoAxeViolations,
   type Locator,
   type Page,
   type TestInfo,
   test,
 } from "./fixtures.js";
-
-async function expectNoAxeViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).analyze();
-  expect(results.violations).toEqual([]);
-}
 
 /** Pixels of the last panel action the docked bar is scrolled to cover. */
 const DOCKED_BAR_OVERLAP = 8;
@@ -113,7 +108,7 @@ async function settleFrames(page: Page): Promise<void> {
 /**
  * Opens the unconstrained Admin host, waits for the bar to dock, then scrolls
  * the last panel action until the bar covers its bottom edge. The action's
- * centre stays clear of the bar, so a press lands on the action itself, and a
+ * center stays clear of the bar, so a press lands on the action itself, and a
  * clearance scroll, which only keyboard and programmatic focus ask for, is the
  * one thing that could move it afterwards.
  */
@@ -157,7 +152,9 @@ async function actionClearsBar({
   return actionBox.y + actionBox.height <= barBox.y;
 }
 
-const CI_SNAPSHOT_VARIANTS = ["x64", "ubuntu24-x64", "ubuntu24-arm64"] as const;
+// Must equal the browser matrix snapshot_variant values in
+// .github/workflows/ci.yml; tests/unit/workflow-contract.test.mjs checks it.
+const CI_SNAPSHOT_VARIANTS = ["ubuntu24-x64", "ubuntu24-arm64"] as const;
 
 function snapshotProject(snapshot: string): string {
   if (snapshot === "panel-mobile-light.png") return "mobile-chromium";
@@ -203,7 +200,7 @@ test("has every required CI visual baseline family", ({
 
   expect(
     missing,
-    "Every visual spec needs linux-x64, ubuntu24-x64, and ubuntu24-arm64 baselines from the manual refresh workflow.",
+    "Every visual spec needs ubuntu24-x64 and ubuntu24-arm64 baselines from the Update visual baselines workflow.",
   ).toEqual([]);
 });
 
@@ -234,7 +231,7 @@ test("renders all themes and component states without axe violations", async ({
   for (const [theme, dangerColor, textColor] of [
     ["Light", "rgb(180, 35, 24)", "rgb(24, 32, 44)"],
     ["Dark", "rgb(255, 139, 130)", "rgb(245, 247, 250)"],
-    ["Night", "rgb(255, 107, 107)", "rgb(255, 120, 120)"],
+    ["Night", "rgb(255, 48, 48)", "rgb(255, 64, 64)"],
   ] as const) {
     await page.getByRole("radio", { name: theme }).click();
     await expect(page.locator("[data-snui-version]")).toHaveAttribute(
@@ -443,7 +440,7 @@ test("keeps library styling inside the panel root", async ({
   );
   const reentryButton = page.locator("#reentry-version-button");
   await expect(reentryButton).toHaveCSS("min-height", expectedHeight);
-  await expect(reentryButton).toHaveCSS("background-color", "rgb(229, 72, 72)");
+  await expect(reentryButton).toHaveCSS("background-color", "rgb(236, 56, 56)");
   await reentryButton.focus();
   await expect(reentryButton).toHaveCSS("outline-width", "2px");
 });
@@ -782,13 +779,13 @@ test("styles native text controls and links in Night mode", async ({
   ];
   for (const control of controls) {
     await expect(control).toHaveCSS("background-color", "rgb(16, 0, 0)");
-    await expect(control).toHaveCSS("color", "rgb(255, 120, 120)");
+    await expect(control).toHaveCSS("color", "rgb(255, 64, 64)");
   }
 
   const link = page.getByRole("link", {
     name: "Read the Signal K documentation",
   });
-  await expect(link).toHaveCSS("color", "rgb(255, 146, 146)");
+  await expect(link).toHaveCSS("color", "rgb(255, 56, 56)");
   await expect(link).toHaveCSS("text-decoration-line", "underline");
 
   for (const control of controls) {
@@ -952,8 +949,8 @@ test("renders compliant placeholders and a red-preserving Night accent", async (
 
   const night = page.getByRole("radio", { name: "Night" });
   await night.click();
-  await expect(night).toHaveCSS("background-color", "rgb(255, 90, 90)");
-  await expect(night).toHaveCSS("color", "rgb(25, 0, 0)");
+  await expect(night).toHaveCSS("background-color", "rgb(255, 64, 64)");
+  await expect(night).toHaveCSS("color", "rgb(16, 0, 0)");
 
   for (const checkbox of [
     page.getByRole("checkbox", { name: "Enable provider" }),
@@ -963,7 +960,7 @@ test("renders compliant placeholders and a red-preserving Night accent", async (
       await checkbox.evaluate(
         (element) => getComputedStyle(element, "::before").borderBottomColor,
       ),
-    ).toBe("rgb(25, 0, 0)");
+    ).toBe("rgb(16, 0, 0)");
   }
   expect(
     await page
@@ -1517,6 +1514,16 @@ test("keeps native controls and focus visible in forced colors", async ({
   await page
     .getByRole("checkbox", { name: "Partially configured option" })
     .focus();
+  // Forced colors with the controls focused is part of the audited matrix.
+  await expectNoAxeViolations(page, {
+    disableRules: [
+      {
+        id: "color-contrast",
+        reason:
+          "Under forced colors the browser replaces author colors with the system palette at paint time while computed values keep the author colors, so axe grades pairs such as Dark text over a forced Canvas background that the user never sees; the contrast of the system palette belongs to the operating system.",
+      },
+    ],
+  });
   await expect(page.locator("[data-snui-version]")).toHaveScreenshot(
     "panel-forced-colors-controls.png",
     { animations: "disabled" },
