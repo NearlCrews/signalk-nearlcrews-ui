@@ -170,10 +170,14 @@ Consumer CSS that targets a package class must account for the scope. A rule ins
 
 ```css
 /* Loses: same specificity as the scoped rule, so the package rule wins. */
-.my-panel .snui-card { padding: 0; }
+.my-panel .snui-card {
+  padding: 0;
+}
 
 /* Wins: the doubled class outranks the scoped rule. */
-.my-panel.my-panel .snui-card { padding: 0; }
+.my-panel.my-panel .snui-card {
+  padding: 0;
+}
 ```
 
 Host applications ship global element styles that reach unclassed markup a consumer renders inside a panel. Signal K Admin bundles Bootstrap Reboot, whose legend, heading, and block margins, code and keyboard-key styling, mark highlight, label display, table header alignment, and button radius visibly change panel content. A panel neutralizes those known element rules (`h1` through `h6`, `p`, lists, `legend`, `fieldset`, `hr`, `table`, `th`, links, `b`, `strong`, `small`, `code`, `kbd`, `pre`, `samp`, `mark`, `label`, and `button`) so the same consumer markup keeps the package's documented baseline in the tested host fixture, which mirrors the complete Reboot element list. This reset applies to consumer-owned markup inside the panel, and stops at the panel root. It is not a guarantee against arbitrary higher-specificity host selectors.

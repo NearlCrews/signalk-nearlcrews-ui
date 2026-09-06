@@ -19,7 +19,7 @@ import {
   Separator as RACSeparator,
   type SeparatorProps as RACSeparatorProps,
 } from "react-aria-components";
-import { OVERLAY_STYLES } from "../styles/index.js";
+import { OVERLAY_STYLES } from "../styles/overlay-styles.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
 import { overlayZIndex, useOverlayLayer } from "../utils/overlay-layer.js";

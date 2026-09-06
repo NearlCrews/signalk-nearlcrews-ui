@@ -54,6 +54,18 @@ interface StabilityProbe {
  * count is the frame the pair completed on. The optional focus runs in the same
  * task as the count so the frames after it are the ones measured.
  */
+/** Resolves a color token inside the panel root, in the theme it currently shows. */
+async function readTokenColor(page: Page, token: string): Promise<string> {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
+    document.querySelector("[data-snui-version]")?.append(probe);
+    probe.style.color = `var(${name})`;
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, token);
+}
+
 async function framesUntilStable(
   page: Page,
   probe: StabilityProbe,
@@ -700,10 +712,15 @@ test("keeps aria-disabled focus indicators fully opaque", async ({ page }) => {
   await page.goto("/?states=1");
   const button = page.getByRole("button", { name: "Unavailable here" });
 
+  const disabledText = await readTokenColor(
+    page,
+    "--snui-color-text-disabled",
+  );
   await expect(button).toHaveCSS("opacity", "1");
+  await expect(button).toHaveCSS("color", disabledText);
   await expect(button.locator(".snui-button__content")).toHaveCSS(
     "opacity",
-    "0.58",
+    "1",
   );
   await expect(button.locator(".snui-button__content")).toHaveCSS(
     "display",
@@ -726,7 +743,8 @@ test("keeps aria-disabled focus indicators fully opaque", async ({ page }) => {
   await nativeDisabled.evaluate((element) =>
     element.setAttribute("aria-disabled", "true"),
   );
-  await expect(nativeDisabled).toHaveCSS("opacity", "0.58");
+  await expect(nativeDisabled).toHaveCSS("opacity", "1");
+  await expect(nativeDisabled).toHaveCSS("color", disabledText);
   await expect(nativeDisabled.locator(".snui-button__content")).toHaveCSS(
     "opacity",
     "1",
@@ -771,6 +789,10 @@ test("styles native text controls and links in Night mode", async ({
   page,
 }) => {
   await page.getByRole("radio", { name: "Night" }).click();
+  const nightDisabledText = await readTokenColor(
+    page,
+    "--snui-color-text-disabled",
+  );
 
   const controls = [
     page.getByLabel("API token"),
@@ -798,7 +820,8 @@ test("styles native text controls and links in Night mode", async ({
         element.disabled = true;
       }
     });
-    await expect(control).toHaveCSS("opacity", "0.58");
+    await expect(control).toHaveCSS("opacity", "1");
+    await expect(control).toHaveCSS("color", nightDisabledText);
   }
 });
 

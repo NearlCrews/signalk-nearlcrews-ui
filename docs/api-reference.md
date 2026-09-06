@@ -21,16 +21,16 @@ The stylesheet entry point has no React import or execution requirement. Install
 
 ### Entry point sizes
 
-The gzip size of each entry bundled alone, with React and React DOM external, as `node scripts/check-bundle-size.mjs --table` reports for the current release; the budget column is the ceiling that command enforces. A minimal panel that imports only the root entry adds about 24 KB gzip to its remote when bundled standalone; consumer remotes measure 16 to 17 KB after their own tree shaking, because the root entry carries React Aria's portal provider and the shared style modules that a panel without overlays does not otherwise need. Add the focused entries a panel imports to size its own ceiling.
+The gzip size of each entry bundled alone, with React and React DOM external, as `node scripts/check-bundle-size.mjs --table` reports for the current release; the budget column is the ceiling that command enforces. A minimal panel that imports only the root entry adds about 29 KB gzip to its remote when bundled standalone; consumer remotes measure 16 to 17 KB after their own tree shaking, because the root entry carries React Aria's portal provider and the shared style modules that a panel without overlays does not otherwise need. Add the focused entries a panel imports to size its own ceiling.
 
 | Import path                        | Gzip bytes | Budget (bytes) |
 | ---------------------------------- | ---------: | -------------: |
-| `signalk-nearlcrews-ui`            |      24470 |          26624 |
-| `signalk-nearlcrews-ui/composites` |       6696 |           8192 |
-| `signalk-nearlcrews-ui/data-grid`  |      73330 |          77824 |
-| `signalk-nearlcrews-ui/forms`      |      21644 |          24576 |
-| `signalk-nearlcrews-ui/overlays`   |      57083 |          61440 |
-| `signalk-nearlcrews-ui/tokens.css` |       1341 |           2048 |
+| `signalk-nearlcrews-ui`            |      29456 |          32768 |
+| `signalk-nearlcrews-ui/composites` |      13755 |          15360 |
+| `signalk-nearlcrews-ui/data-grid`  |      77053 |          83968 |
+| `signalk-nearlcrews-ui/forms`      |      21950 |          24576 |
+| `signalk-nearlcrews-ui/overlays`   |      62276 |          67584 |
+| `signalk-nearlcrews-ui/tokens.css` |       1566 |           2048 |
 
 ## Package root
 

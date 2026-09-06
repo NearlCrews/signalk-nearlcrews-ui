@@ -38,6 +38,9 @@ const UNSTYLED_HOOK_CLASSES: Record<string, true> = {
   "snui-section__heading-group": true,
   // Inherits size, weight, and color from the surrounding snui-toast__tone rule.
   "snui-toast__tone-glyph": true,
+  // Focus hook the toast region uses to find the dismiss control; the button
+  // itself is styled by the shared snui-button rules.
+  "snui-toast__dismiss": true,
 };
 
 /** Classes the stylesheet defines without a literal TSX reference. */
@@ -120,11 +123,26 @@ describe("root module", () => {
   });
 
   it("is the only module that declares tokens", () => {
+    const rootTokens = new Set(
+      [...PANEL_STYLES.matchAll(/(--snui-[a-z0-9-]+)\s*:/g)].map(
+        (match) => match[1],
+      ),
+    );
     for (const module of STYLE_MODULES.slice(1)) {
-      expect(
-        module.styles,
-        `${module.id} declares a token; tokens belong to the root module`,
-      ).not.toMatch(/--snui-[a-z0-9-]+\s*:/);
+      for (const match of module.styles.matchAll(
+        /(--snui-[a-z0-9-]+)\s*:\s*([^;]+);/g,
+      )) {
+        const name = match[1] ?? "";
+        const value = (match[2] ?? "").trim();
+        expect(
+          rootTokens.has(name),
+          `${module.id} declares ${name}, which the root module never defines; tokens belong to the root module`,
+        ).toBe(true);
+        expect(
+          value,
+          `${module.id} gives ${name} a raw value; a module may only point a root token at another root token`,
+        ).toMatch(/^var\(--snui-[a-z0-9-]+\)$/);
+      }
     }
   });
 });

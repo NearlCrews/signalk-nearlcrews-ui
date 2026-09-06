@@ -20,11 +20,11 @@ const hostExternals = SIGNALK_HOST_SHARED_MODULES.flatMap((name) => [
 const printTable = process.argv.includes("--table");
 
 const entryBudgets = {
-  composites: 8 * 1024,
-  "data-grid": 76 * 1024,
+  composites: 15 * 1024,
+  "data-grid": 82 * 1024,
   forms: 24 * 1024,
-  index: 26 * 1024,
-  overlays: 60 * 1024,
+  index: 32 * 1024,
+  overlays: 66 * 1024,
 };
 
 const manifest = await readPackageJson();

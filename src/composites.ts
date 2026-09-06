@@ -32,6 +32,7 @@ export {
 } from "./components/SaveActionBar.js";
 export {
   Table,
+  type TableCaptionVisibility,
   TableCell,
   type TableCellProps,
   TableHeaderCell,

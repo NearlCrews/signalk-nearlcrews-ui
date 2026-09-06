@@ -6,8 +6,6 @@ export {
 } from "./components/ActionBar.js";
 export {
   Banner,
-  // Deprecated aliases stay exported for one minor so consumers can migrate.
-  // eslint-disable-next-line @typescript-eslint/no-deprecated
   type BannerLive,
   type BannerProps,
   type BannerTone,
@@ -84,7 +82,6 @@ export {
   InputGroupControl,
   type InputGroupControlProps,
   type InputGroupControlWidth,
-  // eslint-disable-next-line @typescript-eslint/no-deprecated
   type InputGroupDensity,
   type InputGroupProps,
   type LayoutAlignment,
@@ -211,5 +208,9 @@ export {
 } from "./utils/format-relative-age.js";
 export type { HeadingLevel } from "./utils/heading.js";
 export type { SemanticTone, StatusTone } from "./utils/tone.js";
-export type { Density, Orientation } from "./utils/variants.js";
+export type {
+  Density,
+  LegacyDensity,
+  Orientation,
+} from "./utils/variants.js";
 export { PACKAGE_VERSION } from "./version.js";

@@ -8,7 +8,7 @@ import {
   type TestInfo,
 } from "@playwright/test";
 
-export interface AxeRuleException {
+interface AxeRuleException {
   /** The axe rule id left out of this one run. */
   readonly id: string;
   /** Why the rule misreports the state under test; it is recorded, not optional. */

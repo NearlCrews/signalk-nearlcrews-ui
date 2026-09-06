@@ -8,8 +8,8 @@ import { ROOT_STYLE_MODULE_ID, type StyleModule } from "./install.js";
 import { LAYOUT_STYLES } from "./layout.js";
 import { OVERLAY_STYLES } from "./overlay-styles.js";
 import { SIMPLE_TABLE_STYLES } from "./simple-table.js";
-import { TABS_STYLES } from "./tabs.js";
 import { TABLE_STYLES } from "./table-styles.js";
+import { TABS_STYLES } from "./tabs.js";
 import { TOKEN_STYLES } from "./tokens.js";
 
 /*
@@ -37,7 +37,7 @@ export const PANEL_STYLES = [
 ].join("\n");
 
 /** The root sheet as a module, for tests and tooling that walk every module. */
-export const ROOT_STYLES: StyleModule = {
+const ROOT_STYLES: StyleModule = {
   id: ROOT_STYLE_MODULE_ID,
   styles: PANEL_STYLES,
 };

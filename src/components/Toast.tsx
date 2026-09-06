@@ -11,7 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { OVERLAY_STYLES } from "../styles/index.js";
+import { OVERLAY_STYLES } from "../styles/overlay-styles.js";
 import { TRANSITION_FAST_MS } from "../styles/tokens.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import {

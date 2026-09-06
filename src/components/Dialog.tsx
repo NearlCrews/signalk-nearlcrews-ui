@@ -12,7 +12,7 @@ import {
   Modal,
   ModalOverlay,
 } from "react-aria-components";
-import { OVERLAY_STYLES } from "../styles/index.js";
+import { OVERLAY_STYLES } from "../styles/overlay-styles.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";

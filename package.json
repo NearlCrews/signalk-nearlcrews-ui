@@ -1,6 +1,6 @@
 {
   "name": "signalk-nearlcrews-ui",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Accessible, theme-aware React primitives for Signal K administration panels.",
   "type": "module",
   "sideEffects": [
@@ -108,7 +108,7 @@
     "lint": "npm run lint:biome && npm run lint:eslint",
     "lint:biome": "biome check --error-on-warnings .",
     "lint:eslint": "eslint . --max-warnings 0",
-    "lint:docs": "markdownlint-cli2 \"**/*.md\" \"#node_modules\" \"#coverage\" \"#dist\" \"#playwright-report\" \"#test-results\"",
+    "lint:docs": "markdownlint-cli2 \"**/*.md\" \"#node_modules\" \"#.claude\" \"#coverage\" \"#dist\" \"#playwright-report\" \"#test-results\"",
     "spellcheck": "cspell lint --no-progress --show-suggestions --config cspell.json \"**/*.md\"",
     "docs:links": "node scripts/check-docs-links.mjs",
     "docs:check": "npm run lint:docs && npm run spellcheck && npm run docs:links",
@@ -136,7 +136,7 @@
     "test:package:built": "node scripts/check-package.mjs && node scripts/check-declarations.mjs && node scripts/check-consumer-types.mjs",
     "test:snapshot-families": "node scripts/check-snapshot-families.mjs",
     "declarations:update": "npm run build && node scripts/check-declarations.mjs --update",
-    "validate": "npm run format:check && npm run docs:check && npm run host-contract && npm run dependency-contract && npm run lint && npm run knip && npm run type-check && npm run type-check:ts6 && npm run test:coverage && npm run audit:runtime && npm run build && npm run test:package:built && npm run test:bundle:built && npm run test:federation:built",
+    "validate": "npm run format:check && npm run docs:check && npm run host-contract && npm run dependency-contract && npm run build && npm run lint && npm run knip && npm run type-check && npm run type-check:ts6 && npm run test:coverage && npm run audit:runtime && npm run test:package:built && npm run test:bundle:built && npm run test:federation:built",
     "release:check": "node scripts/check-release-approval.mjs && npm run validate && npm run test:browser",
     "prepublishOnly": "node scripts/check-release-approval.mjs && npm run test:browser",
     "prepack": "npm run build"

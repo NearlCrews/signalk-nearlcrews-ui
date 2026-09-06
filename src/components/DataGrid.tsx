@@ -24,7 +24,7 @@ import {
   TableHeader,
 } from "react-aria-components";
 import { TableLayout, Virtualizer } from "react-aria-components/Virtualizer";
-import { TABLE_STYLES } from "../styles/index.js";
+import { TABLE_STYLES } from "../styles/table-styles.js";
 import { DATA_GRID_ROW_HEIGHTS } from "../styles/tokens.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { hasAccessibleName } from "../utils/aria.js";
