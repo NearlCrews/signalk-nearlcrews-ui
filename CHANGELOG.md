@@ -113,6 +113,8 @@ This release ships the panel frame, save bar, number field, and text primitives 
 - The external-link workflow downloads a pinned lychee release with a verified SHA-256, both publish jobs call a tested registry-order script, and the publish job checks out `scripts/` sparsely with credentials disabled.
 - README links to Markdown documents are absolute repository URLs, and the package contract rejects relative ones, because the Signal K App Store rewrites only image targets. The remote output format is named one way everywhere ("classic `var` and output-module ESM Module Federation remotes"), and "App Store" replaces "marketplace".
 
+- Every dependency moved to its current release: React Aria 3.52 and React Aria Components 1.21 at runtime, and Vitest 5 with its coverage provider, ESLint 10.10, typescript-eslint 8.69, Knip 6.34, Biome 2.5.12, Playwright 1.63, Vite 8.2.2, webpack 5.110, and the rest of the development toolchain. Both dependency audits report zero advisories.
+
 ### Fixed
 
 - Toasts enqueued while a modal was open were hidden from assistive technology and could not receive focus.
