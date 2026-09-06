@@ -51,7 +51,10 @@ function apcaContrast(text: string, background: string): number {
     );
   };
   const clampBlack = (value: number): number =>
-    value > 0.022 ? value : value + (0.022 - value) ** 1.414;
+    value > 0.022
+      ? value
+      : // biome-ignore lint/suspicious/noApproximativeNumericConstant: the APCA soft-clamp exponent is 1.414 by specification, not the square root of two.
+        value + (0.022 - value) ** 1.414;
   const textLuminance = clampBlack(screenLuminance(text));
   const backgroundLuminance = clampBlack(screenLuminance(background));
   if (Math.abs(backgroundLuminance - textLuminance) < 0.0005) return 0;
