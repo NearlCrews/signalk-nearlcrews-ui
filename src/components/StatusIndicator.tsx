@@ -8,7 +8,6 @@ import { classNames } from "../utils/class-names.js";
 import type { StatusTone } from "../utils/tone.js";
 import { ToneMark } from "./ToneMark.js";
 
-
 export type StatusIndicatorSize = "default" | "compact";
 
 export interface StatusIndicatorProps
