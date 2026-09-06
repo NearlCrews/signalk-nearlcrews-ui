@@ -53,6 +53,22 @@ export {
   type TextInputType,
 } from "./components/Inputs.js";
 export {
+  type NumberDraft,
+  type NumberDraftInputProps,
+  type NumberDraftInvalidReason,
+  type NumberDraftOptions,
+  type NumberDraftResolution,
+  resolveNumberDraft,
+  type UseNumberDraftOptions,
+  useNumberDraft,
+} from "./hooks/use-number-draft.js";
+export {
+  NumberField,
+  type NumberFieldInputProps,
+  type NumberFieldMessages,
+  type NumberFieldProps,
+} from "./components/NumberField.js";
+export {
   type FieldControlProps,
   type FieldErrorLive,
   LabeledField,
