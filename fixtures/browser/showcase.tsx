@@ -510,6 +510,8 @@ function Showcase(): React.JSX.Element {
                   onClick={() => {
                     toast.enqueue({
                       title: `${tone} toast`,
+                      // Sticky, so an audit can inspect every tone at once.
+                      duration: 0,
                       description: "Enqueued from the showcase.",
                       tone,
                     });
