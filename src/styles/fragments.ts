@@ -14,6 +14,7 @@ const VISUALLY_HIDDEN_PROPERTIES: readonly (readonly [string, string])[] = [
   ["margin", "-1px"],
   ["overflow", "hidden"],
   ["clip", "rect(0, 0, 0, 0)"],
+  ["clip-path", "inset(50%)"],
   ["white-space", "nowrap"],
   ["border", "0"],
 ];
@@ -69,7 +70,9 @@ export const FORCED_COLORS_OUTLINE_DECLARATIONS = [
 
 /**
  * The focus ring every interactive element paints. Inset rings (offset -2px)
- * suit rows and menu items; outset rings with the soft shadow suit controls.
+ * suit rows and menu items; outset rings with the two-tone shadow suit
+ * controls, where `--snui-focus-ring` fills the offset gap with the surface
+ * color so the ring keeps its own boundary next to a danger or accent edge.
  */
 export function focusRingDeclarations(
   offset: "-2px" | "2px",
@@ -82,19 +85,28 @@ export function focusRingDeclarations(
   ].join("\n");
 }
 
-/** Disabled presentation shared by every control. */
+/**
+ * Disabled presentation shared by every control. Text takes the disabled
+ * token, which the contrast tests measure, instead of an opacity that dims an
+ * unmeasurable amount. Opacity stays for icon-only children, and a filled
+ * control restates its own disabled fill beside this block.
+ */
 export const DISABLED_DECLARATIONS = [
   "  cursor: not-allowed;",
-  "  opacity: 0.58;",
+  "  color: var(--snui-color-text-disabled);",
 ].join("\n");
 
 /** Pressed-state tint painted over the interactive hover fill. */
 export const PRESSED_FILL_DECLARATION =
-  "  background: color-mix(in srgb, var(--snui-color-accent-fill) 12%, var(--snui-color-interactive-hover));";
+  "  background: var(--snui-color-accent-subtle);";
 
-/** Dot shape per semantic tone, keyed by the tone modifier. */
+/**
+ * Dot shape per semantic tone, keyed by the tone modifier. The info radius is
+ * proportional so the rounded square never clamps to a circle at small dot
+ * sizes, which would make info and neutral identical without color.
+ */
 const TONE_DOT_SHAPES: readonly (readonly [string, string])[] = [
-  ["info", "  border-radius: var(--snui-radius-sm);"],
+  ["info", "  border-radius: 20%;"],
   [
     "success",
     "  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);\n  border-radius: 0;",

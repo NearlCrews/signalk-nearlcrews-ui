@@ -28,9 +28,15 @@ export const FOUNDATION_STYLES = scopeStyles(`
   container-type: inline-size;
 }
 
+/*
+ * Horizontal safe-area insets belong to the content padding, so a panel in a
+ * notched or rounded viewport keeps its text clear of the hardware edge. The
+ * overlays read the same insets for their own geometry.
+ */
 .snui-root__content {
   min-width: 0;
-  padding: var(--snui-space-4);
+  padding-block: var(--snui-space-4);
+  padding-inline: max(var(--snui-space-4), env(safe-area-inset-left, 0px)) max(var(--snui-space-4), env(safe-area-inset-right, 0px));
 }
 
 :scope.snui-root--standard {
@@ -51,10 +57,11 @@ textarea {
 /*
  * Host applications ship global element styles that reach unclassed markup a
  * consumer renders inside a panel. Signal K Admin bundles Bootstrap Reboot,
- * whose legend, heading, and block margins visibly change panel content. These
- * rules neutralize the known element-level host styles. They do not override
- * arbitrary higher-specificity selectors. Package components carry their own
- * classes, so they are unaffected.
+ * whose legend, heading, block margins, code and keyboard styling, mark
+ * highlight, label display, and button radius visibly change panel content.
+ * These rules neutralize the known element-level host styles. They do not
+ * override arbitrary higher-specificity selectors. Package components carry
+ * their own classes, so they are unaffected.
  */
 h1,
 h2,
@@ -67,12 +74,12 @@ h6 {
   line-height: 1.3;
 }
 
-h1 { font-size: 1.5rem; }
-h2 { font-size: 1.25rem; }
-h3 { font-size: 1.125rem; }
+h1 { font-size: var(--snui-font-size-2xl); }
+h2 { font-size: var(--snui-font-size-xl); }
+h3 { font-size: var(--snui-font-size-lg); }
 h4,
 h5,
-h6 { font-size: 1rem; }
+h6 { font-size: var(--snui-font-size); }
 
 p,
 ul,
@@ -80,15 +87,52 @@ ol,
 dl,
 dd,
 figure,
-blockquote {
+blockquote,
+address,
+pre {
   margin: 0;
+}
+
+b,
+strong {
+  font-weight: var(--snui-font-weight-bold);
+}
+
+small {
+  font-size: var(--snui-font-size-sm);
+}
+
+code,
+kbd,
+pre,
+samp {
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-family: var(--snui-font-family-mono);
+  font-size: var(--snui-font-size-sm);
+}
+
+pre {
+  overflow: auto;
+}
+
+mark {
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
+
+label {
+  display: inline;
 }
 
 legend {
   width: auto;
   padding: 0;
   float: none;
-  margin-bottom: 0;
+  margin-block-end: 0;
   font-size: inherit;
   line-height: inherit;
 }
@@ -103,7 +147,7 @@ fieldset {
 hr {
   height: 0;
   border: 0;
-  border-top: 1px solid var(--snui-color-border);
+  border-block-start: 1px solid var(--snui-color-border);
   margin: 0;
   color: inherit;
   opacity: 1;
@@ -113,11 +157,25 @@ table {
   border-collapse: collapse;
 }
 
+th {
+  font-weight: var(--snui-font-weight-semibold);
+  text-align: start;
+}
+
+button {
+  border-radius: var(--snui-radius-sm);
+}
+
+/*
+ * Underline metrics come from the active system face, so the line sits where
+ * the font's designer put it; hover keeps an explicit thickening as the
+ * visible change.
+ */
 a:any-link {
   color: var(--snui-color-link);
   text-decoration-line: underline;
-  text-decoration-thickness: 0.08em;
-  text-underline-offset: 0.14em;
+  text-decoration-thickness: from-font;
+  text-underline-position: from-font;
   overflow-wrap: anywhere;
 }
 
@@ -125,9 +183,11 @@ a:visited {
   color: var(--snui-color-link-visited);
 }
 
-a:any-link:hover {
-  color: var(--snui-color-link-hover);
-  text-decoration-thickness: 0.14em;
+@media (hover: hover) {
+  a:any-link:hover {
+    color: var(--snui-color-link-hover);
+    text-decoration-thickness: 0.14em;
+  }
 }
 
 button,
@@ -163,7 +223,8 @@ ${visuallyHiddenDeclarations(true)}
 
 @container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
   .snui-root__content {
-    padding: var(--snui-space-3);
+    padding-block: var(--snui-space-3);
+    padding-inline: max(var(--snui-space-3), env(safe-area-inset-left, 0px)) max(var(--snui-space-3), env(safe-area-inset-right, 0px));
   }
 }
 

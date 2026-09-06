@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CONTROL_STYLES } from "../../src/styles/controls.js";
-import { PANEL_STYLES } from "../../src/styles/index.js";
+import { PANEL_STYLES, STYLE_MODULES } from "../../src/styles/index.js";
 import {
   CONTAINER_BREAKPOINT_NARROW,
   PUBLIC_TOKEN_NAMES,
@@ -23,24 +23,46 @@ describe("design token scales", () => {
     const expected: Record<string, string> = {
       "--snui-font-family-mono":
         'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+      "--snui-font-size": "0.9375rem",
       "--snui-font-size-sm": "0.875rem",
       "--snui-font-size-xs": "0.8125rem",
-      "--snui-font-weight-medium": "600",
-      "--snui-font-weight-semibold": "650",
+      "--snui-font-size-lg": "1.125rem",
+      "--snui-font-size-xl": "1.25rem",
+      "--snui-font-size-2xl": "1.5rem",
+      "--snui-font-weight-medium": "500",
+      "--snui-font-weight-semibold": "600",
       "--snui-font-weight-bold": "700",
       "--snui-font-weight-heavy": "800",
       "--snui-space-7": "2.5rem",
       "--snui-space-8": "3rem",
       "--snui-radius-pill": "999px",
+      "--snui-range-track-color": "var(--snui-color-track)",
     };
     for (const [name, value] of Object.entries(expected)) {
       expect(TOKEN_STYLES).toContain(`${name}: ${value};`);
     }
   });
 
-  it("keeps the motion scale values stable", () => {
+  it("layers overlays above the Admin host's fixed chrome", () => {
+    // Bootstrap's fixed header sits at 1020 and the sidebar at 1019.
+    expect(TOKEN_STYLES).toContain("--snui-z-sticky: 2;");
+    expect(TOKEN_STYLES).toContain("--snui-z-overlay: 1040;");
+    expect(TOKEN_STYLES).toContain("--snui-z-modal: 1050;");
+    expect(TOKEN_STYLES).toContain("--snui-z-toast: 1090;");
+  });
+
+  it("paints a two-tone focus ring", () => {
+    expect(TOKEN_STYLES).toContain(
+      "--snui-focus-ring: 0 0 0 2px var(--snui-color-surface), 0 0 0 6px color-mix(in srgb, var(--snui-color-focus) 38%, transparent);",
+    );
+  });
+
+  it("keeps the motion scale values stable on one easing curve", () => {
     expect(TOKEN_STYLES).toContain(
       "--snui-ease-standard: cubic-bezier(0.2, 0, 0, 1);",
+    );
+    expect(TOKEN_STYLES).toContain(
+      "--snui-transition-fast: 140ms var(--snui-ease-standard);",
     );
     expect(TOKEN_STYLES).toContain(
       "--snui-transition-normal: 240ms var(--snui-ease-standard);",
@@ -67,15 +89,20 @@ describe("design token scales", () => {
   });
 
   it("keeps 999px behind the pill radius token", () => {
-    const occurrences = PANEL_STYLES.split("999px").length - 1;
+    const allStyles = STYLE_MODULES.map((module) => module.styles).join("\n");
+    const occurrences = allStyles.split("999px").length - 1;
     expect(occurrences).toBe(1);
     expect(PANEL_STYLES).toContain("--snui-radius-pill: 999px;");
   });
 
   it("routes every narrow-panel container query through the shared breakpoint", () => {
-    const queries = [
-      ...PANEL_STYLES.matchAll(/@container snui-panel \(max-width: ([^)]+)\)/g),
-    ].map((match) => match[1]);
+    const queries = STYLE_MODULES.flatMap((module) =>
+      [
+        ...module.styles.matchAll(
+          /@container snui-panel \(max-width: ([^)]+)\)/g,
+        ),
+      ].map((match) => match[1]),
+    );
 
     expect(queries.length).toBeGreaterThan(0);
     for (const query of queries) {
