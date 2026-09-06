@@ -121,7 +121,7 @@
     "test:package": "npm run build && npm run test:package:built",
     "test:package:built": "node scripts/check-package.mjs && node scripts/check-declarations.mjs && node scripts/check-consumer-types.mjs",
     "declarations:update": "npm run build && node scripts/check-declarations.mjs --update",
-    "validate": "npm run format:check && npm run docs:check && npm run host-contract && npm run dependency-contract && npm run lint && npm run knip && npm run type-check && npm run type-check:ts6 && npm run test:coverage && npm run audit && npm run audit:runtime && npm run build && npm run test:package:built && npm run test:bundle:built && npm run test:federation:built",
+    "validate": "npm run format:check && npm run docs:check && npm run host-contract && npm run dependency-contract && npm run lint && npm run knip && npm run type-check && npm run type-check:ts6 && npm run test:coverage && npm run audit:runtime && npm run build && npm run test:package:built && npm run test:bundle:built && npm run test:federation:built",
     "release:check": "node scripts/check-release-approval.mjs && npm run validate && npm run test:browser",
     "prepublishOnly": "node scripts/check-release-approval.mjs && npm run test:browser",
     "prepack": "npm run validate"

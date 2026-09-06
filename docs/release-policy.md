@@ -55,10 +55,12 @@ Every release candidate must pass:
 - Bundle-size checks and React plus React DOM externalization checks
 - Classic and ESM Module Federation fixture builds and runtime checks
 - Changelog, API reference, compatibility table, migration note, community file, and package metadata review
-- Full dependency audit and runtime-only dependency audit
+- Runtime-only dependency audit (`npm run audit:runtime`)
 - Signal K host-baseline and locked React Aria compatibility checks
 
 `npm run validate` skips the browser tests in this list, while `npm run release:check` runs them.
+
+Two dependency audits exist, and only one blocks. `npm run audit:runtime` audits the tree a consumer installs (`--omit=dev`), which is also what the Signal K plugin registry audits, so it runs inside `npm run validate` and fails the release. `npm run audit` covers the full tree, including development tooling whose advisories carry no runtime exposure for consumers. It runs as the separate `Full dependency audit` job in CI, which is not a required check for `main`, so a development-only advisory is visible and gets fixed on its own schedule without stopping a release. Do not add an advisory allowlist to make the runtime audit pass: fix or remove the dependency.
 
 Each Chromium visual specification must have reviewed `linux-x64`, `ubuntu24-x64`, and `ubuntu24-arm64` baselines before release. Generate missing platform images with the manual `Update visual baselines` workflow on the exact candidate branch, then commit them and rerun normal CI. Never copy or rename a baseline across runner images or architectures.
 
