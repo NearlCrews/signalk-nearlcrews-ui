@@ -18,7 +18,7 @@ import {
 } from "../utils/polymorphic.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { isSemanticTone, type StatusTone } from "../utils/tone.js";
-import type { Density } from "../utils/variants.js";
+import { type Density, resolveDensity } from "../utils/variants.js";
 import { ToneMark } from "./ToneMark.js";
 
 export type SpaceScale = 1 | 2 | 3 | 4 | 5 | 6;
@@ -137,8 +137,7 @@ export function InputGroup({
   ref,
   ...props
 }: InputGroupProps): React.JSX.Element {
-  const effectiveDensity: Density =
-    density === "comfortable" ? "default" : density;
+  const effectiveDensity = resolveDensity(density);
   return (
     <div
       {...props}

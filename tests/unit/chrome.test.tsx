@@ -268,7 +268,7 @@ describe("chrome primitives", () => {
     const onChange = vi.fn();
     render(
       <PanelRoot data-testid="panel">
-        <ThemeToggle onChange={onChange} />
+        <ThemeToggle onValueChange={onChange} />
       </PanelRoot>,
     );
 

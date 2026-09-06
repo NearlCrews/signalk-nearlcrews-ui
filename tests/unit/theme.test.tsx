@@ -294,10 +294,10 @@ describe("PanelRoot themes", () => {
     render(
       <>
         <PanelRoot data-testid="first-panel">
-          <ThemeToggle legend="First panel theme" />
+          <ThemeToggle label="First panel theme" />
         </PanelRoot>
         <PanelRoot data-testid="second-panel">
-          <ThemeToggle legend="Second panel theme" />
+          <ThemeToggle label="Second panel theme" />
         </PanelRoot>
       </>,
     );
@@ -358,10 +358,10 @@ describe("PanelRoot themes", () => {
     render(
       <>
         <PanelRoot data-testid="first-panel">
-          <ThemeToggle legend="First panel theme" />
+          <ThemeToggle label="First panel theme" />
         </PanelRoot>
         <PanelRoot data-testid="second-panel">
-          <ThemeToggle legend="Second panel theme" />
+          <ThemeToggle label="Second panel theme" />
         </PanelRoot>
       </>,
     );
@@ -613,7 +613,7 @@ describe("PanelRoot themes", () => {
     render(
       <PanelRoot>
         <ThemeToggle
-          legend="Thème du panneau"
+          label="Thème du panneau"
           labels={{ auto: "Automatique", dark: "Sombre", light: "  " }}
         />
       </PanelRoot>,
@@ -636,9 +636,9 @@ describe("SegmentedControl", () => {
 
     return (
       <SegmentedControl
-        legend="Display mode"
+        label="Display mode"
         value={value}
-        onChange={setValue}
+        onValueChange={setValue}
         options={[
           { label: "Auto", value: "auto" },
           { label: "Light", value: "light", disabled: true },
@@ -679,9 +679,9 @@ describe("SegmentedControl", () => {
       const [value, setValue] = useState<ThemeChoice>("light");
       return (
         <SegmentedControl
-          legend="Display mode"
+          label="Display mode"
           value={value}
-          onChange={setValue}
+          onValueChange={setValue}
           options={[
             { label: "Auto", value: "auto" },
             { label: "Light", value: "light", disabled: true },
@@ -731,9 +731,9 @@ describe("SegmentedControl", () => {
       <SegmentedControl
         ref={rootRef}
         data-testid="display-mode"
-        legend="Display mode"
+        label="Display mode"
         value="auto"
-        onChange={() => undefined}
+        onValueChange={() => undefined}
         options={[{ label: "Auto", value: "auto" }]}
       />,
     );
@@ -746,9 +746,9 @@ describe("SegmentedControl", () => {
     expect(() =>
       render(
         <SegmentedControl
-          legend="  "
+          label="  "
           value="auto"
-          onChange={() => undefined}
+          onValueChange={() => undefined}
           options={[{ label: "Auto", value: "auto" }]}
         />,
       ),
