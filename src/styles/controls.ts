@@ -63,8 +63,15 @@ ${scopeStyles(`
   color: var(--snui-color-on-accent);
 }
 
-.snui-button--primary:not(:disabled):not([aria-disabled="true"]):hover {
-  background: var(--snui-color-accent-fill-hover);
+/*
+ * Every raw :hover rule sits behind (hover: hover). On a touch screen the
+ * hover state latches after a tap until the next tap elsewhere, so a stuck
+ * hover fill would read as a stuck state.
+ */
+@media (hover: hover) {
+  .snui-button--primary:not(:disabled):not([aria-disabled="true"]):hover {
+    background: var(--snui-color-accent-fill-hover);
+  }
 }
 
 .snui-button--secondary {
@@ -73,10 +80,12 @@ ${scopeStyles(`
   color: var(--snui-color-text);
 }
 
-.snui-button--secondary:not(:disabled):not([aria-disabled="true"]):hover,
-.snui-button--ghost:not(:disabled):not([aria-disabled="true"]):hover {
-  border-color: var(--snui-color-accent-fill);
-  background: var(--snui-color-interactive-hover);
+@media (hover: hover) {
+  .snui-button--secondary:not(:disabled):not([aria-disabled="true"]):hover,
+  .snui-button--ghost:not(:disabled):not([aria-disabled="true"]):hover {
+    border-color: var(--snui-color-accent-fill);
+    background: var(--snui-color-interactive-hover);
+  }
 }
 
 .snui-button--secondary:not(:disabled):not([aria-disabled="true"]):active,
@@ -95,8 +104,10 @@ ${PRESSED_FILL_DECLARATION}
   color: var(--snui-color-danger);
 }
 
-.snui-button--danger:not(:disabled):not([aria-disabled="true"]):hover {
-  background: color-mix(in srgb, var(--snui-color-danger) 14%, transparent);
+@media (hover: hover) {
+  .snui-button--danger:not(:disabled):not([aria-disabled="true"]):hover {
+    background: var(--snui-color-danger-subtle);
+  }
 }
 
 .snui-button__spinner {
@@ -154,6 +165,23 @@ ${PRESSED_FILL_DECLARATION}
   border-color: var(--snui-color-danger);
 }
 
+.snui-input--monospace {
+  font-family: var(--snui-font-family-mono);
+}
+
+/*
+ * iOS Safari zooms the page when a focused control's font size is below
+ * 16px. Coarse pointers already get the taller control floor, so the same
+ * query lifts text controls to at least 1rem without touching desktop type.
+ */
+@media (any-pointer: coarse) {
+  .snui-input,
+  .snui-select,
+  .snui-textarea {
+    font-size: max(1rem, var(--snui-font-size));
+  }
+}
+
 .snui-select {
   appearance: none;
   padding-inline-end: 2.5rem;
@@ -176,6 +204,15 @@ ${PRESSED_FILL_DECLARATION}
 .snui-textarea {
   min-height: 6rem;
   resize: vertical;
+}
+
+/*
+ * A row count replaces the fixed minimum height, and where the engine sizes
+ * fields from content the control grows with its text from that floor.
+ */
+.snui-textarea--rows {
+  min-height: auto;
+  field-sizing: content;
 }
 
 .snui-range {
@@ -216,7 +253,7 @@ ${PRESSED_FILL_DECLARATION}
   appearance: none;
   width: var(--snui-range-thumb-size);
   height: var(--snui-range-thumb-size);
-  margin-top: calc((0.375rem - var(--snui-range-thumb-size)) / 2);
+  margin-block-start: calc((0.375rem - var(--snui-range-thumb-size)) / 2);
   border: 2px solid var(--snui-color-surface);
   border-radius: 50%;
   background: var(--snui-color-accent-fill);
@@ -275,8 +312,15 @@ ${PRESSED_FILL_DECLARATION}
     border-color var(--snui-transition-fast);
 }
 
-.snui-checkbox:hover .snui-checkbox__input:not(:disabled):not([aria-invalid="true"]) {
-  border-color: var(--snui-color-accent-fill);
+@media (hover: hover) {
+  .snui-checkbox:hover .snui-checkbox__input:not(:disabled):not([aria-invalid="true"]) {
+    border-color: var(--snui-color-accent-fill);
+  }
+}
+
+/* A hidden label leaves the box alone in the grid, so the second column goes. */
+.snui-checkbox--label-hidden {
+  grid-template-columns: auto;
 }
 
 .snui-checkbox__input::before {
@@ -431,6 +475,18 @@ ${focusRingDeclarations("2px", true)}
 ${DISABLED_DECLARATIONS}
 }
 
+.snui-radio__button[data-disabled] .snui-radio__control {
+  border-color: var(--snui-color-text-disabled);
+}
+
+.snui-radio__button[data-disabled][data-selected] .snui-radio__control {
+  background: var(--snui-color-text-disabled);
+}
+
+.snui-radio__button[data-disabled][data-selected] .snui-radio__control::before {
+  background: var(--snui-color-surface);
+}
+
 .snui-radio__label {
   min-width: 0;
   color: var(--snui-color-text);
@@ -463,7 +519,7 @@ ${DISABLED_DECLARATIONS}
 .snui-switch__thumb {
   position: absolute;
   inset-inline-start: 0.125rem;
-  top: 50%;
+  inset-block-start: 50%;
   width: 0.875rem;
   height: 0.875rem;
   border-radius: 50%;
@@ -496,6 +552,22 @@ ${focusRingDeclarations("2px", true)}
 ${DISABLED_DECLARATIONS}
 }
 
+.snui-switch__button[data-disabled] .snui-switch__track {
+  border-color: var(--snui-color-text-disabled);
+}
+
+.snui-switch__button[data-disabled] .snui-switch__thumb {
+  background: var(--snui-color-text-disabled);
+}
+
+.snui-switch__button[data-disabled][data-selected] .snui-switch__track {
+  background: var(--snui-color-text-disabled);
+}
+
+.snui-switch__button[data-disabled][data-selected] .snui-switch__thumb {
+  background: var(--snui-color-surface);
+}
+
 .snui-switch__label {
   min-width: 0;
   color: var(--snui-color-text);
@@ -521,7 +593,7 @@ ${DISABLED_DECLARATIONS}
   height: 0.375rem;
   overflow: hidden;
   border-radius: var(--snui-radius-pill);
-  background: var(--snui-color-border);
+  background: var(--snui-color-track);
 }
 
 .snui-progress__fill {
@@ -579,7 +651,7 @@ ${DISABLED_DECLARATIONS}
   max-width: 100%;
   min-width: 0;
   padding: 0;
-  margin-bottom: var(--snui-space-2);
+  margin-block-end: var(--snui-space-2);
   color: var(--snui-color-text);
   font-weight: var(--snui-font-weight-bold);
   overflow-wrap: anywhere;
@@ -617,9 +689,11 @@ ${DISABLED_DECLARATIONS}
     color var(--snui-transition-fast);
 }
 
-.snui-segmented__option:not(:disabled):not([aria-checked="true"]):hover {
-  background: var(--snui-color-interactive-hover);
-  color: var(--snui-color-text);
+@media (hover: hover) {
+  .snui-segmented__option:not(:disabled):not([aria-checked="true"]):hover {
+    background: var(--snui-color-interactive-hover);
+    color: var(--snui-color-text);
+  }
 }
 
 .snui-segmented__option:not(:disabled):not([aria-checked="true"]):active {
@@ -631,25 +705,57 @@ ${PRESSED_FILL_DECLARATION}
   color: var(--snui-color-on-accent);
 }
 
-.snui-segmented__option[aria-checked="true"]:not(:disabled):hover,
+@media (hover: hover) {
+  .snui-segmented__option[aria-checked="true"]:not(:disabled):hover {
+    background: var(--snui-color-accent-fill-hover);
+  }
+}
+
 .snui-segmented__option[aria-checked="true"]:not(:disabled):active {
   background: var(--snui-color-accent-fill-hover);
 }
 
+/*
+ * Disabled text is a measured token rather than an opacity, so the fragment
+ * recolors text and every control that paints an accent fill or a selected
+ * state repaints that fill in the same token. A busy button keeps its fill:
+ * the spinner and description already say why it is unavailable.
+ */
 .snui-button:disabled,
+.snui-button[aria-disabled="true"]:not([aria-busy="true"]),
 .snui-input:disabled,
 .snui-range:disabled,
 .snui-segmented:not([aria-disabled="true"]) .snui-segmented__option:disabled {
 ${DISABLED_DECLARATIONS}
 }
 
+.snui-button--secondary:disabled,
+.snui-button--secondary[aria-disabled="true"]:not([aria-busy="true"]),
+.snui-button--danger:disabled,
+.snui-button--danger[aria-disabled="true"]:not([aria-busy="true"]) {
+  border-color: var(--snui-color-text-disabled);
+}
+
+.snui-button--primary:disabled,
+.snui-button--primary[aria-disabled="true"]:not([aria-busy="true"]) {
+  background: var(--snui-color-text-disabled);
+  color: var(--snui-color-surface);
+}
+
 .snui-button[aria-disabled="true"] {
   cursor: not-allowed;
 }
 
-.snui-button[aria-disabled="true"]:not(:disabled):not([aria-busy="true"]) .snui-button__content,
-.snui-button[aria-disabled="true"]:not(:disabled):not([aria-busy="true"]) .snui-button__spinner {
-  opacity: 0.58;
+.snui-range:disabled {
+  --snui-range-progress-color: var(--snui-color-text-disabled);
+}
+
+.snui-range:disabled::-webkit-slider-thumb {
+  background: var(--snui-color-text-disabled);
+}
+
+.snui-range:disabled::-moz-range-thumb {
+  background: var(--snui-color-text-disabled);
 }
 
 .snui-checkbox:has(.snui-checkbox__input:disabled),
@@ -660,7 +766,26 @@ ${DISABLED_DECLARATIONS}
 .snui-checkbox:has(.snui-checkbox__input:disabled) .snui-checkbox__input,
 .snui-segmented[aria-disabled="true"] .snui-segmented__option {
   cursor: not-allowed;
-  opacity: 1;
+}
+
+.snui-checkbox__input:disabled {
+  border-color: var(--snui-color-text-disabled);
+}
+
+.snui-checkbox__input:disabled:checked,
+.snui-checkbox__input:disabled:indeterminate {
+  border-color: var(--snui-color-text-disabled);
+  background: var(--snui-color-text-disabled);
+}
+
+.snui-checkbox__input:disabled::before {
+  border-color: var(--snui-color-surface);
+}
+
+.snui-segmented__option:disabled[aria-checked="true"],
+.snui-segmented[aria-disabled="true"] .snui-segmented__option[aria-checked="true"] {
+  background: var(--snui-color-text-disabled);
+  color: var(--snui-color-surface);
 }
 
 @media (forced-colors: active) {
@@ -688,11 +813,44 @@ ${DISABLED_DECLARATIONS}
   }
 
   /*
+   * Secondary and ghost buttons get the same explicit treatment, so a button
+   * inside a surface that opted out of forced-color adjustment (the inline
+   * confirmation, a banner body) still paints in system colors rather than
+   * inheriting the opt-out with the author theme.
+   */
+  .snui-button--secondary,
+  .snui-button--secondary:not(:disabled):not([aria-disabled="true"]):hover {
+    forced-color-adjust: none;
+    border-color: ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+
+  .snui-button--ghost,
+  .snui-button--ghost:not(:disabled):not([aria-disabled="true"]):hover {
+    forced-color-adjust: none;
+    border-color: ButtonText;
+    background: Canvas;
+    color: ButtonText;
+  }
+
+  .snui-button--secondary:disabled,
+  .snui-button--secondary[aria-disabled="true"],
+  .snui-button--ghost:disabled,
+  .snui-button--ghost[aria-disabled="true"] {
+    border-color: GrayText;
+    color: GrayText;
+    opacity: 1;
+  }
+
+  /*
    * These controls opt out of automatic forced-color adjustment to preserve
    * their selected or danger state. Rebuild focus with system colors so the
    * author theme token cannot blend into Highlight.
    */
   .snui-button--primary:focus-visible,
+  .snui-button--secondary:focus-visible,
+  .snui-button--ghost:focus-visible,
   .snui-segmented__option[aria-checked="true"]:focus-visible {
     outline: 2px solid CanvasText;
     outline-offset: 2px;

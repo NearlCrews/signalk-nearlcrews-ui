@@ -2,17 +2,38 @@ import type { ReactNode } from "react";
 import { usePanelTheme } from "../theme/context.js";
 import { THEME_CHOICES, type ThemeChoice } from "../theme/contract.js";
 import { hasReactContent } from "../utils/react-node.js";
-import { SegmentedControl } from "./SegmentedControl.js";
+import {
+  SegmentedControl,
+  type SegmentedControlProps,
+} from "./SegmentedControl.js";
 
-export interface ThemeToggleProps {
+export interface ThemeToggleProps
+  extends Omit<
+    SegmentedControlProps<ThemeChoice>,
+    | "defaultValue"
+    | "label"
+    | "legend"
+    | "onChange"
+    | "onValueChange"
+    | "options"
+    | "value"
+  > {
   readonly choices?: readonly ThemeChoice[] | undefined;
-  readonly className?: string | undefined;
+  /** Accessible name of the theme group. Blank falls back to "Panel theme". */
+  readonly label?: ReactNode | undefined;
+  /** Visible label per theme choice. Blank entries fall back to the default. */
   readonly labels?:
     | Partial<Readonly<Record<ThemeChoice, ReactNode>>>
     | undefined;
+  /** @deprecated Use `label`. */
   readonly legend?: ReactNode | undefined;
+  /** Receives the chosen theme after the shared preference has been updated. */
+  readonly onValueChange?: ((theme: ThemeChoice) => void) | undefined;
+  /** @deprecated Use `onValueChange`. */
   readonly onChange?: ((theme: ThemeChoice) => void) | undefined;
 }
+
+const DEFAULT_THEME_TOGGLE_LABEL = "Panel theme";
 
 const THEME_LABELS: Readonly<Record<ThemeChoice, string>> = {
   auto: "Auto",
@@ -24,10 +45,14 @@ const THEME_LABELS: Readonly<Record<ThemeChoice, string>> = {
 
 export function ThemeToggle({
   choices = THEME_CHOICES,
-  className,
+  label,
   labels,
-  legend = "Panel theme",
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
+  legend,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
   onChange,
+  onValueChange,
+  ...props
 }: ThemeToggleProps): React.JSX.Element {
   const { setTheme, theme } = usePanelTheme();
   const options = choices.map((value) => ({
@@ -36,15 +61,21 @@ export function ThemeToggle({
       : THEME_LABELS[value],
     value,
   }));
+  const groupLabel = hasReactContent(label)
+    ? label
+    : hasReactContent(legend)
+      ? legend
+      : DEFAULT_THEME_TOGGLE_LABEL;
 
   return (
     <SegmentedControl
-      {...(className === undefined ? {} : { className })}
-      legend={hasReactContent(legend) ? legend : "Panel theme"}
+      {...props}
+      label={groupLabel}
       options={options}
       value={theme}
-      onChange={(value) => {
+      onValueChange={(value) => {
         setTheme(value);
+        onValueChange?.(value);
         onChange?.(value);
       }}
     />

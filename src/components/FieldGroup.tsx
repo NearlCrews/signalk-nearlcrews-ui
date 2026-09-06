@@ -4,13 +4,12 @@ import {
   type RefAttributes,
   useId,
 } from "react";
-
+import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { resolveFieldError } from "../utils/field-error.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { FieldError } from "./FieldError.js";
-import type { FieldErrorLive } from "./LabeledField.js";
 
 export interface FieldGroupProps
   extends Omit<FieldsetHTMLAttributes<HTMLFieldSetElement>, "title">,
@@ -18,7 +17,7 @@ export interface FieldGroupProps
   readonly actions?: ReactNode | undefined;
   readonly description?: ReactNode | undefined;
   readonly error?: ReactNode | undefined;
-  readonly errorLive?: FieldErrorLive | undefined;
+  readonly errorLive?: AnnouncementMode | undefined;
   readonly legend: ReactNode;
 }
 
@@ -51,17 +50,14 @@ export function FieldGroup({
       {...props}
       ref={ref}
       className={classNames("snui-field-group", className)}
+      // A fieldset exposes the group role, which supports neither
+      // aria-invalid nor aria-errormessage, so the error joins the
+      // description instead and screen readers read it on entering the group.
       aria-describedby={joinIdReferences(
         ariaDescribedBy,
         descriptionId,
         referencedErrorId,
       )}
-      {...(referencedErrorId === undefined
-        ? {}
-        : {
-            "aria-errormessage": referencedErrorId,
-            "aria-invalid": true,
-          })}
     >
       <legend className="snui-field-group__legend">{legend}</legend>
       {hasDescription ? (

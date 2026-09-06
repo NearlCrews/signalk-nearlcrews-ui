@@ -1,12 +1,15 @@
 import type { ComponentProps, Ref, RefObject } from "react";
 import { describe, expectTypeOf, it } from "vitest";
 
+import type { CheckboxGroupProps } from "../../src/composites.js";
 import type {
   Banner,
   Button,
   Checkbox,
   FieldGroup,
   InlineConfirm,
+  LabeledField,
+  NumberFieldProps,
   NumberInput,
   PanelRoot,
   RangeInput,
@@ -14,6 +17,7 @@ import type {
   Select,
   Textarea,
   TextInput,
+  ThemeToggle,
 } from "../../src/index.js";
 
 /**
@@ -57,6 +61,21 @@ describe("public ref types", () => {
     >();
     expectTypeOf<SegmentedControlProps<string>["ref"]>().toEqualTypeOf<
       Ref<HTMLDivElement> | undefined
+    >();
+    expectTypeOf<ComponentProps<typeof LabeledField>["ref"]>().toEqualTypeOf<
+      Ref<HTMLDivElement> | undefined
+    >();
+    expectTypeOf<ComponentProps<typeof ThemeToggle>["ref"]>().toEqualTypeOf<
+      Ref<HTMLDivElement> | undefined
+    >();
+    expectTypeOf<NumberFieldProps["ref"]>().toEqualTypeOf<
+      Ref<HTMLDivElement> | undefined
+    >();
+    expectTypeOf<NumberFieldProps["inputRef"]>().toEqualTypeOf<
+      Ref<HTMLInputElement> | undefined
+    >();
+    expectTypeOf<CheckboxGroupProps<string>["ref"]>().toEqualTypeOf<
+      Ref<HTMLFieldSetElement> | undefined
     >();
   });
 

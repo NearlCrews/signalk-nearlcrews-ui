@@ -5,7 +5,7 @@ import {
   SwitchField,
 } from "react-aria-components";
 import { classNames } from "../utils/class-names.js";
-import { requireContent } from "../utils/react-node.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
 
 export interface SwitchProps
   extends Omit<
@@ -18,13 +18,22 @@ export interface SwitchProps
    * defaultChecked maps to defaultSelected.
    */
   readonly checked?: boolean | undefined;
-  readonly children: ReactNode;
+  /** Label content. Prefer `label`; children remain supported. */
+  readonly children?: ReactNode | undefined;
   readonly defaultChecked?: boolean | undefined;
   readonly disabled?: boolean | undefined;
   /** Associates the switch with a form outside its DOM subtree. */
   readonly form?: string | undefined;
+  /** Visible label and accessible name. Either `label` or children is required. */
+  readonly label?: ReactNode | undefined;
   /** Name submitted with the switch value while it is selected. */
   readonly name?: string | undefined;
+  /**
+   * Receives the next checked state. Composed controls report values, not
+   * React change events; the native Checkbox keeps the event form.
+   */
+  readonly onCheckedChange?: ((checked: boolean) => void) | undefined;
+  /** @deprecated Use `onCheckedChange`. */
   readonly onChange?: ((checked: boolean) => void) | undefined;
   readonly readOnly?: boolean | undefined;
   readonly required?: boolean | undefined;
@@ -39,18 +48,29 @@ export function Switch({
   defaultChecked,
   disabled,
   form,
+  label,
   name,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
   onChange,
+  onCheckedChange,
   readOnly,
   ref,
   required,
   value,
   ...props
 }: SwitchProps): React.JSX.Element {
-  requireContent(children, "Switch requires a non-empty label.");
+  const labelContent = hasReactContent(label) ? label : children;
+  requireContent(labelContent, "Switch requires a non-empty label.");
 
   // See RadioGroup for why the DOM prop spread needs a boundary assertion.
   const domProps = props as RACSwitchFieldProps;
+  const handleChange =
+    onCheckedChange === undefined && onChange === undefined
+      ? undefined
+      : (next: boolean): void => {
+          onCheckedChange?.(next);
+          onChange?.(next);
+        };
 
   return (
     <SwitchField
@@ -67,13 +87,13 @@ export function Switch({
       {...(defaultChecked === undefined
         ? {}
         : { defaultSelected: defaultChecked })}
-      {...(onChange === undefined ? {} : { onChange })}
+      {...(handleChange === undefined ? {} : { onChange: handleChange })}
     >
       <SwitchButton className="snui-switch__button">
         <span className="snui-switch__track" aria-hidden="true">
           <span className="snui-switch__thumb" />
         </span>
-        <span className="snui-switch__label">{children}</span>
+        <span className="snui-switch__label">{labelContent}</span>
       </SwitchButton>
     </SwitchField>
   );

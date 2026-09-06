@@ -1,7 +1,15 @@
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { describe, expectTypeOf, it } from "vitest";
-import type { ProgressTone } from "../../src/composites.js";
+import type { CheckboxGroupProps, ProgressTone } from "../../src/composites.js";
 import type { DataGridProps } from "../../src/data-grid.js";
+import type {
+  RadioGroupErrorLive,
+  RadioGroupOrientation,
+  RadioGroupProps,
+  RadioProps,
+  SecretInputProps,
+  SwitchProps,
+} from "../../src/forms.js";
 import type {
   ActionBar,
   ActionBarSticky,
@@ -9,22 +17,35 @@ import type {
   BannerTone,
   ButtonAsAnchorProps,
   ButtonAsButtonProps,
+  CheckboxErrorLive,
+  CheckboxProps,
   FieldControlProps,
+  FieldErrorLive,
   FormatRelativeAgeOptions,
   LabeledFieldChild,
   LabeledFieldControlProps,
+  LabeledFieldDensity,
   LabeledFieldProps,
+  NumberDraftResolution,
+  NumberFieldProps,
+  SegmentedControlLegendVisibility,
   SegmentedControlOption,
+  SegmentedControlOrientation,
   SegmentedControlProps,
+  SplitLabeledFieldControlProps,
   StackProps,
   StatusTone,
+  TextareaProps,
   TextInput,
+  TextInputProps,
   TextInputType,
   ThemeChoice,
+  ThemeToggleProps,
   UnsupportedBrowserNoticeProps,
 } from "../../src/index.js";
 import { SegmentedControl } from "../../src/index.js";
 import type { DialogProps } from "../../src/overlays.js";
+import type { Density, Orientation } from "../../src/utils/variants.js";
 
 /**
  * The public type surface is part of the package contract: these assertions
@@ -50,16 +71,31 @@ describe("segmented control generics", () => {
     // A direct call is the only form that exercises generic inference on the
     // component signature; type test files are never executed.
     const element = SegmentedControl({
-      legend: "Log detail",
+      label: "Log detail",
       options: [
         { value: "minimal", label: "Minimal" },
         { value: "normal", label: "Normal" },
       ] as const,
-      onChange: (value) => {
+      onValueChange: (value) => {
         expectTypeOf(value).toEqualTypeOf<"minimal" | "normal">();
       },
     });
     expectTypeOf(element).toEqualTypeOf<React.JSX.Element>();
+  });
+
+  it("keeps the deprecated legend and onChange spellings usable", () => {
+    expectTypeOf<SegmentedControlProps<Mode>["legend"]>().toEqualTypeOf<
+      ReactNode | undefined
+    >();
+    expectTypeOf<SegmentedControlProps<Mode>["label"]>().toEqualTypeOf<
+      ReactNode | undefined
+    >();
+    expectTypeOf<SegmentedControlProps<Mode>["onValueChange"]>().toEqualTypeOf<
+      SegmentedControlProps<Mode>["onChange"]
+    >();
+    expectTypeOf<
+      SegmentedControlProps<Mode>["labelVisibility"]
+    >().toEqualTypeOf<SegmentedControlProps<Mode>["legendVisibility"]>();
   });
 
   it("rejects options outside the value type", () => {
@@ -111,6 +147,159 @@ describe("text input types", () => {
     expectTypeOf<"number">().not.toExtend<TextInputType>();
     expectTypeOf<"number">().not.toExtend<
       NonNullable<ComponentProps<typeof TextInput>["type"]>
+    >();
+  });
+});
+
+describe("shared vocabularies and their deprecated aliases", () => {
+  it("types density with the shared Density plus the deprecated comfortable", () => {
+    expectTypeOf<Density>().toEqualTypeOf<"default" | "compact">();
+    expectTypeOf<LabeledFieldProps["density"]>().toEqualTypeOf<
+      Density | "comfortable" | undefined
+    >();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
+    expectTypeOf<LabeledFieldDensity>().toEqualTypeOf<
+      Density | "comfortable"
+    >();
+  });
+
+  it("types orientation with the shared Orientation", () => {
+    expectTypeOf<Orientation>().toEqualTypeOf<"horizontal" | "vertical">();
+    expectTypeOf<RadioGroupProps["orientation"]>().toEqualTypeOf<
+      Orientation | undefined
+    >();
+    expectTypeOf<SegmentedControlProps<string>["orientation"]>().toEqualTypeOf<
+      Orientation | undefined
+    >();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
+    expectTypeOf<RadioGroupOrientation>().toEqualTypeOf<Orientation>();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
+    expectTypeOf<SegmentedControlOrientation>().toEqualTypeOf<Orientation>();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
+    expectTypeOf<SegmentedControlLegendVisibility>().toEqualTypeOf<
+      "hidden" | "visible"
+    >();
+  });
+
+  it("types announcement props with AnnouncementMode and keeps the aliases", () => {
+    expectTypeOf<LabeledFieldProps["errorLive"]>().toEqualTypeOf<
+      AnnouncementMode | undefined
+    >();
+    expectTypeOf<CheckboxProps["errorLive"]>().toEqualTypeOf<
+      AnnouncementMode | undefined
+    >();
+    expectTypeOf<RadioGroupProps["errorLive"]>().toEqualTypeOf<
+      AnnouncementMode | undefined
+    >();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
+    expectTypeOf<FieldErrorLive>().toEqualTypeOf<AnnouncementMode>();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
+    expectTypeOf<CheckboxErrorLive>().toEqualTypeOf<AnnouncementMode>();
+    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
+    expectTypeOf<RadioGroupErrorLive>().toEqualTypeOf<AnnouncementMode>();
+  });
+});
+
+describe("selection control labels and value callbacks", () => {
+  it("accepts label or children on Switch and Radio", () => {
+    expectTypeOf<SwitchProps["label"]>().toEqualTypeOf<ReactNode | undefined>();
+    expectTypeOf<SwitchProps["children"]>().toEqualTypeOf<
+      ReactNode | undefined
+    >();
+    expectTypeOf<RadioProps["label"]>().toEqualTypeOf<ReactNode | undefined>();
+    expectTypeOf<{ label: "Autopilot" }>().toExtend<SwitchProps>();
+    expectTypeOf<{ value: "sail"; label: "Sail" }>().toExtend<RadioProps>();
+  });
+
+  it("names value callbacks by their payload", () => {
+    expectTypeOf<SwitchProps["onCheckedChange"]>().toEqualTypeOf<
+      ((checked: boolean) => void) | undefined
+    >();
+    expectTypeOf<SwitchProps["onChange"]>().toEqualTypeOf<
+      SwitchProps["onCheckedChange"]
+    >();
+    expectTypeOf<RadioGroupProps["onValueChange"]>().toEqualTypeOf<
+      ((value: string) => void) | undefined
+    >();
+    expectTypeOf<ThemeToggleProps["onValueChange"]>().toEqualTypeOf<
+      ((theme: ThemeChoice) => void) | undefined
+    >();
+    expectTypeOf<
+      CheckboxGroupProps<"a" | "b">["onValueChange"]
+    >().toEqualTypeOf<((values: readonly ("a" | "b")[]) => void) | undefined>();
+  });
+
+  it("lets ThemeToggle carry native attributes and a label", () => {
+    expectTypeOf<{
+      "data-testid": string;
+      id: string;
+      label: string;
+    }>().toExtend<ThemeToggleProps>();
+    expectTypeOf<"options">().not.toExtend<keyof ThemeToggleProps>();
+    expectTypeOf<"value">().not.toExtend<keyof ThemeToggleProps>();
+  });
+});
+
+describe("text control modifiers", () => {
+  it("adds monospace to text controls and minRows to Textarea", () => {
+    expectTypeOf<TextInputProps["monospace"]>().toEqualTypeOf<
+      boolean | undefined
+    >();
+    expectTypeOf<TextareaProps["monospace"]>().toEqualTypeOf<
+      boolean | undefined
+    >();
+    expectTypeOf<SecretInputProps["monospace"]>().toEqualTypeOf<
+      boolean | undefined
+    >();
+    expectTypeOf<TextareaProps["minRows"]>().toEqualTypeOf<
+      number | undefined
+    >();
+    expectTypeOf<CheckboxProps["labelVisibility"]>().toEqualTypeOf<
+      "hidden" | "visible" | undefined
+    >();
+  });
+});
+
+describe("number field value contract", () => {
+  it("narrows the value and callback on allowEmpty", () => {
+    expectTypeOf<{
+      label: string;
+      value: number;
+      onValueChange: (value: number) => void;
+    }>().toExtend<NumberFieldProps>();
+    expectTypeOf<{
+      label: string;
+      allowEmpty: true;
+      value: number | undefined;
+      onValueChange: (value: number | undefined) => void;
+    }>().toExtend<NumberFieldProps>();
+    // Without allowEmpty the value cannot be undefined.
+    expectTypeOf<{
+      label: string;
+      value: number | undefined;
+      onValueChange: (value: number | undefined) => void;
+    }>().not.toExtend<NumberFieldProps>();
+    // A field is not a bare input: the draft owns these.
+    expectTypeOf<"onChange">().not.toExtend<
+      keyof NonNullable<NumberFieldProps["inputProps"]>
+    >();
+  });
+
+  it("resolves a draft to a valid value or an invalid reason", () => {
+    expectTypeOf<NumberDraftResolution>().toEqualTypeOf<
+      | { readonly status: "valid"; readonly value: number | undefined }
+      | {
+          readonly status: "invalid";
+          readonly reason:
+            | "empty"
+            | "notANumber"
+            | "notAnInteger"
+            | "belowMin"
+            | "aboveMax";
+        }
+    >();
+    expectTypeOf<SplitLabeledFieldControlProps["controlProps"]>().toExtend<
+      FieldControlProps & { readonly id: string }
     >();
   });
 });

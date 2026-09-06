@@ -1,4 +1,10 @@
 export { Accordion, type AccordionProps } from "./components/Accordion.js";
+export {
+  CheckboxGroup,
+  type CheckboxGroupLayout,
+  type CheckboxGroupOption,
+  type CheckboxGroupProps,
+} from "./components/CheckboxGroup.js";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState.js";
 export {
   Progress,

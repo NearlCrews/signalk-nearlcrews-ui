@@ -90,9 +90,9 @@ const REF_CASES: readonly {
     render: (ref) => (
       <SegmentedControl
         ref={ref}
-        legend="Units"
+        label="Units"
         value="metric"
-        onChange={() => undefined}
+        onValueChange={() => undefined}
         options={[
           { label: "Metric", value: "metric" },
           { label: "Imperial", value: "imperial" },

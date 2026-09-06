@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-deprecated -- deprecated aliases stay exported for one minor release */
 export {
   ActionBar,
   type ActionBarProps,
@@ -37,7 +38,9 @@ export {
 export {
   Checkbox,
   type CheckboxErrorLive,
+  type CheckboxLabelVisibility,
   type CheckboxProps,
+  type MonospaceControlProps,
   NumberInput,
   type NumberInputProps,
   RangeInput,
@@ -59,6 +62,8 @@ export {
   type LabeledFieldDensity,
   type LabeledFieldLayout,
   type LabeledFieldProps,
+  type SplitLabeledFieldControlProps,
+  splitLabeledFieldControlProps,
 } from "./components/LabeledField.js";
 export {
   Badge,
@@ -90,6 +95,12 @@ export {
   type StackProps,
 } from "./components/Layout.js";
 export {
+  NumberField,
+  type NumberFieldInputProps,
+  type NumberFieldMessages,
+  type NumberFieldProps,
+} from "./components/NumberField.js";
+export {
   PanelRoot,
   type PanelRootProps,
   type PanelWidth,
@@ -97,6 +108,7 @@ export {
 export { Section, type SectionProps } from "./components/Section.js";
 export {
   SegmentedControl,
+  type SegmentedControlLabelVisibility,
   type SegmentedControlLegendVisibility,
   type SegmentedControlOption,
   type SegmentedControlOrientation,
@@ -115,6 +127,16 @@ export {
   UnsupportedBrowserNotice,
   type UnsupportedBrowserNoticeProps,
 } from "./components/UnsupportedBrowserNotice.js";
+export {
+  type NumberDraft,
+  type NumberDraftInputProps,
+  type NumberDraftInvalidReason,
+  type NumberDraftOptions,
+  type NumberDraftResolution,
+  resolveNumberDraft,
+  type UseNumberDraftOptions,
+  useNumberDraft,
+} from "./hooks/use-number-draft.js";
 export {
   supportsNativeCssScope,
   UnsupportedBrowserError,

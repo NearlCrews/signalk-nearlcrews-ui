@@ -1,4 +1,7 @@
-import { FIELD_ERROR_DECLARATIONS } from "./fragments.js";
+import {
+  FIELD_ERROR_DECLARATIONS,
+  visuallyHiddenDeclarations,
+} from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
@@ -131,7 +134,7 @@ export const FORM_STYLES = scopeStyles(`
   grid-column: 1;
   grid-row: 2;
   min-width: 0;
-  margin-top: var(--snui-space-1);
+  margin-block-start: var(--snui-space-1);
   color: var(--snui-color-text-muted);
   overflow-wrap: anywhere;
 }
@@ -140,16 +143,53 @@ export const FORM_STYLES = scopeStyles(`
   display: grid;
   grid-column: 1 / -1;
   gap: var(--snui-space-3);
-  margin-top: var(--snui-space-3);
+  margin-block-start: var(--snui-space-3);
 }
 
 .snui-field-group__error {
 ${FIELD_ERROR_DECLARATIONS}
 }
 
+/*
+ * Disabled text uses a measurable token rather than opacity, so the muted
+ * description stays readable on every theme surface, Night included.
+ */
 .snui-field-group:disabled > .snui-field-group__legend,
 .snui-field-group:disabled > .snui-field-group__description {
-  opacity: 0.68;
+  color: var(--snui-color-text-disabled);
+}
+
+/* The select-all box sits in the legend row, so it drops the row padding. */
+.snui-checkbox-group .snui-field-group__actions {
+  align-items: center;
+}
+
+.snui-checkbox-group__select-all {
+  min-height: 0;
+  padding-block: 0;
+}
+
+.snui-checkbox-group__options {
+  display: grid;
+  column-gap: var(--snui-space-4);
+}
+
+/* Columns fill the available width; a narrow panel collapses to one. */
+.snui-checkbox-group__options--grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+}
+
+.snui-checkbox-group__options--stack {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/*
+ * The warning region stays mounted so its announcement is not lost; while
+ * empty it leaves the flow rather than the accessibility tree, matching the
+ * field error regions.
+ */
+.snui-checkbox-group__warning:empty {
+${visuallyHiddenDeclarations()}
 }
 
 @container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
@@ -175,7 +215,7 @@ ${FIELD_ERROR_DECLARATIONS}
     grid-column: 1;
     grid-row: 3;
     justify-content: flex-start;
-    margin-top: var(--snui-space-2);
+    margin-block-start: var(--snui-space-2);
   }
 
   .snui-field-group__content {

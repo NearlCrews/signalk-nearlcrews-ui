@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-deprecated -- deprecated aliases stay exported for one minor release */
 export {
   Radio,
   RadioGroup,
