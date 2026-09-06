@@ -5,15 +5,16 @@ import { scopeStyles } from "./scope.js";
 /** A versioned global name prevents keyframe collisions between package copies. */
 const TOAST_ENTER_ANIMATION = versionedAnimationName("toast-enter");
 
-export const TOAST_STYLES = scopeStyles(`
-/* ==== Toast (ToastRegion, queued toast cards) ==== */
-
+export const TOAST_STYLES = `
 @keyframes ${TOAST_ENTER_ANIMATION} {
   from {
     opacity: 0;
     transform: translateY(0.5rem);
   }
 }
+
+${scopeStyles(`
+/* ==== Toast (ToastRegion, queued toast cards) ==== */
 
 .snui-toast-region-host {
   position: fixed;
@@ -27,6 +28,7 @@ export const TOAST_STYLES = scopeStyles(`
   flex-direction: column;
   align-items: flex-end;
   gap: var(--snui-space-2);
+  /* Safe-area insets are physical edges, so this shorthand stays physical. */
   padding:
     var(--snui-space-4)
     max(var(--snui-space-4), env(safe-area-inset-right, 0px))
@@ -56,6 +58,12 @@ export const TOAST_STYLES = scopeStyles(`
 }
 
 .snui-toast {
+  /*
+   * The card is a raised surface, so every hover fill painted inside it (the
+   * dismiss button, consumer actions) needs the raised hover step to stay
+   * visible in Dark, where the flat hover fill equals the raised surface.
+   */
+  --snui-color-interactive-hover: var(--snui-color-hover-raised);
   display: flex;
   min-width: 0;
   align-items: flex-start;
@@ -84,21 +92,25 @@ export const TOAST_STYLES = scopeStyles(`
 .snui-toast--warning { border-inline-start-color: var(--snui-color-warning); }
 .snui-toast--danger { border-inline-start-color: var(--snui-color-danger); }
 
+/* The shaped dot keeps its own column; the glyph sits with the title. */
 .snui-toast__tone {
   display: inline-flex;
   flex: none;
   align-items: center;
-  gap: var(--snui-space-1);
   padding-block-start: 0.1875rem;
   color: var(--snui-color-info);
-  font-size: var(--snui-font-size-xs);
-  font-weight: var(--snui-font-weight-heavy);
   line-height: 1;
 }
 
-.snui-toast--success .snui-toast__tone { color: var(--snui-color-success); }
-.snui-toast--warning .snui-toast__tone { color: var(--snui-color-warning); }
-.snui-toast--danger .snui-toast__tone { color: var(--snui-color-danger); }
+.snui-toast__tone-glyph {
+  margin-inline-end: var(--snui-space-1);
+  color: var(--snui-color-info);
+  vertical-align: 0.1em;
+}
+
+.snui-toast--success :is(.snui-toast__tone, .snui-toast__tone-glyph) { color: var(--snui-color-success); }
+.snui-toast--warning :is(.snui-toast__tone, .snui-toast__tone-glyph) { color: var(--snui-color-warning); }
+.snui-toast--danger :is(.snui-toast__tone, .snui-toast__tone-glyph) { color: var(--snui-color-danger); }
 
 .snui-toast__tone-dot {
   width: 0.55rem;
@@ -140,4 +152,4 @@ ${toneDotShapeRules("snui-toast", "snui-toast__tone-dot")}
     forced-color-adjust: none;
   }
 }
-`);
+`)}`;
