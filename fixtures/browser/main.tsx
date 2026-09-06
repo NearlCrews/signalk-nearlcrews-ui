@@ -30,6 +30,7 @@ import {
   TextInput,
   ThemeToggle,
 } from "signalk-nearlcrews-ui";
+import { CheckboxGroup } from "signalk-nearlcrews-ui/composites";
 import { createToastQueue, ToastRegion } from "signalk-nearlcrews-ui/overlays";
 
 type LogLevel = "minimal" | "normal" | "verbose";
@@ -207,7 +208,20 @@ function Fixture(): React.JSX.Element {
                 description="Missing optional capabilities degrade cleanly."
                 defaultChecked
               />
+              <Checkbox
+                label="Include provider in exports"
+                labelVisibility="hidden"
+              />
             </FieldGroup>
+            <CheckboxGroup
+              legend="Data sources"
+              options={[
+                { label: "AIS targets", value: "ais" },
+                { label: "Depth", value: "depth" },
+              ]}
+              defaultValue={["ais"]}
+              selectAllLabel="Select all sources"
+            />
             <CollapsibleSection title="Advanced settings">
               <SegmentedControl
                 label="Log detail"

@@ -145,7 +145,7 @@ describe("control and form stylesheets", () => {
       /\.snui-textarea--rows \{\s*min-height: auto;\s*field-sizing: content;/,
     );
     expect(controls).toMatch(
-      /\.snui-checkbox--label-hidden \{\s*grid-template-columns: auto;/,
+      /\.snui-checkbox--label-hidden \{\s*grid-template-columns: auto;\s*justify-items: center;\s*align-items: center;\s*min-inline-size: var\(--snui-control-min-height\);/,
     );
   });
 });

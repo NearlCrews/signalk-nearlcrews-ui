@@ -319,8 +319,15 @@ ${PRESSED_FILL_DECLARATION}
 }
 
 /* A hidden label leaves the box alone in the grid, so the second column goes. */
+/*
+ * A checkbox whose label is visually hidden has only its box to hit, so the
+ * control keeps the target floor in both axes and centers the box inside it.
+ */
 .snui-checkbox--label-hidden {
   grid-template-columns: auto;
+  justify-items: center;
+  align-items: center;
+  min-inline-size: var(--snui-control-min-height);
 }
 
 .snui-checkbox__input::before {

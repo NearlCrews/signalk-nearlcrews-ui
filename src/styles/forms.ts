@@ -159,13 +159,15 @@ ${FIELD_ERROR_DECLARATIONS}
   color: var(--snui-color-text-disabled);
 }
 
-/* The select-all box sits in the legend row, so it drops the row padding. */
+/*
+ * The select-all box sits in the legend row. It drops the row padding but
+ * keeps the control target floor, so the legend row grows to fit it.
+ */
 .snui-checkbox-group .snui-field-group__actions {
   align-items: center;
 }
 
 .snui-checkbox-group__select-all {
-  min-height: 0;
   padding-block: 0;
 }
 

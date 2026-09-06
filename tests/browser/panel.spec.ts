@@ -560,6 +560,7 @@ test("applies the control target floor to every interactive primitive", async ({
     page.getByRole("radio", { name: "Normal" }),
     page.getByRole("button", { name: "Save" }),
     page.getByRole("checkbox", { name: "Enable provider" }).locator(".."),
+    page.getByRole("checkbox", { name: "Select all sources" }).locator(".."),
     page.getByRole("button", { name: "Dismiss" }),
     page.getByRole("button", { name: "Provider status and metrics" }),
   ];
@@ -568,6 +569,15 @@ test("applies the control target floor to every interactive primitive", async ({
     const box = await target.boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(minimumHeight - 0.01);
   }
+
+  // A checkbox with a hidden label has only its box to hit, so the control
+  // must hold the floor in both axes.
+  const hiddenLabelBox = await page
+    .getByRole("checkbox", { name: "Include provider in exports" })
+    .locator("..")
+    .boundingBox();
+  expect(hiddenLabelBox?.height).toBeGreaterThanOrEqual(minimumHeight - 0.01);
+  expect(hiddenLabelBox?.width).toBeGreaterThanOrEqual(minimumHeight - 0.01);
 
   // A button holding a single glyph has no text to widen it, so the floor has
   // to come from the control itself in both axes.
