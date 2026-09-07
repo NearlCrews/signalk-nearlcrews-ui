@@ -25,9 +25,16 @@ export const COMPONENT_STYLES = scopeStyles(`
   line-height: 1;
 }
 
-/* The theme selector is a panel-level control, so it keeps the trailing edge. */
+/*
+ * The theme selector is a panel-level control, so it keeps the trailing edge.
+ * Ending a grid item sizes it to its content, so the intrinsic minimum is
+ * released and the width capped: the selector scrolls inside its own track on
+ * a narrow panel instead of pushing the column wider.
+ */
 .snui-panel-shell__theme-toggle {
   justify-self: end;
+  min-inline-size: 0;
+  max-inline-size: 100%;
 }
 
 /* The PanelShell title block: the heading reset supplies the type step. */
