@@ -70,6 +70,36 @@ describe("PanelShell", () => {
     ).toBeVisible();
   });
 
+  it("keeps the theme toggle on the trailing edge in either placement", () => {
+    const { container, rerender } = render(
+      <PanelShell title="Sources" themeToggle="between">
+        <p>Body</p>
+      </PanelShell>,
+    );
+
+    // The stack lays its children out in one column, so the shell's own
+    // wrapper is what holds the selector at the trailing edge; without it a
+    // consumer has to re-align the toggle with its own stylesheet.
+    const wrapper = container.querySelector(".snui-panel-shell__theme-toggle");
+    expect(wrapper).not.toBeNull();
+    expect(
+      wrapper?.contains(
+        screen.getByRole("radiogroup", { name: "Panel theme" }),
+      ),
+    ).toBe(true);
+
+    rerender(
+      <PanelShell themeToggle="end">
+        <p>Body</p>
+      </PanelShell>,
+    );
+    expect(
+      container
+        .querySelector(".snui-panel-shell__theme-toggle")
+        ?.contains(screen.getByRole("radiogroup", { name: "Panel theme" })),
+    ).toBe(true);
+  });
+
   it("forwards theme toggle props and omits the title block without a title", () => {
     render(
       <PanelShell themeToggleProps={{ choices: ["light", "dark"] }}>

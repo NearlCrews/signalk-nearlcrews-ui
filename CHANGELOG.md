@@ -119,6 +119,7 @@ This release ships the panel frame, save bar, number field, and text primitives 
 
 ### Fixed
 
+- `PanelShell` holds the theme selector at the trailing edge in both the `"between"` and `"end"` placements. The stack lays its children out in one full-width column, so the selector read as the panel's first section rather than as a control over it, and a panel had to re-align it with its own stylesheet.
 - A `Card` with `density="compact"` and a `LabeledField` with `layout="inline"` no longer restyle a nested card or field of their own kind. Their modifier rules reached every matching descendant, so a default-density card inside a compact one lost its header and footer spacing, and a stacked field inside an inline one had its label and control pulled into the outer grid columns. The same rule now applies to `CollapsibleSection` with `variant="embedded"`, whose nested sections keep their own inset.
 - Toasts enqueued while a modal was open were hidden from assistive technology and could not receive focus.
 - Dismissing a toast dropped focus to the document body.

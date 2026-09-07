@@ -12,7 +12,10 @@ import { PanelRoot, type PanelRootProps } from "./PanelRoot.js";
 import { ThemeToggle, type ThemeToggleProps } from "./ThemeToggle.js";
 import { UnsupportedBrowserNotice } from "./UnsupportedBrowserNotice.js";
 
-/** Where the theme toggle sits: after the content, between title and content, or nowhere. */
+/**
+ * Where the theme toggle sits: after the content, between title and content,
+ * or nowhere. Either placement aligns it to the trailing edge.
+ */
 export type PanelShellThemeToggle = "end" | "between" | "none";
 
 export interface PanelShellProps
@@ -75,7 +78,13 @@ export function PanelShell({
   const Heading = HEADING_ELEMENTS[headingLevel];
   const hasTitle = hasReactContent(title);
   const toggle =
-    themeToggle === "none" ? null : <ThemeToggle {...themeToggleProps} />;
+    themeToggle === "none" ? null : (
+      // The selector is a control over the panel, not one of its sections, so
+      // the shell keeps it at the trailing edge of the single-column stack.
+      <div className="snui-panel-shell__theme-toggle">
+        <ThemeToggle {...themeToggleProps} />
+      </div>
+    );
 
   return (
     <PanelRoot {...rootProps} className={className}>

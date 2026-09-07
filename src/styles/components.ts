@@ -25,6 +25,11 @@ export const COMPONENT_STYLES = scopeStyles(`
   line-height: 1;
 }
 
+/* The theme selector is a panel-level control, so it keeps the trailing edge. */
+.snui-panel-shell__theme-toggle {
+  justify-self: end;
+}
+
 /* The PanelShell title block: the heading reset supplies the type step. */
 .snui-panel-shell__header {
   display: grid;
