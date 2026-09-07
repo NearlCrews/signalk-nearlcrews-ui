@@ -119,6 +119,7 @@ This release ships the panel frame, save bar, number field, and text primitives 
 
 ### Fixed
 
+- A `Card` with `density="compact"` and a `LabeledField` with `layout="inline"` no longer restyle a nested card or field of their own kind. Their modifier rules reached every matching descendant, so a default-density card inside a compact one lost its header and footer spacing, and a stacked field inside an inline one had its label and control pulled into the outer grid columns. The same rule now applies to `CollapsibleSection` with `variant="embedded"`, whose nested sections keep their own inset.
 - Toasts enqueued while a modal was open were hidden from assistive technology and could not receive focus.
 - Dismissing a toast dropped focus to the document body.
 - A blank toast title threw inside the region's render and took the whole panel down through the host's error boundary.

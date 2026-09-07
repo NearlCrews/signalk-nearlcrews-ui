@@ -19,23 +19,23 @@ export const FORM_STYLES = scopeStyles(`
   column-gap: var(--snui-space-4);
 }
 
-.snui-field--inline .snui-field__label {
+.snui-field--inline > .snui-field__label {
   grid-column: 1;
   grid-row: 1;
   align-self: center;
 }
 
-.snui-field--inline .snui-field__description {
+.snui-field--inline > .snui-field__description {
   grid-column: 1;
 }
 
-.snui-field--inline .snui-field__control {
+.snui-field--inline > .snui-field__control {
   grid-column: 2;
   grid-row: 1 / span 2;
   align-self: center;
 }
 
-.snui-field--inline .snui-field__error {
+.snui-field--inline > .snui-field__error {
   grid-column: 2;
 }
 
@@ -200,10 +200,10 @@ ${visuallyHiddenDeclarations()}
     column-gap: 0;
   }
 
-  .snui-field--inline .snui-field__label,
-  .snui-field--inline .snui-field__description,
-  .snui-field--inline .snui-field__control,
-  .snui-field--inline .snui-field__error {
+  .snui-field--inline > .snui-field__label,
+  .snui-field--inline > .snui-field__description,
+  .snui-field--inline > .snui-field__control,
+  .snui-field--inline > .snui-field__error {
     grid-column: 1;
     grid-row: auto;
   }

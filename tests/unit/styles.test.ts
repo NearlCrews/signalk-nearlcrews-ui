@@ -67,3 +67,39 @@ function defined(styles: string): string[] {
     (match) => match[1] ?? "",
   );
 }
+
+/**
+ * Blocks whose public API takes children, so one instance can contain another.
+ * A modifier rule on these must not reach descendants with a plain descendant
+ * combinator: it would repaint the parts of a nested instance that carries a
+ * different modifier. Blocks that cannot nest (Progress, Metric, Banner's tone
+ * icon, and the react-aria data grid) keep their descendant rules.
+ */
+const NESTABLE_BLOCKS = ["collapsible", "card", "field"] as const;
+
+describe("nestable block modifiers", () => {
+  it("reaches its own parts through the child combinator", () => {
+    let ruleCount = 0;
+    for (const block of NESTABLE_BLOCKS) {
+      const leaking = new RegExp(
+        `\\.snui-${block}--[a-z0-9-]+\\s+\\.snui-${block}__`,
+        "g",
+      );
+      const scoped = new RegExp(
+        `\\.snui-${block}--[a-z0-9-]+\\s*>\\s*\\.snui-${block}__`,
+        "g",
+      );
+      for (const module of STYLE_MODULES) {
+        ruleCount += [...module.styles.matchAll(scoped)].length;
+        for (const match of module.styles.matchAll(leaking)) {
+          expect(
+            match[0],
+            `${module.id} lets .snui-${block}--* reach a nested .snui-${block} instance; use the child combinator`,
+          ).toBe("");
+        }
+      }
+    }
+    // Guards the regexes themselves: the scoped form has to appear somewhere.
+    expect(ruleCount).toBeGreaterThan(0);
+  });
+});

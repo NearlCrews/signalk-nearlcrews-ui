@@ -89,11 +89,11 @@ ${GAP_RULES}
   overflow-wrap: anywhere;
 }
 
-.snui-card--compact .snui-card__header {
+.snui-card--compact > .snui-card__header {
   padding-block-end: var(--snui-space-2);
 }
 
-.snui-card--compact .snui-card__footer {
+.snui-card--compact > .snui-card__footer {
   padding-block-start: var(--snui-space-2);
 }
 

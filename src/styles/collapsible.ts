@@ -149,12 +149,12 @@ ${DISABLED_DECLARATIONS}
   border-block-start: 1px solid var(--snui-color-border);
 }
 
-.snui-collapsible--embedded .snui-collapsible__header {
+.snui-collapsible--embedded > .snui-collapsible__header {
   padding-inline: 0;
 }
 
-.snui-collapsible--embedded .snui-collapsible__content,
-.snui-collapsible--embedded .snui-collapsible__summary--below {
+.snui-collapsible--embedded > .snui-collapsible__content,
+.snui-collapsible--embedded > .snui-collapsible__summary--below {
   padding-inline: 0;
 }
 
