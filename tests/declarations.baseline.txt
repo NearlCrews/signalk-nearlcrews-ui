@@ -814,7 +814,10 @@ import { type SpaceScale } from "./Layout.js";
 import { type PanelErrorBoundaryProps } from "./PanelErrorBoundary.js";
 import { type PanelRootProps } from "./PanelRoot.js";
 import { type ThemeToggleProps } from "./ThemeToggle.js";
-/** Where the theme toggle sits: after the content, between title and content, or nowhere. */
+/**
+ * Where the theme toggle sits: after the content, between title and content,
+ * or nowhere. Either placement aligns it to the trailing edge.
+ */
 export type PanelShellThemeToggle = "end" | "between" | "none";
 export interface PanelShellProps extends Omit<PanelRootProps, "children" | "onError" | "title"> {
     readonly children: ReactNode;

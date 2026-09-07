@@ -96,11 +96,25 @@ export function renderDeclarationSnapshot(files, readSource) {
 }
 
 function parseSnapshotSections(snapshot) {
+  // Split on the header lines rather than matching each body with one regular
+  // expression: a multiline pattern ends a lazy body at the first line break,
+  // which silently truncated every section to its first line and hid changes
+  // below it.
   const sections = new Map();
-  const pattern = /^=== (.+) ===\n([\s\S]*?)(?=\n=== .+ ===\n|$)/gm;
-  for (const match of snapshot.matchAll(pattern)) {
-    sections.set(match[1], match[2]);
+  const header = /^=== (.+) ===$/;
+  let file = null;
+  let body = [];
+  for (const line of snapshot.split("\n")) {
+    const match = header.exec(line);
+    if (match?.[1] !== undefined) {
+      if (file !== null) sections.set(file, body.join("\n"));
+      file = match[1];
+      body = [];
+    } else if (file !== null) {
+      body.push(line);
+    }
   }
+  if (file !== null) sections.set(file, body.join("\n"));
   return sections;
 }
 

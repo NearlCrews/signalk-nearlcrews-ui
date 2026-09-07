@@ -119,4 +119,27 @@ describe("declaration graph", () => {
     ]);
     expect(describeSnapshotDifference(before, before)).toEqual([]);
   });
+
+  it("names a file whose change sits below its first line", () => {
+    // Declarations carry doc comments, so most real changes land well below
+    // line one. A parser that ends a section at the first line break reports
+    // no difference at all, which reads as "nothing public changed".
+    const render = (tone) =>
+      renderDeclarationSnapshot(["overlays.d.ts"], () =>
+        [
+          "/**",
+          " * Overlay surfaces.",
+          " */",
+          `export type Tone = "${tone}";`,
+          "",
+        ].join("\n"),
+      );
+
+    expect(
+      describeSnapshotDifference(render("info"), render("danger")),
+    ).toEqual(["overlays.d.ts (changed)"]);
+    expect(describeSnapshotDifference(render("info"), render("info"))).toEqual(
+      [],
+    );
+  });
 });
