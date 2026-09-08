@@ -6,7 +6,18 @@
  * order is unchanged.
  */
 
-import { SEMANTIC_TONES, type SemanticTone } from "../utils/tone.js";
+import type { SemanticTone } from "../utils/tone.js";
+
+/**
+ * The semantic tones in the order every rule set lists them. Checked against
+ * the tone union rather than restating it, so a typo cannot compile.
+ */
+const SEMANTIC_TONES = [
+  "info",
+  "success",
+  "warning",
+  "danger",
+] as const satisfies readonly SemanticTone[];
 
 /**
  * One rule per semantic tone setting `property` to that tone's color token.

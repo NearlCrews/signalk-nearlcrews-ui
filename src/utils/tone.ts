@@ -5,14 +5,6 @@ export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
 /** Tones that carry a meaning a neutral presentation cannot convey. */
 export type SemanticTone = Exclude<StatusTone, "neutral">;
 
-/** The semantic tones in the order the glyph table and the rule sets list them. */
-export const SEMANTIC_TONES = [
-  "info",
-  "success",
-  "warning",
-  "danger",
-] as const satisfies readonly SemanticTone[];
-
 /**
  * A glyph per semantic tone, so tone is never the only visual signal. Rendered
  * decoratively, because the adjacent visually hidden label carries the meaning.
