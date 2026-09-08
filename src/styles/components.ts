@@ -1,10 +1,10 @@
 import {
   FIELD_ERROR_DECLARATIONS,
-  toneDotShapeRules,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
+import { toneColorRules, toneDotShapeRules } from "./tone-rules.js";
 
 export const COMPONENT_STYLES = scopeStyles(`
 /*
@@ -185,10 +185,7 @@ ${visuallyHiddenDeclarations()}
 }
 
 .snui-status--neutral { color: var(--snui-color-text-muted); }
-.snui-status--info { color: var(--snui-color-info); }
-.snui-status--success { color: var(--snui-color-success); }
-.snui-status--warning { color: var(--snui-color-warning); }
-.snui-status--danger { color: var(--snui-color-danger); }
+${toneColorRules((tone) => `.snui-status--${tone}`, "color")}
 
 /*
  * Each tone also gets a distinct dot shape, so the state does not depend on

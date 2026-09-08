@@ -102,37 +102,3 @@ export const DISABLED_DECLARATIONS = [
 /** Pressed-state tint painted over the interactive hover fill. */
 export const PRESSED_FILL_DECLARATION =
   "  background: var(--snui-color-accent-subtle);";
-
-/**
- * Dot shape per semantic tone, keyed by the tone modifier. The info radius is
- * proportional so the rounded square never clamps to a circle at small dot
- * sizes, which would make info and neutral identical without color.
- */
-const TONE_DOT_SHAPES: readonly (readonly [string, string])[] = [
-  ["info", "  border-radius: 20%;"],
-  [
-    "success",
-    "  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);\n  border-radius: 0;",
-  ],
-  [
-    "warning",
-    "  clip-path: polygon(50% 0, 100% 100%, 0 100%);\n  border-radius: 0;",
-  ],
-  [
-    "danger",
-    "  clip-path: polygon(\n    50% 0,\n    100% 25%,\n    100% 75%,\n    50% 100%,\n    0 75%,\n    0 25%\n  );\n  border-radius: 0;",
-  ],
-];
-
-/**
- * Gives each tone a distinct dot shape, so a state never depends on color
- * alone for someone who cannot distinguish the hues. The block owns the tone
- * modifier and the dot element, so indicators and toasts share one set of
- * shapes.
- */
-export function toneDotShapeRules(block: string, dotClass: string): string {
-  return TONE_DOT_SHAPES.map(
-    ([tone, declarations]) =>
-      `.${block}--${tone} .${dotClass} {\n${declarations}\n}`,
-  ).join("\n\n");
-}

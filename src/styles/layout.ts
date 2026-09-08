@@ -2,7 +2,8 @@ import { scopeStyles } from "./scope.js";
 import {
   TONE_ACCENT_BAR_DECLARATIONS,
   toneAccentBarRules,
-} from "./tone-accent.js";
+  toneColorRules,
+} from "./tone-rules.js";
 
 const GAP_RULES = [1, 2, 3, 4, 5, 6]
   .map((space) => {
@@ -174,10 +175,7 @@ ${toneAccentBarRules("snui-card", "accent-")}
   overflow-wrap: anywhere;
 }
 
-.snui-metric--info .snui-metric__value { color: var(--snui-color-info); }
-.snui-metric--success .snui-metric__value { color: var(--snui-color-success); }
-.snui-metric--warning .snui-metric__value { color: var(--snui-color-warning); }
-.snui-metric--danger .snui-metric__value { color: var(--snui-color-danger); }
+${toneColorRules((tone) => `.snui-metric--${tone} .snui-metric__value`, "color")}
 
 .snui-metric__tone-glyph,
 .snui-badge__tone-glyph {
@@ -199,10 +197,7 @@ ${toneAccentBarRules("snui-card", "accent-")}
   overflow-wrap: anywhere;
 }
 
-.snui-badge--info { color: var(--snui-color-info); }
-.snui-badge--success { color: var(--snui-color-success); }
-.snui-badge--warning { color: var(--snui-color-warning); }
-.snui-badge--danger { color: var(--snui-color-danger); }
+${toneColorRules((tone) => `.snui-badge--${tone}`, "color")}
 
 /*
  * Text and code primitives: the hint, caption, identifier, and hidden-text
@@ -216,10 +211,7 @@ ${toneAccentBarRules("snui-card", "accent-")}
 
 .snui-text--neutral { color: var(--snui-color-text); }
 .snui-text--muted { color: var(--snui-color-text-muted); }
-.snui-text--info { color: var(--snui-color-info); }
-.snui-text--success { color: var(--snui-color-success); }
-.snui-text--warning { color: var(--snui-color-warning); }
-.snui-text--danger { color: var(--snui-color-danger); }
+${toneColorRules((tone) => `.snui-text--${tone}`, "color")}
 .snui-text--size-base { font-size: var(--snui-font-size); }
 .snui-text--size-sm { font-size: var(--snui-font-size-sm); }
 .snui-text--size-xs { font-size: var(--snui-font-size-xs); }

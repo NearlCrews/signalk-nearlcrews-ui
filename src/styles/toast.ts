@@ -1,6 +1,6 @@
 import { versionedAnimationName } from "../version.js";
-import { toneDotShapeRules } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
+import { toneAccentBarRules, toneDotShapeRules } from "./tone-rules.js";
 
 /** A versioned global name prevents keyframe collisions between package copies. */
 const TOAST_ENTER_ANIMATION = versionedAnimationName("toast-enter");
@@ -87,10 +87,7 @@ ${scopeStyles(`
   transform: translateY(0.25rem);
 }
 
-.snui-toast--info { border-inline-start-color: var(--snui-color-info); }
-.snui-toast--success { border-inline-start-color: var(--snui-color-success); }
-.snui-toast--warning { border-inline-start-color: var(--snui-color-warning); }
-.snui-toast--danger { border-inline-start-color: var(--snui-color-danger); }
+${toneAccentBarRules("snui-toast")}
 
 /* The shaped dot keeps its own column; the glyph sits with the title. */
 .snui-toast__tone {

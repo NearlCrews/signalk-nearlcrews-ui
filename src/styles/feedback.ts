@@ -3,7 +3,8 @@ import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 import {
   TONE_ACCENT_BAR_DECLARATIONS,
   toneAccentBarRules,
-} from "./tone-accent.js";
+  toneColorRules,
+} from "./tone-rules.js";
 
 export const FEEDBACK_STYLES = scopeStyles(`
 .snui-banner {
@@ -35,13 +36,10 @@ ${toneAccentBarRules("snui-banner")}
   place-items: center;
   border-width: 2px;
   margin-inline-end: 0;
-  color: var(--snui-color-info);
   font-weight: var(--snui-font-weight-heavy);
 }
 
-.snui-banner--success .snui-banner__tone-icon { color: var(--snui-color-success); }
-.snui-banner--warning .snui-banner__tone-icon { color: var(--snui-color-warning); }
-.snui-banner--danger .snui-banner__tone-icon { color: var(--snui-color-danger); }
+${toneColorRules((tone) => `.snui-banner--${tone} .snui-banner__tone-icon`, "color")}
 
 .snui-banner__body > :first-child { margin-block-start: 0; }
 .snui-banner__body > :last-child { margin-block-end: 0; }

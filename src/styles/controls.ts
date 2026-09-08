@@ -6,6 +6,7 @@ import {
   PRESSED_FILL_DECLARATION,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
+import { toneColorRules } from "./tone-rules.js";
 
 const PROGRESS_INDETERMINATE_ANIMATION =
   versionedAnimationName("progress-slide");
@@ -610,21 +611,7 @@ ${DISABLED_DECLARATIONS}
   transition: inline-size var(--snui-transition-fast);
 }
 
-.snui-progress--tone-info .snui-progress__fill {
-  background: var(--snui-color-info);
-}
-
-.snui-progress--tone-success .snui-progress__fill {
-  background: var(--snui-color-success);
-}
-
-.snui-progress--tone-warning .snui-progress__fill {
-  background: var(--snui-color-warning);
-}
-
-.snui-progress--tone-danger .snui-progress__fill {
-  background: var(--snui-color-danger);
-}
+${toneColorRules((tone) => `.snui-progress--tone-${tone} .snui-progress__fill`, "background")}
 
 .snui-progress--indeterminate .snui-progress__fill {
   position: absolute;
