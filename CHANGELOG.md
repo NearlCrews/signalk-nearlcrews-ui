@@ -6,7 +6,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
-## [0.9.0] - 2026-09-05
+## [0.9.0] - 2026-09-08
 
 This release ships the panel frame, save bar, number field, and text primitives that every consumer panel had rebuilt by hand, makes toasts reachable under a modal and persistent for warnings and failures, reworks the Night palette and the token scales, delivers overlay and data-grid styles only to panels that use them, and publishes the Module Federation share map together with a consumer check command.
 
@@ -114,6 +114,9 @@ This release ships the panel frame, save bar, number field, and text primitives 
 - Hosted visual baselines are the `ubuntu24-x64` and `ubuntu24-arm64` families only, the refresh workflow regenerates every Playwright project a screenshot maps to, and local runs write Git-ignored `linux-local-<arch>` images.
 - The external-link workflow downloads a pinned lychee release with a verified SHA-256, both publish jobs call a tested registry-order script, and the publish job checks out `scripts/` sparsely with credentials disabled.
 - README links to Markdown documents are absolute repository URLs, and the package contract rejects relative ones, because the Signal K App Store rewrites only image targets. The remote output format is named one way everywhere ("classic `var` and output-module ESM Module Federation remotes"), and "App Store" replaces "marketplace".
+
+- A `RelativeAge` that owns its clock shares one timer with every other age on the same `tickMs`, rather than each running its own interval from its own mount. A panel showing many ages now wakes once per interval and refreshes them together in a single update.
+- Decorating a cell in a virtualized `DataGrid` no longer allocates on the scroll path, and the column key index is built only when a column asks for decoration.
 
 - Every dependency moved to its current release: React Aria 3.52 and React Aria Components 1.21 at runtime, and Vitest 5 with its coverage provider, ESLint 10.10, typescript-eslint 8.69, Knip 6.34, Biome 2.5.12, Playwright 1.63, Vite 8.2.2, webpack 5.110, and the rest of the development toolchain. Both dependency audits report zero advisories.
 
