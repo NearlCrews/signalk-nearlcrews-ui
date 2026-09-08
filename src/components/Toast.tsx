@@ -522,12 +522,12 @@ function ToastCard<T extends ToastContent>({
       tokenMatch === null
         ? TRANSITION_FAST_MS
         : Number(tokenMatch[1]) * (tokenMatch[2] === "s" ? 1000 : 1);
-    const duration = Number.isFinite(tokenDuration)
+    const exitDurationMs = Number.isFinite(tokenDuration)
       ? tokenDuration
       : TRANSITION_FAST_MS;
     exitTimerRef.current = window.setTimeout(
       finishExit,
-      duration + TOAST_EXIT_FALLBACK_BUFFER_MS,
+      exitDurationMs + TOAST_EXIT_FALLBACK_BUFFER_MS,
     );
     return undefined;
   }, [exiting, finishExit]);

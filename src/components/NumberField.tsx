@@ -155,11 +155,15 @@ export function NumberField({
     onValueChange as (next: number | undefined) => void,
     { ...rules, onValidityChange, resetKey },
   );
+  const messageOverride =
+    draft.invalidReason === undefined
+      ? undefined
+      : messages?.[draft.invalidReason];
   const draftMessage =
     draft.invalidReason === undefined
       ? undefined
-      : hasReactContent(messages?.[draft.invalidReason])
-        ? messages?.[draft.invalidReason]
+      : hasReactContent(messageOverride)
+        ? messageOverride
         : defaultMessage(draft.invalidReason, rules);
   const showUnit = hasReactContent(unit);
 

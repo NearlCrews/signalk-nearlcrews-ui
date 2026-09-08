@@ -8,7 +8,7 @@ import { ROOT_STYLE_MODULE_ID, type StyleModule } from "./install.js";
 import { LAYOUT_STYLES } from "./layout.js";
 import { OVERLAY_STYLES } from "./overlay-styles.js";
 import { SIMPLE_TABLE_STYLES } from "./simple-table.js";
-import { TABLE_STYLES } from "./table-styles.js";
+import { TABLE_STYLES } from "./table.js";
 import { TABS_STYLES } from "./tabs.js";
 import { TOKEN_STYLES } from "./tokens.js";
 

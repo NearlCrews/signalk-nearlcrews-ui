@@ -1,7 +1,8 @@
 import { focusRingDeclarations } from "./fragments.js";
+import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
-export const TABLE_STYLES = scopeStyles(`
+const TABLE_CSS = scopeStyles(`
 .snui-data-grid {
   display: block;
   min-width: 0;
@@ -227,3 +228,9 @@ ${focusRingDeclarations("-2px", false)}
   }
 }
 `);
+
+/** Data-grid styles, installed by `DataGrid` through `useModuleStyles`. */
+export const TABLE_STYLES: StyleModule = {
+  id: "table",
+  styles: TABLE_CSS,
+};

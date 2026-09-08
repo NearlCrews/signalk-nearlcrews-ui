@@ -56,6 +56,9 @@ export function PanelPortalProvider({
  * permanently breaking its role and focus effects.
  */
 function usePortalContainerReady(): boolean {
+  // A reducer rather than useState: the lint rule against a synchronous
+  // setState inside an effect does not fire on a dispatch, and this is a
+  // one-way latch that has to flip in a layout effect, before paint.
   const [ready, resolve] = useReducer(() => true, false);
   useLayoutEffect(() => {
     resolve();

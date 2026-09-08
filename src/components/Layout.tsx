@@ -236,6 +236,8 @@ export function Card({
   ...props
 }: CardProps): React.JSX.Element {
   const hasHeader = hasReactContent(header);
+  // A semantic tone owns the accent bar and the glyph, so it wins over `accent`.
+  const semantic = isSemanticTone(tone);
   const mark = (
     <ToneMark
       className="snui-card__tone-glyph"
@@ -251,10 +253,8 @@ export function Card({
       className: classNames(
         "snui-card",
         `snui-card--${density}`,
-        isSemanticTone(tone) && `snui-card--${tone}`,
-        !isSemanticTone(tone) &&
-          accent !== undefined &&
-          `snui-card--accent-${accent}`,
+        semantic && `snui-card--${tone}`,
+        !semantic && accent !== undefined && `snui-card--accent-${accent}`,
         className,
       ),
     },

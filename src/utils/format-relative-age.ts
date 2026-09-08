@@ -61,7 +61,9 @@ function getFormatter(
       : typeof locale === "string"
         ? [locale]
         : [...locale];
-  const key = JSON.stringify([locales, options.numeric, options.style]);
+  // Concatenated rather than serialized: this runs on every render of every
+  // relative age on screen, and the default path has no locale at all.
+  const key = `${locales?.join(",") ?? ""}\u0000${options.numeric ?? ""}\u0000${options.style ?? ""}`;
   const cached = formatters.get(key);
   if (cached !== undefined) return cached;
 

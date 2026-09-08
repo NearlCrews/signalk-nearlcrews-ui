@@ -172,28 +172,25 @@ export function assertSuccessfulReleaseChecks(
   }
 }
 
-export function parseCheckRunsPage(value) {
+/** A paged GitHub list response: a total plus the array named by `arrayKey`. */
+function parsePage(value, arrayKey, label) {
   if (
     value === null ||
     typeof value !== "object" ||
     !Number.isInteger(value.total_count) ||
-    !Array.isArray(value.check_runs)
+    !Array.isArray(value[arrayKey])
   ) {
-    throw new Error("GitHub returned an invalid check-runs response.");
+    throw new Error(`GitHub returned an invalid ${label} response.`);
   }
   return value;
 }
 
+export function parseCheckRunsPage(value) {
+  return parsePage(value, "check_runs", "check-runs");
+}
+
 export function parseWorkflowRunsPage(value) {
-  if (
-    value === null ||
-    typeof value !== "object" ||
-    !Number.isInteger(value.total_count) ||
-    !Array.isArray(value.workflow_runs)
-  ) {
-    throw new Error("GitHub returned an invalid workflow-runs response.");
-  }
-  return value;
+  return parsePage(value, "workflow_runs", "workflow-runs");
 }
 
 const STABLE_VERSION = /^(\d+)\.(\d+)\.(\d+)$/;
