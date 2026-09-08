@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useControllableState } from "../hooks/use-controllable-state.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
@@ -81,8 +82,11 @@ export function CollapsibleSection({
   const generatedId = useId();
   const contentId = `${generatedId}-content`;
   const titleId = `${generatedId}-title`;
-  const [internalOpen, setInternalOpen] = useState(defaultOpen);
-  const effectiveOpen = open ?? internalOpen;
+  const [effectiveOpen, commitOpen] = useControllableState(
+    open,
+    defaultOpen,
+    onOpenChange,
+  );
   const [hasOpened, setHasOpened] = useState(effectiveOpen);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -132,8 +136,7 @@ export function CollapsibleSection({
         toggleRef.current?.focus();
       }
     }
-    if (open === undefined) setInternalOpen(nextOpen);
-    onOpenChange?.(nextOpen);
+    commitOpen(nextOpen);
   };
 
   const childrenMounted =

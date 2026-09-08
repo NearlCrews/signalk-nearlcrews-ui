@@ -1,4 +1,5 @@
-import { type ReactNode, useId, useState } from "react";
+import { type ReactNode, useId } from "react";
+import { useControllableState } from "../hooks/use-controllable-state.js";
 import { liveRegionProps } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
@@ -71,10 +72,12 @@ export function CheckboxGroup<Value extends string>({
   }
 
   const warningId = useId();
-  const [internalValue, setInternalValue] = useState<readonly Value[]>(
+  const [selectedValues, commitValues] = useControllableState<readonly Value[]>(
+    value,
     defaultValue ?? [],
+    onValueChange,
   );
-  const selected = new Set(value ?? internalValue);
+  const selected = new Set(selectedValues);
 
   const commit = (next: ReadonlySet<Value>): void => {
     // Option order keeps the reported array stable however the boxes were
@@ -82,8 +85,7 @@ export function CheckboxGroup<Value extends string>({
     const ordered = options
       .filter((option) => next.has(option.value))
       .map((option) => option.value);
-    if (value === undefined) setInternalValue(ordered);
-    onValueChange?.(ordered);
+    commitValues(ordered);
   };
 
   const toggle = (optionValue: Value, checked: boolean): void => {

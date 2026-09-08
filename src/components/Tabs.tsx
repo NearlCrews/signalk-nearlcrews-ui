@@ -9,9 +9,9 @@ import {
   useContext,
   useId,
   useMemo,
-  useState,
 } from "react";
 
+import { useControllableState } from "../hooks/use-controllable-state.js";
 import { hasAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
@@ -76,16 +76,20 @@ export function Tabs({
   ...props
 }: TabsProps): React.JSX.Element {
   const baseId = useId();
-  const [internalValue, setInternalValue] = useState(defaultValue);
-  const selected = value ?? internalValue;
+  // The selection is `string | undefined` while nothing is selected, but a
+  // tab only ever reports a real value, so the callback stays outside the hook.
+  const [selected, commitSelected] = useControllableState<string | undefined>(
+    value,
+    defaultValue,
+  );
 
   const select = useCallback(
     (next: string): void => {
       if (next === selected) return;
-      if (value === undefined) setInternalValue(next);
+      commitSelected(next);
       onValueChange?.(next);
     },
-    [onValueChange, selected, value],
+    [commitSelected, onValueChange, selected],
   );
 
   const context = useMemo(

@@ -7,9 +7,9 @@ import {
   useId,
   useLayoutEffect,
   useRef,
-  useState,
 } from "react";
 
+import { useControllableState } from "../hooks/use-controllable-state.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
@@ -113,10 +113,9 @@ export function SegmentedControl<Value extends string>({
 
   const labelId = useId();
   const buttons = useRef(new Map<Value, HTMLButtonElement>());
-  const [internalValue, setInternalValue] = useState<Value | undefined>(
-    defaultValue,
-  );
-  const effectiveValue = value ?? internalValue;
+  const [effectiveValue, commitValue, setInternalValue] = useControllableState<
+    Value | undefined
+  >(value, defaultValue);
   const enabledOptions = options.filter((option) => option.disabled !== true);
   const selectedEnabled = enabledOptions.some(
     (option) => option.value === effectiveValue,
@@ -168,7 +167,9 @@ export function SegmentedControl<Value extends string>({
         hiddenInput.current = null;
       };
     },
-    [],
+    // The setter is the stable useState one the hook hands back, so the ref
+    // callback keeps its identity and never detaches the hidden input.
+    [setInternalValue],
   );
 
   // A reset that lands while this control sits in a paused subtree, inside a
@@ -183,7 +184,7 @@ export function SegmentedControl<Value extends string>({
   });
 
   const select = (nextValue: Value): void => {
-    if (value === undefined) setInternalValue(nextValue);
+    commitValue(nextValue);
     onValueChange?.(nextValue);
     onChange?.(nextValue);
   };

@@ -9,8 +9,8 @@ import {
   useId,
   useMemo,
   useRef,
-  useState,
 } from "react";
+import { useControllableState } from "../hooks/use-controllable-state.js";
 import { hasAccessibleName } from "../utils/aria.js";
 import { composeRef } from "../utils/ref.js";
 import { Button, type ButtonAsButtonProps } from "./Button.js";
@@ -59,8 +59,11 @@ export function useDisclosure({
   const baseId = useId();
   const triggerId = `${baseId}-trigger`;
   const panelId = `${baseId}-panel`;
-  const [internalOpen, setInternalOpen] = useState(defaultOpen);
-  const effectiveOpen = open ?? internalOpen;
+  const [effectiveOpen, commitOpen] = useControllableState(
+    open,
+    defaultOpen,
+    onOpenChange,
+  );
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   const pendingFocus = useRef<boolean | null>(null);
@@ -69,10 +72,9 @@ export function useDisclosure({
     (next: boolean): void => {
       if (next === effectiveOpen) return;
       pendingFocus.current = next;
-      if (open === undefined) setInternalOpen(next);
-      onOpenChange?.(next);
+      commitOpen(next);
     },
-    [effectiveOpen, onOpenChange, open],
+    [commitOpen, effectiveOpen],
   );
 
   const toggle = useCallback((): void => {
