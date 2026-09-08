@@ -155,16 +155,8 @@ function validateExportsMap(exportsMap) {
   }
 }
 
-export function validatePackageMetadata({
-  apiReference,
-  changelog,
-  designContract,
-  packageJson,
-  packageLock,
-  readme,
-  releaseApproved = false,
-  versionSource,
-}) {
+/** Name, publishability, and the authorship and issue-tracker metadata npm shows. */
+function validateIdentity(packageJson) {
   if (packageJson.name !== PACKAGE_NAME) {
     throw new Error(`Unexpected package name: ${packageJson.name}`);
   }
@@ -206,7 +198,10 @@ export function validatePackageMetadata({
       "package.json homepage, repository, and bugs metadata must remain canonical.",
     );
   }
+}
 
+/** The one enforced statement of the Node and npm ranges. */
+function validateRuntimeContract(packageJson) {
   if (
     packageJson.engines?.node !== ENGINES_NODE_RANGE ||
     packageJson.devEngines?.runtime?.name !== "node" ||
@@ -226,13 +221,15 @@ export function validatePackageMetadata({
       "package.json must not declare packageManager; devEngines.packageManager is the one enforced statement of the npm range.",
     );
   }
-
   requireSameMembers(
     packageJson.sideEffects,
     ["*.css"],
     "package.json sideEffects",
   );
+}
 
+/** The lockfile root and the install-script allowlist, which tracks the locked esbuild. */
+function validateLockAgreement(packageJson, packageLock) {
   if (
     packageLock.name !== packageJson.name ||
     packageLock.version !== packageJson.version ||
@@ -255,7 +252,10 @@ export function validatePackageMetadata({
       `package.json allowScripts must equal ${JSON.stringify(expectedAllowScripts)} so strict-allow-scripts admits exactly the locked esbuild install script; update the key when esbuild is bumped.`,
     );
   }
+}
 
+/** What the tarball offers: the file list, the bin, the exports map, and publishConfig. */
+function validatePackagedSurface(packageJson) {
   requireSameMembers(
     packageJson.files,
     EXPECTED_PACKAGE_FILES,
@@ -279,7 +279,10 @@ export function validatePackageMetadata({
       "publishConfig must require public npm publication with provenance.",
     );
   }
+}
 
+/** The release gates, and the prepare ban npm 10 makes necessary. */
+function validateLifecycleScripts(packageJson) {
   if (
     packageJson.scripts?.["release:check"] !==
     "node scripts/check-release-approval.mjs && npm run validate && npm run test:browser"
@@ -310,7 +313,10 @@ export function validatePackageMetadata({
       "prepublishOnly must retain approval and browser verification.",
     );
   }
+}
 
+/** Keywords and fields, which must keep this npm-only library out of Signal K discovery. */
+function validateDiscoveryMetadata(packageJson) {
   const forbiddenKeyword = packageJson.keywords?.find(
     (keyword) =>
       SIGNAL_K_DISCOVERY_KEYWORDS.has(keyword) ||
@@ -335,7 +341,17 @@ export function validatePackageMetadata({
       );
     }
   }
+}
 
+/** One version across src/version.ts, the README, the API reference, the changelog, and the design contract. */
+function validateVersionAgreement({
+  apiReference,
+  changelog,
+  designContract,
+  packageJson,
+  readme,
+  versionSource,
+}) {
   const versionMatches = [
     ...versionSource.matchAll(/^export const PACKAGE_VERSION = "([^"]+)";$/gm),
   ];
@@ -369,7 +385,16 @@ export function validatePackageMetadata({
     }
   }
 
-  const escapedVersion = packageJson.version.replaceAll(".", String.raw`\.`);
+  const expectedScope = `@scope (.snui-root[data-snui-version="${packageJson.version}"])`;
+  if (!designContract.includes(expectedScope)) {
+    throw new Error(
+      `docs/design-contract.md must use package version ${packageJson.version} in its scope example.`,
+    );
+  }
+}
+
+/** The README's release section, its pinned screenshots, its link policy, and its badge block. */
+function validateReadmeShape(packageJson, readme) {
   const whatsNewHeadings = [...readme.matchAll(/^## What's new in (.+)$/gm)];
   if (
     whatsNewHeadings.length !== 1 ||
@@ -396,22 +421,17 @@ export function validatePackageMetadata({
     );
   }
 
-  const expectedScope = `@scope (.snui-root[data-snui-version="${packageJson.version}"])`;
-  if (!designContract.includes(expectedScope)) {
-    throw new Error(
-      `docs/design-contract.md must use package version ${packageJson.version} in its scope example.`,
-    );
-  }
-
   const expectedBadgeBlock = `# Signal K NearlCrews UI\n\n${README_BADGES.join("\n")}`;
   if (!readme.startsWith(expectedBadgeBlock)) {
     throw new Error(
       "README.md must retain the canonical badge order and static Apache-2.0 license badge.",
     );
   }
+}
 
-  if (!releaseApproved) return;
-
+/** Extra changelog demands an approved release makes: a date, and a compare link to the tag. */
+function validateApprovedRelease(packageJson, changelog) {
+  const escapedVersion = packageJson.version.replaceAll(".", String.raw`\.`);
   const datedHeading = new RegExp(
     String.raw`^## \[${escapedVersion}\] - \d{4}-\d{2}-\d{2}$`,
     "m",
@@ -433,6 +453,39 @@ export function validatePackageMetadata({
       `CHANGELOG.md must compare release ${packageJson.version} to v${packageJson.version}, not HEAD.`,
     );
   }
+}
+
+/**
+ * The whole package contract, section by section. Each section throws on the
+ * first thing it finds wrong, and they run in the order a reader would check
+ * them: who the package is, what it runs on, what it ships, and what it says.
+ */
+export function validatePackageMetadata({
+  apiReference,
+  changelog,
+  designContract,
+  packageJson,
+  packageLock,
+  readme,
+  releaseApproved = false,
+  versionSource,
+}) {
+  validateIdentity(packageJson);
+  validateRuntimeContract(packageJson);
+  validateLockAgreement(packageJson, packageLock);
+  validatePackagedSurface(packageJson);
+  validateLifecycleScripts(packageJson);
+  validateDiscoveryMetadata(packageJson);
+  validateVersionAgreement({
+    apiReference,
+    changelog,
+    designContract,
+    packageJson,
+    readme,
+    versionSource,
+  });
+  validateReadmeShape(packageJson, readme);
+  if (releaseApproved) validateApprovedRelease(packageJson, changelog);
 }
 
 export function validatePackedFiles(files, exportsMap, bin = {}) {
