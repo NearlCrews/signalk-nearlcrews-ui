@@ -1,6 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
-import { basename, dirname, extname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 
 import {
   expect,
@@ -163,58 +161,6 @@ async function actionClearsBar({
   if (barBox === null || actionBox === null) return false;
   return actionBox.y + actionBox.height <= barBox.y;
 }
-
-// Must equal the browser matrix snapshot_variant values in
-// .github/workflows/ci.yml; tests/unit/workflow-contract.test.mjs checks it.
-const CI_SNAPSHOT_VARIANTS = ["ubuntu24-x64", "ubuntu24-arm64"] as const;
-
-function snapshotProject(snapshot: string): string {
-  if (snapshot === "panel-mobile-light.png") return "mobile-chromium";
-  if (snapshot === "panel-native-controls-webkit.png") return "webkit";
-  return "chromium";
-}
-
-test("has every required CI visual baseline family", ({
-  browserErrorCapture,
-}, testInfo) => {
-  expect(browserErrorCapture).toBeUndefined();
-  test.skip(testInfo.project.name !== "chromium");
-  test.skip(
-    process.env.SNUI_UPDATE_BASELINES === "true",
-    "The refresh run must generate missing baselines before this check can pass.",
-  );
-  const sourcePath = fileURLToPath(import.meta.url);
-  const source = readFileSync(sourcePath, "utf8");
-  const snapshots = new Set<string>();
-  const literalSnapshotCall =
-    /(?:toHaveScreenshot|withActiveSave)\(\s*(?:page,\s*)?["']([^"']+\.png)["']/g;
-  for (const match of source.matchAll(literalSnapshotCall)) {
-    const snapshot = match[1];
-    if (snapshot !== undefined) snapshots.add(snapshot);
-  }
-
-  const snapshotDirectory = join(
-    dirname(sourcePath),
-    `${basename(sourcePath)}-snapshots`,
-  );
-  const missing: string[] = [];
-  for (const snapshot of snapshots) {
-    const stem = basename(snapshot, extname(snapshot));
-    const project = snapshotProject(snapshot);
-    for (const variant of CI_SNAPSHOT_VARIANTS) {
-      const candidate = join(
-        snapshotDirectory,
-        `${stem}-${project}-linux-${variant}.png`,
-      );
-      if (!existsSync(candidate)) missing.push(basename(candidate));
-    }
-  }
-
-  expect(
-    missing,
-    "Every visual spec needs ubuntu24-x64 and ubuntu24-arm64 baselines from the Update visual baselines workflow.",
-  ).toEqual([]);
-});
 
 test.beforeEach(async ({ page }) => {
   await page.goto("/");

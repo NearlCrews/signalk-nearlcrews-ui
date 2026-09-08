@@ -3,13 +3,16 @@
  * different file in step: the CI Node matrix, the required release checks,
  * the devEngines floors, and the hosted visual-baseline families.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
 import { repositoryPath } from "../../scripts/lib/paths.mjs";
 import { REQUIRED_RELEASE_CHECKS } from "../../scripts/lib/release-checks.mjs";
-import { hostedSnapshotVariants } from "../../scripts/lib/snapshot-families.mjs";
+import {
+  hostedSnapshotVariants,
+  missingSnapshotFiles,
+} from "../../scripts/lib/snapshot-families.mjs";
 import {
   expandMatrixName,
   readInlineList,
@@ -23,10 +26,9 @@ const refreshWorkflow = readFileSync(
   repositoryPath(".github", "workflows", "update-baselines.yml"),
   "utf8",
 );
-const panelSpec = readFileSync(
-  repositoryPath("tests", "browser", "panel.spec.ts"),
-  "utf8",
-);
+const PANEL_SPEC_PATH = repositoryPath("tests", "browser", "panel.spec.ts");
+const panelSpec = readFileSync(PANEL_SPEC_PATH, "utf8");
+const SNAPSHOT_DIRECTORY = `${PANEL_SPEC_PATH}-snapshots`;
 const packageJson = JSON.parse(
   readFileSync(repositoryPath("package.json"), "utf8"),
 );
@@ -101,20 +103,13 @@ describe("hosted visual-baseline families", () => {
     );
   });
 
-  it("checks exactly the families CI verifies in the browser meta-test", () => {
-    const literal = /const CI_SNAPSHOT_VARIANTS = \[([^\]]*)\]/.exec(
-      panelSpec,
-    )?.[1];
-    expect(
-      literal,
-      "panel.spec.ts must declare CI_SNAPSHOT_VARIANTS",
-    ).toBeDefined();
-    const specVariants = [...(literal ?? "").matchAll(/["']([^"']+)["']/g)].map(
-      (match) => match[1],
-    );
-    expect(
-      specVariants,
-      "tests/browser/panel.spec.ts CI_SNAPSHOT_VARIANTS must equal the ci.yml browser matrix snapshot_variant values",
-    ).toEqual(ciVariants);
+  it("has a committed baseline for every screenshot in every family", () => {
+    const present = readdirSync(SNAPSHOT_DIRECTORY);
+    for (const variant of ciVariants) {
+      expect(
+        missingSnapshotFiles(panelSpec, variant, present),
+        `Refresh the ${variant} family through the Update visual baselines workflow.`,
+      ).toEqual([]);
+    }
   });
 });

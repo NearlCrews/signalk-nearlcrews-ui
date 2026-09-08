@@ -1,10 +1,10 @@
 name: Update visual baselines
 
 # Generates the hosted visual-baseline families. Each family is one runner
-# image and architecture, matched to a browser job in ci.yml, and the meta-test
-# in tests/browser/panel.spec.ts requires every screenshot to exist for every
-# family. A local run writes `linux-local-<arch>` images, which are ignored, so
-# only this workflow produces images that can be committed.
+# image and architecture, matched to a browser job in ci.yml, and the workflow
+# contract test requires every screenshot in tests/browser/panel.spec.ts to
+# exist for every family. A local run writes `linux-local-<arch>` images, which
+# are ignored, so only this workflow produces images that can be committed.
 
 on:
   workflow_dispatch:
@@ -57,7 +57,7 @@ jobs:
         env:
           SNUI_SNAPSHOT_VARIANT: ${{ matrix.snapshot_variant }}
           SNUI_UPDATE_BASELINES: "true"
-        # Every project the meta-test maps a screenshot to: desktop Chromium,
+        # Every project a screenshot maps to: desktop Chromium,
         # WebKit for the native-controls image, and mobile Chromium for the
         # mobile image. Firefox takes no screenshots.
         run: npm run test:browser:update -- --project=chromium --project=webkit --project=mobile-chromium

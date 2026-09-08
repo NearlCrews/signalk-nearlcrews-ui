@@ -191,7 +191,7 @@ jobs:
       matrix:
         # These snapshot_variant values are the hosted baseline families. The
         # refresh workflow generates the same two, and a unit test keeps the
-        # two lists and the browser meta-test equal.
+        # two lists equal.
         include:
           - architecture: x64
             runner: ubuntu-24.04

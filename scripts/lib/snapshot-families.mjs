@@ -1,16 +1,17 @@
 /**
  * The hosted visual-baseline families and the files each one must contain.
  *
- * tests/browser/panel.spec.ts asserts at run time that every screenshot it
- * takes exists for every hosted family. The refresh workflow generates one
- * family per runner and cannot run that meta-test, so this module derives the
- * same expectations for one family at a time. The family list itself lives in
- * the browser matrix of .github/workflows/ci.yml; the refresh workflow and the
- * meta-test repeat it, and a unit test keeps the three copies equal.
+ * Both readers derive their expectations here rather than restating the naming
+ * scheme: the workflow-contract unit test asserts every screenshot named in
+ * tests/browser/panel.spec.ts has a committed baseline in every hosted family,
+ * and the refresh workflow, which generates one family per runner, asks for one
+ * family at a time. The family list itself lives in the browser matrix of
+ * .github/workflows/ci.yml; the refresh workflow repeats it, and that same unit
+ * test keeps the two copies equal.
  */
 import { readScalarValues } from "./workflow-matrix.mjs";
 
-/** Matches the same literal screenshot calls the browser meta-test scans. */
+/** Matches the literal screenshot calls the browser spec makes. */
 const LITERAL_SNAPSHOT_CALL =
   /(?:toHaveScreenshot|withActiveSave)\(\s*(?:page,\s*)?["']([^"']+\.png)["']/g;
 

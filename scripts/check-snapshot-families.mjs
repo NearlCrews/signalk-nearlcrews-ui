@@ -3,7 +3,7 @@
  *
  * The refresh workflow runs this after regenerating one family so an
  * incomplete artifact fails there, where the missing image can still be
- * produced, rather than in the browser meta-test on the next pull request.
+ * produced, rather than in the contract test on the next pull request.
  * Without `--variant` it checks every family the CI browser matrix names.
  */
 import { readdir, readFile } from "node:fs/promises";
