@@ -308,7 +308,6 @@ export interface UseDisclosureOptions {
 }
 export interface UseDisclosureResult {
     readonly open: boolean;
-    readonly panelId: string;
     /** Spread onto the disclosed container; it stays mounted so `aria-controls` resolves. */
     readonly panelProps: {
         readonly "aria-labelledby": string;
@@ -320,7 +319,6 @@ export interface UseDisclosureResult {
     };
     readonly setOpen: (open: boolean) => void;
     readonly toggle: () => void;
-    readonly triggerId: string;
     /** Spread onto the button that opens and closes the panel. */
     readonly triggerProps: {
         readonly "aria-controls": string;
@@ -1549,8 +1547,6 @@ export interface NumberDraftInputProps {
     readonly value: string;
 }
 export interface NumberDraft {
-    /** Text the input renders: the live draft while editing, else the value. */
-    readonly display: string;
     /** Drops a valid draft so the input shows the committed value again. */
     readonly finishEdit: () => void;
     /** Records a keystroke and commits whatever the draft resolves to. */
@@ -1558,8 +1554,6 @@ export interface NumberDraft {
     readonly inputProps: NumberDraftInputProps;
     /** Why the current draft is invalid, or undefined while it is valid. */
     readonly invalidReason: NumberDraftInvalidReason | undefined;
-    /** Drops any draft, valid or not. */
-    readonly reset: () => void;
 }
 export interface UseNumberDraftOptions extends NumberDraftOptions {
     /**

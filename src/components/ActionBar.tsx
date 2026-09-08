@@ -445,7 +445,7 @@ function ViewportBottomActionBar({
       <div
         {...props}
         ref={barRef}
-        {...(style === undefined ? {} : { style })}
+        style={style}
         className={classNames(
           "snui-action-bar",
           "snui-action-bar--sticky-viewport-bottom",
@@ -480,7 +480,7 @@ export function ActionBar({
         className={className}
         ref={ref}
         status={status}
-        {...(statusRef === undefined ? {} : { statusRef })}
+        statusRef={statusRef}
       />
     );
   }

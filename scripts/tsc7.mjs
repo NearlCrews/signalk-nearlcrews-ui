@@ -9,20 +9,11 @@
  * order for the build and the type check.
  */
 import { spawnSync } from "node:child_process";
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
-
-const require = createRequire(import.meta.url);
-const manifestPath = require.resolve("@typescript/native/package.json");
-const manifest = require(manifestPath);
-const bin = typeof manifest.bin === "string" ? manifest.bin : manifest.bin?.tsc;
-if (typeof bin !== "string") {
-  throw new Error("@typescript/native package.json does not declare bin.tsc.");
-}
+import { typescriptCompilerEntry } from "./lib/typescript-compiler.mjs";
 
 const result = spawnSync(
   process.execPath,
-  [join(dirname(manifestPath), bin), ...process.argv.slice(2)],
+  [typescriptCompilerEntry(), ...process.argv.slice(2)],
   { stdio: "inherit" },
 );
 process.exit(result.status ?? 1);

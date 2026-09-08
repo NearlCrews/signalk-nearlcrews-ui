@@ -12,7 +12,6 @@ export interface StyleModule {
 }
 
 interface InstalledStyle {
-  readonly element: HTMLStyleElement;
   readonly moduleId: string;
   readonly nonce: string | undefined;
   readonly styles: string;
@@ -126,7 +125,6 @@ export function installStyleModule(
       dispose: () => element.remove(),
       element,
       value: {
-        element,
         moduleId: module.id,
         nonce,
         styles: module.styles,

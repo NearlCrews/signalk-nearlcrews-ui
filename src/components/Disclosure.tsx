@@ -11,8 +11,8 @@ import {
   useRef,
   useState,
 } from "react";
-
 import { hasAccessibleName } from "../utils/aria.js";
+import { composeRef } from "../utils/ref.js";
 import { Button, type ButtonAsButtonProps } from "./Button.js";
 
 export interface UseDisclosureOptions {
@@ -23,7 +23,6 @@ export interface UseDisclosureOptions {
 
 export interface UseDisclosureResult {
   readonly open: boolean;
-  readonly panelId: string;
   /** Spread onto the disclosed container; it stays mounted so `aria-controls` resolves. */
   readonly panelProps: {
     readonly "aria-labelledby": string;
@@ -35,7 +34,6 @@ export interface UseDisclosureResult {
   };
   readonly setOpen: (open: boolean) => void;
   readonly toggle: () => void;
-  readonly triggerId: string;
   /** Spread onto the button that opens and closes the panel. */
   readonly triggerProps: {
     readonly "aria-controls": string;
@@ -98,7 +96,6 @@ export function useDisclosure({
   return useMemo(
     () => ({
       open: effectiveOpen,
-      panelId,
       panelProps: {
         "aria-labelledby": triggerId,
         hidden: !effectiveOpen,
@@ -109,7 +106,6 @@ export function useDisclosure({
       },
       setOpen,
       toggle,
-      triggerId,
       triggerProps: {
         "aria-controls": panelId,
         "aria-expanded": effectiveOpen,
@@ -213,9 +209,7 @@ export function DisclosurePanel({
       className={className}
       ref={(node) => {
         setPanelNode(node);
-        if (typeof ref === "function") return ref(node);
-        if (ref !== null && ref !== undefined) ref.current = node;
-        return undefined;
+        return composeRef(ref, node);
       }}
     >
       {mountStrategy === "unmount" && !open ? null : children}

@@ -236,13 +236,13 @@ export function Card({
   ...props
 }: CardProps): React.JSX.Element {
   const hasHeader = hasReactContent(header);
-  const mark = isSemanticTone(tone) ? (
+  const mark = (
     <ToneMark
       className="snui-card__tone-glyph"
       tone={tone}
       toneLabel={toneLabel}
     />
-  ) : null;
+  );
 
   return createPolymorphicElement(
     as,

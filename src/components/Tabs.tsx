@@ -140,13 +140,15 @@ function moveFocus(
   const rtl = list.matches(":dir(rtl)");
   const forwardKey = orientation === "vertical" ? "ArrowDown" : "ArrowRight";
   const backwardKey = orientation === "vertical" ? "ArrowUp" : "ArrowLeft";
+  // Horizontal arrows follow document direction; vertical ones never mirror.
+  const step = rtl && orientation === "horizontal" ? -1 : 1;
   let next: number;
   switch (event.key) {
     case forwardKey:
-      next = current + (rtl && orientation === "horizontal" ? -1 : 1);
+      next = current + step;
       break;
     case backwardKey:
-      next = current + (rtl && orientation === "horizontal" ? 1 : -1);
+      next = current - step;
       break;
     case "Home":
       next = 0;

@@ -539,8 +539,8 @@ export function DataGrid<TRow, TColumn = unknown>({
         zebra && "snui-data-grid--zebra",
         className,
       )}
-      {...(id === undefined ? {} : { id })}
-      {...(style === undefined ? {} : { style })}
+      id={id}
+      style={style}
     >
       {virtualized ? (
         <Virtualizer

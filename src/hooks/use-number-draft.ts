@@ -135,8 +135,6 @@ export interface NumberDraftInputProps {
 }
 
 export interface NumberDraft {
-  /** Text the input renders: the live draft while editing, else the value. */
-  readonly display: string;
   /** Drops a valid draft so the input shows the committed value again. */
   readonly finishEdit: () => void;
   /** Records a keystroke and commits whatever the draft resolves to. */
@@ -144,8 +142,6 @@ export interface NumberDraft {
   readonly inputProps: NumberDraftInputProps;
   /** Why the current draft is invalid, or undefined while it is valid. */
   readonly invalidReason: NumberDraftInvalidReason | undefined;
-  /** Drops any draft, valid or not. */
-  readonly reset: () => void;
 }
 
 export interface UseNumberDraftOptions extends NumberDraftOptions {
@@ -232,12 +228,7 @@ export function useNumberDraft(
     if (active && isValid) setDraft(null);
   };
 
-  const reset = (): void => {
-    setDraft(null);
-  };
-
   return {
-    display: active ? draft.raw : formatValue(value),
     finishEdit,
     handleChange,
     inputProps: {
@@ -269,6 +260,5 @@ export function useNumberDraft(
       value: active ? draft.raw : formatValue(value),
     },
     invalidReason,
-    reset,
   };
 }
