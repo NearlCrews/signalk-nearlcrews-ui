@@ -244,6 +244,13 @@ function isDecorated(decoration: ColumnDecoration): boolean {
 
 /** The text a cell renders when its children are only strings and numbers. */
 function cellText(children: ReactNode): string | undefined {
+  // A lone string or number is the overwhelmingly common cell, and this runs
+  // once per visible cell per render of a virtualized grid; take it without
+  // allocating the array Children.toArray would build around it.
+  if (typeof children === "string" || typeof children === "number") {
+    const only = String(children);
+    return only.trim() === "" ? undefined : only;
+  }
   const parts = Children.toArray(children);
   if (parts.length === 0) return undefined;
   let text = "";
@@ -271,8 +278,15 @@ function decorateCell(
 ): ReactNode {
   if (!isValidElement<CellProps>(cell) || cell.type !== Cell) return cell;
   const props: CellDecorationProps = {};
-  if (decoration?.numeric === true) props["data-snui-numeric"] = "";
-  if (decoration?.wrap === true) props["data-snui-wrap"] = "";
+  let decorated = false;
+  if (decoration?.numeric === true) {
+    props["data-snui-numeric"] = "";
+    decorated = true;
+  }
+  if (decoration?.wrap === true) {
+    props["data-snui-wrap"] = "";
+    decorated = true;
+  }
   const content = cell.props.children;
   if (
     virtualized &&
@@ -286,9 +300,11 @@ function decorateCell(
           {content}
         </span>
       );
+      decorated = true;
     }
   }
-  return Object.keys(props).length === 0 ? cell : cloneElement(cell, props);
+  // A flag rather than counting the keys, which would allocate per cell.
+  return decorated ? cloneElement(cell, props) : cell;
 }
 
 function decorateRow<TRow>(
@@ -428,26 +444,24 @@ export function DataGrid<TRow, TColumn = unknown>({
   }
 
   const decorations = columnElements.map(decorationOf);
-  const decorationsByKey = new Map<Key, ColumnDecoration>();
-  columnElements.forEach((element, index) => {
-    const decoration = decorations[index];
-    const key = element.props.id ?? getItemKey(columns?.[index]);
-    if (decoration !== undefined && key !== undefined) {
-      decorationsByKey.set(key, decoration);
-    }
-  });
   // Rows are cloned only when a column asks for it or the grid virtualizes,
-  // so the common small grid renders the consumer's rows untouched.
-  const renderDecoratedRow =
-    virtualized || decorations.some(isDecorated)
-      ? (item: TRow) =>
-          decorateRow(
-            renderRow(item),
-            decorations,
-            decorationsByKey,
-            virtualized,
-          )
-      : renderRow;
+  // so the common small grid renders the consumer's rows untouched, and does
+  // not pay for the key index either.
+  const decorating = virtualized || decorations.some(isDecorated);
+  const decorationsByKey = new Map<Key, ColumnDecoration>();
+  if (decorating) {
+    columnElements.forEach((element, index) => {
+      const decoration = decorations[index];
+      const key = element.props.id ?? getItemKey(columns?.[index]);
+      if (decoration !== undefined && key !== undefined) {
+        decorationsByKey.set(key, decoration);
+      }
+    });
+  }
+  const renderDecoratedRow = decorating
+    ? (item: TRow) =>
+        decorateRow(renderRow(item), decorations, decorationsByKey, virtualized)
+    : renderRow;
 
   let body: ReactElement;
   if (virtualized) {

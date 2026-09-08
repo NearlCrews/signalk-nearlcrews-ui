@@ -182,6 +182,30 @@ describe("RelativeAge", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("runs one timer per cadence however many ages read it", () => {
+    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
+    vi.useFakeTimers({ now });
+    const since = now - 5_000;
+    const { unmount } = render(
+      <>
+        <RelativeAge since={since} tickMs={1_000} options={EN} />
+        <RelativeAge since={since} tickMs={1_000} options={EN} />
+        <RelativeAge since={since} tickMs={2_000} options={EN} />
+      </>,
+    );
+
+    expect(screen.getAllByText("5 seconds ago")).toHaveLength(3);
+    expect(vi.getTimerCount()).toBe(2);
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(screen.getAllByText("1 minute ago")).toHaveLength(3);
+
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("does not tick for a precomputed age or when ticking is disabled", () => {
     vi.useFakeTimers();
     render(

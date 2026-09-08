@@ -14,6 +14,7 @@ import {
   type RelativeAgeTimestamp,
   timestampToMs,
 } from "../utils/format-relative-age.js";
+import { subscribeToClock } from "../utils/shared-clock.js";
 
 export type RelativeAgeElement = "time" | "span";
 
@@ -57,8 +58,7 @@ export function RelativeAge({
 
   useEffect(() => {
     if (!ownsClock || tickMs <= 0) return undefined;
-    const interval = setInterval(() => setNowMs(Date.now()), tickMs);
-    return () => clearInterval(interval);
+    return subscribeToClock(tickMs, setNowMs);
   }, [ownsClock, tickMs]);
 
   const sinceMs = timestampToMs(since);
