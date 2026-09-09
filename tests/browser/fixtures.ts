@@ -25,6 +25,28 @@ export interface AxeOptions {
  * call it with those states present. A rule is left out only with a reason,
  * so every exception reads as a documented limitation at its call site.
  */
+/**
+ * Waits for every running transition and animation to finish.
+ *
+ * An axe pass that starts while an overlay is still fading measures colours
+ * composited against whatever is behind it, not the ones the tokens set, and
+ * reports a contrast failure that does not exist once the paint settles.
+ */
+export async function settleAnimations(page: Page): Promise<void> {
+  await page.evaluate(async () => {
+    const finishing = document
+      .getAnimations()
+      // A looping animation, such as the spinner or the indeterminate progress
+      // fill, never finishes, so waiting on it would hang rather than settle.
+      .filter(
+        (animation) =>
+          animation.effect?.getTiming().iterations !== Number.POSITIVE_INFINITY,
+      )
+      .map((animation) => animation.finished.catch(() => undefined));
+    await Promise.all(finishing);
+  });
+}
+
 export async function expectNoAxeViolations(
   page: Page,
   options: AxeOptions = {},

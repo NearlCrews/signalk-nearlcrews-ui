@@ -1,4 +1,9 @@
-import { expect, expectNoAxeViolations, test } from "./fixtures.js";
+import {
+  expect,
+  expectNoAxeViolations,
+  settleAnimations,
+  test,
+} from "./fixtures.js";
 
 /** Bootstrap's fixed header z-index in the Signal K Admin, mirrored by the fixture. */
 const HOST_HEADER_Z_INDEX = 1020;
@@ -122,10 +127,13 @@ test("scrolls a wide table inside its region while the panel stays put", async (
   await expect
     .poll(() => region.evaluate((element) => element.scrollLeft))
     .toBeGreaterThan(1);
+  const scrolledRight = await region.evaluate((element) => element.scrollLeft);
   await page.keyboard.press("ArrowLeft");
+  // Back by a step rather than to exactly zero: the step is the engine's own,
+  // so a press that had already reached the end does not return in one.
   await expect
     .poll(() => region.evaluate((element) => element.scrollLeft))
-    .toBeLessThan(1);
+    .toBeLessThan(scrolledRight);
 });
 
 test("keeps secret input focus and selection while revealing", async ({
@@ -310,6 +318,11 @@ test("keeps toasts reachable while a dialog is open", async ({ page }) => {
   await expect(
     page.getByRole("dialog", { name: "Anchorage details" }),
   ).toBeVisible();
+
+  // The scrim and the dialog fade in on `--snui-transition-normal`, and an axe
+  // pass that starts mid-fade measures composited colours rather than the ones
+  // the tokens set, which reads as a contrast failure that does not exist.
+  await settleAnimations(page);
 
   const region = page.getByRole("region", { name: "Notifications" });
   const dismiss = region.getByRole("button", { name: "Dismiss" });
