@@ -1,5 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
-import { createRef } from "react";
+import { Activity, createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -8,6 +8,7 @@ import {
   RELATIVE_AGE_NARROW,
   RelativeAge,
 } from "../../src/index.js";
+import { subscribeToClock } from "../../src/utils/shared-clock.js";
 
 const EN = { locale: "en" } as const;
 const NARROW_EN = { ...RELATIVE_AGE_NARROW, ...EN } as const;
@@ -236,11 +237,106 @@ describe("RelativeAge", () => {
     expect(age).not.toHaveAttribute("datetime");
   });
 
+  it("re-reads the clock when a paused age resumes", () => {
+    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
+    vi.useFakeTimers({ now });
+    const since = now - 60_000;
+
+    function Section({
+      visible,
+    }: {
+      readonly visible: boolean;
+    }): React.JSX.Element {
+      return (
+        <Activity mode={visible ? "visible" : "hidden"}>
+          <RelativeAge since={since} options={EN} />
+        </Activity>
+      );
+    }
+
+    const { rerender } = render(<Section visible />);
+    expect(screen.getByText("1 minute ago")).toBeInTheDocument();
+
+    // A hidden Activity tears the subscription down while keeping the state,
+    // which is what a collapsed section does to the ages inside it.
+    rerender(<Section visible={false} />);
+    act(() => {
+      vi.advanceTimersByTime(3_600_000);
+    });
+    rerender(<Section visible />);
+
+    expect(screen.getByText("1 hour ago")).toBeInTheDocument();
+  });
+
+  it("moves to a new cadence and stops once the age is precomputed", () => {
+    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
+    vi.useFakeTimers({ now });
+    const since = now - 5_000;
+    const { rerender } = render(
+      <RelativeAge since={since} tickMs={1_000} options={EN} />,
+    );
+    expect(vi.getTimerCount()).toBe(1);
+
+    rerender(<RelativeAge since={since} tickMs={60_000} options={EN} />);
+    expect(vi.getTimerCount()).toBe(1);
+
+    // The old cadence would have ticked 59 times by now.
+    act(() => {
+      vi.advanceTimersByTime(59_000);
+    });
+    expect(screen.getByText("5 seconds ago")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(screen.getByText("1 minute ago")).toBeInTheDocument();
+
+    rerender(<RelativeAge ageMs={120_000} options={EN} />);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(screen.getByText("2 minutes ago")).toBeInTheDocument();
+  });
+
   it("falls back for an unreadable timestamp", () => {
     render(<RelativeAge since="garbage" options={{ fallback: "never" }} />);
 
     const time = screen.getByText("never");
     expect(time.tagName).toBe("TIME");
     expect(time).not.toHaveAttribute("datetime");
+  });
+});
+
+describe("shared clock", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("tells a new subscriber the current instant", () => {
+    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
+    vi.useFakeTimers({ now });
+    const onTick = vi.fn();
+
+    const stop = subscribeToClock(10_000, onTick);
+
+    expect(onTick).toHaveBeenCalledWith(now);
+    stop();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("tolerates a listener unsubscribing another during a tick", () => {
+    vi.useFakeTimers();
+    const second = vi.fn();
+    let stopSecond = (): void => undefined;
+    const stopFirst = subscribeToClock(1_000, () => {
+      stopSecond();
+    });
+    stopSecond = subscribeToClock(1_000, second);
+    second.mockClear();
+
+    expect(() => {
+      vi.advanceTimersByTime(1_000);
+    }).not.toThrow();
+    expect(second).not.toHaveBeenCalled();
+
+    stopFirst();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

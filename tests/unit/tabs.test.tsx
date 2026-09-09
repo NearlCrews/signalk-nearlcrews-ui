@@ -208,6 +208,116 @@ describe("Tabs", () => {
     expect(panelRef.current).toBe(screen.getByTestId("panel"));
   });
 
+  it("keeps a tab stop when nothing is selected", async () => {
+    const user = userEvent.setup();
+    renderTabs({ defaultValue: undefined });
+
+    const engine = screen.getByRole("tab", { name: "Engine" });
+    expect(engine).toHaveAttribute("aria-selected", "false");
+    expect(engine).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("tab", { name: /Navigation/ })).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
+    expect(screen.queryAllByRole("tabpanel")).toHaveLength(0);
+
+    await user.tab();
+    expect(engine).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: /Navigation/ })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("falls back to the first enabled tab for a value that matches none", () => {
+    renderInPanel(
+      <Tabs value="saved-by-an-earlier-release">
+        <TabList aria-label="Pages">
+          <Tab value="a" disabled>
+            First
+          </Tab>
+          <Tab value="b">Second</Tab>
+          <Tab value="c">Third</Tab>
+        </TabList>
+        <TabPanel value="a">A</TabPanel>
+        <TabPanel value="b">B</TabPanel>
+        <TabPanel value="c">C</TabPanel>
+      </Tabs>,
+    );
+
+    expect(screen.getByRole("tab", { name: "Second" })).toHaveAttribute(
+      "tabindex",
+      "0",
+    );
+    expect(screen.getByRole("tab", { name: "First" })).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
+    expect(screen.getByRole("tab", { name: "Third" })).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
+  });
+
+  it("lets a tab's own handlers block the selection and the focus move", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    renderInPanel(
+      <Tabs defaultValue="a" onValueChange={onValueChange}>
+        <TabList aria-label="Pages">
+          <Tab value="a">First</Tab>
+          <Tab
+            value="b"
+            onClick={(event) => {
+              event.preventDefault();
+            }}
+            onKeyDown={(event) => {
+              event.preventDefault();
+            }}
+          >
+            Second
+          </Tab>
+        </TabList>
+        <TabPanel value="a">First panel</TabPanel>
+        <TabPanel value="b">Second panel</TabPanel>
+      </Tabs>,
+    );
+
+    const second = screen.getByRole("tab", { name: "Second" });
+    await user.click(second);
+    expect(second).toHaveAttribute("aria-selected", "false");
+    expect(onValueChange).not.toHaveBeenCalled();
+
+    second.focus();
+    await user.keyboard("{ArrowRight}");
+    expect(second).toHaveFocus();
+  });
+
+  it("keeps ids resolvable for a value holding spaces", () => {
+    const value = "navigation.position source 1";
+    renderInPanel(
+      <Tabs defaultValue={value}>
+        <TabList aria-label="Sources">
+          <Tab value={value}>Position source 1</Tab>
+        </TabList>
+        <TabPanel value={value}>Position panel</TabPanel>
+      </Tabs>,
+    );
+
+    const tab = screen.getByRole("tab", { name: "Position source 1" });
+    // aria-controls and aria-labelledby are space separated lists, so an id
+    // holding a space would silently point at two ids that do not exist.
+    expect(tab.id).not.toMatch(/\s/);
+    const controlled = tab.getAttribute("aria-controls") ?? "";
+    expect(controlled).not.toMatch(/\s/);
+    const tabpanel = screen.getByRole("tabpanel", {
+      name: "Position source 1",
+    });
+    expect(document.getElementById(controlled)).toBe(tabpanel);
+    expect(tabpanel).toHaveAttribute("aria-labelledby", tab.id);
+  });
+
   it("rejects an unnamed list, a blank tab, and parts outside Tabs", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     expect(() =>

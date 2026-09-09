@@ -8,13 +8,17 @@ import {
   useCallback,
   useContext,
   useId,
+  useLayoutEffect,
   useMemo,
+  useRef,
+  useState,
 } from "react";
 
 import { useControllableState } from "../hooks/use-controllable-state.js";
 import { hasAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { composeRef } from "../utils/ref.js";
 import type { Orientation } from "../utils/variants.js";
 
 /** `"automatic"` selects a tab as arrow keys focus it; `"manual"` waits for Enter or Space. */
@@ -121,6 +125,8 @@ export interface TabListProps
 }
 
 const TAB_SELECTOR = '[role="tab"]:not(:disabled)';
+const SELECTED_TAB_SELECTOR =
+  '[role="tab"][aria-selected="true"]:not(:disabled)';
 
 /**
  * Moves focus among the enabled tabs of the list the pressed tab belongs to.
@@ -230,17 +236,52 @@ export function Tab({
   const { activation, baseId, orientation, select, selected } =
     useTabsContext("Tab");
   const isSelected = selected === value;
+  const tabNode = useRef<HTMLButtonElement | null>(null);
+  const [holdsFallbackStop, setHoldsFallbackStop] = useState(false);
+
+  // A selection matching no enabled tab, a saved value from an earlier release
+  // or a value still empty while configuration loads, would otherwise leave
+  // the list without a tab stop and the interface unreachable by keyboard.
+  // The first enabled tab takes the stop instead, as a SegmentedControl option
+  // does. The list is read from the DOM, the way arrow-key movement already
+  // reads it, so its order and disabled state stay authoritative, and it is
+  // read after every commit because a list can gain, lose, or disable a tab
+  // without this tab's own props changing. Writing the same answer back bails
+  // out of rendering, so the update chain the rule below guards against ends
+  // on the first pass.
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
+  useLayoutEffect(() => {
+    const tab = tabNode.current;
+    const list = tab?.closest('[role="tablist"]') ?? null;
+    setHoldsFallbackStop(
+      list !== null &&
+        list.querySelector(SELECTED_TAB_SELECTOR) === null &&
+        list.querySelector(TAB_SELECTOR) === tab,
+    );
+  });
+
+  const setTabNode = useCallback(
+    (tab: HTMLButtonElement) => {
+      tabNode.current = tab;
+      const release = composeRef(ref, tab);
+      return () => {
+        tabNode.current = null;
+        release();
+      };
+    },
+    [ref],
+  );
 
   return (
     <button
       {...props}
-      ref={ref}
+      ref={setTabNode}
       type="button"
       role="tab"
       id={tabId(baseId, value)}
       aria-selected={isSelected}
       aria-controls={panelId(baseId, value)}
-      tabIndex={isSelected ? 0 : -1}
+      tabIndex={isSelected || holdsFallbackStop ? 0 : -1}
       data-snui-tab-value={value}
       className={classNames("snui-tab", className)}
       onClick={(event) => {

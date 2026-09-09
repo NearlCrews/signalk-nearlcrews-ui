@@ -1,6 +1,6 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import {
@@ -102,6 +102,61 @@ describe("Disclosure", () => {
       "aria-expanded",
       "true",
     );
+    // The owner accepted the toggle, so the press still hands focus over.
+    expect(screen.getByRole("region")).toHaveFocus();
+  });
+
+  it("moves no focus once a controlled owner declines the toggle", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+
+    function Owner({ open }: { readonly open: boolean }): React.JSX.Element {
+      return (
+        <PanelRoot>
+          <Disclosure open={open} onOpenChange={onOpenChange}>
+            <DisclosureTrigger>Show reports</DisclosureTrigger>
+            <DisclosurePanel aria-label="Reports">
+              <p>Report body</p>
+            </DisclosurePanel>
+          </Disclosure>
+        </PanelRoot>
+      );
+    }
+
+    const { rerender } = render(<Owner open={false} />);
+    const trigger = screen.getByRole("button", { name: "Show reports" });
+
+    await user.click(trigger);
+    expect(onOpenChange).toHaveBeenCalledWith(true);
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    // The owner opens the panel later for its own reasons, which is a change
+    // the consumer made directly, so it must leave focus where it was.
+    rerender(<Owner open />);
+    const region = screen.getByRole("region", { name: "Reports" });
+    expect(region).toBeVisible();
+    expect(region).not.toHaveFocus();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("forwards a ref to the panel section and still focuses it on open", async () => {
+    const user = userEvent.setup();
+    const panelRef = createRef<HTMLElement>();
+    renderInPanel(
+      <Disclosure>
+        <DisclosureTrigger>Show reports</DisclosureTrigger>
+        <DisclosurePanel ref={panelRef} data-testid="panel">
+          <p>Report body</p>
+        </DisclosurePanel>
+      </Disclosure>,
+    );
+
+    const section = screen.getByTestId("panel");
+    expect(section.tagName).toBe("SECTION");
+    expect(panelRef.current).toBe(section);
+
+    await user.click(screen.getByRole("button", { name: "Show reports" }));
+    expect(section).toHaveFocus();
   });
 
   it("rejects a trigger or panel outside the provider", () => {
@@ -143,5 +198,36 @@ describe("useDisclosure", () => {
     await user.click(trigger);
     expect(screen.getByRole("button", { name: "View details" })).toHaveFocus();
     expect(region).not.toBeVisible();
+  });
+
+  it("ignores setOpen for the state the panel already holds", () => {
+    const onOpenChange = vi.fn();
+    let setOpen: ((open: boolean) => void) | undefined;
+
+    function Drawer(): React.JSX.Element {
+      const disclosure = useDisclosure({ defaultOpen: true, onOpenChange });
+      setOpen = disclosure.setOpen;
+      return (
+        <div>
+          <button type="button" {...disclosure.triggerProps}>
+            Hide details
+          </button>
+          <div {...disclosure.panelProps}>
+            <button type="button">Acknowledge</button>
+          </div>
+        </div>
+      );
+    }
+
+    render(<Drawer />);
+    const acknowledge = screen.getByRole("button", { name: "Acknowledge" });
+    acknowledge.focus();
+
+    act(() => {
+      setOpen?.(true);
+    });
+
+    expect(acknowledge).toHaveFocus();
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 });

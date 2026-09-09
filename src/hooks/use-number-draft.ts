@@ -43,7 +43,8 @@ export interface NumberDraftOptions {
   readonly min?: number | undefined;
   /**
    * Spinner increment passed to the input. In clamp mode committed values
-   * also snap to a multiple of it.
+   * also snap to a multiple of it, counted from `min` where there is one, as
+   * the input's own step constraint counts.
    */
   readonly step?: number | undefined;
 }
@@ -60,12 +61,26 @@ function invalid(reason: NumberDraftInvalidReason): NumberDraftResolution {
   return { status: "invalid", reason };
 }
 
-function snapToStep(value: number, step: number): number {
-  const snapped = Math.round(value / step) * step;
-  // Rounding to the step's own precision removes the binary noise a
-  // multiplication such as 0.1 * 3 leaves behind.
-  const [, fraction = ""] = String(step).split(".");
-  return Number(snapped.toFixed(fraction.length));
+function decimalPlaces(value: number): number {
+  const text = String(value);
+  // Below 1e-6 a number prints in exponential notation, where the digits
+  // after the point are only part of the count and the exponent carries the
+  // rest.
+  const exponentAt = text.indexOf("e");
+  const mantissa = exponentAt === -1 ? text : text.slice(0, exponentAt);
+  const exponent = exponentAt === -1 ? 0 : Number(text.slice(exponentAt + 1));
+  const [, fraction = ""] = mantissa.split(".");
+  // toFixed rejects more than 100 places, and no field offers a step that
+  // fine.
+  return Math.min(100, Math.max(0, fraction.length - exponent));
+}
+
+function snapToStep(value: number, step: number, base: number): number {
+  const snapped = base + Math.round((value - base) / step) * step;
+  // Rounding to the precision the base and the step carry between them
+  // removes the binary noise a multiplication such as 0.1 * 3 leaves behind.
+  const places = Math.max(decimalPlaces(step), decimalPlaces(base));
+  return Number(snapped.toFixed(places));
 }
 
 /**
@@ -104,7 +119,16 @@ export function resolveNumberDraft(
     if (!clamps) return invalid("notAnInteger");
     value = Math.trunc(value);
   }
-  if (clamps && step !== undefined && step > 0) value = snapToStep(value, step);
+  if (clamps && step !== undefined && step > 0) {
+    // HTML measures step validity from a step base, which is `min` when the
+    // input has one. Snapping from anywhere else commits values the input
+    // itself reports as a step mismatch.
+    value = snapToStep(
+      value,
+      step,
+      min !== undefined && Number.isFinite(min) ? min : 0,
+    );
+  }
 
   if (min !== undefined && (exclusiveMin ? value <= min : value < min)) {
     if (!clamps) return invalid("belowMin");

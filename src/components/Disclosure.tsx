@@ -5,8 +5,8 @@ import {
   type RefAttributes,
   useCallback,
   useContext,
-  useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -73,6 +73,13 @@ export function useDisclosure({
       if (next === effectiveOpen) return;
       pendingFocus.current = next;
       commitOpen(next);
+      // A controlling owner may decline the change, which commits nothing and
+      // would leave the latch armed to steal focus at the owner's next open.
+      // The commit this call causes lands before the microtask runs, so an
+      // accepted change has already moved focus by the time the latch drops.
+      queueMicrotask(() => {
+        pendingFocus.current = null;
+      });
     },
     [commitOpen, effectiveOpen],
   );
@@ -81,7 +88,9 @@ export function useDisclosure({
     setOpen(!effectiveOpen);
   }, [effectiveOpen, setOpen]);
 
-  useEffect(() => {
+  // Focus moves in the commit phase so the latch is consumed before the
+  // microtask above drops it.
+  useLayoutEffect(() => {
     if (pendingFocus.current !== effectiveOpen) return;
     pendingFocus.current = null;
     if (effectiveOpen) panelRef.current?.focus();

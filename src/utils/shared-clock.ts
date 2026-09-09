@@ -18,8 +18,8 @@ const clocks = new Map<number, SharedClock>();
 
 /**
  * Subscribes to the clock ticking every `tickMs`, starting it when nothing
- * else reads that cadence and stopping it when the last reader leaves.
- * Returns the unsubscribe.
+ * else reads that cadence and stopping it when the last reader leaves. The
+ * new listener is told the current instant at once. Returns the unsubscribe.
  */
 export function subscribeToClock(tickMs: number, onTick: Tick): () => void {
   let clock = clocks.get(tickMs);
@@ -39,6 +39,11 @@ export function subscribeToClock(tickMs: number, onTick: Tick): () => void {
 
   const { listeners, interval } = clock;
   listeners.add(onTick);
+  // Reading the clock on subscribe keeps a resumed reader current: React tears
+  // the effects of a hidden Activity down and replays them on the way back, so
+  // an age inside a collapsed section would otherwise show the instant from
+  // before the pause until the cadence next fired.
+  onTick(Date.now());
   return () => {
     listeners.delete(onTick);
     if (listeners.size === 0 && clocks.get(tickMs)?.interval === interval) {

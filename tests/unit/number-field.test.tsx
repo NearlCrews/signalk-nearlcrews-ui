@@ -12,7 +12,7 @@ import {
   resolveNumberDraft,
   useNumberDraft,
 } from "../../src/index.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { formOf, panel, renderInPanel } from "../helpers.js";
 
 describe("resolveNumberDraft", () => {
   it.each([
@@ -87,6 +87,67 @@ describe("resolveNumberDraft", () => {
     expect(resolveNumberDraft("0.34", { max: 1, min: 0, step: 0.1 })).toEqual({
       status: "valid",
       value: 0.34,
+    });
+  });
+
+  it("measures the step from min, which is the step base the input uses", () => {
+    // Snapping from zero would leave 4 alone, and the input the hook
+    // configures reports 4 as a step mismatch against min 1 and step 2.
+    expect(resolveNumberDraft("4", { fallback: 1, min: 1, step: 2 })).toEqual({
+      status: "valid",
+      value: 5,
+    });
+    expect(resolveNumberDraft("2.4", { fallback: 1, min: 1, step: 2 })).toEqual(
+      {
+        status: "valid",
+        value: 3,
+      },
+    );
+    expect(resolveNumberDraft("3", { fallback: 1, min: 1, step: 2 })).toEqual({
+      status: "valid",
+      value: 3,
+    });
+    // Without a usable minimum the base stays at zero, which is the base the
+    // input falls back to for a min attribute it cannot read as a number.
+    expect(resolveNumberDraft("4", { fallback: 1, step: 2 })).toEqual({
+      status: "valid",
+      value: 4,
+    });
+    expect(
+      resolveNumberDraft("4", {
+        fallback: 1,
+        min: Number.NEGATIVE_INFINITY,
+        step: 2,
+      }),
+    ).toEqual({ status: "valid", value: 4 });
+  });
+
+  it("keeps a fractional step base free of binary noise", () => {
+    expect(
+      resolveNumberDraft("0.34", { fallback: 0.05, min: 0.05, step: 0.1 }),
+    ).toEqual({ status: "valid", value: 0.35 });
+    expect(
+      resolveNumberDraft("-0.19", { fallback: 0, min: -0.25, step: 0.1 }),
+    ).toEqual({ status: "valid", value: -0.15 });
+  });
+
+  it.each([
+    [0.5, "1.2", 1],
+    [0.5, "1.3", 1.5],
+    [0.1, "0.34", 0.3],
+    [0.25, "7.6", 7.5],
+    // Below 1e-6 a step prints in exponential notation, which a decimal
+    // count read straight off the string would report as no fraction at all.
+    [0.0000001, "0.0000004", 0.0000004],
+    [0.0000001, "0.00000044", 0.0000004],
+    [1e-9, "2.5e-9", 3e-9],
+    [1, "2.6", 3],
+    [1, "12345678901234567", 12345678901234568],
+    [1000, "1400", 1000],
+  ])("snaps to a step of %j across magnitudes", (step, raw, value) => {
+    expect(resolveNumberDraft(raw, { fallback: 0, step })).toEqual({
+      status: "valid",
+      value,
     });
   });
 
@@ -366,6 +427,40 @@ describe("NumberField editing", () => {
     expect(input).not.toHaveAttribute("aria-invalid");
   });
 
+  it("commits a value the input's own step constraint accepts", async () => {
+    const user = userEvent.setup();
+    function Berth(): ReactElement {
+      const [value, setValue] = useState(1);
+      return (
+        <form>
+          <NumberField
+            label="Berth"
+            fallback={1}
+            min={1}
+            max={9}
+            step={2}
+            value={value}
+            onValueChange={setValue}
+          />
+        </form>
+      );
+    }
+    renderInPanel(<Berth />);
+
+    const input = screen.getByRole<HTMLInputElement>("spinbutton", {
+      name: "Berth",
+    });
+    await user.clear(input);
+    await user.type(input, "4");
+    await user.tab();
+
+    // A committed value the browser rejects would raise a native validation
+    // bubble the field never explains.
+    expect(input).toHaveValue(5);
+    expect(input.validity.stepMismatch).toBe(false);
+    expect(formOf(input).checkValidity()).toBe(true);
+  });
+
   it("prefers a custom message and falls back to the field error otherwise", async () => {
     const user = userEvent.setup();
     renderInPanel(
@@ -459,6 +554,38 @@ describe("NumberField inside a retaining CollapsibleSection", () => {
     expect(input).toHaveAttribute("aria-invalid", "true");
     // The reopen reruns effects; validity is not re-announced.
     expect(onValidityChange.mock.calls).toEqual([[false], [true], [false]]);
+  });
+});
+
+describe("NumberField validity reporting on unmount", () => {
+  it("reports nothing when an invalid field leaves the tree", async () => {
+    const user = userEvent.setup();
+    const onValidityChange = vi.fn();
+    function Removable(): ReactElement {
+      const [mounted, setMounted] = useState(true);
+      return (
+        <>
+          {mounted ? <Harness onValidityChange={onValidityChange} /> : null}
+          <button type="button" onClick={() => setMounted(false)}>
+            Remove
+          </button>
+        </>
+      );
+    }
+    renderInPanel(<Removable />);
+
+    const input = screen.getByRole("spinbutton", { name: "Refresh interval" });
+    await user.clear(input);
+    expect(onValidityChange.mock.calls).toEqual([[false]]);
+
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(
+      screen.queryByRole("spinbutton", { name: "Refresh interval" }),
+    ).toBeNull();
+    // A consumer gates its Save button on this map. A valid report from an
+    // unmount would re-enable Save for a field nobody can see or fix, so the
+    // consumer clears its own entry instead.
+    expect(onValidityChange.mock.calls).toEqual([[false]]);
   });
 });
 

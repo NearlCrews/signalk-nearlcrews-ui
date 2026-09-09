@@ -25,12 +25,12 @@ export interface SecretInputProps
   readonly hideLabel?: string | undefined;
   readonly onRevealedChange?: ((revealed: boolean) => void) | undefined;
   readonly revealed?: boolean | undefined;
+  /** Accessible and visible label for the reveal action. */
+  readonly showLabel?: string | undefined;
   /** Content rendered after the input and before the visibility control. */
   readonly trailingContent?: ReactNode | undefined;
   /** Width behavior for the input slot. Defaults to grow. */
   readonly width?: InputGroupControlWidth | undefined;
-  /** Accessible and visible label for the reveal action. */
-  readonly showLabel?: string | undefined;
 }
 
 interface SelectionSnapshot {
@@ -163,7 +163,12 @@ export function SecretInput({
           // normal focus behavior on the button.
           if (selection.focused) event.preventDefault();
         }}
-        onClick={() => {
+        onClick={(event) => {
+          // A press released away from the button never becomes a click and
+          // leaves its snapshot behind. Keyboard activation reports no click
+          // count, so it takes a fresh reading rather than restoring a caret
+          // the user has already abandoned.
+          if (event.detail === 0) selectionRef.current = captureSelection();
           setRevealed(!effectiveRevealed);
         }}
       >
