@@ -125,6 +125,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage && node scripts/check-coverage.mjs",
     "pretest:browser": "npm run build && npm run test:federation:built",
+    "screenshots": "node scripts/capture-screenshots.mjs",
     "test:browser": "playwright test",
     "pretest:browser:update": "npm run build && npm run test:federation:built",
     "test:browser:update": "playwright test --update-snapshots",
