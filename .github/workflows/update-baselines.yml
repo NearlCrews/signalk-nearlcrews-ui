@@ -52,7 +52,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Install browser dependencies
-        run: npx --no-install playwright install --with-deps chromium firefox webkit
+        # `--with-deps` runs apt, and the runner image configures Google's
+        # Chrome repository, which Playwright does not need: it ships its own
+        # browser builds and takes only shared libraries from Ubuntu's archive.
+        # That third-party index has served a corrupt Packages.gz for long
+        # enough to block a release, so drop it before apt reads it.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
+          npx --no-install playwright install --with-deps chromium firefox webkit
       - name: Regenerate baselines
         env:
           SNUI_SNAPSHOT_VARIANT: ${{ matrix.snapshot_variant }}
