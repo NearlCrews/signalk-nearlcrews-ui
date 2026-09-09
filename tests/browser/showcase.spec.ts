@@ -252,7 +252,12 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
 test("audits open overlays and every toast tone with axe", async ({ page }) => {
   test.slow();
   await page.goto("/showcase.html");
-  await page.addStyleTag({ content: "* { transition: none !important; }" });
+  // Transitions and animations both, because the toast entry is a keyframe
+  // animation rather than a transition, and auditing it mid-flight measures
+  // colours composited against what is behind the card.
+  await page.addStyleTag({
+    content: "* { transition: none !important; animation: none !important; }",
+  });
 
   // Dialog with its nested popover open.
   await page.getByRole("button", { name: "Open dialog" }).click();
