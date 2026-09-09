@@ -13,9 +13,10 @@ import { useControllableState } from "../hooks/use-controllable-state.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
-import type { Orientation } from "../utils/variants.js";
+import type { Orientation, Visibility } from "../utils/variants.js";
 
-export type SegmentedControlLabelVisibility = "hidden" | "visible";
+/** Alias of the shared {@link Visibility} vocabulary. */
+export type SegmentedControlLabelVisibility = Visibility;
 /** @deprecated Use {@link SegmentedControlLabelVisibility}. */
 export type SegmentedControlLegendVisibility = SegmentedControlLabelVisibility;
 /** @deprecated Use {@link Orientation}. */
@@ -40,19 +41,11 @@ export interface SegmentedControlOption<Value extends string> {
   readonly value: Value;
 }
 
-export interface SegmentedControlProps<Value extends string>
+interface SegmentedControlBaseProps<Value extends string>
   extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">,
     RefAttributes<HTMLDivElement> {
   readonly defaultValue?: Value | undefined;
   readonly disabled?: boolean | undefined;
-  /**
-   * Accessible name of the group. Either `label` or the deprecated `legend`
-   * is required. The group is a `role="radiogroup"` div, not a fieldset, so
-   * the name is not a `<legend>` element.
-   */
-  readonly label?: ReactNode | undefined;
-  /** @deprecated Use `label`. */
-  readonly legend?: ReactNode | undefined;
   readonly labelVisibility?: SegmentedControlLabelVisibility | undefined;
   /** @deprecated Use `labelVisibility`. */
   readonly legendVisibility?: SegmentedControlLabelVisibility | undefined;
@@ -69,6 +62,29 @@ export interface SegmentedControlProps<Value extends string>
   readonly orientation?: Orientation | undefined;
   readonly value?: Value | undefined;
 }
+
+/**
+ * Accessible name of the group through `label`, or through the deprecated
+ * `legend`. One of the two is required. The group is a `role="radiogroup"`
+ * div, not a fieldset, so the name is not a `<legend>` element.
+ *
+ * Written out rather than composed from `WithLabel`, because `legend` has to
+ * keep its own `@deprecated` tag and a mapped type cannot carry one per key.
+ */
+export type SegmentedControlProps<Value extends string> =
+  SegmentedControlBaseProps<Value> &
+    (
+      | {
+          readonly label: ReactNode;
+          /** @deprecated Use `label`. */
+          readonly legend?: ReactNode | undefined;
+        }
+      | {
+          readonly label?: ReactNode | undefined;
+          /** @deprecated Use `label`. */
+          readonly legend: ReactNode;
+        }
+    );
 
 export function SegmentedControl<Value extends string>({
   className,

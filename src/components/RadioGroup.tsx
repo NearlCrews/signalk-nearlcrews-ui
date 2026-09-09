@@ -17,7 +17,11 @@ import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { resolveFieldError } from "../utils/field-error.js";
-import { hasReactContent, requireContent } from "../utils/react-node.js";
+import {
+  hasReactContent,
+  requireContent,
+  type WithLabel,
+} from "../utils/react-node.js";
 import type { Orientation } from "../utils/variants.js";
 import { FieldError } from "./FieldError.js";
 
@@ -131,16 +135,18 @@ export function RadioGroup({
   );
 }
 
-export interface RadioProps
+interface RadioBaseProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onClick">,
     RefAttributes<HTMLDivElement> {
-  /** Label content. Prefer `label`; children remain supported. */
-  readonly children?: ReactNode | undefined;
   readonly disabled?: boolean | undefined;
-  /** Visible label and accessible name. Either `label` or children is required. */
-  readonly label?: ReactNode | undefined;
   readonly value: string;
 }
+
+/**
+ * Visible label and accessible name through `label`, or through children,
+ * which remain supported. One of the two is required.
+ */
+export type RadioProps = RadioBaseProps & WithLabel<"children">;
 
 export function Radio({
   children,

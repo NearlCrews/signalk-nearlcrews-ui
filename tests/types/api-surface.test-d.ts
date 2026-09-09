@@ -1,7 +1,13 @@
 import type { ComponentProps, ReactElement, ReactNode } from "react";
 import { describe, expectTypeOf, it } from "vitest";
-import type { CheckboxGroupProps, ProgressTone } from "../../src/composites.js";
-import type { DataGridProps } from "../../src/data-grid.js";
+import type {
+  CheckboxGroupProps,
+  ProgressTone,
+  SaveActionBarProps,
+  SaveActionBarStateInput,
+  TableCaptionVisibility,
+} from "../../src/composites.js";
+import type { Column, DataGridProps } from "../../src/data-grid.js";
 import type {
   RadioGroupErrorLive,
   RadioGroupOrientation,
@@ -18,16 +24,20 @@ import type {
   ButtonAsAnchorProps,
   ButtonAsButtonProps,
   CheckboxErrorLive,
+  CheckboxLabelVisibility,
   CheckboxProps,
   FieldControlProps,
   FieldErrorLive,
   FormatRelativeAgeOptions,
+  InlineConfirmProps,
   LabeledFieldChild,
   LabeledFieldControlProps,
   LabeledFieldDensity,
   LabeledFieldProps,
   NumberDraftResolution,
   NumberFieldProps,
+  PanelShellProps,
+  SegmentedControlLabelVisibility,
   SegmentedControlLegendVisibility,
   SegmentedControlOption,
   SegmentedControlOrientation,
@@ -44,14 +54,66 @@ import type {
   UnsupportedBrowserNoticeProps,
 } from "../../src/index.js";
 import { SegmentedControl } from "../../src/index.js";
-import type { DialogProps } from "../../src/overlays.js";
-import type { Density, Orientation } from "../../src/utils/variants.js";
+import type {
+  AlertDialogProps,
+  DialogProps,
+  MenuItemProps,
+  PopoverWidth,
+} from "../../src/overlays.js";
+import type {
+  Density,
+  Orientation,
+  Visibility,
+} from "../../src/utils/variants.js";
 
 /**
  * The public type surface is part of the package contract: these assertions
  * fail when a literal union widens, a required prop goes optional, or a
  * generic stops flowing into the props that consume it.
  */
+describe("controls that accept two naming props", () => {
+  /*
+   * Switch, Radio, and SegmentedControl each throw at render when they carry
+   * no name. Before 0.9.0 the older prop was declared required, so the
+   * unnamed form did not compile; adding `label` beside it must not trade
+   * that guarantee for a crash inside a consumer's panel.
+   */
+  it("accepts either naming prop", () => {
+    const labelled: SwitchProps = { label: "Enabled" };
+    const withChildren: SwitchProps = { children: "Enabled" };
+    const labelledRadio: RadioProps = { label: "One", value: "one" };
+    const radioChildren: RadioProps = { children: "One", value: "one" };
+    const labelledGroup: SegmentedControlProps<"a"> = {
+      label: "View",
+      options: [{ label: "A", value: "a" }],
+    };
+    const legendGroup: SegmentedControlProps<"a"> = {
+      legend: "View",
+      options: [{ label: "A", value: "a" }],
+    };
+    expectTypeOf(labelled).not.toBeNever();
+    expectTypeOf(withChildren).not.toBeNever();
+    expectTypeOf(labelledRadio).not.toBeNever();
+    expectTypeOf(radioChildren).not.toBeNever();
+    expectTypeOf(labelledGroup).not.toBeNever();
+    expectTypeOf(legendGroup).not.toBeNever();
+  });
+
+  it("rejects a control that carries neither", () => {
+    // @ts-expect-error a Switch with no label and no children has no name
+    const unnamedSwitch: SwitchProps = { checked: true };
+    // @ts-expect-error a Radio with no label and no children has no name
+    const unnamedRadio: RadioProps = { value: "one" };
+    // @ts-expect-error a SegmentedControl needs `label` or the deprecated `legend`
+    const unnamedGroup: SegmentedControlProps<"a"> = {
+      options: [{ label: "A", value: "a" }],
+    };
+    expectTypeOf(unnamedSwitch).not.toBeNever();
+    expectTypeOf(unnamedRadio).not.toBeNever();
+    expectTypeOf(unnamedGroup).not.toBeNever();
+  });
+});
+
 describe("segmented control generics", () => {
   type Mode = "minimal" | "normal" | "verbose";
 
@@ -179,6 +241,13 @@ describe("shared vocabularies and their deprecated aliases", () => {
     expectTypeOf<SegmentedControlLegendVisibility>().toEqualTypeOf<
       "hidden" | "visible"
     >();
+  });
+
+  it("types every label and caption visibility with the shared Visibility", () => {
+    expectTypeOf<Visibility>().toEqualTypeOf<"hidden" | "visible">();
+    expectTypeOf<CheckboxLabelVisibility>().toEqualTypeOf<Visibility>();
+    expectTypeOf<SegmentedControlLabelVisibility>().toEqualTypeOf<Visibility>();
+    expectTypeOf<TableCaptionVisibility>().toEqualTypeOf<Visibility>();
   });
 
   it("types announcement props with AnnouncementMode and keeps the aliases", () => {
@@ -397,6 +466,105 @@ describe("data grid accessible name", () => {
     expectTypeOf<Set<ColumnData>>().not.toExtend<
       DataGridProps<unknown, ColumnData>["columns"]
     >();
+  });
+});
+
+describe("data grid header shape", () => {
+  interface ColumnData {
+    readonly id: string;
+  }
+  interface Row {
+    readonly id: string;
+  }
+  type Grid = DataGridProps<Row, ColumnData>;
+  type Required = Pick<Grid, "items" | "renderRow">;
+  type RenderColumn = (column: ColumnData) => ReactElement;
+
+  it("pairs element children with no columns and a render function with columns", () => {
+    expectTypeOf<
+      Required & { children: ReactElement; columns?: undefined }
+    >().toExtend<Grid>();
+    expectTypeOf<
+      Required & { children: RenderColumn; columns: readonly ColumnData[] }
+    >().toExtend<Grid>();
+  });
+
+  it("rejects a render function without columns and columns without one", () => {
+    // A function header with no data renders an empty header at runtime.
+    expectTypeOf<Required & { children: RenderColumn }>().not.toExtend<Grid>();
+    // Element children ignore columns at runtime, so the pairing is refused.
+    expectTypeOf<
+      Required & { children: ReactElement; columns: readonly ColumnData[] }
+    >().not.toExtend<Grid>();
+  });
+
+  it("names the wrapper column props rather than the react-aria ones", () => {
+    // ColumnProps is no longer re-exported: `numeric` and `wrap` live on the
+    // wrapper, and following the X/XProps convention must not lose them.
+    expectTypeOf<ComponentProps<typeof Column>>().toExtend<{
+      numeric?: boolean | undefined;
+      wrap?: boolean | undefined;
+    }>();
+  });
+});
+
+describe("narrowed variant props", () => {
+  it("keeps the always-available escape action out of the danger variant", () => {
+    expectTypeOf<InlineConfirmProps["cancelVariant"]>().toEqualTypeOf<
+      "secondary" | "ghost" | undefined
+    >();
+    expectTypeOf<AlertDialogProps["cancelVariant"]>().toEqualTypeOf<
+      "secondary" | "ghost" | undefined
+    >();
+    expectTypeOf<"danger">().not.toExtend<
+      InlineConfirmProps["cancelVariant"]
+    >();
+    expectTypeOf<"danger">().not.toExtend<AlertDialogProps["cancelVariant"]>();
+  });
+
+  it("types the menu item tone from the shared vocabulary", () => {
+    expectTypeOf<MenuItemProps["tone"]>().toEqualTypeOf<
+      "neutral" | "danger" | undefined
+    >();
+    expectTypeOf<"warning">().not.toExtend<MenuItemProps["tone"]>();
+  });
+
+  it("suggests auto on a popover width without narrowing the set", () => {
+    expectTypeOf<"auto">().toExtend<PopoverWidth>();
+    expectTypeOf<"18rem">().toExtend<PopoverWidth>();
+    expectTypeOf<320>().toExtend<PopoverWidth>();
+    expectTypeOf<boolean>().not.toExtend<PopoverWidth>();
+  });
+});
+
+describe("panel shell error fallback text", () => {
+  it("forwards the boundary strings without colliding with the panel title", () => {
+    expectTypeOf<NonNullable<PanelShellProps["errorLabels"]>>().toEqualTypeOf<{
+      readonly description?: ReactNode | undefined;
+      readonly reloadLabel?: ReactNode | undefined;
+      readonly retryLabel?: ReactNode | undefined;
+      readonly title?: ReactNode | undefined;
+    }>();
+  });
+});
+
+describe("save action bar rules as data", () => {
+  it("takes the component's own props and defaults everything but dirty", () => {
+    // Only `dirty` has no default, exactly as on the component, so the rules
+    // a test exercises need none of the seven default strings retyped.
+    expectTypeOf<{ dirty: boolean }>().toExtend<SaveActionBarStateInput>();
+    expectTypeOf<
+      Pick<
+        SaveActionBarProps,
+        | "dirty"
+        | "invalidMessage"
+        | "labels"
+        | "savedMessage"
+        | "saveRequestedAt"
+        | "saving"
+        | "unconfigured"
+      >
+    >().toEqualTypeOf<SaveActionBarStateInput>();
   });
 });
 

@@ -18,3 +18,18 @@ export function hasReactContent(node: ReactNode): boolean {
     return true;
   });
 }
+
+/**
+ * Requires a control to carry a name at compile time. A component that accepts
+ * `label` beside an older naming prop composes its base props with this, so
+ * omitting both is a type error rather than a render-time throw. `Legacy` is
+ * the older prop, `children` on most controls and `legend` on the ones that
+ * once rendered a fieldset.
+ */
+export type WithLabel<Legacy extends string> =
+  | ({ readonly label: ReactNode } & Partial<
+      Readonly<Record<Legacy, ReactNode | undefined>>
+    >)
+  | ({ readonly label?: ReactNode | undefined } & Readonly<
+      Record<Legacy, ReactNode>
+    >);
