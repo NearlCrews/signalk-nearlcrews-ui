@@ -149,9 +149,16 @@ describe("table and tabs style modules", () => {
   });
 
   it("paints zebra rows with the stripe token and numeric cells with tabular digits", () => {
-    expect(SIMPLE_TABLE_STYLES).toContain("var(--snui-color-surface-stripe)");
+    // Each declaration is tied to its own rule and matched on its own, so
+    // reordering a block that renders identically does not fail the test.
     expect(SIMPLE_TABLE_STYLES).toMatch(
-      /\.snui-table__cell--numeric \{[^}]*font-variant-numeric: tabular-nums;[^}]*text-align: end;/,
+      /\.snui-table--zebra[^{}]*\{[^}]*background: var\(--snui-color-surface-stripe\);/,
+    );
+    expect(SIMPLE_TABLE_STYLES).toMatch(
+      /\.snui-table__cell--numeric \{[^}]*font-variant-numeric: tabular-nums;/,
+    );
+    expect(SIMPLE_TABLE_STYLES).toMatch(
+      /\.snui-table__cell--numeric \{[^}]*text-align: end;/,
     );
   });
 });

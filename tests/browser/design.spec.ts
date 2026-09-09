@@ -22,6 +22,40 @@ function backgroundOf(locator: Locator): Promise<string> {
   );
 }
 
+/**
+ * The color a token resolves to inside the panel, read from a probe so the
+ * comparison is against the theme in force rather than a hard-coded value.
+ */
+function tokenColor(anchor: Locator, token: string): Promise<string> {
+  return anchor.evaluate((element, name) => {
+    const probe = document.createElement("span");
+    probe.style.background = `var(${name})`;
+    element.append(probe);
+    const value = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return value;
+  }, token);
+}
+
+/** Computed values of the system colors the forced-colors rules name. */
+function systemColors(
+  page: Page,
+): Promise<{ canvasText: string; highlight: string }> {
+  return page.evaluate(() => {
+    const probe = document.createElement("span");
+    // Opting the probe out keeps it reporting the system color itself rather
+    // than the substitute the engine paints over an author color.
+    probe.style.forcedColorAdjust = "none";
+    document.body.append(probe);
+    probe.style.color = "CanvasText";
+    const canvasText = getComputedStyle(probe).color;
+    probe.style.color = "Highlight";
+    const highlight = getComputedStyle(probe).color;
+    probe.remove();
+    return { canvasText, highlight };
+  });
+}
+
 /** Resolves a computed border radius (px or %) against the element's width. */
 async function radiusRatio(dot: Locator): Promise<number> {
   return dot.evaluate((element) => {
@@ -113,6 +147,110 @@ test("paints zebra rows that differ from the grid surface in Light and Night", a
     expect(stripe, `${theme} zebra row equals the surface`).not.toBe(surface);
     expect(stripe).not.toBe("rgba(0, 0, 0, 0)");
   }
+});
+
+test("paints table zebra rows and the scroll region focus ring from the tokens", async ({
+  page,
+}) => {
+  await page.goto("/showcase.html");
+  const region = page.getByRole("region", {
+    name: "Signal K paths, scrollable",
+  });
+  const table = page.getByRole("table", { name: "Signal K paths" });
+  const striped = table.locator("tbody tr:nth-child(even) > td").first();
+  const plain = table.locator("tbody tr:nth-child(odd) > td").first();
+
+  for (const theme of ["Light", "Night"] as const) {
+    await selectTheme(page, theme);
+    await expect(striped).toBeVisible();
+    const [stripe, plainFill, stripeToken, surfaceToken] = await Promise.all([
+      backgroundOf(striped),
+      backgroundOf(plain),
+      tokenColor(striped, "--snui-color-surface-stripe"),
+      tokenColor(striped, "--snui-color-surface"),
+    ]);
+    expect(stripe, `${theme} zebra cell misses the stripe token`).toBe(
+      stripeToken,
+    );
+    expect(stripeToken, `${theme} stripe equals the surface`).not.toBe(
+      surfaceToken,
+    );
+    // Only alternate rows take the fill, so the stripe reads as a pattern.
+    expect(plainFill, `${theme} unstriped cell carries a fill`).toBe(
+      "rgba(0, 0, 0, 0)",
+    );
+
+    // The region is a tab stop, so its ring has to survive every theme. Focus
+    // leaves and returns by keyboard because the theme click put the engine in
+    // pointer mode, and Firefox grants :focus-visible only to focus that
+    // keyboard navigation delivered, never to a programmatic call.
+    await region.focus();
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(region).toBeFocused();
+    const [ring, focusToken] = await Promise.all([
+      region.evaluate((element) => {
+        const computed = getComputedStyle(element);
+        return {
+          color: computed.outlineColor,
+          radius: Number.parseFloat(computed.borderTopLeftRadius),
+          style: computed.outlineStyle,
+          width: Number.parseFloat(computed.outlineWidth),
+        };
+      }),
+      tokenColor(region, "--snui-color-focus"),
+    ]);
+    expect(ring.style, `${theme} region ring style`).toBe("solid");
+    expect(ring.width, `${theme} region ring width`).toBeGreaterThanOrEqual(2);
+    expect(ring.color, `${theme} region ring color`).toBe(focusToken);
+    // The module rounds the ring rather than leaving the sharp default.
+    expect(ring.radius, `${theme} region ring radius`).toBeGreaterThan(0);
+  }
+});
+
+test("keeps the selected tab and its focus ring visible under forced colors", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "chromium",
+    "Playwright emulates forced colors in Chromium only.",
+  );
+  await page.goto("/showcase.html");
+  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+
+  const list = page.getByRole("tablist", { name: "Provider detail" });
+  const overview = list.getByRole("tab", { name: "Overview" });
+  const advanced = list.getByRole("tab", { name: "Advanced" });
+  await expect(overview).toHaveAttribute("aria-selected", "true");
+
+  const colors = await systemColors(page);
+  const [selected, unselectedBorder] = await Promise.all([
+    overview.evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        color: computed.borderBottomColor,
+        width: Number.parseFloat(computed.borderBottomWidth),
+      };
+    }),
+    advanced.evaluate((element) => getComputedStyle(element).borderBottomColor),
+  ]);
+  // Forced colors flattens the accent, so the selected bar is redrawn in the
+  // system highlight; an unselected tab must not pick the same mark up.
+  await expect(overview).toHaveCSS("forced-color-adjust", "none");
+  expect(selected.color).toBe(colors.highlight);
+  // A highlight the engine paints nowhere is not a selection mark.
+  expect(selected.width).toBeGreaterThan(0);
+  expect(unselectedBorder).not.toBe(colors.highlight);
+
+  // Arrow keys move the tab stop, so the ring is measured after a real
+  // keyboard interaction rather than a programmatic focus.
+  await overview.focus();
+  await page.keyboard.press("ArrowRight");
+  const sources = list.getByRole("tab", { name: "Sources" });
+  await expect(sources).toBeFocused();
+  await expect(sources).toHaveCSS("outline-style", "solid");
+  await expect(sources).toHaveCSS("outline-width", "2px");
+  await expect(sources).toHaveCSS("outline-color", colors.canvasText);
 });
 
 test("neutralizes the remaining Bootstrap Reboot element rules inside the panel", async ({

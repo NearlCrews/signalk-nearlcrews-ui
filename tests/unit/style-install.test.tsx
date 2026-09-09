@@ -1,4 +1,5 @@
 import { render } from "@testing-library/react";
+import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { PanelRoot } from "../../src/index.js";
@@ -330,5 +331,19 @@ describe("useModuleStyles", () => {
     expect(() =>
       render(<ModuleConsumer module={OVERLAY_STYLES} name="Dialog" />),
     ).toThrow("Dialog must be rendered inside PanelRoot.");
+  });
+
+  it("rejects a nested provider that resolves no portal container", () => {
+    // A host that installs its own portal provider inside the panel would
+    // otherwise install the module sheet against a root it does not own.
+    expect(() =>
+      render(
+        <PanelRoot>
+          <UNSAFE_PortalProvider getContainer={() => null}>
+            <ModuleConsumer module={OVERLAY_STYLES} name="Dialog" />
+          </UNSAFE_PortalProvider>
+        </PanelRoot>,
+      ),
+    ).toThrow("Dialog portal container must be its owning PanelRoot.");
   });
 });

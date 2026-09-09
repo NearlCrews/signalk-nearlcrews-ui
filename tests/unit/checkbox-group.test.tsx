@@ -185,6 +185,23 @@ describe("CheckboxGroup select all", () => {
     }
   });
 
+  it("disables the select-all box when every option is disabled", () => {
+    // A parent toggle that disables the whole group is an ordinary panel
+    // state, and a select-all that looked live there would toggle nothing.
+    renderInPanel(
+      <CheckboxGroup
+        legend="Import layers"
+        selectAllLabel="All layers"
+        options={LAYERS.map((option) => ({ ...option, disabled: true }))}
+      />,
+    );
+
+    const all = screen.getByRole("checkbox", { name: "All layers" });
+    expect(all).toBeDisabled();
+    expect(all).not.toBeChecked();
+    expect(all).not.toBePartiallyChecked();
+  });
+
   it("renders the select-all control in the legend row beside consumer actions", () => {
     const { container } = renderInPanel(
       <CheckboxGroup
@@ -237,9 +254,59 @@ describe("CheckboxGroup empty warning", () => {
     expect(group).not.toHaveAttribute("aria-describedby");
   });
 
+  it("keeps a consumer description beside the warning it adds", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <>
+        <p id="layers-hint">Layers are imported on save.</p>
+        <CheckboxGroup
+          legend="Import layers"
+          aria-describedby="layers-hint"
+          options={LAYERS}
+          defaultValue={["buoys"]}
+          emptyWarning="Nothing will be imported."
+        />
+      </>,
+    );
+
+    const group = screen.getByRole("group", { name: "Import layers" });
+    expect(group).toHaveAttribute("aria-describedby", "layers-hint");
+
+    await user.click(screen.getByRole("checkbox", { name: "Buoys" }));
+    expect(group).toHaveAttribute(
+      "aria-describedby",
+      `layers-hint ${screen.getByRole("status").id}`,
+    );
+  });
+
   it("renders no warning region when none is configured", () => {
     renderInPanel(<CheckboxGroup legend="Import layers" options={LAYERS} />);
 
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+describe("CheckboxGroup option description", () => {
+  it("describes an option with its description", () => {
+    renderInPanel(
+      <CheckboxGroup
+        legend="Import layers"
+        options={[
+          {
+            label: "Depth areas",
+            value: "depth",
+            description: "Contours and soundings.",
+          },
+          { label: "Buoys", value: "buoys" },
+        ]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("checkbox", { name: "Depth areas" }),
+    ).toHaveAccessibleDescription("Contours and soundings.");
+    expect(
+      screen.getByRole("checkbox", { name: "Buoys" }),
+    ).not.toHaveAccessibleDescription();
   });
 });

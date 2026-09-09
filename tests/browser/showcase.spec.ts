@@ -85,6 +85,49 @@ test("keeps tall popover content scrollable inside the visual viewport", async (
   }
 });
 
+test("scrolls a wide table inside its region while the panel stays put", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/showcase.html");
+
+  const region = page.getByRole("region", {
+    name: "Signal K paths, scrollable",
+  });
+  await expect(region).toBeVisible();
+  await expect(region).toHaveCSS("overflow-x", "auto");
+
+  const overflow = await region.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(
+    overflow.scrollWidth,
+    "the fixture table is not wider than its region, so nothing is under test",
+  ).toBeGreaterThan(overflow.clientWidth);
+
+  // The point of the region: the table overflows it, and the panel around it
+  // does not gain a sideways scroll of its own.
+  const pageSizes = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(pageSizes.scrollWidth).toBeLessThanOrEqual(pageSizes.clientWidth);
+
+  // The overflow is reachable by keyboard because the region takes focus and
+  // the arrow keys scroll it both ways.
+  await region.focus();
+  await expect(region).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  await expect
+    .poll(() => region.evaluate((element) => element.scrollLeft))
+    .toBeGreaterThan(1);
+  await page.keyboard.press("ArrowLeft");
+  await expect
+    .poll(() => region.evaluate((element) => element.scrollLeft))
+    .toBeLessThan(1);
+});
+
 test("keeps secret input focus and selection while revealing", async ({
   page,
 }) => {
@@ -235,13 +278,27 @@ test("audits open overlays and every toast tone with axe", async ({ page }) => {
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
 
-  // One toast per tone, all present at once.
-  for (const tone of ["info", "success", "warning", "danger"]) {
-    await page.getByRole("button", { name: `${tone} toast` }).click();
-  }
+  // Every tone, in batches the queue cap holds at once, so axe sees each tone
+  // rendered rather than evicted. Batching also keeps the test off the cap's
+  // exact value, which is the queue's to choose.
   const region = page.getByRole("region", { name: "Notifications" });
-  await expect(region.locator(".snui-toast")).toHaveCount(4);
-  await expectNoAxeViolations(page);
+  const toasts = region.locator(".snui-toast");
+  for (const tones of [
+    ["info", "success"],
+    ["warning", "danger"],
+  ]) {
+    for (const tone of tones) {
+      await page.getByRole("button", { name: `${tone} toast` }).click();
+    }
+    await expect(toasts).toHaveCount(tones.length);
+    await expectNoAxeViolations(page);
+    // Each dismissal is awaited: a toast stays in the DOM while it animates
+    // out, so a second click would otherwise land on the same button.
+    for (let remaining = tones.length; remaining > 0; remaining -= 1) {
+      await region.getByRole("button", { name: "Dismiss" }).first().click();
+      await expect(toasts).toHaveCount(remaining - 1);
+    }
+  }
 });
 
 test("keeps toasts reachable while a dialog is open", async ({ page }) => {

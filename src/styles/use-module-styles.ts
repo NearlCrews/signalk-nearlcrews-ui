@@ -38,6 +38,12 @@ function installModuleStylesForRoot(
   module: StyleModule,
 ): () => void {
   const nonces = installedRootStyleNonces(ownerDocument, PACKAGE_VERSION);
+  // Unreachable through the public API, and deliberately kept. PanelRoot
+  // installs the root sheet in its callback ref, which runs before every
+  // layout effect, and releases it only when that ref detaches at unmount,
+  // while this effect runs only once the owning root has resolved. The guard
+  // survives for a consumer reaching past the package, and for the day one of
+  // those orderings changes.
   if (nonces.length === 0) {
     throw new Error(
       `signalk-nearlcrews-ui ${PACKAGE_VERSION} panel styles are not installed in this document; render inside PanelRoot.`,

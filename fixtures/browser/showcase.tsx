@@ -9,6 +9,7 @@ import {
   Card,
   Checkbox,
   Cluster,
+  Code,
   CollapsibleSection,
   FieldGroup,
   InlineConfirm,
@@ -16,24 +17,40 @@ import {
   InputGroupAddon,
   InputGroupControl,
   LabeledField,
+  LiveRegion,
   Metric,
   MetricGrid,
+  NumberField,
   NumberInput,
   PanelRoot,
   RangeInput,
+  RelativeAge,
   Section,
   SegmentedControl,
   Select,
   Stack,
   StatusIndicator,
+  Text,
   Textarea,
   TextInput,
   ThemeToggle,
+  VisuallyHidden,
 } from "signalk-nearlcrews-ui";
 import {
   Accordion,
+  Disclosure,
+  DisclosurePanel,
+  DisclosureTrigger,
   EmptyState,
   Progress,
+  Tab,
+  TabList,
+  Table,
+  TableCell,
+  TableHeaderCell,
+  TableScrollRegion,
+  TabPanel,
+  Tabs,
 } from "signalk-nearlcrews-ui/composites";
 import {
   Cell,
@@ -89,6 +106,66 @@ const BANNER_COPY: Readonly<Record<(typeof BANNER_TONES)[number], string>> = {
   danger: "The route export failed because the server rejected the write.",
 };
 
+const TEXT_TONES = [
+  "neutral",
+  "muted",
+  "info",
+  "success",
+  "warning",
+  "danger",
+] as const;
+
+interface PathRow {
+  readonly ageMs: number;
+  readonly path: string;
+  readonly source: string;
+  readonly value: string;
+}
+
+const PATH_ROWS: readonly PathRow[] = [
+  {
+    ageMs: 1_000,
+    path: "environment.depth.belowTransducer",
+    source: "Depth sounder",
+    value: "3.1 m",
+  },
+  {
+    ageMs: 12_000,
+    path: "environment.wind.speedApparent",
+    source: "Masthead unit",
+    value: "6.2 m/s",
+  },
+  {
+    ageMs: 45_000,
+    path: "environment.water.temperature",
+    source: "Depth sounder",
+    value: "287.4 K",
+  },
+  {
+    ageMs: 300_000,
+    path: "electrical.batteries.house.stateOfCharge",
+    source: "Battery monitor",
+    value: "0.87",
+  },
+];
+
+/*
+ * Deliberately wider than the panel. The long `updates` line is what makes the
+ * block overflow, and overflow is the only condition under which a scrollable
+ * region that cannot take focus is reported at all. Shortening this line would
+ * leave the audit passing over a block that never scrolls, retiring the
+ * regression it exists to catch without failing anything first.
+ */
+const DELTA_SAMPLE = `{
+  "context": "vessels.urn:mrn:imo:mmsi:234567890",
+  "updates": [
+    { "source": { "label": "N2K", "type": "NMEA2000", "pgn": 128267 }, "timestamp": "2026-09-09T11:04:31.281Z", "values": [{ "path": "environment.depth.belowTransducer", "value": 3.1 }] }
+  ]
+}`;
+
+/** Pinned at load, so the live age counts from one moment for the whole run. */
+const LAST_DELTA_AT = Date.now() - 90_000;
+
 interface Boat {
   readonly id: string;
   readonly name: string;
@@ -123,6 +200,7 @@ function Showcase(): React.JSX.Element {
   });
   const [selectedKeys, setSelectedKeys] = useState<Selection>(new Set<Key>());
   const [units, setUnits] = useState("server");
+  const [depthAlarm, setDepthAlarm] = useState(2.5);
 
   const sortedBoats = useMemo(
     () => [...BOATS].sort((a, b) => compareBoats(a, b, sortDescriptor)),
@@ -288,6 +366,16 @@ function Showcase(): React.JSX.Element {
                 </InputGroup>
               )}
             </LabeledField>
+            <NumberField
+              label="Depth alarm"
+              description="Sounds when the depth falls below this value."
+              value={depthAlarm}
+              onValueChange={setDepthAlarm}
+              min={0.5}
+              max={50}
+              step={0.1}
+              unit="m"
+            />
             <Checkbox label="Enable anchor alarm" defaultChecked />
             <Checkbox label="Share position with the fleet" />
             <Checkbox indeterminate label="Some sensors calibrated" />
@@ -344,6 +432,37 @@ function Showcase(): React.JSX.Element {
               ]}
             />
           </Stack>
+        </Section>
+
+        <Section
+          title="Tabs"
+          description="Selected, unselected, and disabled tabs over their panels."
+        >
+          <Tabs defaultValue="overview">
+            <TabList aria-label="Provider detail">
+              <Tab value="overview">Overview</Tab>
+              <Tab value="sources" badge={<Badge tone="info">3</Badge>}>
+                Sources
+              </Tab>
+              <Tab value="diagnostics" disabled>
+                Diagnostics
+              </Tab>
+              <Tab value="advanced">Advanced</Tab>
+            </TabList>
+            <TabPanel value="overview">
+              The provider reports depth, wind, and water temperature once a
+              second.
+            </TabPanel>
+            <TabPanel value="sources">
+              Three sources claim the depth path; the highest priority wins.
+            </TabPanel>
+            <TabPanel value="diagnostics">
+              Diagnostics stay unavailable until the provider connects.
+            </TabPanel>
+            <TabPanel value="advanced">
+              Advanced options change how often the plugin writes to the server.
+            </TabPanel>
+          </Tabs>
         </Section>
 
         <Section
@@ -404,6 +523,44 @@ function Showcase(): React.JSX.Element {
           </DataGrid>
         </Section>
 
+        <Section
+          title="Table"
+          description="A wide semantic table scrolling inside its own focusable region."
+        >
+          <TableScrollRegion aria-label="Signal K paths, scrollable">
+            <Table
+              caption="Signal K paths"
+              zebra
+              // Wider than the panel at a narrow viewport, so the region
+              // always has overflow for a keyboard user to reach.
+              style={{ minWidth: "48rem" }}
+            >
+              <thead>
+                <tr>
+                  <TableHeaderCell>Path</TableHeaderCell>
+                  <TableHeaderCell>Source</TableHeaderCell>
+                  <TableHeaderCell numeric>Value</TableHeaderCell>
+                  <TableHeaderCell numeric>Age</TableHeaderCell>
+                </tr>
+              </thead>
+              <tbody>
+                {PATH_ROWS.map((row) => (
+                  <tr key={row.path}>
+                    <TableHeaderCell scope="row">
+                      <Code>{row.path}</Code>
+                    </TableHeaderCell>
+                    <TableCell>{row.source}</TableCell>
+                    <TableCell numeric>{row.value}</TableCell>
+                    <TableCell numeric>
+                      <RelativeAge ageMs={row.ageMs} />
+                    </TableCell>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </TableScrollRegion>
+        </Section>
+
         <Section title="Cards">
           <Stack gap={3}>
             <Card
@@ -450,7 +607,7 @@ function Showcase(): React.JSX.Element {
               <MenuItem id="refresh">Refresh data</MenuItem>
               <MenuItem id="columns">Choose columns</MenuItem>
               <MenuSeparator />
-              <MenuItem id="reset" destructive>
+              <MenuItem id="reset" tone="danger">
                 Reset layout
               </MenuItem>
             </Menu>
@@ -490,6 +647,62 @@ function Showcase(): React.JSX.Element {
           </Stack>
         </Section>
 
+        <Section
+          title="Disclosure"
+          description="A trigger that reveals content which is not a section of its own."
+        >
+          <Stack gap={3}>
+            <Disclosure defaultOpen>
+              <DisclosureTrigger variant="secondary">
+                Last delta received
+              </DisclosureTrigger>
+              <DisclosurePanel>
+                <Code block>{DELTA_SAMPLE}</Code>
+              </DisclosurePanel>
+            </Disclosure>
+            <Disclosure>
+              <DisclosureTrigger variant="secondary">
+                Connection log
+              </DisclosureTrigger>
+              <DisclosurePanel>
+                The provider reconnected twice during the last watch.
+              </DisclosurePanel>
+            </Disclosure>
+          </Stack>
+        </Section>
+
+        <Section
+          title="Text and timing"
+          description="Type roles, monospace identifiers, and text only a screen reader reads."
+        >
+          <Stack gap={3}>
+            <Cluster gap={3}>
+              {TEXT_TONES.map((tone) => (
+                <Text key={tone} tone={tone}>
+                  {tone}
+                </Text>
+              ))}
+            </Cluster>
+            <Text as="p" size="sm" tone="muted">
+              Small muted text carries a hint under a control.
+            </Text>
+            <Text as="p" size="xs" tone="muted">
+              Extra small text carries a caption.
+            </Text>
+            <Text as="p">
+              Depth is read from <Code>environment.depth.belowTransducer</Code>{" "}
+              on the primary sounder.
+            </Text>
+            <p style={{ margin: 0 }}>
+              Last delta <RelativeAge since={LAST_DELTA_AT} />
+              <VisuallyHidden> from the primary sounder</VisuallyHidden>
+            </p>
+            <LiveRegion
+              message={`Depth alarm set to ${depthAlarm.toFixed(1)} meters.`}
+            />
+          </Stack>
+        </Section>
+
         <Section title="Empty state">
           <EmptyState
             icon={<span>∅</span>}
@@ -510,7 +723,8 @@ function Showcase(): React.JSX.Element {
                   onClick={() => {
                     toast.enqueue({
                       title: `${tone} toast`,
-                      // Sticky, so an audit can inspect every tone at once.
+                      // Sticky, so an audit inspects the tone rather than
+                      // racing its timeout.
                       duration: 0,
                       description: "Enqueued from the showcase.",
                       tone,
