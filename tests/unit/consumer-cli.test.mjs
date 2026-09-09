@@ -28,21 +28,35 @@ const { cjs: FEDERATION_ENTRY, shared } = renderFederationEntry(
   manifest.version,
 );
 
+/** A plain npm package name, the only shape this fixture will write. */
+const PLAIN_PACKAGE_NAME =
+  /^@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?$/;
+/** A plain semantic version, the only shape this fixture will write. */
+const PLAIN_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+$/;
+
 /*
- * The share registrations Webpack 5 minifies into a remote entry. Every value
- * interpolated into this source goes through JSON.stringify, which is what
- * makes it a literal rather than more code, even though these particular
- * values come from the package manifest.
+ * These values become JavaScript source, so each is checked against the shape
+ * it is meant to have before it is written rather than escaped afterwards.
+ * They come from this package's own manifest today, and the guard is what
+ * keeps that true if the manifest ever carries something stranger.
  */
+function literal(value, shape, what) {
+  if (typeof value !== "string" || !shape.test(value)) {
+    throw new Error(`Refusing to write ${what} ${String(value)} into source.`);
+  }
+  return `"${value}"`;
+}
+
+/** The share registrations Webpack 5 minifies into a remote entry. */
 const REMOTE_ENTRY = `var l={${Object.entries(shared)
   .map(
     ([name, share], index) =>
-      `${String(90 + index)}:()=>s("default",${JSON.stringify(name)},!1,${encodeRequiredVersion(share.requiredVersion)})`,
+      `${String(90 + index)}:()=>s("default",${literal(name, PLAIN_PACKAGE_NAME, "share name")},!1,${encodeRequiredVersion(share.requiredVersion)})`,
   )
   .join(",")}};`;
 
 /** The chunk the library lands in, carrying the PanelRoot version stamp. */
-const CHUNK = `jsx("div",{"data-snui-root":"","data-snui-version":${JSON.stringify(manifest.version)}});`;
+const CHUNK = `jsx("div",{"data-snui-root":"","data-snui-version":${literal(manifest.version, PLAIN_VERSION, "version")}});`;
 
 const REMOTE_GZIP_BYTES = gzipBytesOf([
   Buffer.from(REMOTE_ENTRY),
@@ -51,8 +65,8 @@ const REMOTE_GZIP_BYTES = gzipBytesOf([
 
 /** A configuration whose ModuleFederationPlugin shares the published map. */
 function pluginConfig(source) {
-  const entry = JSON.stringify(`${manifest.name}/federation`);
-  return `const { shared } = require(${entry});\nmodule.exports = ${source};\n`;
+  const entry = literal(manifest.name, PLAIN_PACKAGE_NAME, "package name");
+  return `const { shared } = require(${entry.slice(0, -1)}/federation");\nmodule.exports = ${source};\n`;
 }
 
 const workspaces = [];
