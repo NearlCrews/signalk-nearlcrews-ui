@@ -28,16 +28,21 @@ const { cjs: FEDERATION_ENTRY, shared } = renderFederationEntry(
   manifest.version,
 );
 
-/** The share registrations Webpack 5 minifies into a remote entry. */
+/*
+ * The share registrations Webpack 5 minifies into a remote entry. Every value
+ * interpolated into this source goes through JSON.stringify, which is what
+ * makes it a literal rather than more code, even though these particular
+ * values come from the package manifest.
+ */
 const REMOTE_ENTRY = `var l={${Object.entries(shared)
   .map(
     ([name, share], index) =>
-      `${String(90 + index)}:()=>s("default","${name}",!1,${encodeRequiredVersion(share.requiredVersion)})`,
+      `${String(90 + index)}:()=>s("default",${JSON.stringify(name)},!1,${encodeRequiredVersion(share.requiredVersion)})`,
   )
   .join(",")}};`;
 
 /** The chunk the library lands in, carrying the PanelRoot version stamp. */
-const CHUNK = `jsx("div",{"data-snui-root":"","data-snui-version":"${manifest.version}"});`;
+const CHUNK = `jsx("div",{"data-snui-root":"","data-snui-version":${JSON.stringify(manifest.version)}});`;
 
 const REMOTE_GZIP_BYTES = gzipBytesOf([
   Buffer.from(REMOTE_ENTRY),
@@ -46,7 +51,8 @@ const REMOTE_GZIP_BYTES = gzipBytesOf([
 
 /** A configuration whose ModuleFederationPlugin shares the published map. */
 function pluginConfig(source) {
-  return `const { shared } = require("${manifest.name}/federation");\nmodule.exports = ${source};\n`;
+  const entry = JSON.stringify(`${manifest.name}/federation`);
+  return `const { shared } = require(${entry});\nmodule.exports = ${source};\n`;
 }
 
 const workspaces = [];
