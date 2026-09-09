@@ -32,6 +32,27 @@ export interface AxeOptions {
  * composited against whatever is behind it, not the ones the tokens set, and
  * reports a contrast failure that does not exist once the paint settles.
  */
+/**
+ * Reads `scrollLeft` once it stops moving.
+ *
+ * A scroll started by a key press takes time to come to rest, and a second
+ * key sent while it is still running is swallowed, so a test that presses
+ * twice in a row sees the region refuse to move rather than the engine
+ * coalescing the two.
+ */
+export async function settledScrollLeft(region: Locator): Promise<number> {
+  let previous = Number.NaN;
+  await expect
+    .poll(async () => {
+      const current = await region.evaluate((element) => element.scrollLeft);
+      const settled = current > 1 && current === previous;
+      previous = current;
+      return settled;
+    })
+    .toBe(true);
+  return previous;
+}
+
 export async function settleAnimations(page: Page): Promise<void> {
   await page.evaluate(async () => {
     const finishing = document

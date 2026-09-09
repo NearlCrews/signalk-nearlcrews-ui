@@ -2,6 +2,7 @@ import {
   expect,
   expectNoAxeViolations,
   settleAnimations,
+  settledScrollLeft,
   test,
 } from "./fixtures.js";
 
@@ -124,10 +125,10 @@ test("scrolls a wide table inside its region while the panel stays put", async (
   await region.focus();
   await expect(region).toBeFocused();
   await page.keyboard.press("ArrowRight");
-  await expect
-    .poll(() => region.evaluate((element) => element.scrollLeft))
-    .toBeGreaterThan(1);
-  const scrolledRight = await region.evaluate((element) => element.scrollLeft);
+  // Read it once it stops moving: a key sent while the previous scroll is
+  // still running is swallowed, which reads as the region refusing to scroll
+  // back rather than as two presses being coalesced.
+  const scrolledRight = await settledScrollLeft(region);
   await page.keyboard.press("ArrowLeft");
   // Back by a step rather than to exactly zero: the step is the engine's own,
   // so a press that had already reached the end does not return in one.
