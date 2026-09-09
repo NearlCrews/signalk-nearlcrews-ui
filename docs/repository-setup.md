@@ -7,7 +7,7 @@ This checklist records the external settings that cannot be enforced by files in
 - Keep the repository public with `main` as the default branch.
 - Enable issues and discussions. Disable the wiki and projects unless either gains an active maintainer.
 - Allow squash and rebase merges, delete merged branches, and disable merge commits.
-- Apply the repository topics listed in `package.json` where GitHub supports them.
+- Apply repository topics matching the `keywords` in `package.json` where GitHub supports them.
 - Retain dependency, npm, and GitHub Actions labels for automated updates.
 
 Restrict GitHub Actions to GitHub-owned actions, require full commit SHA pins, and give the default workflow token read-only permissions. Workflows must not approve pull requests. Third-party tools the workflows need (actionlint, zizmor, and lychee) are therefore not run as actions: each workflow downloads a pinned release archive with `curl`, verifies its SHA-256, and runs the binary. A workflow that uses a third-party action under this policy never starts, and the failure is visible only in the Actions run list.

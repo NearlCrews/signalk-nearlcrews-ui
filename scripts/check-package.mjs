@@ -131,9 +131,11 @@ try {
   // is what the `default` conditions and the CommonJS federation entry exist
   // for: without a `default` condition the CommonJS resolution fails outright
   // and attw reports it. The one rule ignored is "cjs-resolves-to-esm", which
-  // predates require(esm): every Node line in `engines` (22.12 and newer)
-  // loads an ES module through `require`, so a CommonJS consumer reaching the
-  // ESM entries is the supported path, not the hazard that rule describes.
+  // predates require(esm). `engines.node` is ">=22", the floor Signal K server
+  // itself declares, and `require` of an ES module is unflagged from 22.12,
+  // which is the floor the docs give for the CommonJS path. So a CommonJS
+  // consumer reaching the ESM entries is the supported path there, not the
+  // hazard that rule describes.
   execFileSync(
     process.execPath,
     [

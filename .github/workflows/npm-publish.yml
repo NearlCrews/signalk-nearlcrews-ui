@@ -204,4 +204,6 @@ jobs:
         env:
           DIST_TAG: ${{ needs.verify.outputs.dist-tag }}
           TARBALL: ${{ steps.package.outputs.tarball }}
-        run: npm publish "$TARBALL" --access public --tag "$DIST_TAG"
+        # Matches the dry run above. Publishing a tarball runs no lifecycle
+        # scripts either way; the flag states that rather than relying on it.
+        run: npm publish "$TARBALL" --ignore-scripts --access public --tag "$DIST_TAG"

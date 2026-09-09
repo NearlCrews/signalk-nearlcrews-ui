@@ -161,7 +161,7 @@ export declare function CollapsibleSection({ actions, "aria-labelledby": ariaLab
 import { type AriaAttributes, type CSSProperties, type ReactElement, type ReactNode, type RefAttributes } from "react";
 import { Cell, type ColumnProps, type Key, Row, type RowProps, type Selection, type SortDescriptor } from "react-aria-components";
 import type { Density } from "../utils/variants.js";
-export type { CellProps, ColumnProps, Key, RowProps, Selection, SortDescriptor, SortDirection, } from "react-aria-components";
+export type { CellProps, Key, RowProps, Selection, SortDescriptor, SortDirection, } from "react-aria-components";
 export { Cell, Row };
 /** @deprecated Use `Density` from the package root; the values are the same. */
 export type DataGridDensity = Density;
@@ -184,17 +184,10 @@ export interface DataGridColumnProps extends ColumnProps, RefAttributes<HTMLDivE
  * DataGrid applies to the header cell and to every body cell in the column.
  */
 export declare function Column({ numeric, wrap, ...props }: DataGridColumnProps): React.JSX.Element;
-export interface DataGridProps<TRow, TColumn = unknown> extends RefAttributes<HTMLDivElement> {
+interface DataGridBaseProps<TRow> extends RefAttributes<HTMLDivElement> {
     readonly "aria-label"?: AriaAttributes["aria-label"] | undefined;
     readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"] | undefined;
-    /**
-     * Header columns as <Column> elements, or a render function when `columns`
-     * provides the column data (the RAC dynamic collection shape).
-     */
-    readonly children: ReactNode | ((column: TColumn) => ReactElement);
     readonly className?: string | undefined;
-    /** Replay-safe column data for a dynamic header; pairs with function children. */
-    readonly columns?: readonly TColumn[] | undefined;
     readonly defaultSelectedKeys?: "all" | Iterable<Key> | undefined;
     readonly density?: Density | undefined;
     /**
@@ -234,6 +227,23 @@ export interface DataGridProps<TRow, TColumn = unknown> extends RefAttributes<HT
     /** Paints alternating row backgrounds. Off by default. */
     readonly zebra?: boolean | undefined;
 }
+/**
+ * The header is written one of two ways, and the runtime honors exactly one.
+ * Static children are `<Column>` elements and take no `columns`; a render
+ * function is the React Aria dynamic collection shape and needs the `columns`
+ * data it renders, because the grid feeds that array to the header and has no
+ * other source for the column list.
+ */
+export type DataGridProps<TRow, TColumn = unknown> = DataGridBaseProps<TRow> & ({
+    /** Header columns as `<Column>` elements. */
+    readonly children: ReactNode;
+    readonly columns?: undefined;
+} | {
+    /** Renders one header column from its entry in `columns`. */
+    readonly children: (column: TColumn) => ReactElement;
+    /** Replay-safe column data for the dynamic header. */
+    readonly columns: readonly TColumn[];
+});
 /**
  * A virtualized, sortable, selectable grid over React Aria's Table. Requires
  * a PanelRoot ancestor, which supplies the scoped styles the grid installs.
@@ -285,8 +295,11 @@ export interface AlertDialogProps extends DialogProps {
     readonly actions?: DialogActions | undefined;
     /** Required label for the always-enabled escape action. */
     readonly cancelLabel: ReactNode;
-    /** Defaults to secondary. */
-    readonly cancelVariant?: ButtonVariant | undefined;
+    /**
+     * Defaults to secondary. The escape action is always available, so it never
+     * paints as danger.
+     */
+    readonly cancelVariant?: Extract<ButtonVariant, "secondary" | "ghost"> | undefined;
 }
 export declare function Dialog(props: DialogProps): React.JSX.Element;
 /**
@@ -396,7 +409,8 @@ export type InlineConfirmCancelReason = "cancel" | "escape";
 export interface InlineConfirmProps extends Omit<HTMLAttributes<HTMLElement>, "children" | "onCancel" | "title">, RefAttributes<HTMLElement> {
     readonly busy?: boolean | undefined;
     readonly cancelLabel?: ReactNode | undefined;
-    readonly cancelVariant?: ButtonVariant | undefined;
+    /** The escape action is always available, so it never paints as danger. */
+    readonly cancelVariant?: Extract<ButtonVariant, "secondary" | "ghost"> | undefined;
     readonly confirmLabel?: ReactNode | undefined;
     readonly confirmVariant?: Extract<ButtonVariant, "primary" | "danger"> | undefined;
     /** Sets the initial state only. Pass `open` to control the confirmation. */
@@ -637,6 +651,7 @@ export declare function LiveRegion({ as, className, live, message, role: supplie
 
 === components/Menu.d.ts ===
 import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
+import type { StatusTone } from "../utils/tone.js";
 import { type ButtonSize, type ButtonVariant } from "./Button.js";
 import { type OverlayOpenState, type OverlayPlacement } from "./overlay-placement.js";
 /**
@@ -672,10 +687,15 @@ export interface MenuProps extends OverlayOpenState, MenuElementAttributes<HTMLD
  * `triggerVariant`.
  */
 export declare function Menu({ children, className, defaultOpen, label, onAction, onOpenChange, open, placement, ref, triggerSize, triggerVariant, ...props }: MenuProps): React.JSX.Element;
+/**
+ * The tones a menu item paints. An item is either ordinary or destructive,
+ * so the shared status vocabulary narrows to those two here.
+ */
+export type MenuItemTone = Extract<StatusTone, "neutral" | "danger">;
 export interface MenuItemProps extends MenuElementAttributes<HTMLDivElement>, RefAttributes<HTMLDivElement> {
     readonly children: ReactNode;
     readonly className?: string | undefined;
-    /** Danger-tone styling for irreversible or destructive actions. */
+    /** @deprecated Use `tone="danger"`. */
     readonly destructive?: boolean | undefined;
     readonly disabled?: boolean | undefined;
     /** Collection key reported to `onAction`; not a DOM id. */
@@ -686,8 +706,14 @@ export interface MenuItemProps extends MenuElementAttributes<HTMLDivElement>, Re
      * from a component's own rendering, or an icon-only item, need it set.
      */
     readonly textValue?: string | undefined;
+    /**
+     * `"danger"` marks an irreversible or destructive action. When set it
+     * decides on its own, so the deprecated `destructive` counts only while
+     * this prop is omitted.
+     */
+    readonly tone?: MenuItemTone | undefined;
 }
-export declare function MenuItem({ children, className, destructive, disabled, id, ref, textValue, ...props }: MenuItemProps): React.JSX.Element;
+export declare function MenuItem({ children, className, destructive, disabled, id, ref, textValue, tone, ...props }: MenuItemProps): React.JSX.Element;
 export interface MenuSeparatorProps extends MenuElementAttributes<HTMLElement>, RefAttributes<HTMLElement> {
     readonly className?: string | undefined;
 }
@@ -817,12 +843,19 @@ import { type ThemeToggleProps } from "./ThemeToggle.js";
  * or nowhere. Either placement aligns it to the trailing edge.
  */
 export type PanelShellThemeToggle = "end" | "between" | "none";
+/**
+ * Text of the default error fallback, for a panel that ships in another
+ * language. `title` and `description` here name the fallback, not the panel.
+ */
+export type PanelShellErrorLabels = Pick<PanelErrorBoundaryProps, "description" | "reloadLabel" | "retryLabel" | "title">;
 export interface PanelShellProps extends Omit<PanelRootProps, "children" | "onError" | "title"> {
     readonly children: ReactNode;
     /** Shown under the title. */
     readonly description?: ReactNode | undefined;
     /** Replaces the default error fallback; see `PanelErrorBoundary`. */
-    readonly errorFallback?: PanelErrorBoundaryProps["fallback"];
+    readonly errorFallback?: PanelErrorBoundaryProps["fallback"] | undefined;
+    /** Text of the default error fallback; ignored when `errorFallback` is set. */
+    readonly errorLabels?: PanelShellErrorLabels | undefined;
     /** Gap of the outer Stack, default 4. */
     readonly gap?: SpaceScale | undefined;
     /**
@@ -832,8 +865,8 @@ export interface PanelShellProps extends Omit<PanelRootProps, "children" | "onEr
      */
     readonly headingLevel?: HeadingLevel | undefined;
     /** Called for every error the boundary catches; replaces the div's native `onError`. */
-    readonly onError?: PanelErrorBoundaryProps["onError"];
-    readonly onReload?: PanelErrorBoundaryProps["onReload"];
+    readonly onError?: PanelErrorBoundaryProps["onError"] | undefined;
+    readonly onReload?: PanelErrorBoundaryProps["onReload"] | undefined;
     readonly themeToggle?: PanelShellThemeToggle | undefined;
     readonly themeToggleProps?: ThemeToggleProps | undefined;
     readonly title?: ReactNode | undefined;
@@ -845,7 +878,7 @@ export interface PanelShellProps extends Omit<PanelRootProps, "children" | "onEr
  * preflight and its notice, `PanelRoot`, an outer `Stack`, an optional title,
  * the theme toggle, and an error boundary around the consumer's content.
  */
-export declare function PanelShell({ children, className, description, errorFallback, gap, headingLevel, onError, onReload, themeToggle, themeToggleProps, title, unsupported, ...rootProps }: PanelShellProps): React.JSX.Element;
+export declare function PanelShell({ children, className, description, errorFallback, errorLabels, gap, headingLevel, onError, onReload, themeToggle, themeToggleProps, title, unsupported, ...rootProps }: PanelShellProps): React.JSX.Element;
 
 === components/Popover.d.ts ===
 import type { ReactElement, ReactNode, RefAttributes } from "react";
@@ -870,8 +903,11 @@ export interface PopoverProps extends RefAttributes<HTMLDivElement>, OverlayOpen
 /**
  * A CSS length string, or `"auto"` to size to the content. Numbers are
  * accepted as pixels for compatibility and are deprecated.
+ *
+ * `"auto"` is spelled out so an editor suggests it; `string & {}` keeps every
+ * other length accepted, which a bare `"auto" | string` would collapse away.
  */
-export type PopoverWidth = string | number;
+export type PopoverWidth = "auto" | (string & {}) | number;
 export declare function Popover({ children, className, defaultOpen, onOpenChange, open, placement, ref, trigger, width, }: PopoverProps): React.JSX.Element;
 
 === components/Progress.d.ts ===
@@ -897,6 +933,7 @@ export declare function Progress({ className, label, max, min, ref, tone, value,
 === components/RadioGroup.d.ts ===
 import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
 import type { AnnouncementMode } from "../utils/announcement.js";
+import { type WithLabel } from "../utils/react-node.js";
 import type { Orientation } from "../utils/variants.js";
 /** @deprecated Use {@link Orientation}. */
 export type RadioGroupOrientation = Orientation;
@@ -923,15 +960,17 @@ export interface RadioGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, "c
     readonly value?: string | undefined;
 }
 export declare function RadioGroup({ "aria-describedby": ariaDescribedBy, children, className, defaultValue, description, disabled, error, errorLive, label, name, onChange, onValueChange, orientation, ref, value, ...props }: RadioGroupProps): React.JSX.Element;
-export interface RadioProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onClick">, RefAttributes<HTMLDivElement> {
-    /** Label content. Prefer `label`; children remain supported. */
-    readonly children?: ReactNode | undefined;
+interface RadioBaseProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onClick">, RefAttributes<HTMLDivElement> {
     readonly disabled?: boolean | undefined;
-    /** Visible label and accessible name. Either `label` or children is required. */
-    readonly label?: ReactNode | undefined;
     readonly value: string;
 }
+/**
+ * Visible label and accessible name through `label`, or through children,
+ * which remain supported. One of the two is required.
+ */
+export type RadioProps = RadioBaseProps & WithLabel<"children">;
 export declare function Radio({ children, className, disabled, label, ref, value, ...props }: RadioProps): React.JSX.Element;
+export {};
 
 === components/RelativeAge.d.ts ===
 import { type HTMLAttributes, type RefAttributes } from "react";
@@ -980,8 +1019,9 @@ export interface SaveActionBarProps extends Omit<ActionBarProps, "actions" | "st
     readonly dirty: boolean;
     /**
      * A validation message that blocks saving, or nothing when the form is
-     * valid. It becomes the status text and is not announced again, because the
-     * field that failed already announced it.
+     * valid. It becomes the status text and is announced like every other
+     * state, because the reason saving is blocked is the one thing the bar has
+     * to say.
      */
     readonly invalidMessage?: string | null | undefined;
     readonly labels?: Partial<SaveActionBarLabels> | undefined;
@@ -1000,27 +1040,42 @@ export interface SaveActionBarProps extends Omit<ActionBarProps, "actions" | "st
 }
 export interface SaveActionBarState {
     readonly discardDisabled: boolean;
+    /**
+     * Always polite: the status keeps one role across every state, and only its
+     * text changes. Attaching the role in the same render that writes the text
+     * is the pattern this package avoids everywhere else, because a live region
+     * created together with its message is not announced reliably.
+     */
     readonly live: AnnouncementMode;
     readonly message: string;
     readonly saveDisabled: boolean;
     readonly tone: StatusTone;
 }
-interface SaveActionBarStateInput {
+/**
+ * The state inputs of {@link resolveSaveActionBarState}: the same values
+ * `SaveActionBar` takes, with the same defaults, so a test of the rules reads
+ * like the props the panel passes.
+ */
+export interface SaveActionBarStateInput {
     readonly dirty: boolean;
-    readonly invalidMessage: string | null | undefined;
-    readonly labels: SaveActionBarLabels;
-    readonly savedMessage: string;
-    readonly saveRequestedAt: number | null | undefined;
-    readonly saving: boolean;
-    readonly unconfigured: boolean;
+    readonly invalidMessage?: string | null | undefined;
+    readonly labels?: Partial<SaveActionBarLabels> | undefined;
+    readonly saveRequestedAt?: number | null | undefined;
+    /** Defaults to the component's own "Save requested". */
+    readonly savedMessage?: string | undefined;
+    readonly saving?: boolean | undefined;
+    readonly unconfigured?: boolean | undefined;
 }
 /**
  * The save rules shared by every configuration panel, as data so a consumer
  * can test them without rendering. Save is enabled while there is something
  * to save: edits, or a plugin that has never been configured. Invalid input
  * and an in-flight save block it.
+ *
+ * Every string falls back to the component's own default, so the rules a test
+ * exercises are the rules the rendered bar runs.
  */
-export declare function resolveSaveActionBarState({ dirty, invalidMessage, labels, savedMessage, saveRequestedAt, saving, unconfigured, }: SaveActionBarStateInput): SaveActionBarState;
+export declare function resolveSaveActionBarState({ dirty, invalidMessage, labels: labelOverrides, savedMessage, saveRequestedAt, saving, unconfigured, }: SaveActionBarStateInput): SaveActionBarState;
 /**
  * The Save and Discard footer of a configuration panel with its status line.
  * After either action, focus moves to the status, because the button that was
@@ -1028,7 +1083,6 @@ export declare function resolveSaveActionBarState({ dirty, invalidMessage, label
  * State stays with the consumer; this component owns presentation and focus.
  */
 export declare function SaveActionBar({ dirty, invalidMessage, labels: labelOverrides, onDiscard, onSave, saveRequestedAt, savedMessage, saving, sticky, unconfigured, ...props }: SaveActionBarProps): React.JSX.Element;
-export {};
 
 === components/SecretInput.d.ts ===
 import { type ReactNode, type RefAttributes } from "react";
@@ -1040,12 +1094,12 @@ export interface SecretInputProps extends Omit<TextInputProps, "type">, RefAttri
     readonly hideLabel?: string | undefined;
     readonly onRevealedChange?: ((revealed: boolean) => void) | undefined;
     readonly revealed?: boolean | undefined;
+    /** Accessible and visible label for the reveal action. */
+    readonly showLabel?: string | undefined;
     /** Content rendered after the input and before the visibility control. */
     readonly trailingContent?: ReactNode | undefined;
     /** Width behavior for the input slot. Defaults to grow. */
     readonly width?: InputGroupControlWidth | undefined;
-    /** Accessible and visible label for the reveal action. */
-    readonly showLabel?: string | undefined;
 }
 export declare function SecretInput({ autoCapitalize, autoComplete, autoCorrect, defaultRevealed, disabled, hideLabel, id, onRevealedChange, ref, revealed, showLabel, spellCheck, trailingContent, width, ...props }: SecretInputProps): React.JSX.Element;
 
@@ -1064,8 +1118,9 @@ export declare function Section({ actions, "aria-labelledby": ariaLabelledBy, ch
 
 === components/SegmentedControl.d.ts ===
 import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
-import type { Orientation } from "../utils/variants.js";
-export type SegmentedControlLabelVisibility = "hidden" | "visible";
+import type { Orientation, Visibility } from "../utils/variants.js";
+/** Alias of the shared {@link Visibility} vocabulary. */
+export type SegmentedControlLabelVisibility = Visibility;
 /** @deprecated Use {@link SegmentedControlLabelVisibility}. */
 export type SegmentedControlLegendVisibility = SegmentedControlLabelVisibility;
 /** @deprecated Use {@link Orientation}. */
@@ -1075,17 +1130,9 @@ export interface SegmentedControlOption<Value extends string> {
     readonly label: ReactNode;
     readonly value: Value;
 }
-export interface SegmentedControlProps<Value extends string> extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">, RefAttributes<HTMLDivElement> {
+interface SegmentedControlBaseProps<Value extends string> extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">, RefAttributes<HTMLDivElement> {
     readonly defaultValue?: Value | undefined;
     readonly disabled?: boolean | undefined;
-    /**
-     * Accessible name of the group. Either `label` or the deprecated `legend`
-     * is required. The group is a `role="radiogroup"` div, not a fieldset, so
-     * the name is not a `<legend>` element.
-     */
-    readonly label?: ReactNode | undefined;
-    /** @deprecated Use `label`. */
-    readonly legend?: ReactNode | undefined;
     readonly labelVisibility?: SegmentedControlLabelVisibility | undefined;
     /** @deprecated Use `labelVisibility`. */
     readonly legendVisibility?: SegmentedControlLabelVisibility | undefined;
@@ -1102,7 +1149,25 @@ export interface SegmentedControlProps<Value extends string> extends Omit<HTMLAt
     readonly orientation?: Orientation | undefined;
     readonly value?: Value | undefined;
 }
+/**
+ * Accessible name of the group through `label`, or through the deprecated
+ * `legend`. One of the two is required. The group is a `role="radiogroup"`
+ * div, not a fieldset, so the name is not a `<legend>` element.
+ *
+ * Written out rather than composed from `WithLabel`, because `legend` has to
+ * keep its own `@deprecated` tag and a mapped type cannot carry one per key.
+ */
+export type SegmentedControlProps<Value extends string> = SegmentedControlBaseProps<Value> & ({
+    readonly label: ReactNode;
+    /** @deprecated Use `label`. */
+    readonly legend?: ReactNode | undefined;
+} | {
+    readonly label?: ReactNode | undefined;
+    /** @deprecated Use `label`. */
+    readonly legend: ReactNode;
+});
 export declare function SegmentedControl<Value extends string>({ className, defaultValue, disabled, label, labelVisibility, legend, legendVisibility, name, onChange, onValueChange, options, orientation, ref, value, "aria-labelledby": ariaLabelledBy, ...props }: SegmentedControlProps<Value>): React.JSX.Element;
+export {};
 
 === components/StatusIndicator.d.ts ===
 import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
@@ -1129,21 +1194,18 @@ export interface StatusIndicatorProps extends HTMLAttributes<HTMLSpanElement>, R
 export declare function StatusIndicator({ children, className, live, ref, role: suppliedRole, size, tone, toneLabel, ...props }: StatusIndicatorProps): React.JSX.Element;
 
 === components/Switch.d.ts ===
-import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
-export interface SwitchProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange" | "onClick">, RefAttributes<HTMLDivElement> {
+import type { HTMLAttributes, RefAttributes } from "react";
+import { type WithLabel } from "../utils/react-node.js";
+interface SwitchBaseProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange" | "onClick">, RefAttributes<HTMLDivElement> {
     /**
      * Mirrors the Checkbox naming: maps to react-aria's isSelected, and
      * defaultChecked maps to defaultSelected.
      */
     readonly checked?: boolean | undefined;
-    /** Label content. Prefer `label`; children remain supported. */
-    readonly children?: ReactNode | undefined;
     readonly defaultChecked?: boolean | undefined;
     readonly disabled?: boolean | undefined;
     /** Associates the switch with a form outside its DOM subtree. */
     readonly form?: string | undefined;
-    /** Visible label and accessible name. Either `label` or children is required. */
-    readonly label?: ReactNode | undefined;
     /** Name submitted with the switch value while it is selected. */
     readonly name?: string | undefined;
     /**
@@ -1158,12 +1220,19 @@ export interface SwitchProps extends Omit<HTMLAttributes<HTMLDivElement>, "child
     /** Submitted value while selected. Defaults to the browser's "on" value. */
     readonly value?: string | undefined;
 }
+/**
+ * Visible label and accessible name through `label`, or through children,
+ * which remain supported. One of the two is required.
+ */
+export type SwitchProps = SwitchBaseProps & WithLabel<"children">;
 export declare function Switch({ checked, children, className, defaultChecked, disabled, form, label, name, onChange, onCheckedChange, readOnly, ref, required, value, ...props }: SwitchProps): React.JSX.Element;
+export {};
 
 === components/Table.d.ts ===
 import type { HTMLAttributes, ReactNode, RefAttributes, TableHTMLAttributes, TdHTMLAttributes, ThHTMLAttributes } from "react";
-import type { Density } from "../utils/variants.js";
-export type TableCaptionVisibility = "visible" | "hidden";
+import type { Density, Visibility } from "../utils/variants.js";
+/** Alias of the shared {@link Visibility} vocabulary. */
+export type TableCaptionVisibility = Visibility;
 export interface TableProps extends TableHTMLAttributes<HTMLTableElement>, RefAttributes<HTMLTableElement> {
     /** Names the table. Required unless `aria-label` or `aria-labelledby` names it. */
     readonly caption?: ReactNode | undefined;
@@ -1451,12 +1520,12 @@ export { CheckboxGroup, type CheckboxGroupLayout, type CheckboxGroupOption, type
 export { Disclosure, type DisclosureContextValue, DisclosurePanel, type DisclosurePanelProps, type DisclosureProps, DisclosureTrigger, type DisclosureTriggerProps, type UseDisclosureOptions, type UseDisclosureResult, useDisclosure, } from "./components/Disclosure.js";
 export { EmptyState, type EmptyStateProps } from "./components/EmptyState.js";
 export { Progress, type ProgressProps, type ProgressTone, } from "./components/Progress.js";
-export { resolveSaveActionBarState, SaveActionBar, type SaveActionBarLabels, type SaveActionBarProps, type SaveActionBarState, } from "./components/SaveActionBar.js";
+export { resolveSaveActionBarState, SaveActionBar, type SaveActionBarLabels, type SaveActionBarProps, type SaveActionBarState, type SaveActionBarStateInput, } from "./components/SaveActionBar.js";
 export { Table, type TableCaptionVisibility, TableCell, type TableCellProps, TableHeaderCell, type TableHeaderCellProps, type TableProps, TableScrollRegion, type TableScrollRegionProps, } from "./components/Table.js";
 export { Tab, TabList, type TabListProps, TabPanel, type TabPanelProps, type TabProps, Tabs, type TabsActivation, type TabsProps, } from "./components/Tabs.js";
 
 === data-grid.d.ts ===
-export { Cell, type CellProps, Column, type ColumnProps, DataGrid, type DataGridColumnProps, type DataGridDensity, type DataGridProps, type DataGridSelectionMode, type Key, Row, type RowProps, type Selection, type SortDescriptor, type SortDirection, } from "./components/DataGrid.js";
+export { Cell, type CellProps, Column, DataGrid, type DataGridColumnProps, type DataGridDensity, type DataGridProps, type DataGridSelectionMode, type Key, Row, type RowProps, type Selection, type SortDescriptor, type SortDirection, } from "./components/DataGrid.js";
 
 === federation.d.cts ===
 /**
@@ -1517,7 +1586,8 @@ export interface NumberDraftOptions {
     readonly min?: number | undefined;
     /**
      * Spinner increment passed to the input. In clamp mode committed values
-     * also snap to a multiple of it.
+     * also snap to a multiple of it, counted from `min` where there is one, as
+     * the input's own step constraint counts.
      */
     readonly step?: number | undefined;
 }
@@ -1608,7 +1678,7 @@ export { LiveRegion, type LiveRegionElement, type LiveRegionProps, } from "./com
 export { NumberField, type NumberFieldInputProps, type NumberFieldMessages, type NumberFieldProps, } from "./components/NumberField.js";
 export { PanelErrorBoundary, type PanelErrorBoundaryFallbackProps, type PanelErrorBoundaryProps, } from "./components/PanelErrorBoundary.js";
 export { PanelRoot, type PanelRootProps, type PanelWidth, } from "./components/PanelRoot.js";
-export { PanelShell, type PanelShellProps, type PanelShellThemeToggle, } from "./components/PanelShell.js";
+export { PanelShell, type PanelShellErrorLabels, type PanelShellProps, type PanelShellThemeToggle, } from "./components/PanelShell.js";
 export { RelativeAge, type RelativeAgeElement, type RelativeAgeProps, } from "./components/RelativeAge.js";
 export { Section, type SectionProps } from "./components/Section.js";
 export { SegmentedControl, type SegmentedControlLabelVisibility, type SegmentedControlLegendVisibility, type SegmentedControlOption, type SegmentedControlOrientation, type SegmentedControlProps, } from "./components/SegmentedControl.js";
@@ -1627,12 +1697,12 @@ export type { AnnouncementMode } from "./utils/announcement.js";
 export { type FormatRelativeAgeOptions, formatRelativeAge, formatRelativeAgeSince, RELATIVE_AGE_NARROW, type RelativeAgeNegative, type RelativeAgeTimestamp, } from "./utils/format-relative-age.js";
 export type { HeadingLevel } from "./utils/heading.js";
 export type { SemanticTone, StatusTone } from "./utils/tone.js";
-export type { Density, LegacyDensity, Orientation, } from "./utils/variants.js";
+export type { Density, Orientation, Visibility, } from "./utils/variants.js";
 export { PACKAGE_VERSION } from "./version.js";
 
 === overlays.d.ts ===
 export { AlertDialog, type AlertDialogProps, Dialog, type DialogActions, type DialogProps, type DialogWidth, } from "./components/Dialog.js";
-export { Menu, type MenuElementAttributes, MenuItem, type MenuItemProps, type MenuProps, MenuSection, type MenuSectionProps, MenuSeparator, type MenuSeparatorProps, } from "./components/Menu.js";
+export { Menu, type MenuElementAttributes, MenuItem, type MenuItemProps, type MenuItemTone, type MenuProps, MenuSection, type MenuSectionProps, MenuSeparator, type MenuSeparatorProps, } from "./components/Menu.js";
 export type { OverlayOpenState, OverlayPlacement, } from "./components/overlay-placement.js";
 export { Popover, type PopoverProps, type PopoverWidth, } from "./components/Popover.js";
 export { createToastQueue, type QueuedToast, type ToastContent, type ToastQueue, ToastRegion, type ToastRegionProps, toast, } from "./components/Toast.js";
@@ -1813,6 +1883,28 @@ export type PolymorphicProps<Element extends IntrinsicElement, DefaultElement ex
 export declare function createPolymorphicElement(as: IntrinsicElement, props: object, ...children: readonly ReactNode[]): React.JSX.Element;
 export {};
 
+=== utils/react-node.d.ts ===
+import { type ReactNode } from "react";
+/**
+ * Throws when a required slot carries no rendered content. Blank text and
+ * empty fragments count as absent, so a component never ships an unnamed
+ * control or an untitled surface.
+ */
+export declare function requireContent(node: ReactNode, message: string): void;
+export declare function hasReactContent(node: ReactNode): boolean;
+/**
+ * Requires a control to carry a name at compile time. A component that accepts
+ * `label` beside an older naming prop composes its base props with this, so
+ * omitting both is a type error rather than a render-time throw. `Legacy` is
+ * the older prop, `children` on most controls and `legend` on the ones that
+ * once rendered a fieldset.
+ */
+export type WithLabel<Legacy extends string> = ({
+    readonly label: ReactNode;
+} & Partial<Readonly<Record<Legacy, ReactNode | undefined>>>) | ({
+    readonly label?: ReactNode | undefined;
+} & Readonly<Record<Legacy, ReactNode>>);
+
 === utils/tone.d.ts ===
 export type StatusTone = "neutral" | "info" | "success" | "warning" | "danger";
 /** Tones that carry a meaning a neutral presentation cannot convey. */
@@ -1842,17 +1934,16 @@ export declare function resolveToneLabel(tone: SemanticTone, toneLabel: string |
  * deprecated re-exports for one minor release.
  */
 export type Density = "default" | "compact";
-/**
- * The density vocabulary before `Density` existed. "comfortable" is the old
- * name for "default" and is still accepted at runtime.
- *
- * @deprecated Use {@link Density}; "comfortable" maps to "default".
- */
-export type LegacyDensity = Density | "comfortable";
 /** Normalizes a density prop, mapping the deprecated "comfortable" to "default". */
 export declare function resolveDensity(density: Density | "comfortable" | undefined): Density;
 /** Axis along which a group of controls is laid out. */
 export type Orientation = "horizontal" | "vertical";
+/**
+ * Whether a label, legend, or caption is drawn. `"hidden"` keeps the text in
+ * the accessible name or description and removes it from the layout, so the
+ * control is still named for assistive technology.
+ */
+export type Visibility = "hidden" | "visible";
 
 === version.d.ts ===
 /** The package version used to isolate styles from other loaded versions. */
