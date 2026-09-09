@@ -25,7 +25,9 @@ const noop = (): void => undefined;
 describe("SegmentedControl option validation", () => {
   it("rejects an empty option collection", () => {
     expect(() =>
-      render(<SegmentedControl legend="Units" options={[]} onChange={noop} />),
+      render(
+        <SegmentedControl label="Units" options={[]} onValueChange={noop} />,
+      ),
     ).toThrow("SegmentedControl requires at least one option.");
   });
 
@@ -33,9 +35,9 @@ describe("SegmentedControl option validation", () => {
     expect(() =>
       render(
         <SegmentedControl
-          legend="Units"
+          label="Units"
           options={[{ label: "  ", value: "metric" }]}
-          onChange={noop}
+          onValueChange={noop}
         />,
       ),
     ).toThrow("SegmentedControl options require non-empty labels.");
@@ -45,12 +47,12 @@ describe("SegmentedControl option validation", () => {
     expect(() =>
       render(
         <SegmentedControl
-          legend="Units"
+          label="Units"
           options={[
             { label: "Metric", value: "metric" },
             { label: "Meters", value: "metric" },
           ]}
-          onChange={noop}
+          onValueChange={noop}
         />,
       ),
     ).toThrow(
@@ -64,9 +66,9 @@ describe("SegmentedControl selection modes", () => {
     const onChange = vi.fn();
     render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         defaultValue="metric"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -102,9 +104,9 @@ describe("SegmentedControl selection modes", () => {
     const onChange = vi.fn();
     const view = render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         name="units"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -136,9 +138,9 @@ describe("SegmentedControl selection modes", () => {
     const onChange = vi.fn();
     const view = render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         value="metric"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -154,9 +156,9 @@ describe("SegmentedControl selection modes", () => {
 
     view.rerender(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         value="imperial"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -180,10 +182,10 @@ describe("SegmentedControl form participation", () => {
         }}
       >
         <SegmentedControl
-          legend="Units"
+          label="Units"
           name="units"
           defaultValue="metric"
-          onChange={noop}
+          onValueChange={noop}
           options={OPTIONS}
         />
       </form>,
@@ -202,9 +204,9 @@ describe("SegmentedControl form participation", () => {
   it("omits the hidden input when no name is given", () => {
     const view = render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         defaultValue="metric"
-        onChange={noop}
+        onValueChange={noop}
         options={OPTIONS}
       />,
     );
@@ -217,7 +219,7 @@ describe("SegmentedControl form participation", () => {
       <form data-testid="units-form">
         <SegmentedControl
           disabled
-          legend="Units"
+          label="Units"
           name="units"
           defaultValue="metric"
           options={OPTIONS}
@@ -233,10 +235,10 @@ describe("SegmentedControl form participation", () => {
     render(
       <form data-testid="units-form">
         <SegmentedControl
-          legend="Units"
+          label="Units"
           name="units"
           defaultValue="metric"
-          onChange={noop}
+          onValueChange={noop}
           options={OPTIONS}
         />
       </form>,
@@ -264,10 +266,10 @@ describe("SegmentedControl form participation", () => {
     render(
       <form data-testid="units-form">
         <SegmentedControl
-          legend="Units"
+          label="Units"
           name="units"
           value="imperial"
-          onChange={noop}
+          onValueChange={noop}
           options={OPTIONS}
         />
       </form>,
@@ -293,10 +295,10 @@ describe("SegmentedControl form participation", () => {
       <form data-testid="units-form">
         <CollapsibleSection title="Units" defaultOpen>
           <SegmentedControl
-            legend="Units"
+            label="Units"
             name="units"
             defaultValue="metric"
-            onChange={noop}
+            onValueChange={noop}
             options={OPTIONS}
           />
         </CollapsibleSection>
@@ -322,13 +324,108 @@ describe("SegmentedControl form participation", () => {
   });
 });
 
+describe("SegmentedControl label and value callbacks", () => {
+  it("names the group from label and falls back to the deprecated legend", () => {
+    render(
+      <>
+        <SegmentedControl label="Units" options={OPTIONS} />
+        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep naming the group */}
+        <SegmentedControl legend="Legacy units" options={OPTIONS} />
+      </>,
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "Units" })).toBeVisible();
+    expect(
+      screen.getByRole("radiogroup", { name: "Legacy units" }),
+    ).toBeVisible();
+  });
+
+  it("rejects a control with neither label nor legend content", () => {
+    expect(() =>
+      render(<SegmentedControl label="  " options={OPTIONS} />),
+    ).toThrow("SegmentedControl requires a non-empty label.");
+  });
+
+  it("reports the value through onValueChange beside the deprecated onChange", () => {
+    const onValueChange = vi.fn();
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl
+        label="Units"
+        options={OPTIONS}
+        onValueChange={onValueChange}
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Nautical" }));
+    expect(onValueChange).toHaveBeenCalledWith("nautical");
+    expect(onChange).toHaveBeenCalledWith("nautical");
+  });
+
+  it("shows the label through labelVisibility and the deprecated legendVisibility", () => {
+    render(
+      <>
+        <SegmentedControl
+          label="Units"
+          labelVisibility="visible"
+          options={OPTIONS}
+        />
+        <SegmentedControl
+          label="Legacy units"
+          // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep showing the label
+          legendVisibility="visible"
+          options={OPTIONS}
+        />
+      </>,
+    );
+
+    expect(screen.getByText("Units")).toHaveClass("snui-segmented__legend");
+    expect(screen.getByText("Legacy units")).toHaveClass(
+      "snui-segmented__legend",
+    );
+  });
+
+  it("keeps the hidden input attached while the controlled value changes", () => {
+    const addListener = vi.spyOn(HTMLFormElement.prototype, "addEventListener");
+    const tree = (
+      value: (typeof OPTIONS)[number]["value"],
+    ): ReactActual.ReactElement => (
+      <form>
+        <SegmentedControl
+          label="Units"
+          name="units"
+          value={value}
+          onValueChange={noop}
+          options={OPTIONS}
+        />
+      </form>
+    );
+    const view = render(tree("metric"));
+    const resetListeners = (): number =>
+      addListener.mock.calls.filter(([type]) => type === "reset").length;
+    expect(resetListeners()).toBe(1);
+
+    view.rerender(tree("imperial"));
+    view.rerender(tree("nautical"));
+
+    // A stable callback ref means the reset listener registered once.
+    expect(resetListeners()).toBe(1);
+    expect(view.container.querySelector("input[type=hidden]")).toHaveProperty(
+      "value",
+      "nautical",
+    );
+  });
+});
+
 describe("SegmentedControl legend visibility", () => {
   it("keeps the legend visually hidden by default", () => {
     render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         value="metric"
-        onChange={noop}
+        onValueChange={noop}
         options={OPTIONS}
       />,
     );
@@ -343,10 +440,10 @@ describe("SegmentedControl legend visibility", () => {
   it("shows the legend when legendVisibility is visible", () => {
     render(
       <SegmentedControl
-        legend="Units"
-        legendVisibility="visible"
+        label="Units"
+        labelVisibility="visible"
         value="metric"
-        onChange={noop}
+        onValueChange={noop}
         options={OPTIONS}
       />,
     );
@@ -364,10 +461,10 @@ describe("SegmentedControl orientation", () => {
     const onChange = vi.fn();
     render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         orientation="vertical"
         defaultValue="metric"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -407,9 +504,9 @@ describe("SegmentedControl orientation", () => {
     const onChange = vi.fn();
     render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         defaultValue="metric"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -433,9 +530,9 @@ describe("SegmentedControl focus-only movement", () => {
     const onChange = vi.fn();
     render(
       <SegmentedControl
-        legend="Units"
+        label="Units"
         defaultValue="metric"
-        onChange={onChange}
+        onValueChange={onChange}
         options={OPTIONS}
       />,
     );
@@ -479,9 +576,9 @@ describe("SegmentedControl focus-only movement", () => {
       const onChange = vi.fn();
       render(
         <MacSegmentedControl
-          legend="Units"
+          label="Units"
           defaultValue="metric"
-          onChange={onChange}
+          onValueChange={onChange}
           options={OPTIONS}
         />,
       );
@@ -516,9 +613,9 @@ describe("SegmentedControl ref", () => {
     render(
       <SegmentedControl
         ref={ref}
-        legend="Units"
+        label="Units"
         value="metric"
-        onChange={noop}
+        onValueChange={noop}
         options={OPTIONS}
       />,
     );

@@ -7,15 +7,20 @@ import {
   useId,
   useLayoutEffect,
   useRef,
-  useState,
 } from "react";
 
+import { useControllableState } from "../hooks/use-controllable-state.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { requireContent } from "../utils/react-node.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
+import type { Orientation, Visibility } from "../utils/variants.js";
 
-export type SegmentedControlLegendVisibility = "hidden" | "visible";
-export type SegmentedControlOrientation = "horizontal" | "vertical";
+/** Alias of the shared {@link Visibility} vocabulary. */
+export type SegmentedControlLabelVisibility = Visibility;
+/** @deprecated Use {@link SegmentedControlLabelVisibility}. */
+export type SegmentedControlLegendVisibility = SegmentedControlLabelVisibility;
+/** @deprecated Use {@link Orientation}. */
+export type SegmentedControlOrientation = Orientation;
 
 /**
  * The APG radio-group pattern optionally moves focus without changing the
@@ -36,29 +41,65 @@ export interface SegmentedControlOption<Value extends string> {
   readonly value: Value;
 }
 
-export interface SegmentedControlProps<Value extends string>
+interface SegmentedControlBaseProps<Value extends string>
   extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">,
     RefAttributes<HTMLDivElement> {
   readonly defaultValue?: Value | undefined;
   readonly disabled?: boolean | undefined;
-  readonly legend: ReactNode;
-  readonly legendVisibility?: SegmentedControlLegendVisibility | undefined;
+  readonly labelVisibility?: SegmentedControlLabelVisibility | undefined;
+  /** @deprecated Use `labelVisibility`. */
+  readonly legendVisibility?: SegmentedControlLabelVisibility | undefined;
   /** Carries the selection into native form submission and form reset. */
   readonly name?: string | undefined;
+  /**
+   * Receives the selected value. Composed controls report values, not React
+   * change events; the native inputs keep the event form.
+   */
+  readonly onValueChange?: ((value: Value) => void) | undefined;
+  /** @deprecated Use `onValueChange`. */
   readonly onChange?: ((value: Value) => void) | undefined;
   readonly options: readonly SegmentedControlOption<Value>[];
-  readonly orientation?: SegmentedControlOrientation | undefined;
+  readonly orientation?: Orientation | undefined;
   readonly value?: Value | undefined;
 }
+
+/**
+ * Accessible name of the group through `label`, or through the deprecated
+ * `legend`. One of the two is required. The group is a `role="radiogroup"`
+ * div, not a fieldset, so the name is not a `<legend>` element.
+ *
+ * Written out rather than composed from `WithLabel`, because `legend` has to
+ * keep its own `@deprecated` tag and a mapped type cannot carry one per key.
+ */
+export type SegmentedControlProps<Value extends string> =
+  SegmentedControlBaseProps<Value> &
+    (
+      | {
+          readonly label: ReactNode;
+          /** @deprecated Use `label`. */
+          readonly legend?: ReactNode | undefined;
+        }
+      | {
+          readonly label?: ReactNode | undefined;
+          /** @deprecated Use `label`. */
+          readonly legend: ReactNode;
+        }
+    );
 
 export function SegmentedControl<Value extends string>({
   className,
   defaultValue,
   disabled = false,
+  label,
+  labelVisibility,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
   legend,
-  legendVisibility = "hidden",
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
+  legendVisibility,
   name,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
   onChange,
+  onValueChange,
   options,
   orientation = "horizontal",
   ref,
@@ -66,7 +107,9 @@ export function SegmentedControl<Value extends string>({
   "aria-labelledby": ariaLabelledBy,
   ...props
 }: SegmentedControlProps<Value>): React.JSX.Element {
-  requireContent(legend, "SegmentedControl requires a non-empty legend.");
+  const groupLabel = hasReactContent(label) ? label : legend;
+  requireContent(groupLabel, "SegmentedControl requires a non-empty label.");
+  const groupLabelVisibility = labelVisibility ?? legendVisibility ?? "hidden";
   if (options.length === 0) {
     throw new Error("SegmentedControl requires at least one option.");
   }
@@ -84,17 +127,26 @@ export function SegmentedControl<Value extends string>({
     optionValues.add(option.value);
   }
 
-  const legendId = useId();
+  const labelId = useId();
   const buttons = useRef(new Map<Value, HTMLButtonElement>());
-  const [internalValue, setInternalValue] = useState<Value | undefined>(
-    defaultValue,
-  );
-  const effectiveValue = value ?? internalValue;
+  const [effectiveValue, commitValue, setInternalValue] = useControllableState<
+    Value | undefined
+  >(value, defaultValue);
   const enabledOptions = options.filter((option) => option.disabled !== true);
   const selectedEnabled = enabledOptions.some(
     (option) => option.value === effectiveValue,
   );
   const fallbackValue = enabledOptions[0]?.value;
+
+  // The reset listener reads the latest value props through refs so the
+  // callback ref below stays stable: a controlled selection change must not
+  // detach and reattach the hidden input on every render.
+  const valueRef = useRef(value);
+  const defaultValueRef = useRef(defaultValue);
+  useLayoutEffect(() => {
+    valueRef.current = value;
+    defaultValueRef.current = defaultValue;
+  }, [defaultValue, value]);
 
   // Keep the hidden input's default value aligned so a native form reset
   // restores the defaultValue selection even before React re-renders, and
@@ -104,7 +156,7 @@ export function SegmentedControl<Value extends string>({
     (node: HTMLInputElement | null): (() => void) | undefined => {
       hiddenInput.current = node;
       if (node === null) return undefined;
-      node.defaultValue = defaultValue ?? "";
+      node.defaultValue = defaultValueRef.current ?? "";
       const form = node.form;
       if (form === null) {
         return () => {
@@ -112,8 +164,9 @@ export function SegmentedControl<Value extends string>({
         };
       }
       const onReset = (): void => {
-        if (value === undefined) {
-          setInternalValue(defaultValue);
+        const controlledValue = valueRef.current;
+        if (controlledValue === undefined) {
+          setInternalValue(defaultValueRef.current);
           return;
         }
         // A controlled selection belongs to the parent, so the reset leaves it
@@ -121,7 +174,7 @@ export function SegmentedControl<Value extends string>({
         // follows to correct it, so restore the submitted value once the reset
         // has finished dispatching.
         queueMicrotask(() => {
-          if (node.isConnected) node.value = value;
+          if (node.isConnected) node.value = controlledValue;
         });
       };
       form.addEventListener("reset", onReset);
@@ -130,7 +183,9 @@ export function SegmentedControl<Value extends string>({
         hiddenInput.current = null;
       };
     },
-    [defaultValue, value],
+    // The setter is the stable useState one the hook hands back, so the ref
+    // callback keeps its identity and never detaches the hidden input.
+    [setInternalValue],
   );
 
   // A reset that lands while this control sits in a paused subtree, inside a
@@ -145,7 +200,8 @@ export function SegmentedControl<Value extends string>({
   });
 
   const select = (nextValue: Value): void => {
-    if (value === undefined) setInternalValue(nextValue);
+    commitValue(nextValue);
+    onValueChange?.(nextValue);
     onChange?.(nextValue);
   };
 
@@ -207,17 +263,17 @@ export function SegmentedControl<Value extends string>({
       role="radiogroup"
       aria-disabled={disabled || undefined}
       aria-orientation={orientation}
-      aria-labelledby={joinIdReferences(ariaLabelledBy, legendId)}
+      aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
     >
       <span
-        id={legendId}
+        id={labelId}
         className={
-          legendVisibility === "visible"
+          groupLabelVisibility === "visible"
             ? "snui-segmented__legend"
             : "snui-visually-hidden"
         }
       >
-        {legend}
+        {groupLabel}
       </span>
       <div
         className={classNames(

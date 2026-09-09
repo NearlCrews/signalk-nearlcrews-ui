@@ -1,7 +1,8 @@
 import { focusRingDeclarations } from "./fragments.js";
+import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
-export const TABLE_STYLES = scopeStyles(`
+const TABLE_CSS = scopeStyles(`
 .snui-data-grid {
   display: block;
   min-width: 0;
@@ -22,11 +23,11 @@ export const TABLE_STYLES = scopeStyles(`
 .snui-data-grid__header :is(th, [role="columnheader"]) {
   box-sizing: border-box;
   position: sticky;
-  top: 0;
+  inset-block-start: 0;
   z-index: var(--snui-z-sticky);
   height: var(--snui-control-min-height);
   padding: var(--snui-space-2) var(--snui-space-3);
-  border-bottom: 1px solid var(--snui-color-border);
+  border-block-end: 1px solid var(--snui-color-border);
   background: var(--snui-color-surface-raised);
   color: var(--snui-color-text);
   font-weight: var(--snui-font-weight-bold);
@@ -38,46 +39,72 @@ export const TABLE_STYLES = scopeStyles(`
   cursor: pointer;
 }
 
-.snui-data-grid__header :is(th, [role="columnheader"])[data-allows-sorting][data-hovered] {
-  background: var(--snui-color-interactive-hover);
-}
-
+/* Header cells sit on the raised surface, so the raised hover step keeps the
+   hover and pressed fills visible in Dark. */
+.snui-data-grid__header :is(th, [role="columnheader"])[data-allows-sorting][data-hovered],
 .snui-data-grid__header :is(th, [role="columnheader"])[data-allows-sorting][data-pressed] {
-  background: var(--snui-color-interactive-hover);
+  background: var(--snui-color-hover-raised);
 }
 
 .snui-data-grid__header :is(th, [role="columnheader"])[data-focus-visible] {
 ${focusRingDeclarations("-2px", true)}
 }
 
-/* Sort state pairs the glyph with aria-sort, never the glyph alone. */
+/*
+ * Sort state pairs the glyph with aria-sort, never the glyph alone. The
+ * empty alternative text keeps the glyph out of the header's accessible
+ * name, which aria-sort already describes.
+ */
 .snui-data-grid__header :is(th, [role="columnheader"])[data-allows-sorting]::after {
-  content: "\\21C5";
+  content: "\\21C5" / "";
   margin-inline-start: var(--snui-space-2);
   color: var(--snui-color-text-muted);
-  font-size: 0.75em;
+  font-size: 0.8em;
 }
 
 .snui-data-grid__header :is(th, [role="columnheader"])[data-sort-direction="ascending"]::after {
-  content: "\\25B2";
+  content: "\\25B2" / "";
   color: var(--snui-color-accent-fill);
 }
 
 .snui-data-grid__header :is(th, [role="columnheader"])[data-sort-direction="descending"]::after {
-  content: "\\25BC";
+  content: "\\25BC" / "";
   color: var(--snui-color-accent-fill);
 }
 
 .snui-data-grid__body :is(td, [role="rowheader"], [role="gridcell"]) {
   box-sizing: border-box;
   padding: var(--snui-space-2) var(--snui-space-3);
-  border-bottom: 1px solid var(--snui-color-border);
+  border-block-end: 1px solid var(--snui-color-border);
   min-width: 6rem;
+  /* Live values tick over without shifting their neighbors. */
+  font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
+}
+
+/* A numeric column right-aligns its header and cells so figures line up. */
+.snui-data-grid :is(th, td, [role="columnheader"], [role="rowheader"], [role="gridcell"])[data-snui-numeric] {
+  text-align: end;
 }
 
 .snui-data-grid__body [role="row"][data-selection-mode] {
   cursor: pointer;
+}
+
+/*
+ * Pressing a selectable row changes the selection, so the row carries the
+ * control target floor. Table layout ignores min-height on a row, so the
+ * floor is written as a height, which it treats as a minimum and still grows
+ * for a taller cell; the virtualized rows below keep min-height because the
+ * virtualizer measures them. Compact trades the floor for density, which the
+ * design contract records as its one target-size exception.
+ */
+.snui-data-grid:not(.snui-data-grid--virtualized) .snui-data-grid__body [role="row"][data-selection-mode] {
+  height: var(--snui-control-min-height);
+}
+
+.snui-data-grid--compact:not(.snui-data-grid--virtualized) .snui-data-grid__body [role="row"][data-selection-mode] {
+  height: calc(var(--snui-control-min-height) - var(--snui-space-3));
 }
 
 .snui-data-grid__body [role="row"][data-selection-mode][data-hovered] {
@@ -85,18 +112,14 @@ ${focusRingDeclarations("-2px", true)}
 }
 
 .snui-data-grid__body [role="row"][data-selected] {
-  background: color-mix(
-    in srgb,
-    var(--snui-color-accent-fill) 12%,
-    var(--snui-color-surface)
-  );
+  background: var(--snui-color-accent-subtle);
 }
 
 .snui-data-grid__body [role="row"][data-selected][data-hovered] {
   background: color-mix(
     in srgb,
-    var(--snui-color-accent-fill) 18%,
-    var(--snui-color-interactive-hover)
+    var(--snui-color-accent-fill) 8%,
+    var(--snui-color-accent-subtle)
   );
 }
 
@@ -106,7 +129,7 @@ ${focusRingDeclarations("-2px", false)}
 
 .snui-data-grid--zebra:not(.snui-data-grid--virtualized) .snui-data-grid__body > tr:nth-of-type(even):not([data-selected]):not([data-hovered]),
 .snui-data-grid--zebra.snui-data-grid--virtualized .snui-data-grid__body [role="row"][data-snui-zebra-odd]:not([data-selected]):not([data-hovered]) {
-  background: var(--snui-color-surface-raised);
+  background: var(--snui-color-surface-stripe);
 }
 
 .snui-data-grid--compact .snui-data-grid__header :is(th, [role="columnheader"]),
@@ -157,6 +180,12 @@ ${focusRingDeclarations("-2px", false)}
   min-height: calc(var(--snui-control-min-height) - var(--snui-space-3));
 }
 
+/*
+ * Virtualized cells keep one line so row heights stay predictable; text-only
+ * content is wrapped in a span that carries the full value as a title, and
+ * the ellipsis lives on that span because a flex container cannot truncate
+ * its own anonymous text.
+ */
 .snui-data-grid--virtualized .snui-data-grid__body :is([role="rowheader"], [role="gridcell"]) {
   display: flex;
   align-items: center;
@@ -165,6 +194,25 @@ ${focusRingDeclarations("-2px", false)}
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.snui-data-grid--virtualized .snui-data-grid__body .snui-data-grid__cell-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Flex cells align through justification rather than text-align. */
+.snui-data-grid--virtualized :is([role="columnheader"], [role="rowheader"], [role="gridcell"])[data-snui-numeric] {
+  justify-content: flex-end;
+}
+
+/* A wrap column trades one-line rows for the whole value. */
+.snui-data-grid--virtualized .snui-data-grid__body :is([role="rowheader"], [role="gridcell"])[data-snui-wrap] {
+  align-items: flex-start;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 @media (forced-colors: active) {
@@ -196,3 +244,9 @@ ${focusRingDeclarations("-2px", false)}
   }
 }
 `);
+
+/** Data-grid styles, installed by `DataGrid` through `useModuleStyles`. */
+export const TABLE_STYLES: StyleModule = {
+  id: "table",
+  styles: TABLE_CSS,
+};

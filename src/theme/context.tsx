@@ -1,13 +1,9 @@
 import {
   createContext,
   type ReactNode,
-  startTransition,
-  useCallback,
   useContext,
-  useEffect,
-  useEffectEvent,
   useMemo,
-  useState,
+  useSyncExternalStore,
 } from "react";
 
 import {
@@ -27,38 +23,131 @@ export interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-function readStorage(key: string): StoredTheme {
+/**
+ * Runs one storage operation and reports failure as `undefined`. Private
+ * browsing, a locked-down WebView, and a sandboxed frame can all throw on any
+ * access to localStorage, and none of them should break the panel: the theme
+ * simply stops being shared.
+ */
+function withStorage<T>(operation: (storage: Storage) => T): T | undefined {
   if (typeof window === "undefined") return undefined;
-
   try {
-    const value = window.localStorage.getItem(key);
-    // An absent key is a genuine clear, so the panel returns to "auto". A
-    // present but unrecognized value comes from a different library version
-    // sharing the key and is ignored: resetting to "auto" here would fight
-    // the theme the other panel just wrote.
-    if (value === null) return null;
-    return isThemeChoice(value) ? value : undefined;
+    return operation(window.localStorage);
   } catch {
     return undefined;
   }
 }
 
+function readStorage(key: string): StoredTheme {
+  const value = withStorage((storage) => storage.getItem(key));
+  // An absent key is a genuine clear, so the panel returns to "auto". A
+  // present but unrecognized value comes from a different library version
+  // sharing the key and is ignored: resetting to "auto" here would fight the
+  // theme the other panel just wrote. Unreadable storage is also ignored.
+  if (value === null) return null;
+  return isThemeChoice(value) ? value : undefined;
+}
+
 function writeSharedTheme(theme: ThemeChoice): void {
-  try {
-    window.localStorage.setItem(THEME_STORAGE_KEY, theme);
-  } catch {
-    // Storage can be unavailable in private or locked-down browser contexts.
-  }
+  withStorage((storage) => {
+    storage.setItem(THEME_STORAGE_KEY, theme);
+  });
 }
 
 function isLocalStorageEvent(event: StorageEvent): boolean {
   if (event.storageArea === null) return true;
+  return withStorage((storage) => storage === event.storageArea) === true;
+}
 
-  try {
-    return event.storageArea === window.localStorage;
-  } catch {
-    return false;
+/**
+ * One store per loaded copy of the library. The theme is a document-wide
+ * preference behind one storage key, so every provider in this copy reads the
+ * same snapshot, and other copies stay in step through the storage event and
+ * the same-document change event below.
+ */
+const listeners = new Set<() => void>();
+let currentTheme: ThemeChoice = "auto";
+
+function emit(): void {
+  for (const listener of listeners) listener();
+}
+
+function updateTheme(next: ThemeChoice): void {
+  if (next === currentTheme) return;
+  currentTheme = next;
+  emit();
+}
+
+/** Adopts the shared value when it is readable and recognized. */
+function adoptSharedTheme(): void {
+  const shared = readStorage(THEME_STORAGE_KEY);
+  if (shared === undefined) return;
+  updateTheme(shared ?? "auto");
+}
+
+function handleThemeChange(event: Event): void {
+  if (event instanceof CustomEvent && isThemeChoice(event.detail)) {
+    updateTheme(event.detail);
+    return;
   }
+  adoptSharedTheme();
+}
+
+function handleStorage(event: StorageEvent): void {
+  if (
+    (event.key === THEME_STORAGE_KEY || event.key === null) &&
+    isLocalStorageEvent(event)
+  ) {
+    handleThemeChange(event);
+  }
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener);
+  if (listeners.size === 1 && typeof window !== "undefined") {
+    window.addEventListener("storage", handleStorage);
+    window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+  }
+  // A panel that subscribes after a hidden period, inside a retained
+  // CollapsibleSection for example, missed every event in between. React
+  // compares snapshots right after subscribing, so adopting the shared value
+  // here re-renders it with the theme another panel wrote meanwhile.
+  adoptSharedTheme();
+
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0 && typeof window !== "undefined") {
+      window.removeEventListener("storage", handleStorage);
+      window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
+    }
+  };
+}
+
+function getSnapshot(): ThemeChoice {
+  // With no subscriber the store hears no events, so a first render reads the
+  // shared value directly instead of trusting a snapshot from an earlier mount.
+  // Unreadable or unrecognized storage starts at "auto" here, exactly as a
+  // fresh panel always has; only a live panel keeps its theme through those.
+  if (listeners.size === 0) {
+    currentTheme = readStorage(THEME_STORAGE_KEY) ?? "auto";
+  }
+  return currentTheme;
+}
+
+function getServerSnapshot(): ThemeChoice {
+  return "auto";
+}
+
+function setTheme(nextTheme: ThemeChoice): void {
+  writeSharedTheme(nextTheme);
+  updateTheme(nextTheme);
+  // Other copies of the library in the same document cannot see this copy's
+  // store, and the storage event never fires in the document that wrote the
+  // value, so they learn the choice from this event. This copy's own listener
+  // receives it too and finds nothing to change.
+  window.dispatchEvent(
+    new CustomEvent<ThemeChoice>(THEME_CHANGE_EVENT, { detail: nextTheme }),
+  );
 }
 
 export interface ThemeProviderProps {
@@ -71,68 +160,8 @@ export function ThemeProvider({
   // An unresolved preference stays "auto" so the panel follows an explicit
   // host theme and otherwise uses the library's light fallback. Operating-system
   // preferences are reserved for the explicit "system" choice.
-  const [theme, setThemeState] = useState<ThemeChoice>(
-    () => readStorage(THEME_STORAGE_KEY) ?? "auto",
-  );
-
-  // The state initializer above runs once per mount, while the effect below
-  // also runs again when React reveals a retained subtree. Adopting the stored
-  // theme as the subscription opens picks up a choice another panel wrote while
-  // this one was hidden, which the initializer alone misses because the hidden
-  // panel kept its state and had no listener for the whole hidden period.
-  const adoptSharedTheme = useEffectEvent((): void => {
-    const sharedTheme = readStorage(THEME_STORAGE_KEY);
-    if (sharedTheme === undefined) return;
-
-    setThemeState(sharedTheme ?? "auto");
-  });
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-
-    const syncTheme = (event: Event): void => {
-      if (event instanceof CustomEvent && isThemeChoice(event.detail)) {
-        setThemeState(event.detail);
-        return;
-      }
-
-      adoptSharedTheme();
-    };
-    const handleStorage = (event: StorageEvent): void => {
-      if (
-        (event.key === THEME_STORAGE_KEY || event.key === null) &&
-        isLocalStorageEvent(event)
-      ) {
-        syncTheme(event);
-      }
-    };
-
-    window.addEventListener("storage", handleStorage);
-    window.addEventListener(THEME_CHANGE_EVENT, syncTheme);
-    // Reading the shared value as the subscription opens is what this effect is
-    // for, not state derived from a render: no event reports a theme written
-    // while the panel was hidden, and an unchanged value bails out before it
-    // reaches a render at all.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    adoptSharedTheme();
-
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener(THEME_CHANGE_EVENT, syncTheme);
-    };
-  }, []);
-
-  const setTheme = useCallback((nextTheme: ThemeChoice): void => {
-    writeSharedTheme(nextTheme);
-    startTransition(() => {
-      setThemeState(nextTheme);
-    });
-    window.dispatchEvent(
-      new CustomEvent<ThemeChoice>(THEME_CHANGE_EVENT, { detail: nextTheme }),
-    );
-  }, []);
-
-  const value = useMemo(() => ({ theme, setTheme }), [setTheme, theme]);
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const value = useMemo(() => ({ theme, setTheme }), [theme]);
 
   return <ThemeContext value={value}>{children}</ThemeContext>;
 }
@@ -140,7 +169,9 @@ export function ThemeProvider({
 export function usePanelTheme(): ThemeContextValue {
   const value = useContext(ThemeContext);
   if (value === null) {
-    throw new Error("ThemeToggle must be rendered inside PanelRoot.");
+    throw new Error(
+      "usePanelTheme must be called inside PanelRoot, which provides the theme context.",
+    );
   }
   return value;
 }

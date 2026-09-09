@@ -1,56 +1,70 @@
-import type { HTMLAttributes, ReactNode } from "react";
+import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
 
 import {
   type AnnouncementMode,
   liveRegionProps,
 } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
-import {
-  isSemanticTone,
-  resolveToneLabel,
-  type StatusTone,
-} from "../utils/tone.js";
-import { ToneAnnouncement } from "./ToneAnnouncement.js";
+import type { StatusTone } from "../utils/tone.js";
+import { ToneMark } from "./ToneMark.js";
 
-export type { StatusTone };
+export type StatusIndicatorSize = "default" | "compact";
 
-export interface StatusIndicatorProps extends HTMLAttributes<HTMLSpanElement> {
+export interface StatusIndicatorProps
+  extends HTMLAttributes<HTMLSpanElement>,
+    RefAttributes<HTMLSpanElement> {
   readonly children: ReactNode;
   readonly live?: AnnouncementMode | undefined;
+  /**
+   * `"compact"` shows the dot and glyph only, for chips and dense grids. The
+   * text stays in the accessibility tree as the indicator's name.
+   */
+  readonly size?: StatusIndicatorSize | undefined;
   readonly tone?: StatusTone | undefined;
   readonly toneLabel?: string | undefined;
 }
 
+/**
+ * A status dot beside its text. The dot carries a per-tone shape and the
+ * semantic tones add the shared glyph, so info and neutral differ without
+ * color. A blank `toneLabel` falls back to the default tone name, as it does
+ * on every other tone-badged component.
+ */
 export function StatusIndicator({
   children,
   className,
   live,
+  ref,
   role: suppliedRole,
+  size = "default",
   tone = "neutral",
   toneLabel,
   ...props
 }: StatusIndicatorProps): React.JSX.Element {
   const region = liveRegionProps(live, suppliedRole);
-  // The dot carries a per-tone shape, so the state survives without color.
-  // An explicitly blank label suppresses the announcement entirely here,
-  // unlike the tone-badged components that always name their tone.
-  const trimmedToneLabel = toneLabel?.trim();
-  const effectiveToneLabel = isSemanticTone(tone)
-    ? resolveToneLabel(tone, toneLabel)
-    : trimmedToneLabel;
 
   return (
     <span
       {...props}
-      className={classNames("snui-status", `snui-status--${tone}`, className)}
+      ref={ref}
+      className={classNames(
+        "snui-status",
+        `snui-status--${tone}`,
+        `snui-status--size-${size}`,
+        className,
+      )}
       role={region.role}
       aria-live={region["aria-live"]}
     >
       <span className="snui-status__dot" aria-hidden="true" />
-      <ToneAnnouncement
-        label={trimmedToneLabel === "" ? undefined : effectiveToneLabel}
-      />
-      <span>{children}</span>
+      <ToneMark tone={tone} toneLabel={toneLabel} />
+      <span
+        className={
+          size === "compact" ? "snui-visually-hidden" : "snui-status__text"
+        }
+      >
+        {children}
+      </span>
     </span>
   );
 }

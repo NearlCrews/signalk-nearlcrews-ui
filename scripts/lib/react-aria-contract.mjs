@@ -1,3 +1,17 @@
+/**
+ * Keeps the React Aria packages this library ships as one compatible set.
+ *
+ * `react-aria` is a direct dependency even though no source file imports it.
+ * react-aria-components depends on it, and a direct range is the lever that
+ * lets this repository require one installed copy at a version it has tested:
+ * the checks below assert that exactly one `react-aria` exists in the lockfile,
+ * that it satisfies both this package's range and react-aria-components'
+ * range, and that both packages accept the installed React. Removing the
+ * "unused" dependency would leave react-aria-components free to pull whatever
+ * `react-aria` it prefers, and the versioned CSS scope assumes one copy per
+ * remote. Knip does not report it because it is a declared dependency; do not
+ * remove it on that basis.
+ */
 import { satisfies } from "semver";
 
 function requiredObject(value, description) {

@@ -21,12 +21,19 @@ import { Button, type ButtonVariant } from "./Button.js";
 
 export type InlineConfirmCancelReason = "cancel" | "escape";
 
+const DEFAULT_CANCEL_LABEL = "Cancel";
+const DEFAULT_CONFIRM_LABEL = "Confirm";
+const DEFAULT_TITLE = "Confirm action";
+
 export interface InlineConfirmProps
   extends Omit<HTMLAttributes<HTMLElement>, "children" | "onCancel" | "title">,
     RefAttributes<HTMLElement> {
   readonly busy?: boolean | undefined;
   readonly cancelLabel?: ReactNode | undefined;
-  readonly cancelVariant?: ButtonVariant | undefined;
+  /** The escape action is always available, so it never paints as danger. */
+  readonly cancelVariant?:
+    | Extract<ButtonVariant, "secondary" | "ghost">
+    | undefined;
   readonly confirmLabel?: ReactNode | undefined;
   readonly confirmVariant?:
     | Extract<ButtonVariant, "primary" | "danger">
@@ -52,13 +59,13 @@ export function InlineConfirm({
   "aria-describedby": ariaDescribedBy,
   "aria-labelledby": ariaLabelledBy,
   busy = false,
-  cancelLabel = "Cancel",
+  cancelLabel,
   cancelVariant,
   className,
-  confirmLabel = "Confirm",
+  confirmLabel,
   confirmVariant = "danger",
   defaultOpen = false,
-  fallbackTitle = "Confirm action",
+  fallbackTitle,
   headingLevel = 2,
   initialFocusRef,
   landmark = true,
@@ -79,17 +86,18 @@ export function InlineConfirm({
   const focusIsInside = useRef(false);
   const [internalOpen, setInternalOpen] = useState(defaultOpen);
   const effectiveOpen = open ?? internalOpen;
+  // Each string falls back once: a blank prop reads the same as an absent one.
   const effectiveTitle = hasReactContent(title)
     ? title
     : hasReactContent(fallbackTitle)
       ? fallbackTitle
-      : "Confirm action";
+      : DEFAULT_TITLE;
   const effectiveCancelLabel = hasReactContent(cancelLabel)
     ? cancelLabel
-    : "Cancel";
+    : DEFAULT_CANCEL_LABEL;
   const effectiveConfirmLabel = hasReactContent(confirmLabel)
     ? confirmLabel
-    : "Confirm";
+    : DEFAULT_CONFIRM_LABEL;
   const Heading = HEADING_ELEMENTS[headingLevel];
 
   // One callback ref owns the node so a caller ref is attached and released
@@ -173,7 +181,7 @@ export function InlineConfirm({
       behavior: reduceMotion ? "auto" : "smooth",
     });
 
-    // Focus the labelled and described container so the message is conveyed on
+    // Focus the labeled and described container so the message is conveyed on
     // open, unless the caller named a better first stop. Focusing Cancel first
     // would announce the button and skip the message it is asking the user to
     // act on.
@@ -215,7 +223,6 @@ export function InlineConfirm({
         landmark ? joinIdReferences(ariaLabelledBy, titleId) : undefined
       }
       aria-describedby={joinIdReferences(ariaDescribedBy, messageId)}
-      aria-keyshortcuts="Escape"
       aria-busy={busy || undefined}
       tabIndex={-1}
       onKeyDown={handleKeyDown}

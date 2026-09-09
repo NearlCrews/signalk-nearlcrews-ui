@@ -1,28 +1,35 @@
 name: Update visual baselines
 
+# Generates the hosted visual-baseline families. Each family is one runner
+# image and architecture, matched to a browser job in ci.yml, and the workflow
+# contract test requires every screenshot in tests/browser/panel.spec.ts to
+# exist for every family. A local run writes `linux-local-<arch>` images, which
+# are ignored, so only this workflow produces images that can be committed.
+
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   update:
-    name: Baselines (${{ matrix.variant }})
+    name: Baselines (${{ matrix.snapshot_variant }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
+        # Keep these entries equal to the browser matrix in ci.yml; a unit test
+        # asserts that.
         include:
-          - variant: linux-x64
-            runner: ubuntu-latest
-            snapshot_variant: x64
-          - variant: ubuntu24-x64
-            runner: ubuntu-24.04
+          - runner: ubuntu-24.04
             snapshot_variant: ubuntu24-x64
-          - variant: ubuntu24-arm64
-            runner: ubuntu-24.04-arm
+          - runner: ubuntu-24.04-arm
             snapshot_variant: ubuntu24-arm64
     steps:
       - name: Check out repository
@@ -32,28 +39,44 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
+          # Floating on the active LTS line; see the pin policy in ci.yml.
           node-version: 24
           package-manager-cache: false
       - name: Set up npm
         env:
           NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
         run: |
-          npm install --global npm@12.0.2
+          npm install --global "npm@$(node -p "require('./package.json').devEngines.packageManager.version")"
           echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
           "${NPM_CONFIG_PREFIX}/bin/npm" --version
       - name: Install dependencies
         run: npm ci
       - name: Install browser dependencies
-        run: npx --no-install playwright install --with-deps chromium firefox webkit
+        # `--with-deps` runs apt, and the runner image configures Google's
+        # Chrome repository, which Playwright does not need: it ships its own
+        # browser builds and takes only shared libraries from Ubuntu's archive.
+        # That third-party index has served a corrupt Packages.gz for long
+        # enough to block a release, so drop it before apt reads it.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
+          npx --no-install playwright install --with-deps chromium firefox webkit
       - name: Regenerate baselines
         env:
           SNUI_SNAPSHOT_VARIANT: ${{ matrix.snapshot_variant }}
           SNUI_UPDATE_BASELINES: "true"
-        run: npm run test:browser:update -- --project=chromium
+        # Every project a screenshot maps to: desktop Chromium,
+        # WebKit for the native-controls image, and mobile Chromium for the
+        # mobile image. Firefox takes no screenshots.
+        run: npm run test:browser:update -- --project=chromium --project=webkit --project=mobile-chromium
+      - name: Assert the family is complete
+        env:
+          SNUI_SNAPSHOT_VARIANT: ${{ matrix.snapshot_variant }}
+        run: node scripts/check-snapshot-families.mjs --variant "$SNUI_SNAPSHOT_VARIANT"
       - name: Upload baselines
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: baselines-${{ matrix.variant }}
+          name: baselines-${{ matrix.snapshot_variant }}
           path: tests/browser/panel.spec.ts-snapshots/
           retention-days: 3
           if-no-files-found: error

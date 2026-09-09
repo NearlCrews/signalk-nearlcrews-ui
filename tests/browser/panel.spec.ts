@@ -1,20 +1,13 @@
-import { existsSync, readFileSync } from "node:fs";
-import { basename, dirname, extname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 
-import AxeBuilder from "@axe-core/playwright";
 import {
   expect,
+  expectNoAxeViolations,
   type Locator,
   type Page,
   type TestInfo,
   test,
 } from "./fixtures.js";
-
-async function expectNoAxeViolations(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).analyze();
-  expect(results.violations).toEqual([]);
-}
 
 /** Pixels of the last panel action the docked bar is scrolled to cover. */
 const DOCKED_BAR_OVERLAP = 8;
@@ -59,6 +52,18 @@ interface StabilityProbe {
  * count is the frame the pair completed on. The optional focus runs in the same
  * task as the count so the frames after it are the ones measured.
  */
+/** Resolves a color token inside the panel root, in the theme it currently shows. */
+async function readTokenColor(page: Page, token: string): Promise<string> {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
+    document.querySelector("[data-snui-version]")?.append(probe);
+    probe.style.color = `var(${name})`;
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }, token);
+}
+
 async function framesUntilStable(
   page: Page,
   probe: StabilityProbe,
@@ -113,7 +118,7 @@ async function settleFrames(page: Page): Promise<void> {
 /**
  * Opens the unconstrained Admin host, waits for the bar to dock, then scrolls
  * the last panel action until the bar covers its bottom edge. The action's
- * centre stays clear of the bar, so a press lands on the action itself, and a
+ * center stays clear of the bar, so a press lands on the action itself, and a
  * clearance scroll, which only keyboard and programmatic focus ask for, is the
  * one thing that could move it afterwards.
  */
@@ -157,56 +162,6 @@ async function actionClearsBar({
   return actionBox.y + actionBox.height <= barBox.y;
 }
 
-const CI_SNAPSHOT_VARIANTS = ["x64", "ubuntu24-x64", "ubuntu24-arm64"] as const;
-
-function snapshotProject(snapshot: string): string {
-  if (snapshot === "panel-mobile-light.png") return "mobile-chromium";
-  if (snapshot === "panel-native-controls-webkit.png") return "webkit";
-  return "chromium";
-}
-
-test("has every required CI visual baseline family", ({
-  browserErrorCapture,
-}, testInfo) => {
-  expect(browserErrorCapture).toBeUndefined();
-  test.skip(testInfo.project.name !== "chromium");
-  test.skip(
-    process.env.SNUI_UPDATE_BASELINES === "true",
-    "The refresh run must generate missing baselines before this check can pass.",
-  );
-  const sourcePath = fileURLToPath(import.meta.url);
-  const source = readFileSync(sourcePath, "utf8");
-  const snapshots = new Set<string>();
-  const literalSnapshotCall =
-    /(?:toHaveScreenshot|withActiveSave)\(\s*(?:page,\s*)?["']([^"']+\.png)["']/g;
-  for (const match of source.matchAll(literalSnapshotCall)) {
-    const snapshot = match[1];
-    if (snapshot !== undefined) snapshots.add(snapshot);
-  }
-
-  const snapshotDirectory = join(
-    dirname(sourcePath),
-    `${basename(sourcePath)}-snapshots`,
-  );
-  const missing: string[] = [];
-  for (const snapshot of snapshots) {
-    const stem = basename(snapshot, extname(snapshot));
-    const project = snapshotProject(snapshot);
-    for (const variant of CI_SNAPSHOT_VARIANTS) {
-      const candidate = join(
-        snapshotDirectory,
-        `${stem}-${project}-linux-${variant}.png`,
-      );
-      if (!existsSync(candidate)) missing.push(basename(candidate));
-    }
-  }
-
-  expect(
-    missing,
-    "Every visual spec needs linux-x64, ubuntu24-x64, and ubuntu24-arm64 baselines from the manual refresh workflow.",
-  ).toEqual([]);
-});
-
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await expect(
@@ -234,7 +189,7 @@ test("renders all themes and component states without axe violations", async ({
   for (const [theme, dangerColor, textColor] of [
     ["Light", "rgb(180, 35, 24)", "rgb(24, 32, 44)"],
     ["Dark", "rgb(255, 139, 130)", "rgb(245, 247, 250)"],
-    ["Night", "rgb(255, 107, 107)", "rgb(255, 120, 120)"],
+    ["Night", "rgb(255, 48, 48)", "rgb(255, 64, 64)"],
   ] as const) {
     await page.getByRole("radio", { name: theme }).click();
     await expect(page.locator("[data-snui-version]")).toHaveAttribute(
@@ -443,7 +398,7 @@ test("keeps library styling inside the panel root", async ({
   );
   const reentryButton = page.locator("#reentry-version-button");
   await expect(reentryButton).toHaveCSS("min-height", expectedHeight);
-  await expect(reentryButton).toHaveCSS("background-color", "rgb(229, 72, 72)");
+  await expect(reentryButton).toHaveCSS("background-color", "rgb(236, 56, 56)");
   await reentryButton.focus();
   await expect(reentryButton).toHaveCSS("outline-width", "2px");
 });
@@ -551,6 +506,7 @@ test("applies the control target floor to every interactive primitive", async ({
     page.getByRole("radio", { name: "Normal" }),
     page.getByRole("button", { name: "Save" }),
     page.getByRole("checkbox", { name: "Enable provider" }).locator(".."),
+    page.getByRole("checkbox", { name: "Select all sources" }).locator(".."),
     page.getByRole("button", { name: "Dismiss" }),
     page.getByRole("button", { name: "Provider status and metrics" }),
   ];
@@ -559,6 +515,15 @@ test("applies the control target floor to every interactive primitive", async ({
     const box = await target.boundingBox();
     expect(box?.height).toBeGreaterThanOrEqual(minimumHeight - 0.01);
   }
+
+  // A checkbox with a hidden label has only its box to hit, so the control
+  // must hold the floor in both axes.
+  const hiddenLabelBox = await page
+    .getByRole("checkbox", { name: "Include provider in exports" })
+    .locator("..")
+    .boundingBox();
+  expect(hiddenLabelBox?.height).toBeGreaterThanOrEqual(minimumHeight - 0.01);
+  expect(hiddenLabelBox?.width).toBeGreaterThanOrEqual(minimumHeight - 0.01);
 
   // A button holding a single glyph has no text to widen it, so the floor has
   // to come from the control itself in both axes.
@@ -622,7 +587,11 @@ test("supports action-bearing collapsible status content", async ({ page }) => {
 
 test("provides hover and active feedback for raw action controls", async ({
   page,
-}) => {
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name === "mobile-chromium",
+    "Hover feedback is gated on hover-capable pointers, which a touch device lacks.",
+  );
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("radio", { name: "Light" }).click();
   for (const control of [
@@ -658,7 +627,13 @@ test("provides hover and active feedback for raw action controls", async ({
   }
 });
 
-test("provides segmented hover and active feedback", async ({ page }) => {
+test("provides segmented hover and active feedback", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name === "mobile-chromium",
+    "Hover feedback is gated on hover-capable pointers, which a touch device lacks.",
+  );
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("button", { name: "Advanced settings" }).click();
   const selected = page.getByRole("radio", { name: "Normal" });
@@ -703,10 +678,12 @@ test("keeps aria-disabled focus indicators fully opaque", async ({ page }) => {
   await page.goto("/?states=1");
   const button = page.getByRole("button", { name: "Unavailable here" });
 
+  const disabledText = await readTokenColor(page, "--snui-color-text-disabled");
   await expect(button).toHaveCSS("opacity", "1");
+  await expect(button).toHaveCSS("color", disabledText);
   await expect(button.locator(".snui-button__content")).toHaveCSS(
     "opacity",
-    "0.58",
+    "1",
   );
   await expect(button.locator(".snui-button__content")).toHaveCSS(
     "display",
@@ -729,7 +706,8 @@ test("keeps aria-disabled focus indicators fully opaque", async ({ page }) => {
   await nativeDisabled.evaluate((element) =>
     element.setAttribute("aria-disabled", "true"),
   );
-  await expect(nativeDisabled).toHaveCSS("opacity", "0.58");
+  await expect(nativeDisabled).toHaveCSS("opacity", "1");
+  await expect(nativeDisabled).toHaveCSS("color", disabledText);
   await expect(nativeDisabled.locator(".snui-button__content")).toHaveCSS(
     "opacity",
     "1",
@@ -774,6 +752,10 @@ test("styles native text controls and links in Night mode", async ({
   page,
 }) => {
   await page.getByRole("radio", { name: "Night" }).click();
+  const nightDisabledText = await readTokenColor(
+    page,
+    "--snui-color-text-disabled",
+  );
 
   const controls = [
     page.getByLabel("API token"),
@@ -782,13 +764,13 @@ test("styles native text controls and links in Night mode", async ({
   ];
   for (const control of controls) {
     await expect(control).toHaveCSS("background-color", "rgb(16, 0, 0)");
-    await expect(control).toHaveCSS("color", "rgb(255, 120, 120)");
+    await expect(control).toHaveCSS("color", "rgb(255, 64, 64)");
   }
 
   const link = page.getByRole("link", {
     name: "Read the Signal K documentation",
   });
-  await expect(link).toHaveCSS("color", "rgb(255, 146, 146)");
+  await expect(link).toHaveCSS("color", "rgb(255, 56, 56)");
   await expect(link).toHaveCSS("text-decoration-line", "underline");
 
   for (const control of controls) {
@@ -801,7 +783,8 @@ test("styles native text controls and links in Night mode", async ({
         element.disabled = true;
       }
     });
-    await expect(control).toHaveCSS("opacity", "0.58");
+    await expect(control).toHaveCSS("opacity", "1");
+    await expect(control).toHaveCSS("color", nightDisabledText);
   }
 });
 
@@ -952,8 +935,10 @@ test("renders compliant placeholders and a red-preserving Night accent", async (
 
   const night = page.getByRole("radio", { name: "Night" });
   await night.click();
-  await expect(night).toHaveCSS("background-color", "rgb(255, 90, 90)");
-  await expect(night).toHaveCSS("color", "rgb(25, 0, 0)");
+  // Park the pointer so the selected option shows its rest fill, not hover.
+  await page.mouse.move(0, 0);
+  await expect(night).toHaveCSS("background-color", "rgb(236, 56, 56)");
+  await expect(night).toHaveCSS("color", "rgb(16, 0, 0)");
 
   for (const checkbox of [
     page.getByRole("checkbox", { name: "Enable provider" }),
@@ -963,7 +948,7 @@ test("renders compliant placeholders and a red-preserving Night accent", async (
       await checkbox.evaluate(
         (element) => getComputedStyle(element, "::before").borderBottomColor,
       ),
-    ).toBe("rgb(25, 0, 0)");
+    ).toBe("rgb(16, 0, 0)");
   }
   expect(
     await page
@@ -1499,7 +1484,9 @@ test("keeps native controls and focus visible in forced colors", async ({
   });
   await expect(bannerLink).toHaveCSS("forced-color-adjust", "auto");
   await expect(bannerLink).toHaveCSS("color", systemColors.link);
-  await expect(bannerDismiss).toHaveCSS("forced-color-adjust", "auto");
+  // Library buttons reconstruct themselves in system colors under forced
+  // colors, so the dismiss control opts out of adjustment and paints ButtonText.
+  await expect(bannerDismiss).toHaveCSS("forced-color-adjust", "none");
   await expect(bannerDismiss).toHaveCSS("color", systemColors.button);
   await expect(rawBannerAction).toHaveCSS("forced-color-adjust", "auto");
   await expect(rawBannerAction).toHaveCSS("color", systemColors.button);
@@ -1517,6 +1504,16 @@ test("keeps native controls and focus visible in forced colors", async ({
   await page
     .getByRole("checkbox", { name: "Partially configured option" })
     .focus();
+  // Forced colors with the controls focused is part of the audited matrix.
+  await expectNoAxeViolations(page, {
+    disableRules: [
+      {
+        id: "color-contrast",
+        reason:
+          "Under forced colors the browser replaces author colors with the system palette at paint time while computed values keep the author colors, so axe grades pairs such as Dark text over a forced Canvas background that the user never sees; the contrast of the system palette belongs to the operating system.",
+      },
+    ],
+  });
   await expect(page.locator("[data-snui-version]")).toHaveScreenshot(
     "panel-forced-colors-controls.png",
     { animations: "disabled" },

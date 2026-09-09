@@ -4,6 +4,7 @@ import {
   type HTMLAttributes,
   type ReactElement,
   type ReactNode,
+  type RefAttributes,
   useId,
 } from "react";
 import type { AnnouncementMode } from "../utils/announcement.js";
@@ -11,6 +12,7 @@ import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { resolveFieldError } from "../utils/field-error.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { type Density, resolveDensity } from "../utils/variants.js";
 import { FieldError } from "./FieldError.js";
 
 export interface FieldControlProps {
@@ -33,8 +35,32 @@ export interface LabeledFieldControlProps extends FieldControlProps {
   readonly errorId?: string | undefined;
 }
 
+/** The render-prop argument split into DOM attributes and the region ids. */
+export interface SplitLabeledFieldControlProps {
+  /** Attributes safe to spread onto the control element. */
+  readonly controlProps: FieldControlProps & { readonly id: string };
+  readonly descriptionId: string | undefined;
+  readonly errorId: string | undefined;
+}
+
+/**
+ * Separates the render-prop argument into the attributes a control element
+ * accepts and the two region ids, which are lookups rather than attributes.
+ * Spread `controlProps` onto the control and wire secondary controls to the
+ * ids with `aria-describedby`.
+ */
+export function splitLabeledFieldControlProps({
+  descriptionId,
+  errorId,
+  ...controlProps
+}: LabeledFieldControlProps): SplitLabeledFieldControlProps {
+  return { controlProps, descriptionId, errorId };
+}
+
 export type LabeledFieldLayout = "stacked" | "inline";
-export type LabeledFieldDensity = "comfortable" | "compact";
+/** @deprecated Use {@link Density}; "comfortable" maps to "default". */
+export type LabeledFieldDensity = Density | "comfortable";
+/** @deprecated Use {@link AnnouncementMode}. */
 export type FieldErrorLive = AnnouncementMode;
 
 export type LabeledFieldChild =
@@ -42,13 +68,15 @@ export type LabeledFieldChild =
   | ((controlProps: LabeledFieldControlProps) => ReactNode);
 
 export interface LabeledFieldProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children">,
+    RefAttributes<HTMLDivElement> {
   readonly children: LabeledFieldChild;
-  readonly density?: LabeledFieldDensity | undefined;
+  /** "comfortable" is accepted as a deprecated alias of "default". */
+  readonly density?: Density | "comfortable" | undefined;
   readonly description?: ReactNode | undefined;
   readonly disabled?: boolean | undefined;
   readonly error?: ReactNode | undefined;
-  readonly errorLive?: FieldErrorLive | undefined;
+  readonly errorLive?: AnnouncementMode | undefined;
   readonly label: ReactNode;
   readonly layout?: LabeledFieldLayout | undefined;
   readonly name?: string | undefined;
@@ -85,7 +113,7 @@ function requireLabelableIntrinsicChild(
 export function LabeledField({
   children,
   className,
-  density = "comfortable",
+  density,
   description,
   disabled,
   error,
@@ -94,6 +122,7 @@ export function LabeledField({
   layout = "stacked",
   name,
   optionalLabel,
+  ref,
   required = false,
   ...props
 }: LabeledFieldProps): React.JSX.Element {
@@ -152,10 +181,11 @@ export function LabeledField({
   return (
     <div
       {...props}
+      ref={ref}
       className={classNames(
         "snui-field",
         `snui-field--${layout}`,
-        `snui-field--${density}`,
+        `snui-field--${resolveDensity(density)}`,
         className,
       )}
     >
@@ -166,9 +196,10 @@ export function LabeledField({
             *
           </span>
         ) : hasReactContent(optionalLabel) ? (
-          <span className="snui-optional-mark" aria-hidden="true">
-            {optionalLabel}
-          </span>
+          // The optional marker stays in the accessible name so what the
+          // user hears matches what the user sees. The required asterisk is
+          // hidden instead because the native attribute already carries it.
+          <span className="snui-optional-mark">{optionalLabel}</span>
         ) : null}
       </label>
       {hasDescription ? (

@@ -31,13 +31,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
+          # Floating on the active LTS line; see the pin policy in ci.yml.
           node-version: 24
           package-manager-cache: false
       - name: Set up npm
         env:
           NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
         run: |
-          npm install --global npm@12.0.2
+          npm install --global "npm@$(node -p "require('./package.json').devEngines.packageManager.version")"
           echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
           "${NPM_CONFIG_PREFIX}/bin/npm" --version
       - name: Verify release metadata
@@ -71,29 +72,9 @@ jobs:
             echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm." >&2
             exit 1
           fi
-          if [[ "$PACKAGE_VERSION" == *-* ]]; then
-            echo "dist-tag=next" >> "$GITHUB_OUTPUT"
-          else
-            LATEST_VERSION="$(npm view "$PACKAGE_NAME" dist-tags.latest)"
-            node --input-type=module - "$PACKAGE_VERSION" "$LATEST_VERSION" <<'NODE'
-          const [candidate, current] = process.argv.slice(2);
-          const parse = (value) => {
-            const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
-            if (match === null) throw new Error(`Expected a stable semantic version, received ${value}.`);
-            return match.slice(1).map(Number);
-          };
-          const candidateParts = parse(candidate);
-          const currentParts = parse(current);
-          for (let index = 0; index < candidateParts.length; index += 1) {
-            if (candidateParts[index] > currentParts[index]) process.exit(0);
-            if (candidateParts[index] < currentParts[index]) {
-              throw new Error(`${candidate} must be newer than npm latest ${current}.`);
-            }
-          }
-          throw new Error(`${candidate} must be newer than npm latest ${current}.`);
-          NODE
-            echo "dist-tag=latest" >> "$GITHUB_OUTPUT"
-          fi
+          LATEST_VERSION="$(npm view "$PACKAGE_NAME" dist-tags.latest)"
+          DIST_TAG="$(node scripts/check-registry-order.mjs --candidate "$PACKAGE_VERSION" --latest "$LATEST_VERSION")"
+          echo "dist-tag=${DIST_TAG}" >> "$GITHUB_OUTPUT"
       - name: Verify exact-commit CI and CodeQL checks
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -102,7 +83,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Install browser dependencies
-        run: npx --no-install playwright install --with-deps chromium firefox webkit
+        # `--with-deps` runs apt, and the runner image configures Google's
+        # Chrome repository, which Playwright does not need: it ships its own
+        # browser builds and takes only shared libraries from Ubuntu's archive.
+        # That third-party index has served a corrupt Packages.gz for long
+        # enough to block a release, so drop it before apt reads it.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
+          npx --no-install playwright install --with-deps chromium firefox webkit
       - name: Run release checks
         env:
           SNUI_RELEASE_APPROVED: "true"
@@ -151,9 +140,19 @@ jobs:
       contents: read
       id-token: write
     steps:
+      # The publish job installs nothing and publishes only the tarball the
+      # verify job preserved. The sparse checkout brings in the release scripts
+      # (and, as cone mode always does, the root files such as package.json) so
+      # the registry-ordering check runs the same tested code as verification.
+      - name: Check out release scripts
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
+          # Floating on the active LTS line; see the pin policy in ci.yml.
           node-version: 24
           registry-url: https://registry.npmjs.org/
           package-manager-cache: false
@@ -161,7 +160,7 @@ jobs:
         env:
           NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
         run: |
-          npm install --global npm@12.0.2
+          npm install --global "npm@$(node -p "require('./package.json').devEngines.packageManager.version")"
           echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
           "${NPM_CONFIG_PREFIX}/bin/npm" --version
       - name: Download verified package
@@ -198,25 +197,13 @@ jobs:
             echo "${PACKAGE_NAME}@${PACKAGE_VERSION} already exists on npm." >&2
             exit 1
           fi
-          if [ "$DIST_TAG" = "latest" ]; then
-            LATEST_VERSION="$(npm view "$PACKAGE_NAME" dist-tags.latest)"
-            node --input-type=module - "$PACKAGE_VERSION" "$LATEST_VERSION" <<'NODE'
-          const [candidate, current] = process.argv.slice(2);
-          const parse = (value) => {
-            const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(value);
-            if (match === null) throw new Error(`Expected a stable semantic version, received ${value}.`);
-            return match.slice(1).map(Number);
-          };
-          const candidateParts = parse(candidate);
-          const currentParts = parse(current);
-          for (let index = 0; index < candidateParts.length; index += 1) {
-            if (candidateParts[index] > currentParts[index]) process.exit(0);
-            if (candidateParts[index] < currentParts[index]) {
-              throw new Error(`${candidate} must be newer than npm latest ${current}.`);
-            }
-          }
-          throw new Error(`${candidate} must be newer than npm latest ${current}.`);
-          NODE
+          # The registry may have moved between verification and environment
+          # approval, so the ordering check runs again against the live latest.
+          LATEST_VERSION="$(npm view "$PACKAGE_NAME" dist-tags.latest)"
+          RESOLVED_TAG="$(node scripts/check-registry-order.mjs --candidate "$PACKAGE_VERSION" --latest "$LATEST_VERSION")"
+          if [ "$RESOLVED_TAG" != "$DIST_TAG" ]; then
+            echo "Registry ordering changed since verification: verified dist-tag $DIST_TAG, now $RESOLVED_TAG." >&2
+            exit 1
           fi
           echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
           sha256sum "$TARBALL"
@@ -225,4 +212,6 @@ jobs:
         env:
           DIST_TAG: ${{ needs.verify.outputs.dist-tag }}
           TARBALL: ${{ steps.package.outputs.tarball }}
-        run: npm publish "$TARBALL" --access public --tag "$DIST_TAG"
+        # Matches the dry run above. Publishing a tarball runs no lifecycle
+        # scripts either way; the flag states that rather than relying on it.
+        run: npm publish "$TARBALL" --ignore-scripts --access public --tag "$DIST_TAG"

@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { transform } from "lightningcss";
 import { describe, expect, it } from "vitest";
 
-import { PANEL_STYLES } from "../../src/styles/index.js";
+import { PANEL_STYLES, STYLE_MODULES } from "../../src/styles/index.js";
 import {
   PUBLIC_COLOR_TOKEN_NAMES,
   PUBLIC_TOKEN_NAMES,
@@ -15,6 +15,9 @@ import { ROOT_SELECTOR } from "../../src/version.js";
 // jsdom rewrites import.meta.url to an http URL, so resolve from the
 // project root (the vitest working directory) instead.
 const COMPONENTS_DIR = join(process.cwd(), "src", "components");
+
+/** Every module's CSS, root first, for checks that span the whole delivery. */
+const ALL_STYLES = STYLE_MODULES.map((module) => module.styles).join("\n");
 
 /**
  * Class tokens referenced by component TSX. The lookbehind keeps custom
@@ -35,6 +38,9 @@ const UNSTYLED_HOOK_CLASSES: Record<string, true> = {
   "snui-section__heading-group": true,
   // Inherits size, weight, and color from the surrounding snui-toast__tone rule.
   "snui-toast__tone-glyph": true,
+  // Focus hook the toast region uses to find the dismiss control; the button
+  // itself is styled by the shared snui-button rules.
+  "snui-toast__dismiss": true,
 };
 
 /** Classes the stylesheet defines without a literal TSX reference. */
@@ -70,32 +76,73 @@ function componentClassTokens(): {
   return { literals, prefixes };
 }
 
-function stylesheetClasses(css: string = PANEL_STYLES): Set<string> {
+function stylesheetClasses(css: string = ALL_STYLES): Set<string> {
   return new Set(
     [...css.matchAll(/\.(snui-[a-z0-9_-]+)/g)].map((match) => match[1] ?? ""),
   );
 }
 
-describe("stylesheet validity", () => {
-  it("parses without errors and round-trips through lightningcss", () => {
-    const first = transform({
-      filename: "panel.css",
-      code: Buffer.from(PANEL_STYLES, "utf8"),
-      minify: false,
-    });
-    expect(first.warnings).toEqual([]);
+describe.each(STYLE_MODULES.map((module) => [module.id, module] as const))(
+  "stylesheet validity: %s module",
+  (_id, module) => {
+    it("parses without errors and round-trips through lightningcss", () => {
+      const first = transform({
+        filename: `${module.id}.css`,
+        code: Buffer.from(module.styles, "utf8"),
+        minify: false,
+      });
+      expect(first.warnings).toEqual([]);
 
-    // lightningcss normalizes declaration order, so the round-trip compares
-    // selector and token content rather than bytes.
-    const second = transform({
-      filename: "panel-roundtrip.css",
-      code: first.code,
-      minify: false,
+      // lightningcss normalizes declaration order, so the round-trip compares
+      // selector and token content rather than bytes.
+      const second = transform({
+        filename: `${module.id}-roundtrip.css`,
+        code: first.code,
+        minify: false,
+      });
+      const output = Buffer.from(second.code).toString("utf8");
+      expect(stylesheetClasses(output)).toEqual(
+        stylesheetClasses(module.styles),
+      );
     });
-    const output = Buffer.from(second.code).toString("utf8");
-    expect(stylesheetClasses(output)).toEqual(stylesheetClasses());
+  },
+);
+
+describe("root module", () => {
+  it("keeps every public token through the lightningcss round-trip", () => {
+    const output = Buffer.from(
+      transform({
+        filename: "root.css",
+        code: Buffer.from(PANEL_STYLES, "utf8"),
+        minify: false,
+      }).code,
+    ).toString("utf8");
     for (const token of PUBLIC_TOKEN_NAMES) {
       expect(output).toContain(`${token}:`);
+    }
+  });
+
+  it("is the only module that declares tokens", () => {
+    const rootTokens = new Set(
+      [...PANEL_STYLES.matchAll(/(--snui-[a-z0-9-]+)\s*:/g)].map(
+        (match) => match[1],
+      ),
+    );
+    for (const module of STYLE_MODULES.slice(1)) {
+      for (const match of module.styles.matchAll(
+        /(--snui-[a-z0-9-]+)\s*:\s*([^;]+);/g,
+      )) {
+        const name = match[1] ?? "";
+        const value = (match[2] ?? "").trim();
+        expect(
+          rootTokens.has(name),
+          `${module.id} declares ${name}, which the root module never defines; tokens belong to the root module`,
+        ).toBe(true);
+        expect(
+          value,
+          `${module.id} gives ${name} a raw value; a module may only point a root token at another root token`,
+        ).toMatch(/^var\(--snui-[a-z0-9-]+\)$/);
+      }
     }
   });
 });

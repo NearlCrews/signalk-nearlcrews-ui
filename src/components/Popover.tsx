@@ -10,6 +10,8 @@ import {
   Pressable,
   Popover as RACPopover,
 } from "react-aria-components";
+import { OVERLAY_STYLES } from "../styles/overlay-styles.js";
+import { useModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
 import { overlayZIndex, useOverlayLayer } from "../utils/overlay-layer.js";
 import { usePanelPortalContainerReady } from "../utils/portal.js";
@@ -32,9 +34,22 @@ export interface PopoverProps
    * that element, and spread every injected event and ARIA prop onto it.
    */
   readonly trigger: ReactElement;
-  /** Fixed pixel width; "auto" sizes to the content. */
-  readonly width?: number | "auto" | undefined;
+  /**
+   * Width as a CSS length string, such as `"18rem"` or
+   * `"var(--snui-content-width-standard)"`; `"auto"` (the default) sizes to
+   * the content. A bare number is read as pixels and is deprecated.
+   */
+  readonly width?: PopoverWidth | undefined;
 }
+
+/**
+ * A CSS length string, or `"auto"` to size to the content. Numbers are
+ * accepted as pixels for compatibility and are deprecated.
+ *
+ * `"auto"` is spelled out so an editor suggests it; `string & {}` keeps every
+ * other length accepted, which a bare `"auto" | string` would collapse away.
+ */
+export type PopoverWidth = "auto" | (string & {}) | number;
 
 const INTERACTIVE_ROLES = new Set([
   "application",
@@ -91,6 +106,7 @@ export function Popover({
   width = "auto",
 }: PopoverProps): React.JSX.Element {
   const triggerRef = useRef<HTMLElement | null>(null);
+  useModuleStyles(OVERLAY_STYLES, "Popover");
   const portalReady = usePanelPortalContainerReady("Popover");
   const overlayLayer = useOverlayLayer();
 
@@ -128,7 +144,8 @@ export function Popover({
             ...(width === "auto"
               ? {}
               : {
-                  "--snui-popover-width": `${String(width)}px`,
+                  "--snui-popover-width":
+                    typeof width === "number" ? `${String(width)}px` : width,
                 }),
           }}
         >

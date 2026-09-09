@@ -18,6 +18,14 @@ export const COLLAPSIBLE_STYLES = scopeStyles(`
   background: var(--snui-color-surface);
 }
 
+/* Embedded sections sit inside a Card and borrow its chrome. */
+.snui-collapsible--embedded {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
 .snui-collapsible__header {
   display: flex;
   min-width: 0;
@@ -28,11 +36,28 @@ export const COLLAPSIBLE_STYLES = scopeStyles(`
   padding: var(--snui-space-2) var(--snui-space-3);
 }
 
+.snui-collapsible__leading {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;
+}
+
+/*
+ * The heading takes the same type step a Section heading of that level would,
+ * so sibling level-2 titles match whether or not they collapse.
+ */
 .snui-collapsible__heading {
   min-width: 0;
   flex: 1 1 auto;
   margin: 0;
   font: inherit;
+  font-size: var(--snui-font-size);
+}
+
+.snui-collapsible__heading--level-1,
+.snui-collapsible__heading--level-2 {
+  font-size: var(--snui-font-size-lg);
 }
 
 .snui-collapsible__toggle {
@@ -53,8 +78,10 @@ export const COLLAPSIBLE_STYLES = scopeStyles(`
   transition: background-color var(--snui-transition-fast);
 }
 
-.snui-collapsible__toggle:not(:disabled):hover {
-  background: var(--snui-color-interactive-hover);
+@media (hover: hover) {
+  .snui-collapsible__toggle:not(:disabled):hover {
+    background: var(--snui-color-interactive-hover);
+  }
 }
 
 .snui-collapsible__toggle:not(:disabled):active {
@@ -119,7 +146,16 @@ ${DISABLED_DECLARATIONS}
 
 .snui-collapsible__content {
   padding: var(--snui-space-3) var(--snui-space-4) var(--snui-space-4);
-  border-top: 1px solid var(--snui-color-border);
+  border-block-start: 1px solid var(--snui-color-border);
+}
+
+.snui-collapsible--embedded > .snui-collapsible__header {
+  padding-inline: 0;
+}
+
+.snui-collapsible--embedded > .snui-collapsible__content,
+.snui-collapsible--embedded > .snui-collapsible__summary--below {
+  padding-inline: 0;
 }
 
 @container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {

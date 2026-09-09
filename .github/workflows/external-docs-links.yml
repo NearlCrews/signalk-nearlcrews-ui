@@ -1,5 +1,9 @@
 name: External documentation links
 
+# The repository allows GitHub-owned actions only, so lychee is downloaded as a
+# pinned release archive and verified by checksum, the same way ci.yml installs
+# actionlint and zizmor.
+
 on:
   schedule:
     - cron: "41 7 * * 1"
@@ -22,14 +26,26 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Install lychee
+        env:
+          LYCHEE_VERSION: 0.24.2
+          LYCHEE_SHA256: 1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
+        run: |
+          archive="lychee-x86_64-unknown-linux-gnu.tar.gz"
+          url="https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/${archive}"
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "$url"
+          echo "${LYCHEE_SHA256}  ${archive}" | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --strip-components=1 "lychee-x86_64-unknown-linux-gnu/lychee"
       - name: Check external documentation links
-        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
-        with:
-          lycheeVersion: v0.24.2
-          args: >-
-            --no-progress
-            --max-retries 2
-            --retry-wait-time 2
-            --timeout 20
-            --accept "100..=103,200..=299,403,429"
+        env:
+          # Read-only token so GitHub links are checked through the API rather
+          # than rate-limited anonymous requests.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./lychee \
+            --no-progress \
+            --max-retries 2 \
+            --retry-wait-time 2 \
+            --timeout 20 \
+            --accept "100..=103,200..=299,403,429" \
             "./**/*.md"

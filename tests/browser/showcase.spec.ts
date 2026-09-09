@@ -1,4 +1,13 @@
-import { expect, test } from "./fixtures.js";
+import {
+  expect,
+  expectNoAxeViolations,
+  settleAnimations,
+  settledScrollLeft,
+  test,
+} from "./fixtures.js";
+
+/** Bootstrap's fixed header z-index in the Signal K Admin, mirrored by the fixture. */
+const HOST_HEADER_Z_INDEX = 1020;
 
 test("renders the showcase without console errors", async ({ page }) => {
   const errors: string[] = [];
@@ -82,6 +91,52 @@ test("keeps tall popover content scrollable inside the visual viewport", async (
   }
 });
 
+test("scrolls a wide table inside its region while the panel stays put", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/showcase.html");
+
+  const region = page.getByRole("region", {
+    name: "Signal K paths, scrollable",
+  });
+  await expect(region).toBeVisible();
+  await expect(region).toHaveCSS("overflow-x", "auto");
+
+  const overflow = await region.evaluate((element) => ({
+    clientWidth: element.clientWidth,
+    scrollWidth: element.scrollWidth,
+  }));
+  expect(
+    overflow.scrollWidth,
+    "the fixture table is not wider than its region, so nothing is under test",
+  ).toBeGreaterThan(overflow.clientWidth);
+
+  // The point of the region: the table overflows it, and the panel around it
+  // does not gain a sideways scroll of its own.
+  const pageSizes = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(pageSizes.scrollWidth).toBeLessThanOrEqual(pageSizes.clientWidth);
+
+  // The overflow is reachable by keyboard because the region takes focus and
+  // the arrow keys scroll it both ways.
+  await region.focus();
+  await expect(region).toBeFocused();
+  await page.keyboard.press("ArrowRight");
+  // Read it once it stops moving: a key sent while the previous scroll is
+  // still running is swallowed, which reads as the region refusing to scroll
+  // back rather than as two presses being coalesced.
+  const scrolledRight = await settledScrollLeft(region);
+  await page.keyboard.press("ArrowLeft");
+  // Back by a step rather than to exactly zero: the step is the engine's own,
+  // so a press that had already reached the end does not return in one.
+  await expect
+    .poll(() => region.evaluate((element) => element.scrollLeft))
+    .toBeLessThan(scrolledRight);
+});
+
 test("keeps secret input focus and selection while revealing", async ({
   page,
 }) => {
@@ -111,7 +166,8 @@ test("keeps secret input focus and selection while revealing", async ({
 test("keeps virtualized grid behavior stable across measured rows and windows", async ({
   page,
 }) => {
-  test.setTimeout(60_000);
+  // Measuring many virtualized rows is slow on a loaded runner.
+  test.slow();
   await page.goto("/showcase.html");
   const grid = page.getByRole("grid", { name: "Fleet" });
   const row = (name: string) =>
@@ -192,4 +248,144 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
   await expect(lastRow).not.toHaveAttribute("data-snui-zebra-odd");
   await lastRow.click();
   await expect(lastRow).toHaveAttribute("aria-selected", "true");
+});
+
+test("audits open overlays and every toast tone with axe", async ({ page }) => {
+  test.slow();
+  await page.goto("/showcase.html");
+  // Transitions and animations both, because the toast entry is a keyframe
+  // animation rather than a transition, and auditing it mid-flight measures
+  // colours composited against what is behind the card.
+  await page.addStyleTag({
+    content: "* { transition: none !important; animation: none !important; }",
+  });
+
+  // Dialog with its nested popover open.
+  await page.getByRole("button", { name: "Open dialog" }).click();
+  await page.getByRole("button", { name: "Show approach note" }).click();
+  const popover = page.getByRole("dialog", { name: "Show approach note" });
+  await expect(popover).toBeVisible();
+  await expect(popover).toBeFocused();
+  await expectNoAxeViolations(page, {
+    disableRules: [
+      {
+        id: "scrollable-region-focusable",
+        reason:
+          "React Aria gives the popover tabindex -1 and moves focus onto it when it opens, so a scrolling popover with only text is keyboard scrollable; axe cannot see programmatic focus and reports this rule for exactly that pattern.",
+      },
+    ],
+  });
+  await page.keyboard.press("Escape");
+  await expect(popover).toHaveCount(0);
+  // This audit is about axe, not focus return (the dialog unit tests cover
+  // that). WebKit under load can leave focus on the dialog container after the
+  // popover unmounts, so put it on the trigger before the Escape that closes
+  // the dialog.
+  await page.getByRole("button", { name: "Show approach note" }).focus();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // Menu open.
+  await page.getByRole("button", { name: "Panel actions" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expectNoAxeViolations(page);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  // Every tone, in batches the queue cap holds at once, so axe sees each tone
+  // rendered rather than evicted. Batching also keeps the test off the cap's
+  // exact value, which is the queue's to choose.
+  const region = page.getByRole("region", { name: "Notifications" });
+  const toasts = region.locator(".snui-toast");
+  for (const tones of [
+    ["info", "success"],
+    ["warning", "danger"],
+  ]) {
+    for (const tone of tones) {
+      await page.getByRole("button", { name: `${tone} toast` }).click();
+    }
+    await expect(toasts).toHaveCount(tones.length);
+    await expectNoAxeViolations(page);
+    // Each dismissal is awaited: a toast stays in the DOM while it animates
+    // out, so a second click would otherwise land on the same button.
+    for (let remaining = tones.length; remaining > 0; remaining -= 1) {
+      await region.getByRole("button", { name: "Dismiss" }).first().click();
+      await expect(toasts).toHaveCount(remaining - 1);
+    }
+  }
+});
+
+test("keeps toasts reachable while a dialog is open", async ({ page }) => {
+  // The axe pass over an open modal is slow on a loaded runner.
+  test.slow();
+  await page.goto("/showcase.html");
+  await page.getByRole("button", { name: "danger toast" }).click();
+  await page.getByRole("button", { name: "Open dialog" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Anchorage details" }),
+  ).toBeVisible();
+
+  // The scrim and the dialog fade in on `--snui-transition-normal`, and an axe
+  // pass that starts mid-fade measures composited colours rather than the ones
+  // the tokens set, which reads as a contrast failure that does not exist.
+  await settleAnimations(page);
+
+  const region = page.getByRole("region", { name: "Notifications" });
+  const dismiss = region.getByRole("button", { name: "Dismiss" });
+  // The host is a top layer: not hidden, not inert, and focusable.
+  await expect(page.locator(".snui-toast-region-host")).toHaveAttribute(
+    "data-react-aria-top-layer",
+  );
+  await expect(region.getByRole("alert")).toBeVisible();
+  await dismiss.focus();
+  await expect(dismiss).toBeFocused();
+  await expectNoAxeViolations(page);
+});
+
+test("paints the dialog scrim and toasts above the Admin header and sidebar", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 720 });
+  await page.goto("/showcase.html?host-chrome=1");
+  const header = page.locator(".app-header");
+  const sidebar = page.locator(".sidebar");
+  await expect(header).toHaveCSS("position", "fixed");
+  await expect(header).toHaveCSS("z-index", String(HOST_HEADER_Z_INDEX));
+  await expect(sidebar).toHaveCSS("z-index", String(HOST_HEADER_Z_INDEX - 1));
+
+  await page.getByRole("button", { name: "Open dialog" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Anchorage details" }),
+  ).toBeVisible();
+
+  // The topmost element at a point inside the header, and at one inside the
+  // sidebar, belongs to the modal layer: the scrim itself, or the dialog it
+  // holds where the standard dialog width reaches over the sidebar.
+  const hits = await page.evaluate(() => {
+    const point = (selector: string): boolean | null => {
+      const box = document.querySelector(selector)?.getBoundingClientRect();
+      if (box === undefined) return null;
+      const element = document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2,
+      );
+      return element !== null && element.closest(".snui-scrim") !== null;
+    };
+    return { header: point(".app-header"), sidebar: point(".sidebar") };
+  });
+  expect(hits).toEqual({ header: true, sidebar: true });
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+
+  // The toast host is a fixed box in the same stacking context as the header,
+  // so a larger z-index is what paints it above the header wherever the two
+  // overlap.
+  await page.getByRole("button", { name: "warning toast" }).click();
+  const host = page.locator(".snui-toast-region-host");
+  await expect(host).toHaveCSS("position", "fixed");
+  const hostZIndex = await host.evaluate((element) =>
+    Number(getComputedStyle(element).zIndex),
+  );
+  expect(hostZIndex).toBeGreaterThan(HOST_HEADER_Z_INDEX);
 });

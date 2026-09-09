@@ -4,7 +4,14 @@ import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { EmptyState, Progress } from "../../src/composites.js";
-import { Radio, RadioGroup, Switch } from "../../src/forms.js";
+import { Radio, RadioGroup, SecretInput, Switch } from "../../src/forms.js";
+import {
+  Checkbox,
+  InlineConfirm,
+  Textarea,
+  TextInput,
+  ThemeToggle,
+} from "../../src/index.js";
 import { formOf, panel, renderInPanel } from "../helpers.js";
 
 describe("RadioGroup", () => {
@@ -51,7 +58,7 @@ describe("RadioGroup", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderInPanel(
-      <RadioGroup label="Mode" value="sail" onChange={onChange}>
+      <RadioGroup label="Mode" value="sail" onValueChange={onChange}>
         <Radio value="sail">Sail</Radio>
         <Radio value="motor">Motor</Radio>
       </RadioGroup>,
@@ -63,6 +70,43 @@ describe("RadioGroup", () => {
     // The value prop stays authoritative until the consumer updates it.
     expect(motor).not.toBeChecked();
     expect(screen.getByRole("radio", { name: "Sail" })).toBeChecked();
+  });
+
+  it("reports the value through onValueChange beside the deprecated onChange", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    const onChange = vi.fn();
+    renderInPanel(
+      <RadioGroup
+        label="Mode"
+        defaultValue="sail"
+        onValueChange={onValueChange}
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
+        onChange={onChange}
+      >
+        <Radio value="sail" label="Sail" />
+        <Radio value="motor" label="Motor" />
+      </RadioGroup>,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "Motor" }));
+    expect(onValueChange).toHaveBeenCalledWith("motor");
+    expect(onChange).toHaveBeenCalledWith("motor");
+  });
+
+  it("names a Radio from the label prop and prefers it over children", () => {
+    renderInPanel(
+      <RadioGroup label="Mode">
+        <Radio value="sail" label="Sail" />
+        <Radio value="motor" label="Motor">
+          Ignored children
+        </Radio>
+      </RadioGroup>,
+    );
+
+    expect(screen.getByRole("radio", { name: "Sail" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Motor" })).toBeInTheDocument();
+    expect(screen.queryByText("Ignored children")).not.toBeInTheDocument();
   });
 
   it("carries name=value through native form submission", async () => {
@@ -188,7 +232,7 @@ describe("RadioGroup", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderInPanel(
-      <RadioGroup label="Mode" disabled onChange={onChange}>
+      <RadioGroup label="Mode" disabled onValueChange={onChange}>
         <Radio value="sail">Sail</Radio>
       </RadioGroup>,
     );
@@ -245,6 +289,33 @@ describe("Switch", () => {
     expect(() => render(<Switch> </Switch>)).toThrow(
       "Switch requires a non-empty label.",
     );
+    expect(() => render(<Switch label="  " />)).toThrow(
+      "Switch requires a non-empty label.",
+    );
+  });
+
+  it("names the switch from the label prop", () => {
+    renderInPanel(<Switch label="Autopilot" />);
+
+    expect(screen.getByRole("switch", { name: "Autopilot" })).toBeVisible();
+  });
+
+  it("reports the checked state through onCheckedChange beside the deprecated onChange", async () => {
+    const user = userEvent.setup();
+    const onCheckedChange = vi.fn();
+    const onChange = vi.fn();
+    renderInPanel(
+      <Switch
+        label="Autopilot"
+        onCheckedChange={onCheckedChange}
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("switch", { name: "Autopilot" }));
+    expect(onCheckedChange).toHaveBeenCalledWith(true);
+    expect(onChange).toHaveBeenCalledWith(true);
   });
 
   it("toggles uncontrolled from defaultChecked", async () => {
@@ -261,7 +332,7 @@ describe("Switch", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderInPanel(
-      <Switch checked onChange={onChange}>
+      <Switch checked onCheckedChange={onChange}>
         Autopilot
       </Switch>,
     );
@@ -276,7 +347,7 @@ describe("Switch", () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderInPanel(
-      <Switch disabled onChange={onChange}>
+      <Switch disabled onCheckedChange={onChange}>
         Autopilot
       </Switch>,
     );
@@ -417,6 +488,21 @@ describe("Progress", () => {
     );
   });
 
+  it.each([
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["negative Infinity", Number.NEGATIVE_INFINITY],
+  ])("treats a %s value as indeterminate", (_name, value) => {
+    renderInPanel(<Progress label="Indexing" value={value} />);
+
+    const bar = screen.getByRole("progressbar", { name: "Indexing" });
+    expect(bar).not.toHaveAttribute("aria-valuenow");
+    expect(bar).toHaveClass("snui-progress--indeterminate");
+    expect(bar.querySelector(".snui-progress__fill")).not.toHaveAttribute(
+      "style",
+    );
+  });
+
   it("applies the tone class", () => {
     renderInPanel(<Progress label="Depth alarm" value={80} tone="danger" />);
 
@@ -432,6 +518,198 @@ describe("Progress", () => {
     expect(ref.current).toBe(
       screen.getByRole("progressbar", { name: "Synchronizing" }),
     );
+  });
+});
+
+describe("SecretInput", () => {
+  it("ties the reveal button to the input through aria-controls", () => {
+    renderInPanel(
+      <>
+        <SecretInput aria-label="API token" />
+        <SecretInput aria-label="Webhook secret" id="webhook-secret" />
+      </>,
+    );
+
+    const token = screen.getByLabelText("API token");
+    const webhook = screen.getByLabelText("Webhook secret");
+    expect(token.id).not.toBe("");
+    expect(webhook).toHaveAttribute("id", "webhook-secret");
+    const [showToken, showWebhook] = screen.getAllByRole("button", {
+      name: "Show",
+    });
+    expect(showToken).toHaveAttribute("aria-controls", token.id);
+    expect(showWebhook).toHaveAttribute("aria-controls", "webhook-secret");
+  });
+
+  it("keeps browser capture off in both states unless overridden", async () => {
+    const user = userEvent.setup();
+    renderInPanel(<SecretInput aria-label="API token" />);
+
+    const input = screen.getByLabelText("API token");
+    const expectDefaults = (): void => {
+      expect(input).toHaveAttribute("autocomplete", "new-password");
+      expect(input).toHaveAttribute("spellcheck", "false");
+      expect(input).toHaveAttribute("autocapitalize", "off");
+      expect(input).toHaveAttribute("autocorrect", "off");
+    };
+    expect(input).toHaveAttribute("type", "password");
+    expectDefaults();
+
+    await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(input).toHaveAttribute("type", "text");
+    expectDefaults();
+  });
+
+  it("lets the caller override the capture defaults", () => {
+    renderInPanel(
+      <SecretInput aria-label="Passphrase" autoComplete="current-password" />,
+    );
+
+    expect(screen.getByLabelText("Passphrase")).toHaveAttribute(
+      "autocomplete",
+      "current-password",
+    );
+  });
+
+  it("applies the monospace modifier to the input", () => {
+    renderInPanel(<SecretInput aria-label="API token" monospace />);
+
+    expect(screen.getByLabelText("API token")).toHaveClass(
+      "snui-input--monospace",
+    );
+  });
+});
+
+describe("monospace and sizing modifiers", () => {
+  it("adds the monospace class to TextInput and Textarea", () => {
+    renderInPanel(
+      <>
+        <TextInput aria-label="Path" monospace />
+        <TextInput aria-label="Name" />
+        <Textarea aria-label="Prompt" monospace />
+      </>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Path" })).toHaveClass(
+      "snui-input--monospace",
+    );
+    expect(screen.getByRole("textbox", { name: "Name" })).not.toHaveClass(
+      "snui-input--monospace",
+    );
+    expect(screen.getByRole("textbox", { name: "Prompt" })).toHaveClass(
+      "snui-input--monospace",
+    );
+  });
+
+  it("sizes a Textarea from minRows and lets an explicit rows attribute win", () => {
+    renderInPanel(
+      <>
+        <Textarea aria-label="Prompt" minRows={8} />
+        <Textarea aria-label="Notes" minRows={8} rows={3} />
+        <Textarea aria-label="Plain" />
+      </>,
+    );
+
+    const prompt = screen.getByRole("textbox", { name: "Prompt" });
+    expect(prompt).toHaveAttribute("rows", "8");
+    expect(prompt).toHaveClass("snui-textarea--rows");
+    expect(screen.getByRole("textbox", { name: "Notes" })).toHaveAttribute(
+      "rows",
+      "3",
+    );
+    const plain = screen.getByRole("textbox", { name: "Plain" });
+    expect(plain).not.toHaveAttribute("rows");
+    expect(plain).not.toHaveClass("snui-textarea--rows");
+  });
+});
+
+describe("Checkbox label visibility", () => {
+  it("keeps a hidden label in the accessible name", () => {
+    const { container } = renderInPanel(
+      <Checkbox label="Select all rows" labelVisibility="hidden" />,
+    );
+
+    const checkbox = screen.getByRole("checkbox", { name: "Select all rows" });
+    expect(checkbox).toBeInTheDocument();
+    const root = container.querySelector(".snui-checkbox");
+    expect(root).toHaveClass("snui-checkbox--label-hidden");
+    expect(container.querySelector(".snui-checkbox__label")).toHaveClass(
+      "snui-visually-hidden",
+    );
+  });
+
+  it("still requires label content when it is hidden", () => {
+    expect(() =>
+      render(<Checkbox label="  " labelVisibility="hidden" />),
+    ).toThrow("Checkbox requires a non-empty label.");
+  });
+});
+
+describe("InlineConfirm keyboard semantics", () => {
+  it("does not advertise Escape as a shortcut that activates the region", () => {
+    renderInPanel(
+      <InlineConfirm
+        open
+        message="Remove this source?"
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Confirm action" }),
+    ).not.toHaveAttribute("aria-keyshortcuts");
+  });
+});
+
+describe("ThemeToggle root", () => {
+  it("forwards a ref and native attributes to the radiogroup", () => {
+    const ref = createRef<HTMLDivElement>();
+    renderInPanel(
+      <ThemeToggle ref={ref} data-testid="theme-toggle" id="theme" />,
+    );
+
+    const group = screen.getByRole("radiogroup", { name: "Panel theme" });
+    expect(ref.current).toBe(group);
+    expect(group).toHaveAttribute("data-testid", "theme-toggle");
+    expect(group).toHaveAttribute("id", "theme");
+  });
+
+  it("names the group from label and falls back through the deprecated legend", () => {
+    renderInPanel(
+      <>
+        <ThemeToggle label="Display" />
+        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep naming the group */}
+        <ThemeToggle legend="Legacy display" />
+        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- blank label and blank alias fall back together */}
+        <ThemeToggle label="  " legend="  " />
+      </>,
+    );
+
+    expect(screen.getByRole("radiogroup", { name: "Display" })).toBeVisible();
+    expect(
+      screen.getByRole("radiogroup", { name: "Legacy display" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("radiogroup", { name: "Panel theme" }),
+    ).toBeVisible();
+  });
+
+  it("reports the theme through onValueChange and the deprecated onChange", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    const onChange = vi.fn();
+    renderInPanel(
+      <ThemeToggle
+        onValueChange={onValueChange}
+        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "Night" }));
+    expect(onValueChange).toHaveBeenCalledWith("night");
+    expect(onChange).toHaveBeenCalledWith("night");
   });
 });
 

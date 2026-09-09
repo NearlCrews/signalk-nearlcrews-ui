@@ -244,7 +244,7 @@ describe("inline confirmation upgrades", () => {
     expect(onCancel).toHaveBeenCalledWith("escape");
   });
 
-  it("advertises the Escape shortcut and styles the cancel action", () => {
+  it("styles the cancel action with the requested variant", () => {
     renderInPanel(
       <InlineConfirm
         open
@@ -255,9 +255,6 @@ describe("inline confirmation upgrades", () => {
       />,
     );
 
-    expect(
-      screen.getByRole("region", { name: "Confirm action" }),
-    ).toHaveAttribute("aria-keyshortcuts", "Escape");
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
       "snui-button--ghost",
     );

@@ -4,6 +4,7 @@ import {
   type HTMLAttributes,
   isValidElement,
   type ReactNode,
+  type RefAttributes,
   useState,
 } from "react";
 import { classNames } from "../utils/class-names.js";
@@ -13,14 +14,17 @@ import {
 } from "./CollapsibleSection.js";
 
 export interface AccordionProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children">,
+    RefAttributes<HTMLDivElement> {
   readonly children: ReactNode;
 }
 
 /**
  * Coordinates a set of collapsible sections so at most one is open. Each
  * child stays a controlled section: opening one closes the others, and
- * keyboard behavior remains per child.
+ * keyboard behavior remains per child. Sections default to `landmark={false}`
+ * here, because six regions from one accordion would crowd the landmark list;
+ * a child can opt back in.
  *
  * @remarks
  * Keep child order stable after the first render. The accordion tracks the
@@ -30,6 +34,7 @@ export interface AccordionProps
 export function Accordion({
   children,
   className,
+  ref,
   ...props
 }: AccordionProps): React.JSX.Element {
   const sections = Children.toArray(children).map((child) => {
@@ -52,9 +57,14 @@ export function Accordion({
   });
 
   return (
-    <div {...props} className={classNames("snui-accordion", className)}>
+    <div
+      {...props}
+      ref={ref}
+      className={classNames("snui-accordion", className)}
+    >
       {sections.map((section, index) =>
         cloneElement(section, {
+          landmark: section.props.landmark ?? false,
           open: openIndex === index,
           onOpenChange: (nextOpen: boolean): void => {
             section.props.onOpenChange?.(nextOpen);

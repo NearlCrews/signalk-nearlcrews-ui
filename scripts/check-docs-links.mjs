@@ -1,10 +1,12 @@
 import { existsSync } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+import { repositoryPath } from "./lib/paths.mjs";
+
+const repositoryRoot = repositoryPath();
 const ignoredDirectories = new Set([
+  ".claude",
   ".git",
   ".remember",
   "coverage",

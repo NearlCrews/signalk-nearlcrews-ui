@@ -83,8 +83,59 @@ describe("Button anchors", () => {
     }
     expect(anchor).not.toHaveAttribute("href");
     expect(anchor).toHaveAttribute("aria-disabled", "true");
+    // Without href an anchor is generic, so the link role is restated.
+    expect(screen.getByRole("link", { name: "Unsafe" })).toBe(anchor);
     await user.click(anchor);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("warns once per rejected href in development and never for safe ones", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    render(
+      <PanelRoot>
+        <Button as="a" href="ftp://example.com/chart">
+          First
+        </Button>
+        <Button as="a" href="ftp://example.com/chart">
+          Second
+        </Button>
+        <Button as="a" href="gopher://example.com/">
+          Third
+        </Button>
+        <Button as="a" href="https://example.com/docs">
+          Safe
+        </Button>
+      </PanelRoot>,
+    );
+
+    expect(warn).toHaveBeenCalledTimes(2);
+    expect(warn.mock.calls[0]?.[0]).toContain('"ftp://example.com/chart"');
+    expect(warn.mock.calls[1]?.[0]).toContain('"gopher://example.com/"');
+    expect(screen.getByRole("link", { name: "Safe" })).toHaveAttribute(
+      "href",
+      "https://example.com/docs",
+    );
+  });
+
+  it("stays silent about rejected hrefs in production builds", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      render(
+        <PanelRoot>
+          <Button as="a" href="ftp://example.com/production">
+            Quiet
+          </Button>
+        </PanelRoot>,
+      );
+      expect(warn).not.toHaveBeenCalled();
+      expect(screen.getByRole("link", { name: "Quiet" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("forwards the ref to the anchor element", () => {
@@ -125,6 +176,7 @@ describe("Button anchors", () => {
     }
     expect(anchor).not.toHaveAttribute("href");
     expect(anchor).toHaveAttribute("aria-disabled", "true");
+    expect(anchor).toHaveAttribute("role", "link");
     expect(anchor).toHaveAttribute("aria-busy", "true");
     expect(anchor).toHaveAccessibleDescription("Working");
     expect(anchor.querySelector(".snui-button__spinner")).not.toBeNull();
@@ -164,6 +216,7 @@ describe("Button anchors", () => {
     expect(anchor).not.toHaveAttribute("href");
     expect(anchor).toHaveAttribute("aria-disabled", "true");
     expect(anchor).not.toHaveAttribute("aria-busy");
+    expect(screen.getByRole("link", { name: "Docs" })).toBe(anchor);
 
     await user.click(anchor);
     anchor.focus();
@@ -330,6 +383,71 @@ describe("Button prop types", () => {
     expectTypeOf<ComponentProps<typeof Button>["as"]>().toEqualTypeOf<
       "button" | "a" | undefined
     >();
+  });
+});
+
+describe("Button disabled states", () => {
+  it("lets ariaDisabled decide when both spellings are present", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <PanelRoot>
+        <Button ariaDisabled={false} aria-disabled="true" onClick={onClick}>
+          Enabled by prop
+        </Button>
+        <Button ariaDisabled aria-disabled="false" onClick={onClick}>
+          Blocked by prop
+        </Button>
+      </PanelRoot>,
+    );
+
+    const enabled = screen.getByRole("button", { name: "Enabled by prop" });
+    const blocked = screen.getByRole("button", { name: "Blocked by prop" });
+    expect(enabled).not.toHaveAttribute("aria-disabled");
+    expect(blocked).toHaveAttribute("aria-disabled", "true");
+
+    await user.click(enabled);
+    expect(onClick).toHaveBeenCalledTimes(1);
+    await user.click(blocked);
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads the native aria-disabled attribute while the prop is absent", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <PanelRoot>
+        <Button aria-disabled="true" onClick={onClick}>
+          Save
+        </Button>
+      </PanelRoot>,
+    );
+
+    const button = screen.getByRole("button", { name: "Save" });
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    await user.click(button);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("omits aria-disabled from a natively disabled button", () => {
+    render(
+      <PanelRoot>
+        <Button disabled loading>
+          Save
+        </Button>
+        <Button disabled ariaDisabled>
+          Reset
+        </Button>
+      </PanelRoot>,
+    );
+
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+    expect(save).not.toHaveAttribute("aria-disabled");
+    expect(save).toHaveAttribute("aria-busy", "true");
+    const reset = screen.getByRole("button", { name: "Reset" });
+    expect(reset).toBeDisabled();
+    expect(reset).not.toHaveAttribute("aria-disabled");
   });
 });
 

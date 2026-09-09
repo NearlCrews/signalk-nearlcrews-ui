@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { PANEL_STYLES } from "../../src/styles/index.js";
+import { PANEL_STYLES, STYLE_MODULES } from "../../src/styles/index.js";
 import { PACKAGE_VERSION, SPINNER_ANIMATION_NAME } from "../../src/version.js";
 
 describe("versioned keyframes", () => {
@@ -10,21 +10,47 @@ describe("versioned keyframes", () => {
     );
   });
 
-  it("defines every keyframe the stylesheet animates", () => {
-    const declared = new Set(defined(PANEL_STYLES));
-    const references = [...PANEL_STYLES.matchAll(/animation:\s*([^;]+);/g)].map(
-      (match) => match[1] ?? "",
-    );
+  it("defines every keyframe a module animates in that module or the root", () => {
+    const rootKeyframes = defined(PANEL_STYLES);
+    let referenceCount = 0;
+    for (const module of STYLE_MODULES) {
+      const declared = new Set([...rootKeyframes, ...defined(module.styles)]);
+      const references = [
+        ...module.styles.matchAll(/animation:\s*([^;]+);/g),
+      ].map((match) => match[1] ?? "");
+      referenceCount += references.length;
+      for (const shorthand of references) {
+        // A rule naming a keyframe that does not exist still reports a normal
+        // computed animation-duration, so only this check catches the break.
+        const named = shorthand
+          .trim()
+          .split(/\s+/)
+          .some((token) => declared.has(token));
+        expect(
+          named,
+          `no @keyframes backs "${shorthand.trim()}" in the ${module.id} module`,
+        ).toBe(true);
+      }
+    }
+    expect(referenceCount).toBeGreaterThan(0);
+  });
 
-    expect(references.length).toBeGreaterThan(0);
-    for (const shorthand of references) {
-      // A rule naming a keyframe that does not exist still reports a normal
-      // computed animation-duration, so only this check catches the break.
-      const named = shorthand
-        .trim()
-        .split(/\s+/)
-        .some((token) => declared.has(token));
-      expect(named, `no @keyframes backs "${shorthand.trim()}"`).toBe(true);
+  it("declares every keyframe outside the scope block under a versioned name", () => {
+    const versionMarker = PACKAGE_VERSION.replaceAll(".", "-");
+    for (const module of STYLE_MODULES) {
+      for (const match of module.styles.matchAll(
+        /@keyframes\s+([A-Za-z0-9_-]+)/g,
+      )) {
+        const name = match[1] ?? "";
+        expect(name, `${name} carries no package version`).toContain(
+          versionMarker,
+        );
+        const before = module.styles.slice(0, match.index);
+        const depth =
+          (before.match(/\{/g)?.length ?? 0) -
+          (before.match(/\}/g)?.length ?? 0);
+        expect(depth, `@keyframes ${name} is nested inside a block`).toBe(0);
+      }
     }
   });
 
@@ -41,3 +67,39 @@ function defined(styles: string): string[] {
     (match) => match[1] ?? "",
   );
 }
+
+/**
+ * Blocks whose public API takes children, so one instance can contain another.
+ * A modifier rule on these must not reach descendants with a plain descendant
+ * combinator: it would repaint the parts of a nested instance that carries a
+ * different modifier. Blocks that cannot nest (Progress, Metric, Banner's tone
+ * icon, and the react-aria data grid) keep their descendant rules.
+ */
+const NESTABLE_BLOCKS = ["collapsible", "card", "field"] as const;
+
+describe("nestable block modifiers", () => {
+  it("reaches its own parts through the child combinator", () => {
+    let ruleCount = 0;
+    for (const block of NESTABLE_BLOCKS) {
+      const leaking = new RegExp(
+        `\\.snui-${block}--[a-z0-9-]+\\s+\\.snui-${block}__`,
+        "g",
+      );
+      const scoped = new RegExp(
+        `\\.snui-${block}--[a-z0-9-]+\\s*>\\s*\\.snui-${block}__`,
+        "g",
+      );
+      for (const module of STYLE_MODULES) {
+        ruleCount += [...module.styles.matchAll(scoped)].length;
+        for (const match of module.styles.matchAll(leaking)) {
+          expect(
+            match[0],
+            `${module.id} lets .snui-${block}--* reach a nested .snui-${block} instance; use the child combinator`,
+          ).toBe("");
+        }
+      }
+    }
+    // Guards the regexes themselves: the scoped form has to appear somewhere.
+    expect(ruleCount).toBeGreaterThan(0);
+  });
+});

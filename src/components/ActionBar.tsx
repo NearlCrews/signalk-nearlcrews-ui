@@ -3,6 +3,7 @@ import {
   type HTMLAttributes,
   type ReactNode,
   type Ref,
+  type RefAttributes,
   useLayoutEffect,
   useRef,
   useState,
@@ -11,11 +12,18 @@ import { flushSync } from "react-dom";
 
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
+import { composeRef } from "../utils/ref.js";
+import {
+  observePanelViewport,
+  readViewportEdges,
+  roundedLayoutValue,
+} from "../utils/viewport.js";
 
 export type ActionBarSticky = "bottom" | "top" | "viewport-bottom";
 
 export interface ActionBarProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, "children"> {
+  extends Omit<HTMLAttributes<HTMLDivElement>, "children">,
+    RefAttributes<HTMLDivElement> {
   readonly actions: ReactNode;
   readonly status?: ReactNode | undefined;
   readonly statusRef?: Ref<HTMLDivElement> | undefined;
@@ -70,24 +78,6 @@ function placementsMatch(
     current.viewportBottom === next.viewportBottom &&
     current.width === next.width
   );
-}
-
-function roundedLayoutValue(value: number): number {
-  return Math.round(value * 100) / 100;
-}
-
-function getVisualViewport(ownerWindow: Window): VisualViewport | undefined {
-  return Reflect.get(ownerWindow, "visualViewport") as
-    | VisualViewport
-    | undefined;
-}
-
-function getResizeObserver(
-  ownerWindow: Window,
-): typeof ResizeObserver | undefined {
-  return Reflect.get(ownerWindow, "ResizeObserver") as
-    | typeof ResizeObserver
-    | undefined;
 }
 
 const SCROLLABLE_OVERFLOW = /^(auto|overlay|scroll)$/;
@@ -244,6 +234,7 @@ function ActionBarContent({
 function ViewportBottomActionBar({
   actions,
   className,
+  ref,
   status,
   statusRef,
   style,
@@ -270,27 +261,18 @@ function ViewportBottomActionBar({
     const ownerWindow = ownerDocument.defaultView;
     const panelRoot = anchor.closest<HTMLElement>("[data-snui-root]");
     if (ownerWindow === null || panelRoot === null) return undefined;
-    const visualViewport = getVisualViewport(ownerWindow);
-
-    let animationFrame = 0;
-    let disposed = false;
 
     /**
      * Reads the current geometry and adopts it. Returns the placement React
      * still has to render, or null once the geometry holds still.
      */
     const takePlacement = (): ViewportPlacement | null => {
-      const viewport = getVisualViewport(ownerWindow);
-      const viewportTop = viewport?.offsetTop ?? 0;
-      const viewportLeft = viewport?.offsetLeft ?? 0;
-      const viewportBottom =
-        viewport === undefined
-          ? ownerWindow.innerHeight
-          : viewport.offsetTop + viewport.height;
-      const viewportRight =
-        viewport === undefined
-          ? ownerWindow.innerWidth
-          : viewport.offsetLeft + viewport.width;
+      const {
+        top: viewportTop,
+        right: viewportRight,
+        bottom: viewportBottom,
+        left: viewportLeft,
+      } = readViewportEdges(ownerWindow);
       const bottomInset = Math.max(0, ownerWindow.innerHeight - viewportBottom);
 
       const anchorRect = anchor.getBoundingClientRect();
@@ -337,8 +319,6 @@ function ViewportBottomActionBar({
     };
 
     const measure = (): void => {
-      animationFrame = 0;
-      if (disposed) return;
       // Settle inside this frame. Each pass commits its placement
       // synchronously, so the next pass reads the layout that placement
       // produced rather than waiting for another frame, and the bar's box is
@@ -354,11 +334,6 @@ function ViewportBottomActionBar({
           setPlacement(nextPlacement);
         });
       }
-    };
-
-    const scheduleMeasure = (): void => {
-      if (animationFrame !== 0 || disposed) return;
-      animationFrame = ownerWindow.requestAnimationFrame(measure);
     };
 
     const keepFocusedContentVisible = (event: FocusEvent): void => {
@@ -391,50 +366,40 @@ function ViewportBottomActionBar({
       pointerPressRef.current = false;
     };
 
-    const ResizeObserverConstructor = getResizeObserver(ownerWindow);
-    const resizeObserver =
-      ResizeObserverConstructor === undefined
-        ? undefined
-        : new ResizeObserverConstructor(scheduleMeasure);
-    resizeObserver?.observe(anchor);
-    resizeObserver?.observe(bar);
-    resizeObserver?.observe(panelRoot);
-
-    ownerDocument.addEventListener("scroll", scheduleMeasure, true);
     ownerDocument.addEventListener("focusin", keepFocusedContentVisible);
     ownerDocument.addEventListener("pointerdown", beginPointerPress, true);
     ownerDocument.addEventListener("pointerup", endPointerPress, true);
     ownerDocument.addEventListener("pointercancel", endPointerPress, true);
     ownerDocument.addEventListener("keydown", endPointerPress, true);
-    ownerWindow.addEventListener("resize", scheduleMeasure);
-    ownerWindow.addEventListener("scroll", scheduleMeasure);
-    visualViewport?.addEventListener("resize", scheduleMeasure);
-    visualViewport?.addEventListener("scroll", scheduleMeasure);
     // React is already committing here, so this first placement lands through
-    // an ordinary state update and the scheduled frame settles the rest.
+    // an ordinary state update and the frame the observer schedules settles
+    // the rest.
     const mountPlacement = takePlacement();
     if (mountPlacement !== null) setPlacement(mountPlacement);
-    scheduleMeasure();
+    const stopObserving = observePanelViewport(panelRoot, measure, {
+      resizeTargets: [anchor, bar],
+    });
 
     return () => {
-      disposed = true;
       pointerPressRef.current = false;
-      if (animationFrame !== 0) {
-        ownerWindow.cancelAnimationFrame(animationFrame);
-      }
-      resizeObserver?.disconnect();
-      ownerDocument.removeEventListener("scroll", scheduleMeasure, true);
+      stopObserving();
       ownerDocument.removeEventListener("focusin", keepFocusedContentVisible);
       ownerDocument.removeEventListener("pointerdown", beginPointerPress, true);
       ownerDocument.removeEventListener("pointerup", endPointerPress, true);
       ownerDocument.removeEventListener("pointercancel", endPointerPress, true);
       ownerDocument.removeEventListener("keydown", endPointerPress, true);
-      ownerWindow.removeEventListener("resize", scheduleMeasure);
-      ownerWindow.removeEventListener("scroll", scheduleMeasure);
-      visualViewport?.removeEventListener("resize", scheduleMeasure);
-      visualViewport?.removeEventListener("scroll", scheduleMeasure);
     };
   }, []);
+
+  // The caller ref composes through composeRef in a layout effect, as
+  // PanelRoot does, so swapping the ref never disturbs the measuring effect
+  // that owns barRef.
+  useLayoutEffect(() => {
+    const node = barRef.current;
+    if (node === null) return undefined;
+
+    return composeRef(ref, node);
+  }, [ref]);
 
   useLayoutEffect(() => {
     if (!placement.docked) return;
@@ -480,7 +445,7 @@ function ViewportBottomActionBar({
       <div
         {...props}
         ref={barRef}
-        {...(style === undefined ? {} : { style })}
+        style={style}
         className={classNames(
           "snui-action-bar",
           "snui-action-bar--sticky-viewport-bottom",
@@ -501,6 +466,7 @@ function ViewportBottomActionBar({
 export function ActionBar({
   actions,
   className,
+  ref,
   status,
   statusRef,
   sticky,
@@ -512,8 +478,9 @@ export function ActionBar({
         {...props}
         actions={actions}
         className={className}
+        ref={ref}
         status={status}
-        {...(statusRef === undefined ? {} : { statusRef })}
+        statusRef={statusRef}
       />
     );
   }
@@ -521,6 +488,7 @@ export function ActionBar({
   return (
     <div
       {...props}
+      ref={ref}
       className={classNames(
         "snui-action-bar",
         sticky !== undefined && `snui-action-bar--sticky-${sticky}`,

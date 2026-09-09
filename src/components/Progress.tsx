@@ -18,7 +18,10 @@ export interface ProgressProps
   readonly min?: number | undefined;
   /** Recolors the fill. Omit for the accent fill. */
   readonly tone?: ProgressTone | undefined;
-  /** Current value. Omit for an indeterminate indicator. */
+  /**
+   * Current value. Omit it, or pass a non-finite number such as the NaN a
+   * division by zero produces, for an indeterminate indicator.
+   */
   readonly value?: number | undefined;
   /** Exposed as aria-valuetext for assistive technology. */
   readonly valueText?: string | undefined;
@@ -37,7 +40,9 @@ export function Progress({
 }: ProgressProps): React.JSX.Element {
   requireContent(label, "Progress requires a non-empty label.");
 
-  const indeterminate = value === undefined;
+  // NaN and Infinity have no place on the track or in aria-valuenow, so they
+  // read as "no measurable progress yet" rather than reaching the DOM.
+  const indeterminate = value === undefined || !Number.isFinite(value);
   const span = max - min;
   const percentage =
     indeterminate || span <= 0

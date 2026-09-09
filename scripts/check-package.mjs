@@ -11,16 +11,30 @@ import {
   validatePackageMetadata,
   validatePackedFiles,
 } from "./lib/package-contract.mjs";
+import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 
 const require = createRequire(import.meta.url);
 
-const packageJson = JSON.parse(await readFile("package.json", "utf8"));
-const packageLock = JSON.parse(await readFile("package-lock.json", "utf8"));
-const versionSource = await readFile("src/version.ts", "utf8");
-const changelog = await readFile("CHANGELOG.md", "utf8");
-const readme = await readFile("README.md", "utf8");
-const apiReference = await readFile("docs/api-reference.md", "utf8");
-const designContract = await readFile("docs/design-contract.md", "utf8");
+const readRepositoryFile = (...segments) =>
+  readFile(repositoryPath(...segments), "utf8");
+
+const [
+  packageJson,
+  packageLock,
+  versionSource,
+  changelog,
+  readme,
+  apiReference,
+  designContract,
+] = await Promise.all([
+  readPackageJson(),
+  readRepositoryFile("package-lock.json").then(JSON.parse),
+  readRepositoryFile("src", "version.ts"),
+  readRepositoryFile("CHANGELOG.md"),
+  readRepositoryFile("README.md"),
+  readRepositoryFile("docs", "api-reference.md"),
+  readRepositoryFile("docs", "design-contract.md"),
+]);
 
 validatePackageMetadata({
   apiReference,
@@ -36,12 +50,12 @@ validatePackageMetadata({
 const output = runNpmPack(["--dry-run", "--json", "--ignore-scripts"]);
 const packResult = parseNpmPackResult(output, packageJson.name);
 const files = new Set(packResult.files.map((file) => file.path));
-validatePackedFiles(files, packageJson.exports);
+validatePackedFiles(files, packageJson.exports, packageJson.bin);
 
 for (const file of files) {
   if (!file.endsWith(".map")) continue;
 
-  const sourceMap = JSON.parse(await readFile(file, "utf8"));
+  const sourceMap = JSON.parse(await readRepositoryFile(file));
   if (
     !Array.isArray(sourceMap.sources) ||
     !Array.isArray(sourceMap.sourcesContent) ||
@@ -103,25 +117,37 @@ try {
     stdio: "inherit",
   });
 
-  // A stylesheet entry point is not a module, so type resolution has nothing to
-  // report on it and the analyzer would otherwise fail the whole package. The
-  // exclusions come from the exports map, so a second stylesheet needs no edit.
-  const stylesheetEntryPoints = Object.entries(packageJson.exports)
+  // A stylesheet or manifest entry point is not a module, so type resolution
+  // has nothing to report on it and the analyzer would otherwise fail the
+  // whole package. The exclusions come from the exports map, so a second such
+  // entry needs no edit here.
+  const nonModuleEntryPoints = Object.entries(packageJson.exports)
     .filter(
       ([, target]) => typeof target === "string" && !target.endsWith(".js"),
     )
     .map(([subpath]) => subpath.replace(/^\.\/?/, ""));
 
+  // The node16 profile checks `require` resolution as well as `import`, which
+  // is what the `default` conditions and the CommonJS federation entry exist
+  // for: without a `default` condition the CommonJS resolution fails outright
+  // and attw reports it. The one rule ignored is "cjs-resolves-to-esm", which
+  // predates require(esm). `engines.node` is ">=22", the floor Signal K server
+  // itself declares, and `require` of an ES module is unflagged from 22.12,
+  // which is the floor the docs give for the CommonJS path. So a CommonJS
+  // consumer reaching the ESM entries is the supported path there, not the
+  // hazard that rule describes.
   execFileSync(
     process.execPath,
     [
       attwEntryPoint,
       tarballPath,
       "--profile",
-      "esm-only",
+      "node16",
+      "--ignore-rules",
+      "cjs-resolves-to-esm",
       "--no-emoji",
-      ...(stylesheetEntryPoints.length > 0
-        ? ["--exclude-entrypoints", ...stylesheetEntryPoints]
+      ...(nonModuleEntryPoints.length > 0
+        ? ["--exclude-entrypoints", ...nonModuleEntryPoints]
         : []),
     ],
     { stdio: "inherit" },

@@ -11,6 +11,7 @@ import {
 
 import { hasAccessibleName, joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { isDevelopment } from "../utils/environment.js";
 import { DEFAULT_LOADING_LABEL, resolveLabel } from "../utils/labels.js";
 
 export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
@@ -18,6 +19,11 @@ export type ButtonSize = "default" | "compact";
 export type ButtonShape = "default" | "pill";
 
 interface ButtonCommonProps {
+  /**
+   * Blocks activation while the control stays focusable. When set, it takes
+   * precedence over a native `aria-disabled` attribute; when omitted, the
+   * native attribute is read instead.
+   */
   readonly ariaDisabled?: boolean | undefined;
   readonly fullWidth?: boolean | undefined;
   readonly iconOnly?: boolean | undefined;
@@ -48,51 +54,68 @@ export interface ButtonAsAnchorProps
 
 export type ButtonProps = ButtonAsButtonProps | ButtonAsAnchorProps;
 
-interface ButtonStateInput {
-  readonly ariaBusy?: AriaAttributes["aria-busy"];
-  readonly ariaDescribedBy?: string | undefined;
-  readonly ariaDisabled: boolean;
-  readonly ariaLabel?: string | undefined;
-  readonly ariaLabelledBy?: string | undefined;
-  readonly children?: ReactNode;
-  readonly className?: string | undefined;
-  readonly fullWidth: boolean;
-  readonly iconOnly: boolean;
-  readonly loading: boolean;
-  readonly loadingLabel: string;
-  readonly nativeAriaDisabled?: AriaAttributes["aria-disabled"];
-  readonly shape: ButtonShape;
-  readonly size: ButtonSize;
-  readonly variant: ButtonVariant;
+/**
+ * Props both element forms consume before anything reaches the DOM. Listing
+ * them once lets one destructure serve the button and the anchor.
+ */
+type SharedButtonPropKey =
+  | keyof ButtonCommonProps
+  | "aria-busy"
+  | "aria-describedby"
+  | "aria-disabled"
+  | "aria-label"
+  | "aria-labelledby"
+  | "children"
+  | "className";
+
+interface ButtonState<Props extends ButtonProps> {
+  readonly blocksActivation: boolean;
+  readonly dom: {
+    readonly "aria-busy": AriaAttributes["aria-busy"];
+    readonly "aria-describedby": string | undefined;
+    readonly "aria-disabled": true | undefined;
+    readonly "aria-label": string | undefined;
+    readonly "aria-labelledby": string | undefined;
+    readonly children: ReactNode;
+    readonly className: string;
+  };
+  /** Everything the element form still has to place itself. */
+  readonly rest: Omit<Props, SharedButtonPropKey>;
 }
 
-function useButtonState({
-  ariaBusy,
-  ariaDescribedBy,
-  ariaDisabled,
-  ariaLabel,
-  ariaLabelledBy,
-  children,
-  className,
-  fullWidth,
-  iconOnly,
-  loading,
-  loadingLabel,
-  nativeAriaDisabled,
-  shape,
-  size,
-  variant,
-}: ButtonStateInput) {
+function useButtonState<Props extends ButtonProps>(
+  props: Props,
+): ButtonState<Props> {
+  const {
+    "aria-busy": ariaBusy,
+    "aria-describedby": ariaDescribedBy,
+    "aria-disabled": nativeAriaDisabled,
+    "aria-label": ariaLabel,
+    "aria-labelledby": ariaLabelledBy,
+    ariaDisabled,
+    children,
+    className,
+    fullWidth = false,
+    iconOnly = false,
+    loading = false,
+    loadingLabel,
+    shape = "default",
+    size = "default",
+    variant = "secondary",
+    ...rest
+  } = props;
+
   if (iconOnly && !hasAccessibleName(ariaLabel, ariaLabelledBy)) {
     throw new Error(
       "Button with iconOnly requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
     );
   }
 
+  // The camelCase prop is the documented spelling, so when it is set it
+  // decides; the native attribute only counts while the prop is absent.
   const isAriaDisabled =
-    ariaDisabled ||
-    nativeAriaDisabled === true ||
-    nativeAriaDisabled === "true";
+    ariaDisabled ??
+    (nativeAriaDisabled === true || nativeAriaDisabled === "true");
   const blocksActivation = isAriaDisabled || loading;
   const effectiveLoadingLabel = resolveLabel(
     loadingLabel,
@@ -145,6 +168,7 @@ function useButtonState({
         className,
       ),
     },
+    rest,
   };
 }
 
@@ -183,117 +207,80 @@ function guardKeyDown<TElement>(
 
 const SAFE_ANCHOR_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
 
+/**
+ * Hrefs already reported, so a rejected destination warns once per value
+ * rather than once per render.
+ */
+const REPORTED_UNSAFE_HREFS = new Set<string>();
+
+function warnUnsafeHref(href: string): void {
+  if (!isDevelopment() || REPORTED_UNSAFE_HREFS.has(href)) return;
+  REPORTED_UNSAFE_HREFS.add(href);
+  console.warn(
+    `Button rejected the href ${JSON.stringify(href)}: only http, https, mailto, tel, fragment, query, and relative destinations are allowed. The anchor renders inert.`,
+  );
+}
+
 function safeAnchorHref(href: string): string | undefined {
   const trimmedHref = href.trim();
-  if (trimmedHref.length === 0) return undefined;
+  if (trimmedHref.length === 0) {
+    warnUnsafeHref(href);
+    return undefined;
+  }
 
   try {
     const parsed = new URL(
       trimmedHref,
       "https://signalk-nearlcrews-ui.invalid/",
     );
-    return SAFE_ANCHOR_PROTOCOLS.has(parsed.protocol) ? trimmedHref : undefined;
+    if (SAFE_ANCHOR_PROTOCOLS.has(parsed.protocol)) return trimmedHref;
   } catch {
-    return undefined;
+    // Unparseable hrefs fall through to the rejection below.
   }
+  warnUnsafeHref(href);
+  return undefined;
 }
 
-function NativeButton({
-  "aria-busy": ariaBusy,
-  "aria-describedby": ariaDescribedBy,
-  "aria-disabled": nativeAriaDisabled,
-  "aria-label": ariaLabel,
-  "aria-labelledby": ariaLabelledBy,
-  ariaDisabled = false,
-  as: Component = "button",
-  children,
-  className,
-  disabled,
-  fullWidth = false,
-  iconOnly = false,
-  loading = false,
-  loadingLabel = DEFAULT_LOADING_LABEL,
-  onClick,
-  onKeyDown,
-  ref,
-  shape = "default",
-  size = "default",
-  type = "button",
-  variant = "secondary",
-  ...buttonProps
-}: ButtonAsButtonProps): React.JSX.Element {
-  const state = useButtonState({
-    ariaBusy,
-    ariaDescribedBy,
-    ariaDisabled,
-    ariaLabel,
-    ariaLabelledBy,
-    children,
-    className,
-    fullWidth,
-    iconOnly,
-    loading,
-    loadingLabel,
-    nativeAriaDisabled,
-    shape,
-    size,
-    variant,
-  });
+function NativeButton(props: ButtonAsButtonProps): React.JSX.Element {
+  const { blocksActivation, dom, rest } = useButtonState(props);
+  const {
+    as: Component = "button",
+    disabled,
+    onClick,
+    onKeyDown,
+    ref,
+    type = "button",
+    ...buttonProps
+  } = rest;
 
   return (
     <Component
       {...buttonProps}
-      {...state.dom}
+      {...dom}
+      // A natively disabled button already exposes its state; aria-disabled
+      // beside it would describe the same control twice.
+      aria-disabled={disabled ? undefined : dom["aria-disabled"]}
       ref={ref}
       type={type}
       disabled={disabled}
-      onClick={guardClick(state.blocksActivation, onClick)}
-      onKeyDown={guardKeyDown(state.blocksActivation, onKeyDown)}
+      onClick={guardClick(blocksActivation, onClick)}
+      onKeyDown={guardKeyDown(blocksActivation, onKeyDown)}
     />
   );
 }
 
-function AnchorButton({
-  "aria-busy": ariaBusy,
-  "aria-describedby": ariaDescribedBy,
-  "aria-disabled": nativeAriaDisabled,
-  "aria-label": ariaLabel,
-  "aria-labelledby": ariaLabelledBy,
-  ariaDisabled = false,
-  as: Component,
-  children,
-  className,
-  fullWidth = false,
-  href,
-  iconOnly = false,
-  loading = false,
-  loadingLabel = DEFAULT_LOADING_LABEL,
-  onClick,
-  onKeyDown,
-  ref,
-  shape = "default",
-  size = "default",
-  tabIndex,
-  variant = "secondary",
-  ...anchorProps
-}: ButtonAsAnchorProps): React.JSX.Element {
-  const state = useButtonState({
-    ariaBusy,
-    ariaDescribedBy,
-    ariaDisabled,
-    ariaLabel,
-    ariaLabelledBy,
-    children,
-    className,
-    fullWidth,
-    iconOnly,
-    loading,
-    loadingLabel,
-    nativeAriaDisabled,
-    shape,
-    size,
-    variant,
-  });
+function AnchorButton(props: ButtonAsAnchorProps): React.JSX.Element {
+  const state = useButtonState(props);
+  const {
+    as: Component,
+    href,
+    onClick,
+    onKeyDown,
+    ref,
+    role,
+    tabIndex,
+    ...anchorProps
+  } = state.rest;
   const safeHref = safeAnchorHref(href);
   const blocksActivation = state.blocksActivation || safeHref === undefined;
 
@@ -303,6 +290,10 @@ function AnchorButton({
       {...state.dom}
       ref={ref}
       href={blocksActivation ? undefined : safeHref}
+      // An anchor without href maps to the generic role, so the link role is
+      // restated while the destination is withheld; aria-disabled is valid
+      // on a link.
+      role={blocksActivation ? (role ?? "link") : role}
       tabIndex={blocksActivation ? (tabIndex ?? 0) : tabIndex}
       aria-disabled={blocksActivation || undefined}
       onClick={guardClick(blocksActivation, onClick)}

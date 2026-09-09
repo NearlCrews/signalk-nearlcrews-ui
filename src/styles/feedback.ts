@@ -1,5 +1,10 @@
 import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
+import {
+  TONE_ACCENT_BAR_DECLARATIONS,
+  toneAccentBarRules,
+  toneColorRules,
+} from "./tone-rules.js";
 
 export const FEEDBACK_STYLES = scopeStyles(`
 .snui-banner {
@@ -9,43 +14,35 @@ export const FEEDBACK_STYLES = scopeStyles(`
   justify-content: space-between;
   gap: var(--snui-space-3);
   padding: var(--snui-space-3) var(--snui-space-4);
-  border: 1px solid var(--snui-color-border);
-  border-inline-start-width: 0.3rem;
+${TONE_ACCENT_BAR_DECLARATIONS}
   border-radius: var(--snui-radius-md);
   background: var(--snui-color-surface-raised);
   color: var(--snui-color-text);
 }
 
-.snui-banner--info { border-inline-start-color: var(--snui-color-info); }
-.snui-banner--success { border-inline-start-color: var(--snui-color-success); }
-.snui-banner--warning { border-inline-start-color: var(--snui-color-warning); }
-.snui-banner--danger { border-inline-start-color: var(--snui-color-danger); }
+${toneAccentBarRules("snui-banner")}
 
 .snui-banner__title {
-  margin: 0 0 var(--snui-space-1);
+  margin: 0;
+  margin-block-end: var(--snui-space-1);
   font-weight: var(--snui-font-weight-bold);
 }
 
+/* The banner glyph is larger and heavier than the inline mark it refines. */
 .snui-banner__tone-icon {
   display: inline-grid;
   width: 1.25rem;
   height: 1.25rem;
-  flex: none;
   place-items: center;
-  border: 2px solid currentColor;
-  border-radius: 50%;
-  color: var(--snui-color-info);
-  font-size: var(--snui-font-size-xs);
+  border-width: 2px;
+  margin-inline-end: 0;
   font-weight: var(--snui-font-weight-heavy);
-  line-height: 1;
 }
 
-.snui-banner--success .snui-banner__tone-icon { color: var(--snui-color-success); }
-.snui-banner--warning .snui-banner__tone-icon { color: var(--snui-color-warning); }
-.snui-banner--danger .snui-banner__tone-icon { color: var(--snui-color-danger); }
+${toneColorRules((tone) => `.snui-banner--${tone} .snui-banner__tone-icon`, "color")}
 
-.snui-banner__body > :first-child { margin-top: 0; }
-.snui-banner__body > :last-child { margin-bottom: 0; }
+.snui-banner__body > :first-child { margin-block-start: 0; }
+.snui-banner__body > :last-child { margin-block-end: 0; }
 
 .snui-banner__content,
 .snui-banner__text,
@@ -60,11 +57,14 @@ export const FEEDBACK_STYLES = scopeStyles(`
   gap: var(--snui-space-2);
 }
 
+/*
+ * The action slot never shrinks: the text column wraps instead, and the
+ * narrow layout stacks the two, so a Dismiss label cannot break per letter.
+ */
 .snui-banner__actions {
   display: flex;
-  min-width: 0;
   max-width: 100%;
-  flex: 0 1 auto;
+  flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--snui-space-2);
@@ -92,12 +92,14 @@ export const FEEDBACK_STYLES = scopeStyles(`
   }
 
   /*
-   * The banner opts out as a surface, so ordinary links and the unrestricted
-   * action slot must opt back in or consumer controls can disappear against
-   * Canvas. Primary and danger buttons explicitly reconstruct their own
-   * system colors, which overrides this inherited action-slot value.
+   * The banner opts out as a surface, so ordinary links, the body, and the
+   * unrestricted action slot opt back in or consumer controls placed in them
+   * keep the author palette against Canvas. Primary and danger buttons
+   * explicitly reconstruct their own system colors, which overrides this
+   * inherited value.
    */
   .snui-banner a:any-link,
+  .snui-banner__body,
   .snui-banner__actions {
     forced-color-adjust: auto;
   }

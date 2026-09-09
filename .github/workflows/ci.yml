@@ -1,5 +1,20 @@
 name: CI
 
+# Node and npm pin policy for every workflow in this repository:
+#
+# - Jobs that prove a supported floor pin the exact patch version: the validate
+#   matrix pins the Node 22 and Node 24 floors from devEngines.runtime and the
+#   Windows job pins the Node 24 floor. Node 26 floats until it has an LTS
+#   release to pin.
+# - Jobs that only need a supported Node (browser tests, the full audit, the
+#   publish path, the host-contract drift check, and the baseline refresh)
+#   float on the active LTS line, `24`, so they track security releases without
+#   a manual bump. Those jobs never define the floor.
+# - npm is never a literal in a workflow. Each "Set up npm" step installs the
+#   newest npm that satisfies devEngines.packageManager.version in
+#   package.json, so that field is the one place the supported npm range lives
+#   and a new npm 12.x is exercised here before a contributor meets it.
+
 on:
   push:
     branches: [main]
@@ -56,6 +71,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # The two pinned entries are the devEngines.runtime floors; a unit test
+        # keeps this list, scripts/lib/release-checks.mjs, and package.json in
+        # step. Branch protection names these jobs, so changing an entry means
+        # updating the required checks in the same pull request.
         node: [22.22.2, 24.15.0, 26]
     steps:
       - name: Check out repository
@@ -71,7 +90,7 @@ jobs:
         env:
           NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
         run: |
-          npm install --global npm@12.0.2
+          npm install --global "npm@$(node -p "require('./package.json').devEngines.packageManager.version")"
           echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
           "${NPM_CONFIG_PREFIX}/bin/npm" --version
       - name: Cache npm downloads
@@ -87,6 +106,46 @@ jobs:
       - name: Validate package
         run: npm run validate
 
+  audit:
+    # The full-tree audit covers development tooling whose advisories carry no
+    # runtime exposure for consumers, so it reports without blocking: this job
+    # is not a required check for main. The runtime audit inside
+    # `npm run validate` is the blocking one. See "Release checks" in
+    # docs/release-policy.md.
+    name: Full dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Floating on the active LTS line; see the pin policy above.
+          node-version: 24
+          package-manager-cache: false
+      - name: Set up npm
+        env:
+          NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
+        run: |
+          npm install --global "npm@$(node -p "require('./package.json').devEngines.packageManager.version")"
+          echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
+          "${NPM_CONFIG_PREFIX}/bin/npm" --version
+      - name: Cache npm downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-24-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-24-
+            ${{ runner.os }}-npm-
+      - name: Install dependencies
+        run: npm ci
+      - name: Audit the full dependency tree
+        run: npm run audit
+
   windows-package:
     name: Windows package validation
     runs-on: windows-latest
@@ -99,13 +158,15 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
+          # Pinned to the Node 24 floor from devEngines.runtime.
           node-version: 24.15.0
           package-manager-cache: false
       - name: Set up npm
         shell: pwsh
         run: |
           $npmPrefix = Join-Path $env:RUNNER_TEMP "npm-global"
-          npm install --global npm@12.0.2 --prefix $npmPrefix
+          $npmRange = node -p "require('./package.json').devEngines.packageManager.version"
+          npm install --global "npm@$npmRange" --prefix $npmPrefix
           $npmPrefix | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           & (Join-Path $npmPrefix "npm.cmd") --version
       - name: Cache npm downloads
@@ -128,6 +189,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # These snapshot_variant values are the hosted baseline families. The
+        # refresh workflow generates the same two, and a unit test keeps the
+        # two lists equal.
         include:
           - architecture: x64
             runner: ubuntu-24.04
@@ -143,13 +207,14 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
+          # Floating on the active LTS line; see the pin policy above.
           node-version: 24
           package-manager-cache: false
       - name: Set up npm
         env:
           NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
         run: |
-          npm install --global npm@12.0.2
+          npm install --global "npm@$(node -p "require('./package.json').devEngines.packageManager.version")"
           echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
           "${NPM_CONFIG_PREFIX}/bin/npm" --version
       - name: Cache npm downloads
@@ -163,7 +228,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Install browser dependencies
-        run: npx --no-install playwright install --with-deps chromium firefox webkit
+        # `--with-deps` runs apt, and the runner image configures Google's
+        # Chrome repository, which Playwright does not need: it ships its own
+        # browser builds and takes only shared libraries from Ubuntu's archive.
+        # That third-party index has served a corrupt Packages.gz for long
+        # enough to block a release, so drop it before apt reads it.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+            /etc/apt/sources.list.d/google-chrome.sources
+          npx --no-install playwright install --with-deps chromium firefox webkit
       - name: Run browser tests
         env:
           SNUI_SNAPSHOT_VARIANT: ${{ matrix.snapshot_variant }}

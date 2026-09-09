@@ -17,10 +17,17 @@ import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { resolveFieldError } from "../utils/field-error.js";
-import { hasReactContent, requireContent } from "../utils/react-node.js";
+import {
+  hasReactContent,
+  requireContent,
+  type WithLabel,
+} from "../utils/react-node.js";
+import type { Orientation } from "../utils/variants.js";
 import { FieldError } from "./FieldError.js";
 
-export type RadioGroupOrientation = "horizontal" | "vertical";
+/** @deprecated Use {@link Orientation}. */
+export type RadioGroupOrientation = Orientation;
+/** @deprecated Use {@link AnnouncementMode}. */
 export type RadioGroupErrorLive = AnnouncementMode;
 
 export interface RadioGroupProps
@@ -31,12 +38,18 @@ export interface RadioGroupProps
   readonly description?: ReactNode | undefined;
   readonly disabled?: boolean | undefined;
   readonly error?: ReactNode | undefined;
-  readonly errorLive?: RadioGroupErrorLive | undefined;
+  readonly errorLive?: AnnouncementMode | undefined;
   readonly label: ReactNode;
   /** Applied to every radio input, so native form submission and reset work. */
   readonly name?: string | undefined;
+  /**
+   * Receives the selected value. Composed controls report values, not React
+   * change events; the native inputs keep the event form.
+   */
+  readonly onValueChange?: ((value: string) => void) | undefined;
+  /** @deprecated Use `onValueChange`. */
   readonly onChange?: ((value: string) => void) | undefined;
-  readonly orientation?: RadioGroupOrientation | undefined;
+  readonly orientation?: Orientation | undefined;
   readonly value?: string | undefined;
 }
 
@@ -51,7 +64,9 @@ export function RadioGroup({
   errorLive = "off",
   label,
   name,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
   onChange,
+  onValueChange,
   orientation = "vertical",
   ref,
   value,
@@ -73,6 +88,13 @@ export function RadioGroup({
   // under exactOptionalPropertyTypes. The rest props are plain DOM
   // attributes, so this boundary assertion is sound.
   const domProps = props as RACRadioGroupProps;
+  const handleChange =
+    onValueChange === undefined && onChange === undefined
+      ? undefined
+      : (next: string): void => {
+          onValueChange?.(next);
+          onChange?.(next);
+        };
 
   return (
     <RACRadioGroup
@@ -85,7 +107,7 @@ export function RadioGroup({
       {...(name === undefined ? {} : { name })}
       {...(value === undefined ? {} : { value })}
       {...(defaultValue === undefined ? {} : { defaultValue })}
-      {...(onChange === undefined ? {} : { onChange })}
+      {...(handleChange === undefined ? {} : { onChange: handleChange })}
       {...(describedBy === undefined
         ? {}
         : { "aria-describedby": describedBy })}
@@ -113,23 +135,30 @@ export function RadioGroup({
   );
 }
 
-export interface RadioProps
+interface RadioBaseProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onClick">,
     RefAttributes<HTMLDivElement> {
-  readonly children: ReactNode;
   readonly disabled?: boolean | undefined;
   readonly value: string;
 }
+
+/**
+ * Visible label and accessible name through `label`, or through children,
+ * which remain supported. One of the two is required.
+ */
+export type RadioProps = RadioBaseProps & WithLabel<"children">;
 
 export function Radio({
   children,
   className,
   disabled,
+  label,
   ref,
   value,
   ...props
 }: RadioProps): React.JSX.Element {
-  requireContent(children, "Radio requires a non-empty label.");
+  const labelContent = hasReactContent(label) ? label : children;
+  requireContent(labelContent, "Radio requires a non-empty label.");
 
   // See RadioGroup for why the DOM prop spread needs a boundary assertion.
   const domProps = props as RACRadioFieldProps;
@@ -144,7 +173,7 @@ export function Radio({
     >
       <RadioButton className="snui-radio__button">
         <span className="snui-radio__control" aria-hidden="true" />
-        <span className="snui-radio__label">{children}</span>
+        <span className="snui-radio__label">{labelContent}</span>
       </RadioButton>
     </RadioField>
   );

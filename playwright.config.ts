@@ -1,7 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 import { BROWSER_URL } from "./fixtures/browser/browser-server.js";
 
-const snapshotVariant = process.env.SNUI_SNAPSHOT_VARIANT ?? process.arch;
+/**
+ * Hosted baseline families are named by the workflow that generates them
+ * (`ubuntu24-x64`, `ubuntu24-arm64`). A local run gets a `local-` prefix so its
+ * images can never collide with, or be mistaken for, a hosted family; they are
+ * ignored by Git and exist for inspection only.
+ */
+const snapshotVariant =
+  process.env.SNUI_SNAPSHOT_VARIANT ?? `local-${process.arch}`;
 
 export default defineConfig({
   testDir: "./tests/browser",

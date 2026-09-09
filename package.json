@@ -1,6 +1,6 @@
 {
   "name": "signalk-nearlcrews-ui",
-  "version": "0.8.2",
+  "version": "0.9.0",
   "description": "Accessible, theme-aware React primitives for Signal K administration panels.",
   "type": "module",
   "sideEffects": [
@@ -17,38 +17,53 @@
     "design-system"
   ],
   "files": [
+    "bin",
     "dist",
     "docs",
     "CHANGELOG.md",
     "LICENSE",
     "README.md"
   ],
+  "bin": {
+    "snui-check-consumer": "bin/snui-check-consumer.mjs"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./composites": {
       "types": "./dist/composites.d.ts",
-      "import": "./dist/composites.js"
+      "import": "./dist/composites.js",
+      "default": "./dist/composites.js"
     },
     "./data-grid": {
       "types": "./dist/data-grid.d.ts",
-      "import": "./dist/data-grid.js"
+      "import": "./dist/data-grid.js",
+      "default": "./dist/data-grid.js"
+    },
+    "./federation": {
+      "types": "./dist/federation.d.cts",
+      "require": "./dist/federation.cjs",
+      "default": "./dist/federation.cjs"
     },
     "./forms": {
       "types": "./dist/forms.d.ts",
-      "import": "./dist/forms.js"
+      "import": "./dist/forms.js",
+      "default": "./dist/forms.js"
     },
     "./overlays": {
       "types": "./dist/overlays.d.ts",
-      "import": "./dist/overlays.js"
+      "import": "./dist/overlays.js",
+      "default": "./dist/overlays.js"
     },
+    "./package.json": "./package.json",
     "./tokens.css": "./dist/tokens.css"
   },
   "types": "./dist/index.d.ts",
   "engines": {
-    "node": "^22.22.2 || ^24.15.0 || ^26.0.0"
+    "node": ">=22"
   },
   "devEngines": {
     "runtime": {
@@ -62,7 +77,6 @@
       "onFail": "error"
     }
   },
-  "packageManager": "npm@12.0.2",
   "peerDependencies": {
     "react": "^19.2.0",
     "react-dom": "^19.2.0"
@@ -87,14 +101,14 @@
     "url": "https://github.com/NearlCrews/signalk-nearlcrews-ui/issues"
   },
   "scripts": {
-    "build": "node scripts/clean.mjs && tsc -p tsconfig.build.json && node scripts/build-tokens-css.mjs",
+    "build": "node scripts/clean.mjs && node scripts/tsc7.mjs -p tsconfig.build.json && node scripts/build-tokens-css.mjs && node scripts/build-federation-entry.mjs",
     "clean": "node scripts/clean.mjs",
     "format": "biome check --write . && prettier --write \"**/*.{md,yml,yaml}\"",
     "format:check": "biome format . && prettier --check \"**/*.{md,yml,yaml}\"",
     "lint": "npm run lint:biome && npm run lint:eslint",
     "lint:biome": "biome check --error-on-warnings .",
     "lint:eslint": "eslint . --max-warnings 0",
-    "lint:docs": "markdownlint-cli2 \"**/*.md\" \"#node_modules\" \"#coverage\" \"#dist\" \"#playwright-report\" \"#test-results\"",
+    "lint:docs": "markdownlint-cli2 \"**/*.md\" \"#node_modules\" \"#.claude\" \"#coverage\" \"#dist\" \"#playwright-report\" \"#test-results\"",
     "spellcheck": "cspell lint --no-progress --show-suggestions --config cspell.json \"**/*.md\"",
     "docs:links": "node scripts/check-docs-links.mjs",
     "docs:check": "npm run lint:docs && npm run spellcheck && npm run docs:links",
@@ -103,7 +117,7 @@
     "host-contract:drift": "node scripts/check-host-contract.mjs --check-registry",
     "host-contract:update": "node scripts/check-host-contract.mjs --update",
     "dependency-contract": "node scripts/check-react-aria-contract.mjs",
-    "type-check": "tsc --noEmit",
+    "type-check": "node scripts/tsc7.mjs --noEmit",
     "type-check:ts6": "tsc6 --noEmit && tsc6 --noEmit -p tsconfig.build.json",
     "audit": "npm audit --audit-level=moderate",
     "audit:runtime": "npm audit --omit=dev --audit-level=moderate",
@@ -111,6 +125,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage && node scripts/check-coverage.mjs",
     "pretest:browser": "npm run build && npm run test:federation:built",
+    "screenshots": "node scripts/capture-screenshots.mjs",
     "test:browser": "playwright test",
     "pretest:browser:update": "npm run build && npm run test:federation:built",
     "test:browser:update": "playwright test --update-snapshots",
@@ -120,36 +135,37 @@
     "test:federation:built": "webpack --config fixtures/federation/classic/webpack.config.cjs --json fixtures/federation/classic/dist/stats.json && webpack --config fixtures/federation/esm/webpack.config.cjs --json fixtures/federation/esm/dist/stats.json && node scripts/check-federation-build.mjs",
     "test:package": "npm run build && npm run test:package:built",
     "test:package:built": "node scripts/check-package.mjs && node scripts/check-declarations.mjs && node scripts/check-consumer-types.mjs",
+    "test:snapshot-families": "node scripts/check-snapshot-families.mjs",
     "declarations:update": "npm run build && node scripts/check-declarations.mjs --update",
-    "validate": "npm run format:check && npm run docs:check && npm run host-contract && npm run dependency-contract && npm run lint && npm run knip && npm run type-check && npm run type-check:ts6 && npm run test:coverage && npm run audit && npm run audit:runtime && npm run build && npm run test:package:built && npm run test:bundle:built && npm run test:federation:built",
+    "validate": "npm run format:check && npm run docs:check && npm run host-contract && npm run dependency-contract && npm run build && npm run lint && npm run knip && npm run type-check && npm run type-check:ts6 && npm run test:coverage && npm run audit:runtime && npm run test:package:built && npm run test:bundle:built && npm run test:federation:built",
     "release:check": "node scripts/check-release-approval.mjs && npm run validate && npm run test:browser",
     "prepublishOnly": "node scripts/check-release-approval.mjs && npm run test:browser",
-    "prepack": "npm run validate"
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@axe-core/playwright": "^4.13.0",
-    "@biomejs/biome": "2.5.9",
+    "@biomejs/biome": "2.5.12",
     "@eslint/js": "^10.0.1",
-    "@playwright/test": "^1.62.1",
+    "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^7.0.1",
-    "@testing-library/react": "^16.3.2",
-    "@testing-library/user-event": "^14.6.5",
-    "@types/node": "^26.2.0",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/node": "^26.4.1",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
+    "@types/react-dom": "^19.2.7",
     "@typescript/native": "npm:typescript@^7.0.2",
-    "@vitejs/plugin-react": "^6.0.5",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitejs/plugin-react": "^6.1.1",
+    "@vitest/coverage-v8": "^5.0.0",
     "axe-core": "^4.13.0",
-    "cspell": "^10.0.1",
+    "cspell": "^10.2.2",
     "esbuild": "^0.28.2",
-    "eslint": "^10.8.1",
+    "eslint": "^10.10.0",
     "eslint-plugin-jsx-a11y-x": "^0.2.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "globals": "^17.11.0",
+    "globals": "^17.12.0",
     "jsdom": "^30.0.1",
-    "knip": "^6.32.2",
+    "knip": "^6.34.0",
     "lightningcss": "^1.33.0",
     "markdownlint-cli2": "^0.23.2",
     "prettier": "^3.9.6",
@@ -159,17 +175,17 @@
     "semver": "^7.8.5",
     "ts-loader": "^9.6.2",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
-    "typescript-eslint": "^8.67.0",
-    "vite": "^8.2.1",
-    "vitest": "^4.1.11",
-    "webpack": "^5.109.2",
-    "webpack-cli": "^7.2.2"
+    "typescript-eslint": "^8.69.0",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0",
+    "webpack": "^5.110.3",
+    "webpack-cli": "^7.2.3"
   },
   "allowScripts": {
     "esbuild@0.28.2": true
   },
   "dependencies": {
-    "react-aria": "^3.51.0",
-    "react-aria-components": "^1.20.0"
+    "react-aria": "^3.52.1",
+    "react-aria-components": "^1.21.1"
   }
 }

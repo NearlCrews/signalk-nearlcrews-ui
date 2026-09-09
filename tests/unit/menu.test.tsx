@@ -141,12 +141,12 @@ describe("Menu", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("marks destructive items with the danger class", async () => {
+  it("marks danger items with the danger class", async () => {
     const user = userEvent.setup();
     renderInPanel(
       <Menu label="Crew">
         <MenuItem id="rename">Rename</MenuItem>
-        <MenuItem id="remove" destructive>
+        <MenuItem id="remove" tone="danger">
           Remove
         </MenuItem>
       </Menu>,
@@ -159,6 +159,31 @@ describe("Menu", () => {
       "snui-menu__item--destructive",
     );
     expect(screen.getByRole("menuitem", { name: "Rename" })).not.toHaveClass(
+      "snui-menu__item--destructive",
+    );
+  });
+
+  it("honors the deprecated destructive prop and lets tone override it", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <Menu label="Crew">
+        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored */}
+        <MenuItem id="remove" destructive>
+          Remove
+        </MenuItem>
+        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- tone must win over the deprecated spelling */}
+        <MenuItem id="archive" destructive tone="neutral">
+          Archive
+        </MenuItem>
+      </Menu>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Crew" }));
+
+    expect(screen.getByRole("menuitem", { name: "Remove" })).toHaveClass(
+      "snui-menu__item--destructive",
+    );
+    expect(screen.getByRole("menuitem", { name: "Archive" })).not.toHaveClass(
       "snui-menu__item--destructive",
     );
   });
@@ -206,6 +231,77 @@ describe("Menu", () => {
     await user.keyboard("d");
 
     expect(screen.getByRole("menuitem", { name: "Delta" })).toHaveFocus();
+  });
+
+  it("derives typeahead text from the text inside element children", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <Menu label="Jump">
+        <MenuItem id="alpha">
+          <span>Alpha</span>
+        </MenuItem>
+        <MenuItem id="delta">
+          <span aria-hidden="true">*</span>
+          <span>Delta</span>
+        </MenuItem>
+      </Menu>,
+    );
+
+    screen.getByRole("button", { name: "Jump" }).focus();
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("d");
+
+    expect(screen.getByRole("menuitem", { name: "Delta" })).toHaveFocus();
+  });
+
+  it("forwards refs and forwarded DOM attributes to the menu elements", async () => {
+    const user = userEvent.setup();
+    const menuRef = createRef<HTMLDivElement>();
+    const itemRef = createRef<HTMLDivElement>();
+    const sectionRef = createRef<HTMLElement>();
+    const separatorRef = createRef<HTMLElement>();
+    const onPointerDown = vi.fn();
+    renderInPanel(
+      <Menu label="View" ref={menuRef} id="view-menu" data-testid="view-menu">
+        <MenuSection ref={sectionRef} title="Panels" data-testid="panels">
+          <MenuItem
+            id="charts"
+            ref={itemRef}
+            data-testid="charts"
+            onPointerDown={onPointerDown}
+            style={{ color: "rgb(1, 2, 3)" }}
+          >
+            Charts
+          </MenuItem>
+        </MenuSection>
+        <MenuSeparator ref={separatorRef} data-testid="view-separator" />
+        <MenuItem id="reset">Reset layout</MenuItem>
+      </Menu>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "View" }));
+
+    const menu = screen.getByRole("menu");
+    expect(menuRef.current).toBe(menu);
+    expect(menu).toHaveAttribute("id", "view-menu");
+    expect(menu).toHaveAttribute("data-testid", "view-menu");
+
+    const item = screen.getByRole("menuitem", { name: "Charts" });
+    expect(itemRef.current).toBe(item);
+    expect(item).toHaveAttribute("data-testid", "charts");
+    expect(item).toHaveStyle({ color: "rgb(1, 2, 3)" });
+    await user.pointer({ keys: "[MouseLeft>]", target: item });
+    expect(onPointerDown).toHaveBeenCalled();
+
+    expect(sectionRef.current).toBe(
+      screen.getByRole("group", { name: "Panels" }),
+    );
+    expect(sectionRef.current).toHaveAttribute("data-testid", "panels");
+    expect(separatorRef.current).toBe(screen.getByRole("separator"));
+    expect(separatorRef.current).toHaveAttribute(
+      "data-testid",
+      "view-separator",
+    );
   });
 
   it("uses an explicit textValue for typeahead when children are elements", async () => {
@@ -514,6 +610,20 @@ describe("Popover", () => {
 
     await user.click(screen.getByRole("button", { name: "Info" }));
     expect(screen.getByRole("dialog")).toHaveAttribute("data-placement", "top");
+  });
+
+  it("applies a CSS length width through a CSS variable", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <Popover trigger={<Button>Info</Button>} width="18rem">
+        <p>Hint text</p>
+      </Popover>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Info" }));
+    expect(
+      screen.getByRole("dialog").style.getPropertyValue("--snui-popover-width"),
+    ).toBe("18rem");
   });
 
   it("applies a fixed pixel width through a CSS variable", async () => {

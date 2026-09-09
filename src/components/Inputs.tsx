@@ -30,16 +30,24 @@ export type TextInputType =
   | "url"
   | "week";
 
+/** Props shared by the text-like controls that can show identifiers. */
+export interface MonospaceControlProps {
+  /** Renders the value in the panel's monospace stack, for keys, paths, and identifiers. */
+  readonly monospace?: boolean | undefined;
+}
+
 export type TextInputProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
   "type"
 > &
-  RefAttributes<HTMLInputElement> & {
+  RefAttributes<HTMLInputElement> &
+  MonospaceControlProps & {
     readonly type?: TextInputType | undefined;
   };
 
 export function TextInput({
   className,
+  monospace = false,
   ref,
   type = "text",
   ...props
@@ -49,7 +57,11 @@ export function TextInput({
       {...props}
       ref={ref}
       type={type}
-      className={classNames("snui-input", className)}
+      className={classNames(
+        "snui-input",
+        monospace && "snui-input--monospace",
+        className,
+      )}
     />
   );
 }
@@ -165,28 +177,48 @@ export function Select({
 }
 
 export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> &
-  RefAttributes<HTMLTextAreaElement>;
+  RefAttributes<HTMLTextAreaElement> &
+  MonospaceControlProps & {
+    /**
+     * Rows the control shows before any content wraps. Replaces the default
+     * minimum height, and where the browser supports content sizing the
+     * control grows with its text from this floor.
+     */
+    readonly minRows?: number | undefined;
+  };
 
 export function Textarea({
   className,
+  minRows,
+  monospace = false,
   ref,
+  rows,
   ...props
 }: TextareaProps): React.JSX.Element {
   return (
     <textarea
       {...props}
       ref={ref}
-      className={classNames("snui-input", "snui-textarea", className)}
+      rows={rows ?? minRows}
+      className={classNames(
+        "snui-input",
+        "snui-textarea",
+        minRows === undefined ? undefined : "snui-textarea--rows",
+        monospace && "snui-input--monospace",
+        className,
+      )}
     />
   );
 }
+
+export type CheckboxLabelVisibility = "hidden" | "visible";
 
 export interface CheckboxProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "children" | "type">,
     RefAttributes<HTMLInputElement> {
   readonly description?: ReactNode | undefined;
   readonly error?: ReactNode | undefined;
-  readonly errorLive?: CheckboxErrorLive | undefined;
+  readonly errorLive?: AnnouncementMode | undefined;
   /**
    * Re-asserted after every render and after a native form reset. A reset
    * restores checkedness from defaultChecked (or the controlled checked
@@ -194,9 +226,16 @@ export interface CheckboxProps
    * component re-applies this prop once the reset lands.
    */
   readonly indeterminate?: boolean | undefined;
+  /** Always names the control; `labelVisibility` decides whether it is drawn. */
   readonly label: ReactNode;
+  /**
+   * "hidden" keeps the label in the accessible name but takes it out of the
+   * layout, for a checkbox in a table header, a card header, or a dense row.
+   */
+  readonly labelVisibility?: CheckboxLabelVisibility | undefined;
 }
 
+/** @deprecated Use {@link AnnouncementMode}. */
 export type CheckboxErrorLive = AnnouncementMode;
 
 export function Checkbox({
@@ -212,6 +251,7 @@ export function Checkbox({
   id,
   indeterminate,
   label,
+  labelVisibility = "visible",
   ref,
   required,
   ...props
@@ -277,32 +317,53 @@ export function Checkbox({
   );
   const errorMessage = joinIdReferences(ariaErrorMessage, referencedErrorId);
 
+  const labelHidden = labelVisibility === "hidden";
+
   return (
-    <label
-      className={classNames("snui-checkbox", className)}
-      htmlFor={controlId}
+    <div
+      className={classNames(
+        "snui-checkbox",
+        labelHidden && "snui-checkbox--label-hidden",
+        className,
+      )}
     >
-      <input
-        {...props}
-        ref={attachInput}
-        id={controlId}
-        type="checkbox"
-        checked={checked}
-        className="snui-checkbox__input"
-        required={required}
-        aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
-        aria-describedby={describedBy}
-        aria-errormessage={errorMessage}
-        aria-invalid={hasError ? true : ariaInvalid}
-      />
-      <span id={labelId} className="snui-checkbox__label">
-        {label}{" "}
-        {required ? (
-          <span className="snui-required-mark" aria-hidden="true">
-            *
-          </span>
-        ) : null}
-      </span>
+      {/*
+       * The label wraps the box and its own text alone, the way LabeledField
+       * does. A description or an error inside it would be part of the
+       * label's activation area, so a touch user pressing a validation
+       * message to read it would silently flip the setting. Both are already
+       * referenced by aria-describedby and aria-errormessage, so moving them
+       * out costs nothing.
+       */}
+      <label className="snui-checkbox__control" htmlFor={controlId}>
+        <input
+          {...props}
+          ref={attachInput}
+          id={controlId}
+          type="checkbox"
+          checked={checked}
+          className="snui-checkbox__input"
+          required={required}
+          aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
+          aria-describedby={describedBy}
+          aria-errormessage={errorMessage}
+          aria-invalid={hasError ? true : ariaInvalid}
+        />
+        <span
+          id={labelId}
+          className={classNames(
+            "snui-checkbox__label",
+            labelHidden && "snui-visually-hidden",
+          )}
+        >
+          {label}{" "}
+          {required ? (
+            <span className="snui-required-mark" aria-hidden="true">
+              *
+            </span>
+          ) : null}
+        </span>
+      </label>
       {hasDescription ? (
         <span id={descriptionId} className="snui-checkbox__description">
           {description}
@@ -318,6 +379,6 @@ export function Checkbox({
           live={errorLive}
         />
       ) : null}
-    </label>
+    </div>
   );
 }

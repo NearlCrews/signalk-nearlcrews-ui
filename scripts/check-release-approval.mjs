@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readPackageJson } from "./lib/paths.mjs";
 
 if (process.env.SNUI_RELEASE_APPROVED !== "true") {
   throw new Error(
@@ -6,7 +6,7 @@ if (process.env.SNUI_RELEASE_APPROVED !== "true") {
   );
 }
 
-const packageJson = JSON.parse(await readFile("package.json", "utf8"));
+const packageJson = await readPackageJson();
 if (packageJson.private === true) {
   throw new Error("A private package cannot be published.");
 }
