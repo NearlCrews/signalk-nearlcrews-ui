@@ -166,6 +166,100 @@ describe("PanelShell", () => {
   });
 });
 
+describe("PanelShell error boundary", () => {
+  let armed = true;
+
+  function Bomb(): React.JSX.Element {
+    if (armed) throw new Error("Panel content failed.");
+    return <p>Recovered content</p>;
+  }
+
+  afterEach(() => {
+    armed = true;
+  });
+
+  it("hands the boundary props to the boundary around the content", async () => {
+    const user = userEvent.setup();
+    const onError = vi.fn();
+    const onReload = vi.fn();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    render(
+      <PanelShell
+        title="Chart locker"
+        onError={onError}
+        onReload={onReload}
+        errorFallback={({ error, reload }) => (
+          <div>
+            <p>{error instanceof Error ? error.message : "Unknown"}</p>
+            <button type="button" onClick={reload}>
+              Reload Admin
+            </button>
+          </div>
+        )}
+      >
+        <Bomb />
+      </PanelShell>,
+    );
+
+    // PanelShell replaces the root div's native onError with the boundary
+    // callback, so a leak back into the root props would leave the boundary
+    // without a handler and this assertion without a call.
+    expect(onError).toHaveBeenCalledOnce();
+    expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
+    expect(screen.getByText("Panel content failed.")).toBeVisible();
+    // Only the content is replaced; the frame still surrounds the fallback.
+    expect(
+      screen.getByRole("heading", { level: 2, name: "Chart locker" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("radiogroup", { name: "Panel theme" }),
+    ).toBeVisible();
+
+    await user.click(screen.getByRole("button", { name: "Reload Admin" }));
+    expect(onReload).toHaveBeenCalledOnce();
+  });
+
+  it("keeps the default fallback and recovery when no fallback is given", async () => {
+    const user = userEvent.setup();
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    render(
+      <PanelShell title="Chart locker">
+        <Bomb />
+      </PanelShell>,
+    );
+
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This panel stopped working",
+    );
+
+    armed = false;
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(screen.getByText("Recovered content")).toBeVisible();
+  });
+
+  it("gives the outer stack the requested gap", () => {
+    // The spacing scale reaches the DOM only as the stack's gap class.
+    const { container, rerender } = render(
+      <PanelShell title="Sources" themeToggle="none" gap={2}>
+        <p>Body</p>
+      </PanelShell>,
+    );
+
+    expect(container.querySelector(".snui-stack")).toHaveClass(
+      "snui-stack--gap-2",
+    );
+
+    rerender(
+      <PanelShell title="Sources" themeToggle="none">
+        <p>Body</p>
+      </PanelShell>,
+    );
+    expect(container.querySelector(".snui-stack")).toHaveClass(
+      "snui-stack--gap-4",
+    );
+  });
+});
+
 describe("PanelErrorBoundary", () => {
   let armed = true;
 

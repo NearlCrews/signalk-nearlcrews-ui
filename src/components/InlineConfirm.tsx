@@ -30,7 +30,10 @@ export interface InlineConfirmProps
     RefAttributes<HTMLElement> {
   readonly busy?: boolean | undefined;
   readonly cancelLabel?: ReactNode | undefined;
-  readonly cancelVariant?: ButtonVariant | undefined;
+  /** The escape action is always available, so it never paints as danger. */
+  readonly cancelVariant?:
+    | Extract<ButtonVariant, "secondary" | "ghost">
+    | undefined;
   readonly confirmLabel?: ReactNode | undefined;
   readonly confirmVariant?:
     | Extract<ButtonVariant, "primary" | "danger">

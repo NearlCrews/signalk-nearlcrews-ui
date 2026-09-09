@@ -2,7 +2,6 @@ export {
   Cell,
   type CellProps,
   Column,
-  type ColumnProps,
   DataGrid,
   type DataGridColumnProps,
   // The deprecated alias stays exported for one minor release.

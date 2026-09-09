@@ -141,12 +141,12 @@ describe("Menu", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
-  it("marks destructive items with the danger class", async () => {
+  it("marks danger items with the danger class", async () => {
     const user = userEvent.setup();
     renderInPanel(
       <Menu label="Crew">
         <MenuItem id="rename">Rename</MenuItem>
-        <MenuItem id="remove" destructive>
+        <MenuItem id="remove" tone="danger">
           Remove
         </MenuItem>
       </Menu>,
@@ -159,6 +159,31 @@ describe("Menu", () => {
       "snui-menu__item--destructive",
     );
     expect(screen.getByRole("menuitem", { name: "Rename" })).not.toHaveClass(
+      "snui-menu__item--destructive",
+    );
+  });
+
+  it("honors the deprecated destructive prop and lets tone override it", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <Menu label="Crew">
+        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored */}
+        <MenuItem id="remove" destructive>
+          Remove
+        </MenuItem>
+        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- tone must win over the deprecated spelling */}
+        <MenuItem id="archive" destructive tone="neutral">
+          Archive
+        </MenuItem>
+      </Menu>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Crew" }));
+
+    expect(screen.getByRole("menuitem", { name: "Remove" })).toHaveClass(
+      "snui-menu__item--destructive",
+    );
+    expect(screen.getByRole("menuitem", { name: "Archive" })).not.toHaveClass(
       "snui-menu__item--destructive",
     );
   });

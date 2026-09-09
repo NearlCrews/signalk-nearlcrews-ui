@@ -18,13 +18,24 @@ import { UnsupportedBrowserNotice } from "./UnsupportedBrowserNotice.js";
  */
 export type PanelShellThemeToggle = "end" | "between" | "none";
 
+/**
+ * Text of the default error fallback, for a panel that ships in another
+ * language. `title` and `description` here name the fallback, not the panel.
+ */
+export type PanelShellErrorLabels = Pick<
+  PanelErrorBoundaryProps,
+  "description" | "reloadLabel" | "retryLabel" | "title"
+>;
+
 export interface PanelShellProps
   extends Omit<PanelRootProps, "children" | "onError" | "title"> {
   readonly children: ReactNode;
   /** Shown under the title. */
   readonly description?: ReactNode | undefined;
   /** Replaces the default error fallback; see `PanelErrorBoundary`. */
-  readonly errorFallback?: PanelErrorBoundaryProps["fallback"];
+  readonly errorFallback?: PanelErrorBoundaryProps["fallback"] | undefined;
+  /** Text of the default error fallback; ignored when `errorFallback` is set. */
+  readonly errorLabels?: PanelShellErrorLabels | undefined;
   /** Gap of the outer Stack, default 4. */
   readonly gap?: SpaceScale | undefined;
   /**
@@ -34,8 +45,8 @@ export interface PanelShellProps
    */
   readonly headingLevel?: HeadingLevel | undefined;
   /** Called for every error the boundary catches; replaces the div's native `onError`. */
-  readonly onError?: PanelErrorBoundaryProps["onError"];
-  readonly onReload?: PanelErrorBoundaryProps["onReload"];
+  readonly onError?: PanelErrorBoundaryProps["onError"] | undefined;
+  readonly onReload?: PanelErrorBoundaryProps["onReload"] | undefined;
   readonly themeToggle?: PanelShellThemeToggle | undefined;
   readonly themeToggleProps?: ThemeToggleProps | undefined;
   readonly title?: ReactNode | undefined;
@@ -53,6 +64,7 @@ export function PanelShell({
   className,
   description,
   errorFallback,
+  errorLabels,
   gap = 4,
   headingLevel = 2,
   onError,
@@ -99,6 +111,7 @@ export function PanelShell({
         ) : null}
         {themeToggle === "between" ? toggle : null}
         <PanelErrorBoundary
+          {...errorLabels}
           fallback={errorFallback}
           onError={onError}
           onReload={onReload}

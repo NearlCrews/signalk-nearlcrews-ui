@@ -8,14 +8,6 @@
  */
 export type Density = "default" | "compact";
 
-/**
- * The density vocabulary before `Density` existed. "comfortable" is the old
- * name for "default" and is still accepted at runtime.
- *
- * @deprecated Use {@link Density}; "comfortable" maps to "default".
- */
-export type LegacyDensity = Density | "comfortable";
-
 /** Normalizes a density prop, mapping the deprecated "comfortable" to "default". */
 export function resolveDensity(
   density: Density | "comfortable" | undefined,
@@ -27,3 +19,10 @@ export function resolveDensity(
 
 /** Axis along which a group of controls is laid out. */
 export type Orientation = "horizontal" | "vertical";
+
+/**
+ * Whether a label, legend, or caption is drawn. `"hidden"` keeps the text in
+ * the accessible name or description and removes it from the layout, so the
+ * control is still named for assistive technology.
+ */
+export type Visibility = "hidden" | "visible";

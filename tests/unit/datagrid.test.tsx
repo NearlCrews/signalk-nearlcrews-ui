@@ -56,7 +56,11 @@ function boatColumns(): ReactElement {
   );
 }
 
-function renderGrid(props: Partial<DataGridProps<Boat>> = {}): RenderResult {
+// The header shape is a union now, so the shared helper varies only the
+// props that sit outside it.
+type GridOverrides = Partial<Omit<DataGridProps<Boat>, "children" | "columns">>;
+
+function renderGrid(props: GridOverrides = {}): RenderResult {
   return renderInPanel(
     <DataGrid
       aria-label="Boats"

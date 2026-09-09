@@ -11,6 +11,7 @@ export {
   type MenuElementAttributes,
   MenuItem,
   type MenuItemProps,
+  type MenuItemTone,
   type MenuProps,
   MenuSection,
   type MenuSectionProps,

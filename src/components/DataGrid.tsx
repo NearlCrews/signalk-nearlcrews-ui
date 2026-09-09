@@ -35,7 +35,6 @@ import { EmptyState } from "./EmptyState.js";
 
 export type {
   CellProps,
-  ColumnProps,
   Key,
   RowProps,
   Selection,
@@ -95,18 +94,10 @@ interface VirtualCollectionItem<T> {
   readonly value: T;
 }
 
-export interface DataGridProps<TRow, TColumn = unknown>
-  extends RefAttributes<HTMLDivElement> {
+interface DataGridBaseProps<TRow> extends RefAttributes<HTMLDivElement> {
   readonly "aria-label"?: AriaAttributes["aria-label"] | undefined;
   readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"] | undefined;
-  /**
-   * Header columns as <Column> elements, or a render function when `columns`
-   * provides the column data (the RAC dynamic collection shape).
-   */
-  readonly children: ReactNode | ((column: TColumn) => ReactElement);
   readonly className?: string | undefined;
-  /** Replay-safe column data for a dynamic header; pairs with function children. */
-  readonly columns?: readonly TColumn[] | undefined;
   readonly defaultSelectedKeys?: "all" | Iterable<Key> | undefined;
   readonly density?: Density | undefined;
   /**
@@ -146,6 +137,28 @@ export interface DataGridProps<TRow, TColumn = unknown>
   /** Paints alternating row backgrounds. Off by default. */
   readonly zebra?: boolean | undefined;
 }
+
+/**
+ * The header is written one of two ways, and the runtime honors exactly one.
+ * Static children are `<Column>` elements and take no `columns`; a render
+ * function is the React Aria dynamic collection shape and needs the `columns`
+ * data it renders, because the grid feeds that array to the header and has no
+ * other source for the column list.
+ */
+export type DataGridProps<TRow, TColumn = unknown> = DataGridBaseProps<TRow> &
+  (
+    | {
+        /** Header columns as `<Column>` elements. */
+        readonly children: ReactNode;
+        readonly columns?: undefined;
+      }
+    | {
+        /** Renders one header column from its entry in `columns`. */
+        readonly children: (column: TColumn) => ReactElement;
+        /** Replay-safe column data for the dynamic header. */
+        readonly columns: readonly TColumn[];
+      }
+  );
 
 /** The `id` or `key` an item exposes, when it exposes one React Aria accepts. */
 function getItemKey(item: unknown): Key | undefined {

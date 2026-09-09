@@ -25,6 +25,7 @@ import { classNames } from "../utils/class-names.js";
 import { overlayZIndex, useOverlayLayer } from "../utils/overlay-layer.js";
 import { usePanelPortalContainerReady } from "../utils/portal.js";
 import { requireContent } from "../utils/react-node.js";
+import type { StatusTone } from "../utils/tone.js";
 import { Button, type ButtonSize, type ButtonVariant } from "./Button.js";
 import {
   OVERLAY_PLACEMENTS,
@@ -204,12 +205,18 @@ function reactNodeText(node: ReactNode): string {
   return text;
 }
 
+/**
+ * The tones a menu item paints. An item is either ordinary or destructive,
+ * so the shared status vocabulary narrows to those two here.
+ */
+export type MenuItemTone = Extract<StatusTone, "neutral" | "danger">;
+
 export interface MenuItemProps
   extends MenuElementAttributes<HTMLDivElement>,
     RefAttributes<HTMLDivElement> {
   readonly children: ReactNode;
   readonly className?: string | undefined;
-  /** Danger-tone styling for irreversible or destructive actions. */
+  /** @deprecated Use `tone="danger"`. */
   readonly destructive?: boolean | undefined;
   readonly disabled?: boolean | undefined;
   /** Collection key reported to `onAction`; not a DOM id. */
@@ -220,19 +227,28 @@ export interface MenuItemProps
    * from a component's own rendering, or an icon-only item, need it set.
    */
   readonly textValue?: string | undefined;
+  /**
+   * `"danger"` marks an irreversible or destructive action. When set it
+   * decides on its own, so the deprecated `destructive` counts only while
+   * this prop is omitted.
+   */
+  readonly tone?: MenuItemTone | undefined;
 }
 
 export function MenuItem({
   children,
   className,
+  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
   destructive = false,
   disabled = false,
   id,
   ref,
   textValue,
+  tone,
   ...props
 }: MenuItemProps): React.JSX.Element {
   const resolvedTextValue = textValue ?? reactNodeText(children).trim();
+  const danger = tone === undefined ? destructive : tone === "danger";
   const domProps = props as RACMenuItemProps;
   return (
     <RACMenuItem
@@ -240,7 +256,7 @@ export function MenuItem({
       ref={ref}
       className={classNames(
         "snui-menu__item",
-        destructive && "snui-menu__item--destructive",
+        danger && "snui-menu__item--destructive",
         className,
       )}
       id={id}

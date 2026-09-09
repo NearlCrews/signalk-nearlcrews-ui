@@ -29,6 +29,7 @@ export {
   type SaveActionBarLabels,
   type SaveActionBarProps,
   type SaveActionBarState,
+  type SaveActionBarStateInput,
 } from "./components/SaveActionBar.js";
 export {
   Table,

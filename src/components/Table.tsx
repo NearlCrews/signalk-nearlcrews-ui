@@ -10,9 +10,10 @@ import type {
 import { hasAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
-import type { Density } from "../utils/variants.js";
+import type { Density, Visibility } from "../utils/variants.js";
 
-export type TableCaptionVisibility = "visible" | "hidden";
+/** Alias of the shared {@link Visibility} vocabulary. */
+export type TableCaptionVisibility = Visibility;
 
 export interface TableProps
   extends TableHTMLAttributes<HTMLTableElement>,

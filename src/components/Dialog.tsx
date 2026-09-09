@@ -75,8 +75,13 @@ export interface AlertDialogProps extends DialogProps {
   readonly actions?: DialogActions | undefined;
   /** Required label for the always-enabled escape action. */
   readonly cancelLabel: ReactNode;
-  /** Defaults to secondary. */
-  readonly cancelVariant?: ButtonVariant | undefined;
+  /**
+   * Defaults to secondary. The escape action is always available, so it never
+   * paints as danger.
+   */
+  readonly cancelVariant?:
+    | Extract<ButtonVariant, "secondary" | "ghost">
+    | undefined;
 }
 
 interface DialogSurfaceProps extends DialogProps {

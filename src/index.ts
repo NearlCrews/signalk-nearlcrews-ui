@@ -118,6 +118,7 @@ export {
 } from "./components/PanelRoot.js";
 export {
   PanelShell,
+  type PanelShellErrorLabels,
   type PanelShellProps,
   type PanelShellThemeToggle,
 } from "./components/PanelShell.js";
@@ -210,7 +211,7 @@ export type { HeadingLevel } from "./utils/heading.js";
 export type { SemanticTone, StatusTone } from "./utils/tone.js";
 export type {
   Density,
-  LegacyDensity,
   Orientation,
+  Visibility,
 } from "./utils/variants.js";
 export { PACKAGE_VERSION } from "./version.js";

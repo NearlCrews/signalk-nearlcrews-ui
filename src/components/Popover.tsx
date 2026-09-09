@@ -45,8 +45,11 @@ export interface PopoverProps
 /**
  * A CSS length string, or `"auto"` to size to the content. Numbers are
  * accepted as pixels for compatibility and are deprecated.
+ *
+ * `"auto"` is spelled out so an editor suggests it; `string & {}` keeps every
+ * other length accepted, which a bare `"auto" | string` would collapse away.
  */
-export type PopoverWidth = string | number;
+export type PopoverWidth = "auto" | (string & {}) | number;
 
 const INTERACTIVE_ROLES = new Set([
   "application",
