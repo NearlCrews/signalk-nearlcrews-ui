@@ -28,35 +28,43 @@ const { cjs: FEDERATION_ENTRY, shared } = renderFederationEntry(
   manifest.version,
 );
 
-/** A plain npm package name, the only shape this fixture will write. */
-const PLAIN_PACKAGE_NAME =
-  /^@?[a-z0-9][a-z0-9._-]*(?:\/[a-z0-9][a-z0-9._-]*)?$/;
-/** A plain semantic version, the only shape this fixture will write. */
-const PLAIN_VERSION = /^[0-9]+\.[0-9]+\.[0-9]+$/;
-
 /*
- * These values become JavaScript source, so each is checked against the shape
- * it is meant to have before it is written rather than escaped afterwards.
- * They come from this package's own manifest today, and the guard is what
- * keeps that true if the manifest ever carries something stranger.
+ * The names and paths written into the generated source below are literals in
+ * this file rather than values read from the manifest, because a fixture that
+ * assembles JavaScript should not assemble it out of anything it has not
+ * fixed itself. A test asserts the manifest still shares exactly these, so the
+ * two cannot drift apart quietly.
  */
-function literal(value, shape, what) {
-  if (typeof value !== "string" || !shape.test(value)) {
-    throw new Error(`Refusing to write ${what} ${String(value)} into source.`);
+const SHARED_NAMES = ["react", "react-dom"];
+const FEDERATION_REQUEST = "signalk-nearlcrews-ui/federation";
+
+/**
+ * The version tuple Webpack encodes a range into, rebuilt from its numbers so
+ * only numbers reach the generated source.
+ */
+function versionTuple(range) {
+  const parsed = JSON.parse(encodeRequiredVersion(range));
+  if (!Array.isArray(parsed) || parsed.some((part) => !Number.isFinite(part))) {
+    throw new Error(`Unexpected requiredVersion encoding for ${range}.`);
   }
-  return `"${value}"`;
+  return `[${parsed.map(Number).join(",")}]`;
 }
 
+/** The version stamp PanelRoot writes, as digits and dots or nothing. */
+const STAMP = /^\d+\.\d+\.\d+$/.test(manifest.version)
+  ? manifest.version
+  : "0.0.0";
+
 /** The share registrations Webpack 5 minifies into a remote entry. */
-const REMOTE_ENTRY = `var l={${Object.entries(shared)
-  .map(
-    ([name, share], index) =>
-      `${String(90 + index)}:()=>s("default",${literal(name, PLAIN_PACKAGE_NAME, "share name")},!1,${encodeRequiredVersion(share.requiredVersion)})`,
-  )
-  .join(",")}};`;
+const REMOTE_ENTRY = `var l={${SHARED_NAMES.map((name, index) => {
+  const share = shared[name];
+  if (share === undefined)
+    throw new Error(`The manifest no longer shares ${name}.`);
+  return `${String(90 + index)}:()=>s("default","${name}",!1,${versionTuple(share.requiredVersion)})`;
+}).join(",")}};`;
 
 /** The chunk the library lands in, carrying the PanelRoot version stamp. */
-const CHUNK = `jsx("div",{"data-snui-root":"","data-snui-version":${literal(manifest.version, PLAIN_VERSION, "version")}});`;
+const CHUNK = `jsx("div",{"data-snui-root":"","data-snui-version":"${STAMP}"});`;
 
 const REMOTE_GZIP_BYTES = gzipBytesOf([
   Buffer.from(REMOTE_ENTRY),
@@ -65,8 +73,7 @@ const REMOTE_GZIP_BYTES = gzipBytesOf([
 
 /** A configuration whose ModuleFederationPlugin shares the published map. */
 function pluginConfig(source) {
-  const entry = literal(manifest.name, PLAIN_PACKAGE_NAME, "package name");
-  return `const { shared } = require(${entry.slice(0, -1)}/federation");\nmodule.exports = ${source};\n`;
+  return `const { shared } = require("${FEDERATION_REQUEST}");\nmodule.exports = ${source};\n`;
 }
 
 const workspaces = [];
@@ -132,6 +139,13 @@ function runCli(...args) {
 }
 
 describe("snui-check-consumer", () => {
+  it("writes a fixture that matches the manifest it stands in for", () => {
+    // The generated source uses literals, so this is what keeps them true.
+    expect(Object.keys(shared).sort()).toEqual([...SHARED_NAMES].sort());
+    expect(FEDERATION_REQUEST).toBe(`${manifest.name}/federation`);
+    expect(STAMP).toBe(manifest.version);
+  });
+
   it("passes a Webpack consumer whose plugin keeps the share map in _options", () => {
     // Webpack 5's ModuleFederationPlugin stores the options it was
     // constructed with on _options, so a check that only read `options` would
