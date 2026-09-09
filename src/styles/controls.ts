@@ -11,6 +11,13 @@ import { toneColorRules } from "./tone-rules.js";
 const PROGRESS_INDETERMINATE_ANIMATION =
   versionedAnimationName("progress-slide");
 
+/**
+ * Edge of the checkbox box. The description and the error sit outside the
+ * label, so they indent by this plus the control's column gap to line up
+ * under the label text.
+ */
+const CHECKBOX_BOX_SIZE = "1.25rem";
+
 export const CONTROL_STYLES = `
 @keyframes ${SPINNER_ANIMATION_NAME} {
   to { transform: rotate(1turn); }
@@ -286,7 +293,17 @@ ${PRESSED_FILL_DECLARATION}
   --snui-range-track-color: var(--snui-color-danger);
 }
 
+/*
+ * The block holds the control, the description, and the error; only the
+ * control is a label, so only it toggles when pressed.
+ */
 .snui-checkbox {
+  display: grid;
+  min-width: 0;
+  gap: var(--snui-space-1);
+}
+
+.snui-checkbox__control {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--snui-space-1) var(--snui-space-3);
@@ -300,8 +317,8 @@ ${PRESSED_FILL_DECLARATION}
   appearance: none;
   display: grid;
   place-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: ${CHECKBOX_BOX_SIZE};
+  height: ${CHECKBOX_BOX_SIZE};
   margin: 0.125rem 0 0;
   border: 2px solid var(--snui-color-border);
   border-radius: 0.25rem;
@@ -314,17 +331,17 @@ ${PRESSED_FILL_DECLARATION}
 }
 
 @media (hover: hover) {
-  .snui-checkbox:hover .snui-checkbox__input:not(:disabled):not([aria-invalid="true"]) {
+  .snui-checkbox__control:hover .snui-checkbox__input:not(:disabled):not([aria-invalid="true"]) {
     border-color: var(--snui-color-accent-fill);
   }
 }
 
-/* A hidden label leaves the box alone in the grid, so the second column goes. */
 /*
- * A checkbox whose label is visually hidden has only its box to hit, so the
- * control keeps the target floor in both axes and centers the box inside it.
+ * A hidden label leaves the box alone in the grid, so the second column goes,
+ * and the control has only its box to hit. It therefore keeps the target
+ * floor in both axes and centers the box inside it.
  */
-.snui-checkbox--label-hidden {
+.snui-checkbox--label-hidden > .snui-checkbox__control {
   grid-template-columns: auto;
   justify-items: center;
   align-items: center;
@@ -367,16 +384,21 @@ ${PRESSED_FILL_DECLARATION}
 }
 
 .snui-checkbox__description {
-  grid-column: 2;
   min-width: 0;
+  padding-inline-start: calc(${CHECKBOX_BOX_SIZE} + var(--snui-space-3));
   color: var(--snui-color-text-muted);
   font-size: var(--snui-font-size-sm);
   overflow-wrap: anywhere;
 }
 
 .snui-checkbox__error {
-  grid-column: 2;
+  padding-inline-start: calc(${CHECKBOX_BOX_SIZE} + var(--snui-space-3));
 ${FIELD_ERROR_DECLARATIONS}
+}
+
+/* Nothing occupies the box column, so the messages start at the edge. */
+.snui-checkbox--label-hidden > :is(.snui-checkbox__description, .snui-checkbox__error) {
+  padding-inline-start: 0;
 }
 
 .snui-checkbox__input[aria-invalid="true"] {
@@ -668,8 +690,15 @@ ${toneColorRules((tone) => `.snui-progress--tone-${tone} .snui-progress__fill`, 
   overflow-y: auto;
 }
 
+/*
+ * A short option sizes to its own text, which clears the target floor in
+ * height and misses it in width, exactly as a compact button does. The floor
+ * belongs to the control, so the option carries the same token in both axes
+ * and a one-character option stays at least square.
+ */
 .snui-segmented__option {
   min-height: var(--snui-control-min-height);
+  min-inline-size: var(--snui-control-min-height);
   padding: var(--snui-space-1) var(--snui-space-3);
   border: 0;
   border-radius: calc(var(--snui-radius-md) - 0.375rem - 1px);
@@ -757,6 +786,7 @@ ${DISABLED_DECLARATIONS}
 ${DISABLED_DECLARATIONS}
 }
 
+.snui-checkbox:has(.snui-checkbox__input:disabled) > .snui-checkbox__control,
 .snui-checkbox:has(.snui-checkbox__input:disabled) .snui-checkbox__input,
 .snui-segmented[aria-disabled="true"] .snui-segmented__option {
   cursor: not-allowed;

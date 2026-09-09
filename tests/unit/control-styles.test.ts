@@ -145,7 +145,9 @@ describe("control and form stylesheets", () => {
       /\.snui-textarea--rows \{\s*min-height: auto;\s*field-sizing: content;/,
     );
     expect(controls).toMatch(
-      /\.snui-checkbox--label-hidden \{\s*grid-template-columns: auto;\s*justify-items: center;\s*align-items: center;\s*min-inline-size: var\(--snui-control-min-height\);/,
+      // The label inside the block is the target, so the modifier reaches it
+      // rather than the block that also holds the description and the error.
+      /\.snui-checkbox--label-hidden > \.snui-checkbox__control \{\s*grid-template-columns: auto;\s*justify-items: center;\s*align-items: center;\s*min-inline-size: var\(--snui-control-min-height\);/,
     );
   });
 });

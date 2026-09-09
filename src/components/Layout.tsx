@@ -263,10 +263,18 @@ export function Card({
         {mark}
         {header}
       </div>
+    ) : null,
+    hasHeader || !semantic ? (
+      children
     ) : (
-      mark
+      // Without a header the mark would be a grid item of its own, putting the
+      // cue on a row above the content it marks. One flow container keeps the
+      // glyph on the first line of the body instead.
+      <div className="snui-card__body">
+        {mark}
+        {children}
+      </div>
     ),
-    children,
     hasReactContent(footer) ? (
       <div className="snui-card__footer">{footer}</div>
     ) : null,

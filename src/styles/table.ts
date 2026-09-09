@@ -91,6 +91,22 @@ ${focusRingDeclarations("-2px", true)}
   cursor: pointer;
 }
 
+/*
+ * Pressing a selectable row changes the selection, so the row carries the
+ * control target floor. Table layout ignores min-height on a row, so the
+ * floor is written as a height, which it treats as a minimum and still grows
+ * for a taller cell; the virtualized rows below keep min-height because the
+ * virtualizer measures them. Compact trades the floor for density, which the
+ * design contract records as its one target-size exception.
+ */
+.snui-data-grid:not(.snui-data-grid--virtualized) .snui-data-grid__body [role="row"][data-selection-mode] {
+  height: var(--snui-control-min-height);
+}
+
+.snui-data-grid--compact:not(.snui-data-grid--virtualized) .snui-data-grid__body [role="row"][data-selection-mode] {
+  height: calc(var(--snui-control-min-height) - var(--snui-space-3));
+}
+
 .snui-data-grid__body [role="row"][data-selection-mode][data-hovered] {
   background: var(--snui-color-interactive-hover);
 }

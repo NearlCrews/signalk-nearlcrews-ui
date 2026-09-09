@@ -167,7 +167,11 @@ ${FIELD_ERROR_DECLARATIONS}
   align-items: center;
 }
 
-.snui-checkbox-group__select-all {
+/*
+ * The consumer class lands on the checkbox block, while the row padding sits
+ * on the control inside it, so the reset has to reach the control.
+ */
+.snui-checkbox-group__select-all > .snui-checkbox__control {
   padding-block: 0;
 }
 

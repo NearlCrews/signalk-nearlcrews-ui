@@ -100,6 +100,28 @@ describe("Text and Code", () => {
     expect(block).toHaveClass("snui-code--block");
     expect(screen.getByTestId("key").tagName).toBe("KBD");
   });
+
+  it("puts a scrollable block in the tab order and leaves inline code out", () => {
+    // A block scrolls horizontally past the panel edge, so a keyboard user
+    // needs to reach it. jsdom has no layout, so the axe rule that caught
+    // this cannot fire here; the attribute is what the browser pass checks.
+    renderInPanel(
+      <>
+        <Code data-testid="inline">navigation.position</Code>
+        <Code block data-testid="block">
+          {"line one\nline two"}
+        </Code>
+        <Code block tabIndex={-1} data-testid="opted-out">
+          {"line one\nline two"}
+        </Code>
+      </>,
+    );
+
+    expect(screen.getByTestId("block")).toHaveAttribute("tabindex", "0");
+    expect(screen.getByTestId("inline")).not.toHaveAttribute("tabindex");
+    // A consumer that manages focus itself still wins.
+    expect(screen.getByTestId("opted-out")).toHaveAttribute("tabindex", "-1");
+  });
 });
 
 describe("LiveRegion", () => {
@@ -262,14 +284,6 @@ describe("Card variants", () => {
       "!",
     );
     expect(announcementOf(header)).toBe("Warning. ");
-  });
-
-  it("places the tone mark first when a toned card has no header", () => {
-    const { container } = renderInPanel(<Card tone="danger">Body</Card>);
-
-    const card = container.querySelector(".snui-card");
-    expect(card?.firstElementChild).toHaveClass("snui-card__tone-glyph");
-    expect(card?.querySelector(".snui-card__header")).toBeNull();
   });
 
   it("accepts the shared density values without a tone class for neutral", () => {

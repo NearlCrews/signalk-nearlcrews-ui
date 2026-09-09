@@ -75,7 +75,7 @@ describe("resolveSaveActionBarState", () => {
     ).toMatchObject({ saveDisabled: false });
   });
 
-  it("blocks Save with the validation message without announcing it again", () => {
+  it("blocks Save with the trimmed validation message", () => {
     expect(
       resolveSaveActionBarState({
         ...BASE,
@@ -84,7 +84,7 @@ describe("resolveSaveActionBarState", () => {
       }),
     ).toEqual({
       discardDisabled: false,
-      live: "off",
+      live: "polite",
       message: "Fix the port.",
       saveDisabled: true,
       tone: "danger",
@@ -145,7 +145,7 @@ describe("SaveActionBar", () => {
     expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
   });
 
-  it("shows the validation message silently and blocks Save", () => {
+  it("shows the validation message in the status and blocks Save", () => {
     const { container } = renderInPanel(
       <SaveActionBar
         dirty
@@ -155,17 +155,21 @@ describe("SaveActionBar", () => {
       />,
     );
 
-    expect(screen.queryByRole("status")).toBeNull();
-    const status = container.querySelector(".snui-status--danger");
-    expect(status).toHaveAttribute("aria-live", "off");
+    // One polite region carries every state, so the role is already mounted
+    // when the validation message arrives rather than created beside it.
+    const status = screen.getByRole("status");
+    expect(status).not.toHaveAttribute("aria-live");
     expect(status).toHaveTextContent("Choose a port between 1 and 65535.");
+    expect(container.querySelector(".snui-status--danger")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Discard" })).toBeEnabled();
   });
 
-  it("keeps a saving button focusable and busy", () => {
+  it("keeps a saving button focusable and busy", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
     renderInPanel(
-      <SaveActionBar dirty saving onSave={vi.fn()} onDiscard={vi.fn()} />,
+      <SaveActionBar dirty saving onSave={onSave} onDiscard={vi.fn()} />,
     );
 
     const save = screen.getByRole("button", { name: "Save" });
@@ -177,6 +181,11 @@ describe("SaveActionBar", () => {
     // The busy description reuses the saving status label so it stays
     // overridable through `labels`.
     expect(save).toHaveAccessibleDescription("Saving changes");
+
+    // Focusable is not activatable: a second Save during an in-flight save
+    // would send the same configuration twice.
+    await user.click(save);
+    expect(onSave).not.toHaveBeenCalled();
   });
 
   it("reports a requested save with the configurable message", () => {

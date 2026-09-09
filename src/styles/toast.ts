@@ -1,4 +1,5 @@
 import { versionedAnimationName } from "../version.js";
+import { visuallyHiddenDeclarations } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { toneAccentBarRules, toneDotShapeRules } from "./tone-rules.js";
 
@@ -40,8 +41,19 @@ ${scopeStyles(`
   pointer-events: none;
 }
 
+/*
+ * A panel scrolled out of the visual viewport hides its notifications from
+ * sight, never from assistive technology. Hiding it through visibility would
+ * drop the live region and every dismiss button out of the accessibility
+ * tree, so a failed save raised while the panel is off screen would go
+ * unannounced and stay unreachable, including through F6. Only the paint is
+ * removed: the insets reset first so the clipped box takes its static
+ * position inside the panel instead of a viewport coordinate the panel no
+ * longer occupies.
+ */
 .snui-toast-region-host:not([data-snui-toast-host-visible]) {
-  visibility: hidden;
+  inset: auto;
+${visuallyHiddenDeclarations()}
 }
 
 .snui-toast-region {

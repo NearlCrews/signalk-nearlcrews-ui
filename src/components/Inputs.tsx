@@ -320,41 +320,50 @@ export function Checkbox({
   const labelHidden = labelVisibility === "hidden";
 
   return (
-    <label
+    <div
       className={classNames(
         "snui-checkbox",
         labelHidden && "snui-checkbox--label-hidden",
         className,
       )}
-      htmlFor={controlId}
     >
-      <input
-        {...props}
-        ref={attachInput}
-        id={controlId}
-        type="checkbox"
-        checked={checked}
-        className="snui-checkbox__input"
-        required={required}
-        aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
-        aria-describedby={describedBy}
-        aria-errormessage={errorMessage}
-        aria-invalid={hasError ? true : ariaInvalid}
-      />
-      <span
-        id={labelId}
-        className={classNames(
-          "snui-checkbox__label",
-          labelHidden && "snui-visually-hidden",
-        )}
-      >
-        {label}{" "}
-        {required ? (
-          <span className="snui-required-mark" aria-hidden="true">
-            *
-          </span>
-        ) : null}
-      </span>
+      {/*
+       * The label wraps the box and its own text alone, the way LabeledField
+       * does. A description or an error inside it would be part of the
+       * label's activation area, so a touch user pressing a validation
+       * message to read it would silently flip the setting. Both are already
+       * referenced by aria-describedby and aria-errormessage, so moving them
+       * out costs nothing.
+       */}
+      <label className="snui-checkbox__control" htmlFor={controlId}>
+        <input
+          {...props}
+          ref={attachInput}
+          id={controlId}
+          type="checkbox"
+          checked={checked}
+          className="snui-checkbox__input"
+          required={required}
+          aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
+          aria-describedby={describedBy}
+          aria-errormessage={errorMessage}
+          aria-invalid={hasError ? true : ariaInvalid}
+        />
+        <span
+          id={labelId}
+          className={classNames(
+            "snui-checkbox__label",
+            labelHidden && "snui-visually-hidden",
+          )}
+        >
+          {label}{" "}
+          {required ? (
+            <span className="snui-required-mark" aria-hidden="true">
+              *
+            </span>
+          ) : null}
+        </span>
+      </label>
       {hasDescription ? (
         <span id={descriptionId} className="snui-checkbox__description">
           {description}
@@ -370,6 +379,6 @@ export function Checkbox({
           live={errorLive}
         />
       ) : null}
-    </label>
+    </div>
   );
 }

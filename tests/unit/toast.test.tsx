@@ -18,6 +18,8 @@ import {
   type ToastRegionProps,
   toast,
 } from "../../src/overlays.js";
+import { visuallyHiddenDeclarations } from "../../src/styles/fragments.js";
+import { TOAST_STYLES } from "../../src/styles/toast.js";
 import { TRANSITION_FAST_MS } from "../../src/styles/tokens.js";
 import { renderInPanel } from "../helpers.js";
 
@@ -835,5 +837,20 @@ describe("ToastRegion", () => {
     view.unmount();
 
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe("toast host stylesheet", () => {
+  it("keeps a host outside the visual viewport in the accessibility tree", () => {
+    const rule =
+      /\.snui-toast-region-host:not\(\[data-snui-toast-host-visible\]\) \{([^}]*)\}/.exec(
+        TOAST_STYLES,
+      );
+    expect(rule).not.toBeNull();
+    const declarations = rule?.[1] ?? "";
+    // A panel scrolled off screen still has to announce a failed save and let
+    // the user reach Dismiss, so the host loses its paint and keeps its node.
+    expect(declarations).not.toMatch(/visibility:/);
+    expect(declarations).toContain(visuallyHiddenDeclarations());
   });
 });

@@ -126,6 +126,22 @@ ${toneAccentBarRules("snui-card", "accent-")}
   vertical-align: middle;
 }
 
+/*
+ * The body of a headerless toned card. Flow root rather than a grid row, so
+ * the floated glyph sits on the first line of the content it marks and stays
+ * contained even when that content is shorter than the glyph.
+ */
+.snui-card__body {
+  display: flow-root;
+  min-width: 0;
+}
+
+.snui-card__body > .snui-card__tone-glyph {
+  float: inline-start;
+  /* The same optical nudge the checkbox box takes onto a line of text. */
+  margin-block-start: 0.125rem;
+}
+
 .snui-metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(12rem, 100%), 1fr));

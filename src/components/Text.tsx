@@ -71,6 +71,12 @@ export function Code({
   ...props
 }: CodeProps): React.JSX.Element {
   return createPolymorphicElement(as ?? (block ? "pre" : "code"), {
+    // A block keeps the author's line breaks and scrolls horizontally when a
+    // line is wider than the panel, and a scrollable region that cannot take
+    // focus is unreachable without a pointer. Declared before the rest props
+    // so a consumer can still set its own tabIndex. Inline code wraps instead
+    // of scrolling, so it stays out of the tab order.
+    ...(block ? { tabIndex: 0 } : {}),
     ...props,
     className: classNames(
       "snui-code",

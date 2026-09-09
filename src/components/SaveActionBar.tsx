@@ -37,8 +37,9 @@ export interface SaveActionBarProps
   readonly dirty: boolean;
   /**
    * A validation message that blocks saving, or nothing when the form is
-   * valid. It becomes the status text and is not announced again, because the
-   * field that failed already announced it.
+   * valid. It becomes the status text and is announced like every other
+   * state, because the reason saving is blocked is the one thing the bar has
+   * to say.
    */
   readonly invalidMessage?: string | null | undefined;
   readonly labels?: Partial<SaveActionBarLabels> | undefined;
@@ -58,20 +59,32 @@ export interface SaveActionBarProps
 
 export interface SaveActionBarState {
   readonly discardDisabled: boolean;
+  /**
+   * Always polite: the status keeps one role across every state, and only its
+   * text changes. Attaching the role in the same render that writes the text
+   * is the pattern this package avoids everywhere else, because a live region
+   * created together with its message is not announced reliably.
+   */
   readonly live: AnnouncementMode;
   readonly message: string;
   readonly saveDisabled: boolean;
   readonly tone: StatusTone;
 }
 
-interface SaveActionBarStateInput {
+/**
+ * The state inputs of {@link resolveSaveActionBarState}: the same values
+ * `SaveActionBar` takes, with the same defaults, so a test of the rules reads
+ * like the props the panel passes.
+ */
+export interface SaveActionBarStateInput {
   readonly dirty: boolean;
-  readonly invalidMessage: string | null | undefined;
-  readonly labels: SaveActionBarLabels;
-  readonly savedMessage: string;
-  readonly saveRequestedAt: number | null | undefined;
-  readonly saving: boolean;
-  readonly unconfigured: boolean;
+  readonly invalidMessage?: string | null | undefined;
+  readonly labels?: Partial<SaveActionBarLabels> | undefined;
+  readonly saveRequestedAt?: number | null | undefined;
+  /** Defaults to the component's own "Save requested". */
+  readonly savedMessage?: string | undefined;
+  readonly saving?: boolean | undefined;
+  readonly unconfigured?: boolean | undefined;
 }
 
 /**
@@ -79,16 +92,20 @@ interface SaveActionBarStateInput {
  * can test them without rendering. Save is enabled while there is something
  * to save: edits, or a plugin that has never been configured. Invalid input
  * and an in-flight save block it.
+ *
+ * Every string falls back to the component's own default, so the rules a test
+ * exercises are the rules the rendered bar runs.
  */
 export function resolveSaveActionBarState({
   dirty,
   invalidMessage,
-  labels,
+  labels: labelOverrides,
   savedMessage,
   saveRequestedAt,
-  saving,
-  unconfigured,
+  saving = false,
+  unconfigured = false,
 }: SaveActionBarStateInput): SaveActionBarState {
+  const labels = resolveLabels(labelOverrides);
   const invalid = (invalidMessage?.trim() ?? "") !== "";
   if (saving) {
     return {
@@ -102,7 +119,7 @@ export function resolveSaveActionBarState({
   if (invalid) {
     return {
       discardDisabled: !dirty,
-      live: "off",
+      live: "polite",
       message: invalidMessage?.trim() ?? "",
       saveDisabled: true,
       tone: "danger",
@@ -121,7 +138,7 @@ export function resolveSaveActionBarState({
     return {
       discardDisabled: true,
       live: "polite",
-      message: savedMessage,
+      message: resolveLabel(savedMessage, DEFAULT_SAVED_MESSAGE),
       saveDisabled: !unconfigured,
       tone: "info",
     };
@@ -185,7 +202,7 @@ export function SaveActionBar({
     dirty,
     invalidMessage,
     labels,
-    savedMessage: resolveLabel(savedMessage, DEFAULT_SAVED_MESSAGE),
+    savedMessage,
     saveRequestedAt,
     saving,
     unconfigured,
