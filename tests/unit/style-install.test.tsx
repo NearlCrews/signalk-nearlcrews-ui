@@ -65,6 +65,9 @@ describe("style module manifest", () => {
     "snui-range",
     "snui-scrim",
     "snui-switch",
+    "snui-tablist",
+    "snui-tabpanel",
+    "snui-tabs",
     "snui-textarea",
     "snui-toast",
   ] as const;

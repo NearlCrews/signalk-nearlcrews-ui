@@ -9,6 +9,7 @@ import { RADIO_STYLES } from "./radio.js";
 import { RANGE_STYLES } from "./range.js";
 import { SWITCH_STYLES } from "./switch.js";
 import { TABLE_STYLES } from "./table.js";
+import { TABS_STYLES } from "./tabs.js";
 import { TEXTAREA_STYLES } from "./textarea.js";
 import { TOAST_STYLES } from "./toast.js";
 
@@ -41,6 +42,7 @@ export const STYLE_MODULES: readonly StyleModule[] = [
   RANGE_STYLES,
   SWITCH_STYLES,
   TABLE_STYLES,
+  TABS_STYLES,
   TEXTAREA_STYLES,
   TOAST_STYLES,
 ];

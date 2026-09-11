@@ -15,16 +15,13 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or App Store package. The initial API may change during the `0.x` series, so consumers should pin an exact version.
 
-## What's new in 0.10.0
+## What's new in 0.10.1
 
-Version 0.10.0 closes the gaps six consumer panels hit in practice: live regions that were created together with their first message, controls that destroyed focus when they locked, and a stylesheet every panel paid for whether or not it rendered the components in it.
+Version 0.10.1 is a patch: it changes when one stylesheet is delivered and nothing else.
 
-- **Live regions that actually announce**: `Banner`, `StatusIndicator`, and `Metric` with `live` set now render the element that carries the role before there is anything to say, so `<Banner live="polite">{message}</Banner>` is correct where the conditional form was not. One consumer had twelve call sites written the obvious way and all twelve announced unreliably.
-- **Focus that survives**: a disclosure panel holding focus when it closes hands it to its trigger whoever closed it, a `Banner` does the same however it goes away rather than only on Dismiss, and `Checkbox`, `CheckboxGroup` options, and `RadioGroup` can refuse a change while staying focusable through `ariaDisabled` and `readOnly`. `InlineConfirm.busy` now blocks Confirm alone, so Cancel and Escape still work.
-- **Headings that nest**: the sections inside a titled `PanelShell` take the level below the panel title instead of sitting beside it, so the outline a screen reader navigates matches the one on screen. A `Banner` given a landmark role names itself from its own visible title rather than a duplicated string.
-- **Styles only for what you render**: each component installs its own module, so a panel that renders a dialog and none of the in-flow controls drops about 19 KB of stylesheet text, and `Card density="flush"` clears the row gap it used to leave behind. No selector, declaration, or rendered result changed.
-- **Types that carry your own values**: `Tabs`, `Tab`, and `TabPanel` are generic over their value type, so a reported value needs no guard on the way back, and `TabPanel` accepts a function child so `mountStrategy="unmount"` means "do not build".
-- **Less for a consumer to carry**: `SaveActionBar` expires its own saved message, `LiveRegion` takes `announceKey` to repeat an identical one, `LabeledField` merges extra `aria-describedby` ids, and `snui-check-consumer --runtime` renders the built remote the way the Signal K Admin host does, so a panel no longer hand-maintains a list of the globals React Aria touches at import.
+- **Tab styles install with `Tabs`, not with every panel.** The tab rules were part of the root sheet `PanelRoot` installs on mount, so a panel that rendered no tabs still carried them and no bundler could drop the CSS. They are a per-component module now, the same way the progress bar, radio group, and switch already were, which takes 2,456 raw bytes, 291 gzip, out of the root sheet. Panels that do render tabs see no change: the rules are identical and nothing else in the sheet references a tab class, so the cascade is unchanged.
+
+For everything that landed in 0.10.0, including the live-region, focus, and heading-level changes, read the [0.10.0 changelog](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/CHANGELOG.md#0100---2026-09-10).
 
 ## Compatibility
 
@@ -124,7 +121,7 @@ The repository checks the declaration against that committed baseline rather tha
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.10.0
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.10.1
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball. `--pack-destination ..` keeps the tarball out of the repository tree:
@@ -132,7 +129,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts --pack-destination ..
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui-0.10.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui-0.10.1.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while resolving React and React DOM from the Signal K Admin host through the integration supported by its bundler.
@@ -374,11 +371,11 @@ An inline token override applies in every selected theme. Use it only when that 
 
 The repository ships a fixture page that renders every exported component. The top of that page in each theme:
 
-![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.10.0/docs/screenshots/showcase-light.png)
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.10.1/docs/screenshots/showcase-light.png)
 
-![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.10.0/docs/screenshots/showcase-dark.png)
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.10.1/docs/screenshots/showcase-dark.png)
 
-![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.10.0/docs/screenshots/showcase-night.png)
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.10.1/docs/screenshots/showcase-night.png)
 
 The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
 
