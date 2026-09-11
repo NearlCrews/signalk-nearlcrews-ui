@@ -6,7 +6,6 @@ import { FORM_STYLES } from "./forms.js";
 import { FOUNDATION_STYLES } from "./foundation.js";
 import { LAYOUT_STYLES } from "./layout.js";
 import { SIMPLE_TABLE_STYLES } from "./simple-table.js";
-import { TABS_STYLES } from "./tabs.js";
 import { TOKEN_STYLES } from "./tokens.js";
 
 /*
@@ -33,7 +32,6 @@ export const PANEL_STYLES = [
   FORM_STYLES,
   LAYOUT_STYLES,
   SIMPLE_TABLE_STYLES,
-  TABS_STYLES,
   FEEDBACK_STYLES,
   COLLAPSIBLE_STYLES,
 ].join("\n");

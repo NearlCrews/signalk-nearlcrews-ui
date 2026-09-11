@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-09-11
+
+### Fixed
+
+- Tab styles install with `Tabs` rather than with every panel. The tab rules were joined into the root sheet `PanelRoot` installs on mount, so a panel that renders no tabs still carried them and no bundler could drop the CSS, which is the case for most panels. They are a per-component module now, the same as the progress bar, radio group, and switch already were, and `Tabs` installs the module through `useOptionalModuleStyles`. That takes 2,456 raw bytes, 291 gzip, out of the root sheet every panel installs. The `signalk-nearlcrews-ui/composites` entry point grows by 689 gzip bytes in exchange, because bundling that entry whole now pulls the tab styles in with `Tabs`; a panel that does not render tabs drops them instead. Panels that do render tabs are unaffected in what they ship and in what they look like: the rules are identical and no other sheet references a tab class, so moving the module after the root sheet cannot change a computed style.
+
 ## [0.10.0] - 2026-09-10
 
 This release closes the gaps six consumer panels hit in practice. Live regions created together with their first message now mount before there is anything to say, controls that must refuse a change keep their focus instead of destroying it, a disclosure hands focus back to its trigger whoever closed it, and every component installs only its own stylesheet, which takes about 19 KB of CSS out of a typical panel.
@@ -479,7 +485,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.8.2...v0.9.0
 [0.8.2]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.8.1...v0.8.2

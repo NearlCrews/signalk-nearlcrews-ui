@@ -135,7 +135,7 @@ describe("TableScrollRegion", () => {
 describe("table and tabs style modules", () => {
   it.each([
     ["simple table", SIMPLE_TABLE_STYLES],
-    ["tabs", TABS_STYLES],
+    ["tabs", TABS_STYLES.styles],
   ])("scopes the %s module and parses it without warnings", (_name, css) => {
     expect(
       css.startsWith(`@scope (${ROOT_SELECTOR}) to ([data-snui-version])`),

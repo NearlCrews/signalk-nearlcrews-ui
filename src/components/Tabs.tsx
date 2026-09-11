@@ -15,6 +15,8 @@ import {
 } from "react";
 
 import { useControllableState } from "../hooks/use-controllable-state.js";
+import { TABS_STYLES } from "../styles/tabs.js";
+import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import { hasAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
@@ -85,6 +87,8 @@ export function Tabs<Value extends string = string>({
   value,
   ...props
 }: TabsProps<Value>): React.JSX.Element {
+  useOptionalModuleStyles(TABS_STYLES);
+
   const baseId = useId();
   // The selection is `Value | undefined` while nothing is selected, but a
   // tab only ever reports a real value, so the callback stays outside the hook.

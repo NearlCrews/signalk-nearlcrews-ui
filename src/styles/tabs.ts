@@ -2,9 +2,16 @@ import {
   DISABLED_DECLARATIONS,
   FORCED_COLORS_OUTLINE_DECLARATIONS,
 } from "./fragments.js";
+import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
-export const TABS_STYLES = scopeStyles(`
+/**
+ * Tab styles. Installed by `Tabs` through `useOptionalModuleStyles`, so a panel
+ * without tabs never injects them.
+ */
+export const TABS_STYLES: StyleModule = {
+  id: "tabs",
+  styles: scopeStyles(`
 .snui-tabs {
   min-width: 0;
 }
@@ -108,4 +115,5 @@ ${DISABLED_DECLARATIONS}
 ${FORCED_COLORS_OUTLINE_DECLARATIONS}
   }
 }
-`);
+`),
+};

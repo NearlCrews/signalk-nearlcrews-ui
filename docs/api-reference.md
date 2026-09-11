@@ -25,8 +25,8 @@ The gzip size of each entry bundled alone, with React and React DOM external, as
 
 | Import path                        | Gzip bytes | Budget (bytes) |
 | ---------------------------------- | ---------: | -------------: |
-| `signalk-nearlcrews-ui`            |      30989 |          32768 |
-| `signalk-nearlcrews-ui/composites` |      16567 |          17408 |
+| `signalk-nearlcrews-ui`            |      30698 |          32768 |
+| `signalk-nearlcrews-ui/composites` |      17256 |          17408 |
 | `signalk-nearlcrews-ui/data-grid`  |      77591 |          83968 |
 | `signalk-nearlcrews-ui/forms`      |      24724 |          26624 |
 | `signalk-nearlcrews-ui/overlays`   |      63365 |          67584 |
