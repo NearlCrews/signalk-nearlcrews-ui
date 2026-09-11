@@ -180,8 +180,10 @@ export {
   UnsupportedBrowserError,
 } from "./styles/install.js";
 export {
+  CONTAINER_BREAKPOINT_NARROW,
   type ColorTokenName,
   type FoundationTokenName,
+  PANEL_CONTAINER_NAME,
   PUBLIC_COLOR_TOKEN_NAMES,
   PUBLIC_FOUNDATION_TOKEN_NAMES,
   PUBLIC_TOKEN_NAMES,

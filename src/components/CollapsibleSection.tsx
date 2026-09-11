@@ -13,6 +13,7 @@ import { useControllableState } from "../hooks/use-controllable-state.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
+import { useHeadingLevel } from "../utils/heading-level.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 
 export type CollapsibleMountStrategy = "lazy-retain" | "retain" | "unmount";
@@ -26,6 +27,11 @@ export interface CollapsibleSectionProps
   readonly actions?: ReactNode | undefined;
   readonly defaultOpen?: boolean | undefined;
   readonly disabled?: boolean | undefined;
+  /**
+   * Level of the section heading. It defaults to the level below a
+   * `PanelShell` title, and to 2 outside one, so the ordinary panel nests
+   * rather than repeating the level its own title already took.
+   */
   readonly headingLevel?: HeadingLevel | undefined;
   /** Removes the region landmark naming when false. Accordion defaults it to false. */
   readonly landmark?: boolean | undefined;
@@ -63,7 +69,7 @@ export function CollapsibleSection({
   className,
   defaultOpen = false,
   disabled = false,
-  headingLevel = 2,
+  headingLevel,
   landmark = true,
   leading,
   mountStrategy = "retain",
@@ -91,7 +97,9 @@ export function CollapsibleSection({
   const toggleRef = useRef<HTMLButtonElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const focusWasInside = useRef(false);
-  const Heading = HEADING_ELEMENTS[headingLevel];
+  const shellHeadingLevel = useHeadingLevel();
+  const level = headingLevel ?? shellHeadingLevel;
+  const Heading = HEADING_ELEMENTS[level];
 
   // Latch first-open for lazy-retain: guarded render-phase adjustment, so the
   // content mounts in the same commit that first opens the section.
@@ -167,7 +175,7 @@ export function CollapsibleSection({
         <Heading
           className={classNames(
             "snui-collapsible__heading",
-            `snui-collapsible__heading--level-${String(headingLevel)}`,
+            `snui-collapsible__heading--level-${String(level)}`,
           )}
         >
           <button

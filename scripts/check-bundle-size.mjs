@@ -19,10 +19,16 @@ const hostExternals = SIGNALK_HOST_SHARED_MODULES.flatMap((name) => [
 /** `--table` also prints the Markdown table docs/api-reference.md carries. */
 const printTable = process.argv.includes("--table");
 
+/*
+ * Each entry is measured bundled alone, so a component's own style module
+ * counts against the entry that exports it, and the install machinery counts
+ * against every entry that reaches it. A consumer bundles the root entry
+ * beside its focused ones and pays for both once.
+ */
 const entryBudgets = {
-  composites: 15 * 1024,
+  composites: 17 * 1024,
   "data-grid": 82 * 1024,
-  forms: 24 * 1024,
+  forms: 26 * 1024,
   index: 32 * 1024,
   overlays: 66 * 1024,
 };

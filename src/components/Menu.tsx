@@ -19,7 +19,7 @@ import {
   Separator as RACSeparator,
   type SeparatorProps as RACSeparatorProps,
 } from "react-aria-components";
-import { OVERLAY_STYLES } from "../styles/overlay-styles.js";
+import { MENU_STYLES } from "../styles/menu.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
 import { overlayZIndex, useOverlayLayer } from "../utils/overlay-layer.js";
@@ -131,7 +131,7 @@ export function Menu({
     "Menu requires a non-empty label to name its trigger button.",
   );
 
-  useModuleStyles(OVERLAY_STYLES, "Menu");
+  useModuleStyles(MENU_STYLES, "Menu");
   const portalReady = usePanelPortalContainerReady("Menu");
   const overlayLayer = useOverlayLayer();
   // react-aria's optional DOM props are not declared with `| undefined`,

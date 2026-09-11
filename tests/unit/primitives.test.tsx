@@ -1,6 +1,6 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { createRef, type ReactElement, type Ref } from "react";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Accordion } from "../../src/composites.js";
 import {
@@ -163,6 +163,102 @@ describe("LiveRegion", () => {
   });
 });
 
+describe("LiveRegion repeat announcements", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("empties and refills the region when the announce key changes", () => {
+    vi.useFakeTimers();
+    const { rerender } = renderInPanel(
+      <LiveRegion message="All sources enabled" announceKey={1} />,
+    );
+
+    const region = screen.getByRole("status");
+    expect(region).toHaveTextContent("All sources enabled");
+
+    // The same words again: without a real change to its text the region is
+    // silent, so the message is withheld for a beat and then restored.
+    rerender(
+      panel(<LiveRegion message="All sources enabled" announceKey={2} />),
+    );
+    expect(region).toBeEmptyDOMElement();
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(region).toHaveTextContent("All sources enabled");
+    // One region throughout: a remount would be observed by nobody.
+    expect(screen.getByRole("status")).toBe(region);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("restarts the beat for an announcement that lands mid-beat", () => {
+    vi.useFakeTimers();
+    const { rerender, unmount } = renderInPanel(
+      <LiveRegion message="Two paths detected" announceKey="scan-1" />,
+    );
+
+    const region = screen.getByRole("status");
+    rerender(
+      panel(<LiveRegion message="Two paths detected" announceKey="scan-2" />),
+    );
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
+    rerender(
+      panel(<LiveRegion message="Two paths detected" announceKey="scan-3" />),
+    );
+
+    // The second announcement does not inherit what the first had left.
+    act(() => {
+      vi.advanceTimersByTime(60);
+    });
+    expect(region).toBeEmptyDOMElement();
+    act(() => {
+      vi.advanceTimersByTime(40);
+    });
+    expect(region).toHaveTextContent("Two paths detected");
+
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("waits for nothing when there is nothing to re-announce", () => {
+    vi.useFakeTimers();
+    const { rerender } = renderInPanel(
+      <LiveRegion message="Scan complete" announceKey={1} />,
+    );
+
+    const region = screen.getByRole("status");
+    // A message the region does not carry yet announces itself, and a cleared
+    // message announces nothing at all.
+    rerender(panel(<LiveRegion message="" announceKey={2} />));
+    expect(region).toBeEmptyDOMElement();
+    expect(vi.getTimerCount()).toBe(0);
+
+    rerender(panel(<LiveRegion message="Scan complete" announceKey={3} />));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(region).toHaveTextContent("Scan complete");
+  });
+
+  it("leaves a region without an announce key untimed", () => {
+    vi.useFakeTimers();
+    const { rerender } = renderInPanel(<LiveRegion message="Saved" />);
+
+    rerender(panel(<LiveRegion message="Saved" />));
+    expect(screen.getByRole("status")).toHaveTextContent("Saved");
+    expect(vi.getTimerCount()).toBe(0);
+
+    // A silenced region speaks for nobody, so a new key costs it nothing.
+    rerender(panel(<LiveRegion live="off" message="Saved" announceKey={1} />));
+    expect(screen.getByText("Saved")).toHaveAttribute("aria-live", "off");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
 describe("tone marks", () => {
   it("renders the shared glyph and announcement for semantic badges", () => {
     const { container } = renderInPanel(<Badge tone="info">Beta</Badge>);
@@ -242,6 +338,120 @@ describe("tone marks", () => {
     expect(
       announcementOf(container.querySelector(".snui-banner__content")),
     ).toBe("Warning. ");
+  });
+});
+
+describe("announcing regions with nothing to say", () => {
+  it("mounts an empty shell with its role instead of the usual chrome", () => {
+    const { container } = renderInPanel(
+      <>
+        <Banner data-testid="banner" tone="danger" live="polite" />
+        <StatusIndicator data-testid="indicator" tone="success" live="polite">
+          {null}
+        </StatusIndicator>
+        <Metric
+          label="Depth below keel"
+          value={null}
+          tone="warning"
+          live="polite"
+        />
+      </>,
+    );
+
+    const value = container.querySelector(".snui-metric__value");
+    for (const region of [
+      screen.getByTestId("banner"),
+      screen.getByTestId("indicator"),
+      value,
+    ]) {
+      // Nothing inside, so the stylesheet's :empty rule takes the region out
+      // of the flow while it keeps its place in the accessibility tree.
+      expect(region?.childNodes).toHaveLength(0);
+      expect(region).toHaveAttribute("role", "status");
+      expect(region).not.toHaveAttribute("aria-live");
+    }
+    // Tone chrome belongs to a message, so none of it stands on its own.
+    expect(container.querySelector(".snui-tone-glyph")).toBeNull();
+    expect(container.querySelector(".snui-status__dot")).toBeNull();
+    // The metric keeps its label: only the value region is waiting.
+    expect(screen.getByText("Depth below keel")).toBeVisible();
+  });
+
+  it("writes the first message into the region it already mounted", () => {
+    const { container, rerender } = renderInPanel(
+      <>
+        <Banner data-testid="banner" live="polite" />
+        <StatusIndicator data-testid="indicator" live="polite">
+          {null}
+        </StatusIndicator>
+        <Metric label="Depth below keel" value={null} live="polite" />
+      </>,
+    );
+
+    const banner = screen.getByTestId("banner");
+    const indicator = screen.getByTestId("indicator");
+    const value = container.querySelector(".snui-metric__value");
+
+    rerender(
+      panel(
+        <>
+          <Banner data-testid="banner" live="polite">
+            Provider lost.
+          </Banner>
+          <StatusIndicator data-testid="indicator" live="polite">
+            Connected
+          </StatusIndicator>
+          <Metric label="Depth below keel" value="3.2" unit="m" live="polite" />
+        </>,
+      ),
+    );
+
+    // Same nodes, so every region was observable before its text arrived,
+    // which is the whole reason a live region is mounted early.
+    expect(screen.getByTestId("banner")).toBe(banner);
+    expect(screen.getByTestId("indicator")).toBe(indicator);
+    expect(container.querySelector(".snui-metric__value")).toBe(value);
+    expect(banner).toHaveTextContent("Provider lost.");
+    expect(indicator).toHaveTextContent("Connected");
+    expect(value).toHaveTextContent("3.2 m");
+  });
+
+  it("renders the usual chrome when the region does not announce", () => {
+    const { container } = renderInPanel(
+      <>
+        <Banner data-testid="banner" tone="danger" />
+        <StatusIndicator data-testid="indicator" tone="success" live="off">
+          {null}
+        </StatusIndicator>
+      </>,
+    );
+
+    // Without an announcement there is no region to mount early, so an empty
+    // banner or indicator keeps the shape it has always had.
+    expect(
+      screen.getByTestId("banner").querySelector(".snui-banner__body"),
+    ).not.toBeNull();
+    expect(container.querySelector(".snui-status__dot")).not.toBeNull();
+  });
+
+  it("keeps the shell whole when only the actions are set", () => {
+    const onDismiss = vi.fn();
+    renderInPanel(
+      <Banner data-testid="banner" live="polite" onDismiss={onDismiss} />,
+    );
+
+    // A dismiss control is content of its own: hiding it would strand a
+    // focusable button in a region taken out of the flow.
+    expect(screen.getByRole("button", { name: "Dismiss" })).toBeVisible();
+    expect(screen.getByTestId("banner").childNodes.length).toBeGreaterThan(0);
+  });
+
+  it("mounts the shell for a caller-supplied live role too", () => {
+    renderInPanel(<Banner data-testid="banner" role="alert" />);
+
+    const banner = screen.getByTestId("banner");
+    expect(banner).toHaveAttribute("role", "alert");
+    expect(banner.childNodes).toHaveLength(0);
   });
 });
 

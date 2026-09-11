@@ -11,6 +11,7 @@ import {
   createRef,
   Fragment,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
@@ -729,6 +730,169 @@ describe("feedback and layout primitives", () => {
     });
   });
 
+  it("hands focus on when a consumer action takes the banner away", async () => {
+    const user = userEvent.setup();
+    const destinationRef = createRef<HTMLButtonElement>();
+
+    function Fixture(): React.JSX.Element {
+      const [failed, setFailed] = useState(true);
+
+      return (
+        <PanelRoot>
+          {failed ? (
+            <Banner
+              tone="danger"
+              title="Provider unavailable"
+              dismissFocusRef={destinationRef}
+              actions={<Button onClick={() => setFailed(false)}>Retry</Button>}
+            >
+              Check the optional provider.
+            </Banner>
+          ) : null}
+          <Button ref={destinationRef}>Provider settings</Button>
+        </PanelRoot>
+      );
+    }
+
+    render(<Fixture />);
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Provider settings" }),
+      ).toHaveFocus();
+    });
+  });
+
+  it("hands focus on when an announcing banner's actions go with its message", async () => {
+    const user = userEvent.setup();
+    const destinationRef = createRef<HTMLButtonElement>();
+
+    function Fixture(): React.JSX.Element {
+      const [failure, setFailure] = useState("The provider stopped answering.");
+
+      return (
+        <PanelRoot>
+          <Banner
+            live="polite"
+            tone="danger"
+            dismissFocusRef={destinationRef}
+            actions={
+              failure === "" ? undefined : (
+                <Button onClick={() => setFailure("")}>Retry</Button>
+              )
+            }
+          >
+            {failure}
+          </Banner>
+          <Button ref={destinationRef}>Provider settings</Button>
+        </PanelRoot>
+      );
+    }
+
+    render(<Fixture />);
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Provider settings" }),
+      ).toHaveFocus();
+    });
+  });
+
+  it("leaves focus where a panel puts it in the banner's place", async () => {
+    const user = userEvent.setup();
+    const destinationRef = createRef<HTMLButtonElement>();
+
+    function Replacement(): React.JSX.Element {
+      const fieldRef = useRef<HTMLInputElement>(null);
+
+      useEffect(() => {
+        fieldRef.current?.focus();
+      }, []);
+
+      return <TextInput ref={fieldRef} aria-label="Server URL" />;
+    }
+
+    function Fixture(): React.JSX.Element {
+      const [failed, setFailed] = useState(true);
+
+      return (
+        <PanelRoot>
+          {failed ? (
+            <Banner
+              tone="danger"
+              dismissFocusRef={destinationRef}
+              actions={<Button onClick={() => setFailed(false)}>Retry</Button>}
+            >
+              The provider stopped answering.
+            </Banner>
+          ) : (
+            <Replacement />
+          )}
+          <Button ref={destinationRef}>Provider settings</Button>
+        </PanelRoot>
+      );
+    }
+
+    render(<Fixture />);
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    // The banner hands focus on before the replacement mounts, so the panel's
+    // own placement is the one the user is left with.
+    await waitFor(() => {
+      expect(screen.getByRole("textbox", { name: "Server URL" })).toHaveFocus();
+    });
+  });
+
+  it("names a consumer landmark by the banner's own title", () => {
+    renderInPanel(
+      <Banner role="region" title="Provider unavailable">
+        Check the optional provider.
+      </Banner>,
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Provider unavailable" }),
+    ).toBeVisible();
+  });
+
+  it("leaves naming alone where the consumer or the role already owns it", () => {
+    renderInPanel(
+      <>
+        <Banner
+          role="region"
+          aria-label="Provider health"
+          title="Provider unavailable"
+        >
+          Check the optional provider.
+        </Banner>
+        <Banner role="status" title="Provider restored">
+          The provider answered.
+        </Banner>
+        <Banner data-testid="untitled-banner" role="region">
+          Values are stored in SI.
+        </Banner>
+        <Banner data-testid="roleless-banner" title="Provider notice">
+          Values are stored in SI.
+        </Banner>
+      </>,
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Provider health" }),
+    ).toBeVisible();
+    // A live role announces its own contents, so naming it by the title it
+    // already reads would only say the words twice.
+    expect(screen.getByRole("status")).not.toHaveAttribute("aria-labelledby");
+    expect(screen.getByTestId("untitled-banner")).not.toHaveAttribute(
+      "aria-labelledby",
+    );
+    expect(screen.getByTestId("roleless-banner")).not.toHaveAttribute(
+      "aria-labelledby",
+    );
+  });
+
   it("falls back to a named banner dismissal for blank labels", () => {
     renderInPanel(
       <Banner onDismiss={() => undefined} dismissLabel={" \t "}>
@@ -1161,8 +1325,13 @@ describe("buttons and confirmation", () => {
     expect(confirmation).toHaveFocus();
     expect(confirmation).toHaveAttribute("aria-busy", "true");
     const cancel = screen.getByRole("button", { name: "Cancel" });
-    expect(cancel).toHaveAttribute("aria-disabled", "true");
+    // Busy blocks the decision, never the route out of it.
+    expect(cancel).not.toHaveAttribute("aria-disabled");
     expect(cancel).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Confirm" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 
   it("does not steal focus when busy changes after focus leaves", async () => {
@@ -1247,11 +1416,39 @@ describe("buttons and confirmation", () => {
 
     rerender(panel(<InlineConfirm {...props} open busy />));
 
-    // Busy blocks activation through aria-disabled, so the control stays in the
-    // tab order and focus is never destroyed and chased.
+    // Busy blocks Confirm through aria-disabled, so that control stays in the
+    // tab order and focus is never destroyed and chased. Cancel stays live.
     expect(cancel).toHaveFocus();
-    expect(cancel).toHaveAttribute("aria-disabled", "true");
+    expect(cancel).not.toHaveAttribute("aria-disabled");
     expect(cancel).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Confirm" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+
+  it("keeps the way out of a busy confirmation open", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    const onConfirm = vi.fn();
+    const props = {
+      message: "Resetting.",
+      onCancel,
+      onConfirm,
+    } as const;
+    renderInPanel(<InlineConfirm {...props} open busy />);
+
+    // Confirm is the only action busy blocks; the decision has not been made
+    // twice, so pressing it again must do nothing.
+    await user.click(screen.getByRole("button", { name: "Confirm" }));
+    expect(onConfirm).not.toHaveBeenCalled();
+
+    await user.keyboard("{Escape}");
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith("escape");
+
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(onCancel).toHaveBeenCalledTimes(2);
+    expect(onCancel).toHaveBeenLastCalledWith("cancel");
   });
 
   it("focuses the confirmation inside its own document realm", () => {

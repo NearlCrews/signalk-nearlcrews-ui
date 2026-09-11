@@ -2,9 +2,11 @@ import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
 
 import {
   type AnnouncementMode,
+  announcesUpdates,
   liveRegionProps,
 } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
+import { hasReactContent } from "../utils/react-node.js";
 import type { StatusTone } from "../utils/tone.js";
 import { ToneMark } from "./ToneMark.js";
 
@@ -14,6 +16,12 @@ export interface StatusIndicatorProps
   extends HTMLAttributes<HTMLSpanElement>,
     RefAttributes<HTMLSpanElement> {
   readonly children: ReactNode;
+  /**
+   * Announces the indicator's own updates. Render the indicator whenever the
+   * panel can produce a status and let its content go empty, rather than
+   * mounting it beside the first message; an empty announcing indicator
+   * renders as a shell that occupies no space.
+   */
   readonly live?: AnnouncementMode | undefined;
   /**
    * `"compact"` shows the dot and glyph only, for chips and dense grids. The
@@ -42,6 +50,11 @@ export function StatusIndicator({
   ...props
 }: StatusIndicatorProps): React.JSX.Element {
   const region = liveRegionProps(live, suppliedRole);
+  // An announcing indicator keeps its region mounted so a screen reader
+  // observes it before the first status arrives. With nothing to report it
+  // renders as an empty shell, which the stylesheet takes out of the flow, so
+  // no dot or glyph stands where there is no status yet.
+  const silent = announcesUpdates(region) && !hasReactContent(children);
 
   return (
     <span
@@ -56,15 +69,19 @@ export function StatusIndicator({
       role={region.role}
       aria-live={region["aria-live"]}
     >
-      <span className="snui-status__dot" aria-hidden="true" />
-      <ToneMark tone={tone} toneLabel={toneLabel} />
-      <span
-        className={
-          size === "compact" ? "snui-visually-hidden" : "snui-status__text"
-        }
-      >
-        {children}
-      </span>
+      {silent ? null : (
+        <>
+          <span className="snui-status__dot" aria-hidden="true" />
+          <ToneMark tone={tone} toneLabel={toneLabel} />
+          <span
+            className={
+              size === "compact" ? "snui-visually-hidden" : "snui-status__text"
+            }
+          >
+            {children}
+          </span>
+        </>
+      )}
     </span>
   );
 }

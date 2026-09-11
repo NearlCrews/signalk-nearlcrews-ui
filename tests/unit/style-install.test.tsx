@@ -2,18 +2,18 @@ import { render } from "@testing-library/react";
 import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { PanelRoot } from "../../src/index.js";
-import {
-  OVERLAY_STYLES,
-  STYLE_MODULES,
-  TABLE_STYLES,
-} from "../../src/styles/index.js";
+import { Progress } from "../../src/composites.js";
+import { Switch } from "../../src/forms.js";
+import { PanelRoot, RangeInput } from "../../src/index.js";
+import { DIALOG_STYLES } from "../../src/styles/dialog.js";
 import {
   installedRootStyleNonces,
   installPanelStyles,
   installStyleModule,
   type StyleModule,
 } from "../../src/styles/install.js";
+import { STYLE_MODULES } from "../../src/styles/modules.js";
+import { TABLE_STYLES } from "../../src/styles/table.js";
 import { useModuleStyles } from "../../src/styles/use-module-styles.js";
 import { PACKAGE_VERSION } from "../../src/version.js";
 
@@ -41,29 +41,120 @@ afterEach(() => {
   }
 });
 
+/**
+ * Every class a stylesheet writes a rule for. The `@scope` prelude names the
+ * panel root in every module, so it is dropped before the scan.
+ */
+function classesIn(styles: string): Set<string> {
+  const rules = styles.replaceAll(/@scope \([^)]*\) to \([^)]*\)/g, "");
+  return new Set(
+    [...rules.matchAll(/\.(snui-[a-z0-9_-]+)/g)].map((match) => match[1] ?? ""),
+  );
+}
+
 describe("style module manifest", () => {
-  it("keeps overlay and table selectors out of the root sheet", () => {
+  /** Class prefixes whose rules all moved into a per-component module. */
+  const MOVED_BLOCKS = [
+    "snui-data-grid",
+    "snui-dialog",
+    "snui-empty-state",
+    "snui-menu",
+    "snui-popover",
+    "snui-progress",
+    "snui-radio",
+    "snui-range",
+    "snui-scrim",
+    "snui-switch",
+    "snui-textarea",
+    "snui-toast",
+  ] as const;
+
+  /*
+   * The rules that may still open with a moved class. Each belongs to a
+   * component that stayed in the root sheet: every field shares the rule that
+   * takes an empty error region out of flow.
+   */
+  const SHARED_ROOT_RULES = new Set([".snui-radio-group__error:empty"]);
+
+  it("keeps every per-component block out of the root sheet", () => {
     const [root] = STYLE_MODULES;
     expect(root?.id).toBe("root");
-    for (const selector of [
-      ".snui-dialog",
-      ".snui-menu",
-      ".snui-popover",
-      ".snui-toast",
-      ".snui-data-grid",
-    ]) {
-      expect(root?.styles, `root sheet styles ${selector}`).not.toContain(
-        selector,
-      );
+
+    let checked = 0;
+    for (const line of (root?.styles ?? "").split("\n")) {
+      const opener = /^\s*(\.snui-[^,{]*)[,{]/.exec(line);
+      if (opener === null) continue;
+      const selector = (opener[1] ?? "").trim();
+      const block = /^\.(snui-[a-z0-9_-]+)/.exec(selector)?.[1] ?? "";
+      if (!MOVED_BLOCKS.some((moved) => block.startsWith(moved))) continue;
+      checked += 1;
+      expect(
+        SHARED_ROOT_RULES.has(selector),
+        `the root sheet still opens a rule with ${selector}`,
+      ).toBe(true);
     }
-    expect(OVERLAY_STYLES.styles).toContain(".snui-dialog");
-    expect(OVERLAY_STYLES.styles).toContain(".snui-toast");
-    expect(TABLE_STYLES.styles).toContain(".snui-data-grid");
+    // Guards the scan itself: the shared rules have to be found.
+    expect(checked).toBe(SHARED_ROOT_RULES.size);
+  });
+
+  /*
+   * InputGroup lays out a slider it never owns the look of, so its two sizing
+   * rules stay with InputGroup in the root sheet. They outrank the module's
+   * own width on specificity, which is what kept them working when the module
+   * moved after the root sheet in the cascade.
+   */
+  it("keeps InputGroup's slider sizing in the root sheet", () => {
+    const [root] = STYLE_MODULES;
+    expect(root?.styles).toContain(".snui-input-group > .snui-range");
+    expect(root?.styles).toContain(
+      ".snui-input-group__control--grow > .snui-range",
+    );
   });
 
   it("gives every module a distinct id", () => {
     const ids = STYLE_MODULES.map((module) => module.id);
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  /*
+   * Modules install in mount order, so two modules writing rules for one class
+   * would leave that class styled differently depending on which component
+   * mounted first. Only the root sheet has a fixed place in the cascade.
+   */
+  it("never styles one class from two modules", () => {
+    const owner = new Map<string, string>();
+    for (const module of STYLE_MODULES.slice(1)) {
+      for (const name of classesIn(module.styles)) {
+        const first = owner.get(name);
+        expect(
+          first,
+          `.${name} is styled by both the ${String(first)} and ${module.id} modules, whose install order is not fixed`,
+        ).toBeUndefined();
+        owner.set(name, module.id);
+      }
+    }
+    expect(owner.size).toBeGreaterThan(0);
+  });
+
+  it("styles every module's own block in that module", () => {
+    const modules = new Map(
+      STYLE_MODULES.map((module) => [module.id, module.styles]),
+    );
+    for (const [id, selector] of [
+      ["dialog", ".snui-dialog"],
+      ["empty-state", ".snui-empty-state"],
+      ["menu", ".snui-menu"],
+      ["popover", ".snui-popover"],
+      ["progress", ".snui-progress"],
+      ["radio", ".snui-radio-group"],
+      ["range", ".snui-range"],
+      ["switch", ".snui-switch__button"],
+      ["table", ".snui-data-grid"],
+      ["textarea", ".snui-textarea"],
+      ["toast", ".snui-toast"],
+    ] as const) {
+      expect(modules.get(id), `no ${id} module`).toContain(selector);
+    }
   });
 });
 
@@ -92,7 +183,7 @@ describe("installStyleModule", () => {
     const remove = installStyleModule(
       document,
       "module-conflict",
-      { id: "overlays", styles: ".fixture { color: red; }" },
+      { id: "dialog", styles: ".fixture { color: red; }" },
       undefined,
     );
 
@@ -100,10 +191,10 @@ describe("installStyleModule", () => {
       installStyleModule(
         document,
         "module-conflict",
-        { id: "overlays", styles: ".fixture { color: blue; }" },
+        { id: "dialog", styles: ".fixture { color: blue; }" },
         "another-nonce",
       ),
-    ).toThrow(/Conflicting signalk-nearlcrews-ui styles .* module "overlays"/);
+    ).toThrow(/Conflicting signalk-nearlcrews-ui styles .* module "dialog"/);
 
     const removeTable = installStyleModule(
       document,
@@ -128,7 +219,7 @@ describe("installStyleModule", () => {
     const removeModule = installStyleModule(
       document,
       "marked-version",
-      { id: "overlays", styles: ".overlay {}" },
+      { id: "dialog", styles: ".overlay {}" },
       "sheet-nonce",
     );
 
@@ -137,7 +228,7 @@ describe("installStyleModule", () => {
     expect(root?.dataset.snuiStyles).toBe("marked-version");
     expect(root?.dataset.snuiStyleModule).toBeUndefined();
     expect(module?.dataset.snuiModuleStyles).toBe("marked-version");
-    expect(module?.dataset.snuiStyleModule).toBe("overlays");
+    expect(module?.dataset.snuiStyleModule).toBe("dialog");
     expect(module?.nonce).toBe("sheet-nonce");
     expect(root?.nextElementSibling).toBe(module);
 
@@ -155,7 +246,7 @@ describe("installStyleModule", () => {
     const removeModule = installStyleModule(
       document,
       "ordered-version",
-      { id: "overlays", styles: ".overlay {}" },
+      { id: "dialog", styles: ".overlay {}" },
       undefined,
     );
     const [root] = headSheets(ROOT_SHEET);
@@ -235,17 +326,17 @@ describe("useModuleStyles", () => {
   it("installs one module sheet per panel document under the root nonce", () => {
     const { unmount } = render(
       <PanelRoot styleNonce="panel-nonce">
-        <ModuleConsumer module={OVERLAY_STYLES} name="Dialog" />
-        <ModuleConsumer module={OVERLAY_STYLES} name="Menu" />
+        <ModuleConsumer module={DIALOG_STYLES} name="Dialog" />
+        <ModuleConsumer module={DIALOG_STYLES} name="Menu" />
       </PanelRoot>,
     );
 
     const sheets = headSheets(MODULE_SHEET);
     expect(sheets).toHaveLength(1);
     expect(sheets[0]?.dataset.snuiModuleStyles).toBe(PACKAGE_VERSION);
-    expect(sheets[0]?.dataset.snuiStyleModule).toBe("overlays");
+    expect(sheets[0]?.dataset.snuiStyleModule).toBe("dialog");
     expect(sheets[0]?.nonce).toBe("panel-nonce");
-    expect(sheets[0]?.textContent).toBe(OVERLAY_STYLES.styles);
+    expect(sheets[0]?.textContent).toBe(DIALOG_STYLES.styles);
     expect(headSheets(ROOT_SHEET)[0]?.nextElementSibling).toBe(sheets[0]);
 
     unmount();
@@ -256,7 +347,7 @@ describe("useModuleStyles", () => {
   it("keeps the sheet while any consumer remains and installs each module once", () => {
     const { rerender, unmount } = render(
       <PanelRoot>
-        <ModuleConsumer module={OVERLAY_STYLES} name="Dialog" />
+        <ModuleConsumer module={DIALOG_STYLES} name="Dialog" />
         <ModuleConsumer module={TABLE_STYLES} name="DataGrid" />
         <ModuleConsumer module={TABLE_STYLES} name="SecondGrid" />
       </PanelRoot>,
@@ -264,7 +355,7 @@ describe("useModuleStyles", () => {
 
     expect(
       headSheets(MODULE_SHEET).map((sheet) => sheet.dataset.snuiStyleModule),
-    ).toEqual(["overlays", "table"]);
+    ).toEqual(["dialog", "table"]);
 
     rerender(
       <PanelRoot>
@@ -305,10 +396,10 @@ describe("useModuleStyles", () => {
     const { unmount } = render(
       <>
         <PanelRoot styleNonce="alpha">
-          <ModuleConsumer module={OVERLAY_STYLES} name="Dialog" />
+          <ModuleConsumer module={DIALOG_STYLES} name="Dialog" />
         </PanelRoot>
         <PanelRoot styleNonce="beta">
-          <ModuleConsumer module={OVERLAY_STYLES} name="Popover" />
+          <ModuleConsumer module={DIALOG_STYLES} name="Popover" />
         </PanelRoot>
       </>,
     );
@@ -329,7 +420,7 @@ describe("useModuleStyles", () => {
 
   it("names the component in the error thrown outside PanelRoot", () => {
     expect(() =>
-      render(<ModuleConsumer module={OVERLAY_STYLES} name="Dialog" />),
+      render(<ModuleConsumer module={DIALOG_STYLES} name="Dialog" />),
     ).toThrow("Dialog must be rendered inside PanelRoot.");
   });
 
@@ -340,10 +431,43 @@ describe("useModuleStyles", () => {
       render(
         <PanelRoot>
           <UNSAFE_PortalProvider getContainer={() => null}>
-            <ModuleConsumer module={OVERLAY_STYLES} name="Dialog" />
+            <ModuleConsumer module={DIALOG_STYLES} name="Dialog" />
           </UNSAFE_PortalProvider>
         </PanelRoot>,
       ),
     ).toThrow("Dialog portal container must be its owning PanelRoot.");
+  });
+});
+
+/*
+ * The in-flow controls that own a module install it the way the overlays do,
+ * and differ in one place: outside PanelRoot they render unstyled rather than
+ * throwing, which is what they did while their rules traveled in the root
+ * sheet. Making them throw would be a breaking change dressed as packaging.
+ */
+describe("useOptionalModuleStyles", () => {
+  it("installs a control's own module from inside PanelRoot", () => {
+    const { unmount } = render(
+      <PanelRoot>
+        <Switch label="Autopilot" />
+        <Progress label="Sync" value={40} />
+        <RangeInput aria-label="Depth" />
+      </PanelRoot>,
+    );
+
+    expect(
+      headSheets(MODULE_SHEET)
+        .map((sheet) => sheet.dataset.snuiStyleModule)
+        .sort(),
+    ).toEqual(["progress", "range", "switch"]);
+
+    unmount();
+    expect(headSheets(MODULE_SHEET)).toHaveLength(0);
+  });
+
+  it("renders an in-flow control outside PanelRoot without throwing", () => {
+    expect(() => render(<Switch label="Autopilot" />)).not.toThrow();
+    expect(headSheets(MODULE_SHEET)).toHaveLength(0);
+    expect(headSheets(ROOT_SHEET)).toHaveLength(0);
   });
 });

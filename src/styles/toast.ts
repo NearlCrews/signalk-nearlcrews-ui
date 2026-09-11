@@ -1,12 +1,19 @@
 import { versionedAnimationName } from "../version.js";
 import { visuallyHiddenDeclarations } from "./fragments.js";
+import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 import { toneAccentBarRules, toneDotShapeRules } from "./tone-rules.js";
 
 /** A versioned global name prevents keyframe collisions between package copies. */
 const TOAST_ENTER_ANIMATION = versionedAnimationName("toast-enter");
 
-export const TOAST_STYLES = `
+/**
+ * Toast region and card styles. Installed by `ToastRegion` through
+ * `useModuleStyles`, so a panel without notifications never injects them.
+ */
+export const TOAST_STYLES: StyleModule = {
+  id: "toast",
+  styles: `
 @keyframes ${TOAST_ENTER_ANIMATION} {
   from {
     opacity: 0;
@@ -161,4 +168,5 @@ ${toneDotShapeRules("snui-toast", "snui-toast__tone-dot")}
     forced-color-adjust: none;
   }
 }
-`)}`;
+`)}`,
+};

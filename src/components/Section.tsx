@@ -8,6 +8,7 @@ import {
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
+import { useHeadingLevel } from "../utils/heading-level.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 
 export interface SectionProps
@@ -15,6 +16,11 @@ export interface SectionProps
     RefAttributes<HTMLElement> {
   readonly actions?: ReactNode | undefined;
   readonly description?: ReactNode | undefined;
+  /**
+   * Level of the section heading. It defaults to the level below a
+   * `PanelShell` title, and to 2 outside one, so the ordinary panel nests
+   * rather than repeating the level its own title already took.
+   */
   readonly headingLevel?: HeadingLevel | undefined;
   /** Removes the region landmark naming when false. */
   readonly landmark?: boolean | undefined;
@@ -27,7 +33,7 @@ export function Section({
   children,
   className,
   description,
-  headingLevel = 2,
+  headingLevel,
   landmark = true,
   ref,
   title,
@@ -36,7 +42,8 @@ export function Section({
   requireContent(title, "Section requires a non-empty title.");
 
   const titleId = useId();
-  const Heading = HEADING_ELEMENTS[headingLevel];
+  const shellHeadingLevel = useHeadingLevel();
+  const Heading = HEADING_ELEMENTS[headingLevel ?? shellHeadingLevel];
 
   return (
     <section

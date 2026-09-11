@@ -1,8 +1,15 @@
 import { FORCED_COLORS_OUTLINE_DECLARATIONS } from "./fragments.js";
+import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
-export const DIALOG_STYLES = scopeStyles(`
+/**
+ * Modal dialog and scrim styles. Installed by `Dialog` and `AlertDialog`
+ * through `useModuleStyles`, so a panel without a dialog never injects them.
+ */
+export const DIALOG_STYLES: StyleModule = {
+  id: "dialog",
+  styles: scopeStyles(`
 /* ==== Dialog and scrim (Dialog, AlertDialog) ==== */
 
 .snui-scrim {
@@ -146,4 +153,5 @@ export const DIALOG_STYLES = scopeStyles(`
 ${FORCED_COLORS_OUTLINE_DECLARATIONS}
   }
 }
-`);
+`),
+};

@@ -10,7 +10,7 @@ import {
   Pressable,
   Popover as RACPopover,
 } from "react-aria-components";
-import { OVERLAY_STYLES } from "../styles/overlay-styles.js";
+import { POPOVER_STYLES } from "../styles/popover.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
 import { overlayZIndex, useOverlayLayer } from "../utils/overlay-layer.js";
@@ -106,7 +106,7 @@ export function Popover({
   width = "auto",
 }: PopoverProps): React.JSX.Element {
   const triggerRef = useRef<HTMLElement | null>(null);
-  useModuleStyles(OVERLAY_STYLES, "Popover");
+  useModuleStyles(POPOVER_STYLES, "Popover");
   const portalReady = usePanelPortalContainerReady("Popover");
   const overlayLayer = useOverlayLayer();
 

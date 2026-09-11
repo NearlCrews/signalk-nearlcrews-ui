@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { transform } from "lightningcss";
 import { describe, expect, it } from "vitest";
 
-import { PANEL_STYLES, STYLE_MODULES } from "../../src/styles/index.js";
+import { PANEL_STYLES } from "../../src/styles/index.js";
+import { STYLE_MODULES } from "../../src/styles/modules.js";
 import {
   PUBLIC_COLOR_TOKEN_NAMES,
   PUBLIC_TOKEN_NAMES,

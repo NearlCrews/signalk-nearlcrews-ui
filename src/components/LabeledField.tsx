@@ -71,6 +71,16 @@ export interface LabeledFieldProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children">,
     RefAttributes<HTMLDivElement> {
   readonly children: LabeledFieldChild;
+  /**
+   * Ids of elements outside the field that also describe the control, such as
+   * a note the whole section shares. They join the description and error the
+   * field owns, so the control receives one merged `aria-describedby` and no
+   * caller writes the join. Pass one id or a list.
+   */
+  readonly controlDescribedBy?:
+    | string
+    | readonly (string | undefined)[]
+    | undefined;
   /** "comfortable" is accepted as a deprecated alias of "default". */
   readonly density?: Density | "comfortable" | undefined;
   readonly description?: ReactNode | undefined;
@@ -110,9 +120,18 @@ function requireLabelableIntrinsicChild(
   }
 }
 
+/** Reads the one-or-many form of `controlDescribedBy` as a list of ids. */
+function describedByIds(
+  value: LabeledFieldProps["controlDescribedBy"],
+): readonly (string | undefined)[] {
+  if (value === undefined) return [];
+  return typeof value === "string" ? [value] : value;
+}
+
 export function LabeledField({
   children,
   className,
+  controlDescribedBy,
   density,
   description,
   disabled,
@@ -142,10 +161,14 @@ export function LabeledField({
     hasError,
     errorLive,
   );
+  // The field's own text is read first, then whatever the caller added, so a
+  // unit or a shared note follows the description and the error rather than
+  // displacing them.
   const describedBy = joinIdReferences(
     elementChild?.props["aria-describedby"],
     descriptionId,
     referencedErrorId,
+    ...describedByIds(controlDescribedBy),
   );
   const errorMessage = joinIdReferences(
     elementChild?.props["aria-errormessage"],

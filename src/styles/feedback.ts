@@ -1,3 +1,4 @@
+import { visuallyHiddenDeclarations } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 import {
@@ -21,6 +22,17 @@ ${TONE_ACCENT_BAR_DECLARATIONS}
 }
 
 ${toneAccentBarRules("snui-banner")}
+
+/*
+ * An announcing banner stays mounted so a screen reader observes it before the
+ * first message arrives. While it has nothing to say it leaves the flow rather
+ * than the accessibility tree, so it paints no box, border, padding, or
+ * margin; display: none would remove the region entirely. The pseudo-class
+ * outranks the tone modifier, so the accent bar waits with it.
+ */
+.snui-banner:empty {
+${visuallyHiddenDeclarations()}
+}
 
 .snui-banner__title {
   margin: 0;

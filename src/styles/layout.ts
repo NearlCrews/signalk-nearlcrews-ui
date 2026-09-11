@@ -1,3 +1,4 @@
+import { visuallyHiddenDeclarations } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import {
   TONE_ACCENT_BAR_DECLARATIONS,
@@ -69,7 +70,14 @@ ${GAP_RULES}
   padding: var(--snui-space-3);
 }
 
+/*
+ * Flush draws no chrome of its own, so it drops the row gap with the padding.
+ * A consumer reaching for it is placing its own surface in the card, and a gap
+ * it never asked for offsets that surface from the edge it was aligned to. One
+ * is still available to a card that wants it.
+ */
 .snui-card--flush {
+  gap: 0;
   padding: 0;
 }
 
@@ -175,6 +183,15 @@ ${toneAccentBarRules("snui-card", "accent-")}
   font-weight: var(--snui-font-weight-bold);
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+/*
+ * An announcing value stays mounted so a screen reader observes it before the
+ * first reading arrives. With no reading it leaves the flow rather than the
+ * accessibility tree, so it adds no margin under the label.
+ */
+.snui-metric__value:empty {
+${visuallyHiddenDeclarations()}
 }
 
 .snui-metric__unit {

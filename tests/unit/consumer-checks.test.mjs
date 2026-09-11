@@ -8,8 +8,10 @@ import {
   assertConsumedShares,
   assertExactPin,
   assertNoReactRuntime,
+  assertProductionJsxRuntime,
   assertSizeBaseline,
   assertVersionStamp,
+  DEVELOPMENT_JSX_MARKERS,
   encodeRequiredVersion,
   findConsumedShares,
   findVersionStamps,
@@ -114,6 +116,29 @@ describe("React runtime markers", () => {
     for (const marker of REACT_RUNTIME_MARKERS) {
       expect(() => assertNoReactRuntime(`x${marker}y`, "The chunk")).toThrow(
         `The chunk bundled a React runtime marker: ${marker}.`,
+      );
+    }
+  });
+});
+
+describe("development JSX runtime markers", () => {
+  it("names the file that carries a development runtime and passes clean files", () => {
+    expect(() =>
+      assertProductionJsxRuntime([
+        { name: "remoteEntry.js", source: 'jsx("div")' },
+      ]),
+    ).not.toThrow();
+    for (const marker of DEVELOPMENT_JSX_MARKERS) {
+      expect(() =>
+        assertProductionJsxRuntime(
+          [
+            { name: "remoteEntry.js", source: "clean" },
+            { name: "main.chunk.js", source: `x${marker}y` },
+          ],
+          "The fixture",
+        ),
+      ).toThrow(
+        `The fixture uses the React development JSX runtime: main.chunk.js contains ${marker}.`,
       );
     }
   });

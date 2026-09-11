@@ -11,7 +11,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 
-import { OVERLAY_STYLES } from "../styles/overlay-styles.js";
+import { TOAST_STYLES } from "../styles/toast.js";
 import { TRANSITION_FAST_MS } from "../styles/tokens.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import {
@@ -693,7 +693,7 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
     throw new Error("ToastRegion requires a non-empty label.");
   }
 
-  useModuleStyles(OVERLAY_STYLES, "ToastRegion");
+  useModuleStyles(TOAST_STYLES, "ToastRegion");
   const toasts = useSyncExternalStore(queue.subscribe, queue.getSnapshot);
   // Newest first, without copying the snapshot on every render.
   const cards: React.JSX.Element[] = [];

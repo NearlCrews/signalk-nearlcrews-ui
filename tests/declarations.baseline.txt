@@ -29,7 +29,7 @@ export interface ActionBarProps extends Omit<HTMLAttributes<HTMLDivElement>, "ch
 export declare function ActionBar({ actions, className, ref, status, statusRef, sticky, ...props }: ActionBarProps): React.JSX.Element;
 
 === components/Banner.d.ts ===
-import type { HTMLAttributes, MouseEvent, ReactNode, RefAttributes, RefObject } from "react";
+import { type HTMLAttributes, type MouseEvent, type ReactNode, type RefAttributes, type RefObject } from "react";
 import { type AnnouncementMode } from "../utils/announcement.js";
 import type { StatusTone } from "../utils/tone.js";
 export type BannerTone = StatusTone;
@@ -37,8 +37,20 @@ export type BannerTone = StatusTone;
 export type BannerLive = AnnouncementMode;
 export interface BannerProps extends Omit<HTMLAttributes<HTMLDivElement>, "aria-live" | "title">, RefAttributes<HTMLDivElement> {
     readonly actions?: ReactNode | undefined;
+    /**
+     * Where focus goes when the banner takes it away: the Dismiss press, and any
+     * other change that removes the banner, or the actions inside it, while the
+     * user is standing there. A Retry in `actions` that clears the error it
+     * reports is the common one.
+     */
     readonly dismissFocusRef?: RefObject<HTMLElement | null> | undefined;
     readonly dismissLabel?: string | undefined;
+    /**
+     * Announces the banner's own updates. Render the banner whenever the panel
+     * can produce one and let its content go empty, rather than mounting it
+     * beside the first message; an empty announcing banner renders as a shell
+     * that occupies no space.
+     */
     readonly live?: AnnouncementMode | undefined;
     readonly onDismiss?: ((event: MouseEvent<HTMLButtonElement>) => void) | undefined;
     readonly title?: ReactNode | undefined;
@@ -83,6 +95,13 @@ export {};
 import { type ReactNode } from "react";
 import { type FieldGroupProps } from "./FieldGroup.js";
 export interface CheckboxGroupOption<Value extends string> {
+    /**
+     * Blocks this option's change while its box stays focusable and keeps its
+     * value, the way `Checkbox.ariaDisabled` does. Reach for it where the
+     * option cannot change right now, such as the last remaining selection;
+     * `disabled` takes the box out of the tab order instead.
+     */
+    readonly ariaDisabled?: boolean | undefined;
     readonly description?: ReactNode | undefined;
     readonly disabled?: boolean | undefined;
     readonly label: ReactNode;
@@ -108,7 +127,9 @@ export interface CheckboxGroupProps<Value extends string> extends Omit<FieldGrou
     /**
      * Adds a tri-state select-all checkbox to the legend row with this label.
      * It completes a partial selection and clears a full one, and it leaves
-     * disabled options as they are.
+     * blocked options as they are, whether they are `disabled` or
+     * `ariaDisabled`: an option the user cannot change is not one select-all
+     * may change for them.
      */
     readonly selectAllLabel?: ReactNode | undefined;
     readonly value?: readonly Value[] | undefined;
@@ -126,6 +147,11 @@ export interface CollapsibleSectionProps extends Omit<HTMLAttributes<HTMLElement
     readonly actions?: ReactNode | undefined;
     readonly defaultOpen?: boolean | undefined;
     readonly disabled?: boolean | undefined;
+    /**
+     * Level of the section heading. It defaults to the level below a
+     * `PanelShell` title, and to 2 outside one, so the ordinary panel nests
+     * rather than repeating the level its own title already took.
+     */
     readonly headingLevel?: HeadingLevel | undefined;
     /** Removes the region landmark naming when false. Accordion defaults it to false. */
     readonly landmark?: boolean | undefined;
@@ -316,6 +342,18 @@ import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
 import { type ButtonAsButtonProps } from "./Button.js";
 export interface UseDisclosureOptions {
     readonly defaultOpen?: boolean | undefined;
+    /**
+     * Names the trigger, so code outside the pair can focus or query it
+     * directly instead of hunting for it in the DOM. The panel keeps a
+     * generated id unless `idPrefix` names one.
+     */
+    readonly id?: string | undefined;
+    /**
+     * Names both ends of the pair: the trigger becomes `<idPrefix>-trigger` and
+     * the panel `<idPrefix>-panel`. Reach for it when a harness or a deep link
+     * has to know either id before the panel renders.
+     */
+    readonly idPrefix?: string | undefined;
     readonly onOpenChange?: ((open: boolean) => void) | undefined;
     readonly open?: boolean | undefined;
 }
@@ -344,12 +382,32 @@ export interface UseDisclosureResult {
 /**
  * Headless open state, ids, ARIA wiring, and focus handoff for a button that
  * reveals content which is not a heading section. Opening through `toggle` or
- * `setOpen` moves focus into the panel, closing moves it back to the trigger,
- * so a keyboard user never lands on the body. A change made by the consumer
- * setting `open` directly moves no focus, because nothing was pressed.
+ * `setOpen` moves focus into the panel, and closing moves it back to the
+ * trigger, so a keyboard user never lands on the body.
+ *
+ * A change the consumer makes by setting `open` directly moves no focus into
+ * the panel, because nothing was pressed. Closing is different: the trigger
+ * takes focus back whenever the panel held it at that moment, whoever caused
+ * the change, because closing a panel that holds focus drops the reader on
+ * the body. A Close button inside the panel wired to the consumer's own
+ * setter is the ordinary way to hit that, and it is safe by construction. A
+ * close while focus sits outside the panel still moves nothing.
+ *
+ * Both ids are generated unless `id` names the trigger or `idPrefix` names the
+ * pair. `aria-labelledby` and `aria-controls` are written from whatever those
+ * two ids resolve to, so naming one end cannot leave the wiring dangling.
  */
-export declare function useDisclosure({ defaultOpen, onOpenChange, open, }?: UseDisclosureOptions): UseDisclosureResult;
+export declare function useDisclosure({ defaultOpen, id, idPrefix, onOpenChange, open, }?: UseDisclosureOptions): UseDisclosureResult;
 export type DisclosureContextValue = UseDisclosureResult;
+/** Names the disclosure a part drives when context cannot carry it. */
+interface DisclosurePartProps {
+    /**
+     * The `useDisclosure` result this part belongs to. Give it where two
+     * disclosures share a row, so neither has to be the enclosing context.
+     * Without it the part reads the surrounding `Disclosure`.
+     */
+    readonly disclosure?: UseDisclosureResult | undefined;
+}
 export interface DisclosureProps extends UseDisclosureOptions {
     readonly children: ReactNode;
 }
@@ -359,10 +417,10 @@ export interface DisclosureProps extends UseDisclosureOptions {
  * result yourself when the trigger is not a library Button.
  */
 export declare function Disclosure({ children, ...options }: DisclosureProps): React.JSX.Element;
-export type DisclosureTriggerProps = Omit<ButtonAsButtonProps, "aria-controls" | "aria-expanded" | "as" | "href" | "id" | "onClick" | "ref">;
+export type DisclosureTriggerProps = Omit<ButtonAsButtonProps, "aria-controls" | "aria-expanded" | "as" | "href" | "id" | "onClick" | "ref"> & DisclosurePartProps;
 /** The library Button wired as the disclosure's toggle. */
-export declare function DisclosureTrigger(props: DisclosureTriggerProps): React.JSX.Element;
-export interface DisclosurePanelProps extends Omit<HTMLAttributes<HTMLElement>, "hidden" | "id" | "role">, RefAttributes<HTMLElement> {
+export declare function DisclosureTrigger({ disclosure, ...props }: DisclosureTriggerProps): React.JSX.Element;
+export interface DisclosurePanelProps extends Omit<HTMLAttributes<HTMLElement>, "hidden" | "id" | "role">, RefAttributes<HTMLElement>, DisclosurePartProps {
     /**
      * Under `"unmount"` the children leave the tree while closed; the container
      * stays so `aria-controls` still resolves. `"retain"`, the default, keeps
@@ -375,7 +433,8 @@ export interface DisclosurePanelProps extends Omit<HTMLAttributes<HTMLElement>, 
  * `aria-labelledby` is given, and it takes focus when opened through the
  * trigger so the reader arrives at the revealed content.
  */
-export declare function DisclosurePanel({ "aria-label": ariaLabel, "aria-labelledby": ariaLabelledBy, children, className, mountStrategy, ref, ...props }: DisclosurePanelProps): React.JSX.Element;
+export declare function DisclosurePanel({ "aria-label": ariaLabel, "aria-labelledby": ariaLabelledBy, children, className, disclosure, mountStrategy, ref, ...props }: DisclosurePanelProps): React.JSX.Element;
+export {};
 
 === components/EmptyState.d.ts ===
 import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
@@ -407,6 +466,12 @@ import { type HeadingLevel } from "../utils/heading.js";
 import { type ButtonVariant } from "./Button.js";
 export type InlineConfirmCancelReason = "cancel" | "escape";
 export interface InlineConfirmProps extends Omit<HTMLAttributes<HTMLElement>, "children" | "onCancel" | "title">, RefAttributes<HTMLElement> {
+    /**
+     * Blocks Confirm while the confirmed action runs. Cancel and Escape stay
+     * live: declining is the user's route out of the region, and work already
+     * under way is not in conflict with it. `onCancel` may therefore fire while
+     * `busy` is true, and the consumer decides what that means.
+     */
     readonly busy?: boolean | undefined;
     readonly cancelLabel?: ReactNode | undefined;
     /** The escape action is always available, so it never paints as danger. */
@@ -461,6 +526,16 @@ export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & RefAtt
 export declare function Textarea({ className, minRows, monospace, ref, rows, ...props }: TextareaProps): React.JSX.Element;
 export type CheckboxLabelVisibility = "hidden" | "visible";
 export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "children" | "type">, RefAttributes<HTMLInputElement> {
+    /**
+     * Blocks the state change while the box stays focusable, keeps its checked
+     * state, and goes on submitting with its form. Reach for it where the value
+     * is real but cannot be changed right now, such as the last remaining
+     * selection in a list: native `disabled` takes the box out of the tab
+     * order, so setting it on the box the user is standing on destroys their
+     * focus. When set it decides; when omitted, a native `aria-disabled`
+     * attribute is read instead. `Button.ariaDisabled` follows the same rule.
+     */
+    readonly ariaDisabled?: boolean | undefined;
     readonly description?: ReactNode | undefined;
     readonly error?: ReactNode | undefined;
     readonly errorLive?: AnnouncementMode | undefined;
@@ -481,7 +556,7 @@ export interface CheckboxProps extends Omit<InputHTMLAttributes<HTMLInputElement
 }
 /** @deprecated Use {@link AnnouncementMode}. */
 export type CheckboxErrorLive = AnnouncementMode;
-export declare function Checkbox({ "aria-describedby": ariaDescribedBy, "aria-errormessage": ariaErrorMessage, "aria-invalid": ariaInvalid, "aria-labelledby": ariaLabelledBy, checked, className, description, error, errorLive, id, indeterminate, label, labelVisibility, ref, required, ...props }: CheckboxProps): React.JSX.Element;
+export declare function Checkbox({ "aria-describedby": ariaDescribedBy, "aria-disabled": nativeAriaDisabled, "aria-errormessage": ariaErrorMessage, "aria-invalid": ariaInvalid, "aria-labelledby": ariaLabelledBy, ariaDisabled, checked, className, description, disabled, error, errorLive, id, indeterminate, label, labelVisibility, onChange, onClick, onKeyDown, ref, required, ...props }: CheckboxProps): React.JSX.Element;
 
 === components/LabeledField.d.ts ===
 import { type AriaAttributes, type HTMLAttributes, type ReactElement, type ReactNode, type RefAttributes } from "react";
@@ -527,6 +602,13 @@ export type FieldErrorLive = AnnouncementMode;
 export type LabeledFieldChild = ReactElement<FieldControlProps> | ((controlProps: LabeledFieldControlProps) => ReactNode);
 export interface LabeledFieldProps extends Omit<HTMLAttributes<HTMLDivElement>, "children">, RefAttributes<HTMLDivElement> {
     readonly children: LabeledFieldChild;
+    /**
+     * Ids of elements outside the field that also describe the control, such as
+     * a note the whole section shares. They join the description and error the
+     * field owns, so the control receives one merged `aria-describedby` and no
+     * caller writes the join. Pass one id or a list.
+     */
+    readonly controlDescribedBy?: string | readonly (string | undefined)[] | undefined;
     /** "comfortable" is accepted as a deprecated alias of "default". */
     readonly density?: Density | "comfortable" | undefined;
     readonly description?: ReactNode | undefined;
@@ -539,7 +621,7 @@ export interface LabeledFieldProps extends Omit<HTMLAttributes<HTMLDivElement>, 
     readonly optionalLabel?: ReactNode | undefined;
     readonly required?: boolean | undefined;
 }
-export declare function LabeledField({ children, className, density, description, disabled, error, errorLive, label, layout, name, optionalLabel, ref, required, ...props }: LabeledFieldProps): React.JSX.Element;
+export declare function LabeledField({ children, className, controlDescribedBy, density, description, disabled, error, errorLive, label, layout, name, optionalLabel, ref, required, ...props }: LabeledFieldProps): React.JSX.Element;
 
 === components/Layout.d.ts ===
 import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
@@ -614,6 +696,12 @@ export declare function MetricGrid({ as, children, className, ...props }: Metric
 export interface MetricProps extends Omit<HTMLAttributes<HTMLDivElement>, "children">, RefAttributes<HTMLDivElement> {
     readonly detail?: ReactNode | undefined;
     readonly label: ReactNode;
+    /**
+     * Announces the value's own updates. Render the metric whenever the panel
+     * can produce a reading and let `value` go empty until one arrives, rather
+     * than mounting the metric beside its first value; an empty announcing
+     * value region occupies no space.
+     */
     readonly live?: AnnouncementMode | undefined;
     readonly tone?: StatusTone | undefined;
     readonly toneLabel?: string | undefined;
@@ -633,6 +721,12 @@ import { type HTMLAttributes, type ReactNode } from "react";
 import { type AnnouncementMode } from "../utils/announcement.js";
 export type LiveRegionElement = "div" | "span" | "p";
 export interface LiveRegionProps extends Omit<HTMLAttributes<HTMLElement>, "aria-live" | "children"> {
+    /**
+     * Change it to announce `message` again, the same words twice in a row
+     * included. Any value that differs from the last one does: the count of
+     * presses, or the id of the event that produced the message.
+     */
+    readonly announceKey?: string | number | undefined;
     readonly as?: LiveRegionElement | undefined;
     /** Announcement mode; exactly one of `role` or `aria-live` is emitted. */
     readonly live?: AnnouncementMode | undefined;
@@ -644,10 +738,12 @@ export interface LiveRegionProps extends Omit<HTMLAttributes<HTMLElement>, "aria
  * A visually hidden announcer for state changes that no visible control owns,
  * such as "3 paths detected" after a scan. Render it once, before the first
  * message, and update `message`: screen readers only observe a live region
- * that already existed when its text changed. Reserve `"assertive"` for
- * errors that must interrupt.
+ * that already existed when its text changed. Repeating a message it already
+ * carries changes nothing in the DOM and is therefore silent, so pass an
+ * `announceKey` that changes per announcement and the region re-announces the
+ * same words for you. Reserve `"assertive"` for errors that must interrupt.
  */
-export declare function LiveRegion({ as, className, live, message, role: suppliedRole, ...props }: LiveRegionProps): React.JSX.Element;
+export declare function LiveRegion({ announceKey, as, className, live, message, role: suppliedRole, ...props }: LiveRegionProps): React.JSX.Element;
 
 === components/Menu.d.ts ===
 import { type HTMLAttributes, type ReactNode, type RefAttributes } from "react";
@@ -840,7 +936,8 @@ import { type PanelRootProps } from "./PanelRoot.js";
 import { type ThemeToggleProps } from "./ThemeToggle.js";
 /**
  * Where the theme toggle sits: after the content, between title and content,
- * or nowhere. Either placement aligns it to the trailing edge.
+ * or nowhere. Either placement aligns it to the trailing edge. `"between"`
+ * needs a title to follow, so a panel without one resolves it to `"end"`.
  */
 export type PanelShellThemeToggle = "end" | "between" | "none";
 /**
@@ -861,7 +958,9 @@ export interface PanelShellProps extends Omit<PanelRootProps, "children" | "onEr
     /**
      * Level of the panel title, default 2. Signal K Admin renders the plugin
      * card header as an `h5` and the page title as its own heading, so a panel
-     * must not add another `h1`.
+     * must not add another `h1`. A titled shell also offers the next level down
+     * to the sections inside it, so they nest under the panel heading without
+     * being told where they are.
      */
     readonly headingLevel?: HeadingLevel | undefined;
     /** Called for every error the boundary catches; replaces the div's native `onError`. */
@@ -957,9 +1056,17 @@ export interface RadioGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, "c
     /** @deprecated Use `onValueChange`. */
     readonly onChange?: ((value: string) => void) | undefined;
     readonly orientation?: Orientation | undefined;
+    /**
+     * Blocks the selection from changing while every radio stays focusable and
+     * in the roving tab order. Reach for it where the choice is real but cannot
+     * be changed right now; `disabled` takes the group out of the tab order
+     * instead, which destroys focus if it lands on the radio the user is
+     * standing on. React Aria owns the blocking, as it does for `Switch`.
+     */
+    readonly readOnly?: boolean | undefined;
     readonly value?: string | undefined;
 }
-export declare function RadioGroup({ "aria-describedby": ariaDescribedBy, children, className, defaultValue, description, disabled, error, errorLive, label, name, onChange, onValueChange, orientation, ref, value, ...props }: RadioGroupProps): React.JSX.Element;
+export declare function RadioGroup({ "aria-describedby": ariaDescribedBy, children, className, defaultValue, description, disabled, error, errorLive, label, name, onChange, onValueChange, orientation, readOnly, ref, value, ...props }: RadioGroupProps): React.JSX.Element;
 interface RadioBaseProps extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onClick">, RefAttributes<HTMLDivElement> {
     readonly disabled?: boolean | undefined;
     readonly value: string;
@@ -1027,10 +1134,21 @@ export interface SaveActionBarProps extends Omit<ActionBarProps, "actions" | "st
     readonly labels?: Partial<SaveActionBarLabels> | undefined;
     readonly onDiscard: () => void;
     readonly onSave: () => void;
-    /** Epoch milliseconds of the last save request, or null before the first. */
+    /**
+     * Epoch milliseconds of the last save request, or null before the first.
+     * The bar reports the request for `savedMessageDurationMs` from that
+     * instant and then falls back to the state underneath, so a panel keeps no
+     * timer of its own and never has to write the timestamp back to null.
+     */
     readonly saveRequestedAt?: number | null | undefined;
     /** Status text once a save has been requested and nothing is pending. */
     readonly savedMessage?: string | undefined;
+    /**
+     * How long the saved message stays up after a save request. Zero leaves it
+     * up until `saveRequestedAt` changes, for a panel that ends the window on
+     * something other than the clock, such as a server confirmation.
+     */
+    readonly savedMessageDurationMs?: number | undefined;
     readonly saving?: boolean | undefined;
     /**
      * The host supplied no configuration, so the plugin has never been set up.
@@ -1060,6 +1178,11 @@ export interface SaveActionBarStateInput {
     readonly dirty: boolean;
     readonly invalidMessage?: string | null | undefined;
     readonly labels?: Partial<SaveActionBarLabels> | undefined;
+    /**
+     * A save request while its message is still up. The component owns that
+     * window, so a rules test passes the timestamp for the reported state and
+     * null for the state the bar falls back to once the window closes.
+     */
     readonly saveRequestedAt?: number | null | undefined;
     /** Defaults to the component's own "Save requested". */
     readonly savedMessage?: string | undefined;
@@ -1080,9 +1203,10 @@ export declare function resolveSaveActionBarState({ dirty, invalidMessage, label
  * The Save and Discard footer of a configuration panel with its status line.
  * After either action, focus moves to the status, because the button that was
  * pressed usually disables itself and would otherwise drop focus to the body.
- * State stays with the consumer; this component owns presentation and focus.
+ * Configuration state stays with the consumer; this component owns
+ * presentation, focus, and how long the saved message stays up.
  */
-export declare function SaveActionBar({ dirty, invalidMessage, labels: labelOverrides, onDiscard, onSave, saveRequestedAt, savedMessage, saving, sticky, unconfigured, ...props }: SaveActionBarProps): React.JSX.Element;
+export declare function SaveActionBar({ dirty, invalidMessage, labels: labelOverrides, onDiscard, onSave, saveRequestedAt, savedMessage, savedMessageDurationMs, saving, sticky, unconfigured, ...props }: SaveActionBarProps): React.JSX.Element;
 
 === components/SecretInput.d.ts ===
 import { type ReactNode, type RefAttributes } from "react";
@@ -1109,6 +1233,11 @@ import { type HeadingLevel } from "../utils/heading.js";
 export interface SectionProps extends Omit<HTMLAttributes<HTMLElement>, "title">, RefAttributes<HTMLElement> {
     readonly actions?: ReactNode | undefined;
     readonly description?: ReactNode | undefined;
+    /**
+     * Level of the section heading. It defaults to the level below a
+     * `PanelShell` title, and to 2 outside one, so the ordinary panel nests
+     * rather than repeating the level its own title already took.
+     */
     readonly headingLevel?: HeadingLevel | undefined;
     /** Removes the region landmark naming when false. */
     readonly landmark?: boolean | undefined;
@@ -1176,6 +1305,12 @@ import type { StatusTone } from "../utils/tone.js";
 export type StatusIndicatorSize = "default" | "compact";
 export interface StatusIndicatorProps extends HTMLAttributes<HTMLSpanElement>, RefAttributes<HTMLSpanElement> {
     readonly children: ReactNode;
+    /**
+     * Announces the indicator's own updates. Render the indicator whenever the
+     * panel can produce a status and let its content go empty, rather than
+     * mounting it beside the first message; an empty announcing indicator
+     * renders as a shell that occupies no space.
+     */
     readonly live?: AnnouncementMode | undefined;
     /**
      * `"compact"` shows the dot and glyph only, for chips and dense grids. The
@@ -1277,45 +1412,58 @@ import { type ButtonHTMLAttributes, type HTMLAttributes, type ReactNode, type Re
 import type { Orientation } from "../utils/variants.js";
 /** `"automatic"` selects a tab as arrow keys focus it; `"manual"` waits for Enter or Space. */
 export type TabsActivation = "automatic" | "manual";
-export interface TabsProps extends Omit<HTMLAttributes<HTMLDivElement>, "defaultValue" | "onChange">, RefAttributes<HTMLDivElement> {
+export interface TabsProps<Value extends string = string> extends Omit<HTMLAttributes<HTMLDivElement>, "defaultValue" | "onChange">, RefAttributes<HTMLDivElement> {
     readonly activation?: TabsActivation | undefined;
     readonly children: ReactNode;
     /** Value of the initially selected tab when uncontrolled. */
-    readonly defaultValue?: string | undefined;
-    readonly onValueChange?: ((value: string) => void) | undefined;
+    readonly defaultValue?: Value | undefined;
+    /** Receives the value of the newly selected tab. */
+    readonly onValueChange?: ((value: Value) => void) | undefined;
     readonly orientation?: Orientation | undefined;
     /** Value of the selected tab when controlled. */
-    readonly value?: string | undefined;
+    readonly value?: Value | undefined;
 }
 /**
  * A tab interface following the ARIA tabs pattern: one tab stop into the list,
  * arrows move between tabs, Home and End jump to the ends, and each panel is
  * labeled by its tab. Give every Tab and TabPanel the same `value`.
+ *
+ * The value type follows the consumer's own union, so `onValueChange` reports
+ * it without a guard on the way back. Anything typed at the boundary pins it: a
+ * `value` or `defaultValue` of that type, or an explicit `<Tabs<Category>>`.
+ * Instantiate the children the same way to have their values checked too.
  */
-export declare function Tabs({ activation, children, className, defaultValue, onValueChange, orientation, ref, value, ...props }: TabsProps): React.JSX.Element;
+export declare function Tabs<Value extends string = string>({ activation, children, className, defaultValue, onValueChange, orientation, ref, value, ...props }: TabsProps<Value>): React.JSX.Element;
 export interface TabListProps extends HTMLAttributes<HTMLDivElement>, RefAttributes<HTMLDivElement> {
     readonly children: ReactNode;
 }
 /** The `tablist`. It needs an accessible name: pass `aria-label` or `aria-labelledby`. */
 export declare function TabList({ "aria-label": ariaLabel, "aria-labelledby": ariaLabelledBy, children, className, ref, ...props }: TabListProps): React.JSX.Element;
-export interface TabProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "role" | "type" | "value">, RefAttributes<HTMLButtonElement> {
+export interface TabProps<Value extends string = string> extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "role" | "type" | "value">, RefAttributes<HTMLButtonElement> {
     /** A count or `Badge` shown after the label; it joins the tab's name. */
     readonly badge?: ReactNode | undefined;
     readonly children: ReactNode;
-    readonly value: string;
+    /** Names the tab, and with it the TabPanel written with the same value. */
+    readonly value: Value;
 }
-export declare function Tab({ badge, children, className, onClick, onKeyDown, ref, value, ...props }: TabProps): React.JSX.Element;
-export interface TabPanelProps extends Omit<HTMLAttributes<HTMLDivElement>, "hidden" | "id" | "role">, RefAttributes<HTMLDivElement> {
-    readonly children?: ReactNode | undefined;
+export declare function Tab<Value extends string = string>({ badge, children, className, onClick, onKeyDown, ref, value, ...props }: TabProps<Value>): React.JSX.Element;
+export interface TabPanelProps<Value extends string = string> extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "hidden" | "id" | "role">, RefAttributes<HTMLDivElement> {
+    /**
+     * The panel's content. A function child runs only where the panel renders
+     * it, so under `mountStrategy="unmount"` an unselected tab builds nothing;
+     * plain children are built by the surrounding render either way.
+     */
+    readonly children?: ReactNode | (() => ReactNode) | undefined;
     /** Removes the hidden panels' children while another tab is selected. */
     readonly mountStrategy?: "retain" | "unmount" | undefined;
-    readonly value: string;
+    /** Names the panel, matching the value of the tab that controls it. */
+    readonly value: Value;
 }
 /**
  * The panel a tab controls. It is focusable so a keyboard user can Tab from
  * the list straight into its content even when the panel holds no control.
  */
-export declare function TabPanel({ children, className, mountStrategy, ref, value, ...props }: TabPanelProps): React.JSX.Element;
+export declare function TabPanel<Value extends string = string>({ children, className, mountStrategy, ref, value, ...props }: TabPanelProps<Value>): React.JSX.Element;
 
 === components/Text.d.ts ===
 import type { ReactNode } from "react";
@@ -1529,7 +1677,7 @@ export { Cell, type CellProps, Column, DataGrid, type DataGridColumnProps, type 
 
 === federation.d.cts ===
 /**
- * Module Federation share map for signalk-nearlcrews-ui 0.9.0.
+ * Module Federation share map for signalk-nearlcrews-ui 0.10.0.
  * Generated from package.json at build time. Do not edit.
  */
 export type SignalKHostSharedModule = "react" | "react-dom";
@@ -1690,7 +1838,7 @@ export { VisuallyHidden, type VisuallyHiddenElement, type VisuallyHiddenProps, }
 export { type NumberDraft, type NumberDraftInputProps, type NumberDraftInvalidReason, type NumberDraftOptions, type NumberDraftResolution, resolveNumberDraft, type UseNumberDraftOptions, useNumberDraft, } from "./hooks/use-number-draft.js";
 export { useUnsavedChangesGuard } from "./hooks/use-unsaved-changes-guard.js";
 export { supportsNativeCssScope, UnsupportedBrowserError, } from "./styles/install.js";
-export { type ColorTokenName, type FoundationTokenName, PUBLIC_COLOR_TOKEN_NAMES, PUBLIC_FOUNDATION_TOKEN_NAMES, PUBLIC_TOKEN_NAMES, } from "./styles/tokens.js";
+export { CONTAINER_BREAKPOINT_NARROW, type ColorTokenName, type FoundationTokenName, PANEL_CONTAINER_NAME, PUBLIC_COLOR_TOKEN_NAMES, PUBLIC_FOUNDATION_TOKEN_NAMES, PUBLIC_TOKEN_NAMES, } from "./styles/tokens.js";
 export { type ThemeContextValue, ThemeProvider, type ThemeProviderProps, usePanelTheme, } from "./theme/context.js";
 export { isThemeChoice, THEME_CHOICES, THEME_STORAGE_KEY, type ThemeChoice, } from "./theme/contract.js";
 export type { AnnouncementMode } from "./utils/announcement.js";
@@ -1747,7 +1895,21 @@ export type ThemeTokenSet = Readonly<Record<ColorTokenName, string>>;
 export declare const LIGHT_TOKENS: ThemeTokenSet;
 export declare const DARK_TOKENS: ThemeTokenSet;
 export declare const NIGHT_TOKENS: ThemeTokenSet;
-/** Inline-size breakpoint below which panels switch to their narrow layout. */
+/**
+ * The `container-name` `PanelRoot` sets on itself, together with
+ * `container-type: inline-size`. Public API: a consumer writes
+ * `@container snui-panel (...)` against it so its own rules respond to the
+ * panel's width rather than the viewport's, which is what the panel actually
+ * gets inside the Signal K Admin frame.
+ */
+export declare const PANEL_CONTAINER_NAME = "snui-panel";
+/**
+ * Inline-size breakpoint below which panels switch to their narrow layout.
+ * Public API, and published as a string rather than a CSS custom property
+ * because a container or media query condition cannot read one: a consumer
+ * that wants to turn at the same width as the package interpolates this
+ * value, or writes the documented number.
+ */
 export declare const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
 /**
  * Duration of --snui-transition-fast in milliseconds. Exit timers that must
@@ -1800,6 +1962,16 @@ export interface LiveRegionProps {
  * would silence a role the caller asked for, so exactly one of the two is set.
  */
 export declare function liveRegionProps(mode: AnnouncementMode | undefined, suppliedRole?: string): LiveRegionProps;
+/**
+ * Reports whether a resolved region announces its own updates.
+ *
+ * A live region has to be in the DOM before its first message, because a
+ * region created together with its text is not announced reliably. A component
+ * that owns one reads this to mount an empty shell instead of appearing with
+ * its first message. `liveRegionProps` sets exactly one of the pair, so both
+ * spellings are read here.
+ */
+export declare function announcesUpdates(region: LiveRegionProps): boolean;
 
 === utils/format-relative-age.d.ts ===
 export type RelativeAgeNegative = "clamp" | "fallback";
@@ -1853,6 +2025,12 @@ export declare const HEADING_ELEMENTS: {
     readonly 5: "h5";
     readonly 6: "h6";
 };
+/**
+ * The level a heading nested under one of this level takes. It stops at 6,
+ * because the outline has no deeper level to name and a skipped or invented
+ * one reads worse than a repeated one.
+ */
+export declare function nextHeadingLevel(level: HeadingLevel): HeadingLevel;
 
 === utils/polymorphic.d.ts ===
 import { type ComponentPropsWithRef, type ReactNode } from "react";
@@ -1947,11 +2125,11 @@ export type Visibility = "hidden" | "visible";
 
 === version.d.ts ===
 /** The package version used to isolate styles from other loaded versions. */
-export declare const PACKAGE_VERSION = "0.9.0";
+export declare const PACKAGE_VERSION = "0.10.0";
 /** The root class is private and may change without notice. */
 export declare const ROOT_CLASS = "snui-root";
 /** The exact selector prevents styles from crossing package-version roots. */
-export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.9.0\"]";
+export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.10.0\"]";
 /** A versioned global name prevents keyframe collisions between package copies. */
 export declare function versionedAnimationName(suffix: string): string;
 export declare const SPINNER_ANIMATION_NAME: string;

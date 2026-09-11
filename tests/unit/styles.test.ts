@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { PANEL_STYLES, STYLE_MODULES } from "../../src/styles/index.js";
+import { PANEL_STYLES } from "../../src/styles/index.js";
+import { STYLE_MODULES } from "../../src/styles/modules.js";
+import {
+  CONTAINER_BREAKPOINT_NARROW,
+  PANEL_CONTAINER_NAME,
+} from "../../src/styles/tokens.js";
 import { PACKAGE_VERSION, SPINNER_ANIMATION_NAME } from "../../src/version.js";
 
 describe("versioned keyframes", () => {
@@ -101,5 +106,121 @@ describe("nestable block modifiers", () => {
     }
     // Guards the regexes themselves: the scoped form has to appear somewhere.
     expect(ruleCount).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Every region a component keeps mounted while it has nothing to say. Each one
+ * is empty in the DOM sense while it waits, so the rule that takes it out of
+ * the flow is keyed on `:empty`.
+ */
+const SILENT_REGION_SELECTORS = [
+  ".snui-banner:empty",
+  ".snui-status:empty",
+  ".snui-metric__value:empty",
+  ".snui-field__error:empty",
+  ".snui-checkbox-group__warning:empty",
+] as const;
+
+/** Declarations that leave nothing of an element on screen. */
+const NO_VISIBLE_BOX = [
+  "position: absolute",
+  "width: 1px",
+  "height: 1px",
+  "padding: 0",
+  "margin: -1px",
+  "border: 0",
+  "overflow: hidden",
+  "clip-path: inset(50%)",
+] as const;
+
+/** The declarations of the first rule whose selector list names `selector`. */
+function declarationsFor(css: string, selector: string): string {
+  const index = css.indexOf(selector);
+  if (index === -1) throw new Error(`No rule opens with ${selector}.`);
+  const open = css.indexOf("{", index);
+  const close = css.indexOf("}", open);
+  return css.slice(open + 1, close);
+}
+
+describe("mounted regions with nothing to announce", () => {
+  it("costs no box, border, padding, or margin while a region waits", () => {
+    for (const selector of SILENT_REGION_SELECTORS) {
+      const declarations = declarationsFor(PANEL_STYLES, selector);
+      for (const declaration of NO_VISIBLE_BOX) {
+        expect(
+          declarations,
+          `${selector} does not declare ${declaration}`,
+        ).toContain(declaration);
+      }
+      // display: none would take the region out of the accessibility tree
+      // along with the layout, and a screen reader would never observe it.
+      expect(declarations).not.toContain("display: none");
+    }
+  });
+});
+
+/*
+ * Spacing the default card sets for its own chrome. A flush card draws none of
+ * that chrome, so it has to clear every one of them: a consumer reaching for
+ * flush is placing its own surface in the card, and a spacing it did not ask
+ * for offsets that surface from the edge it was aligned to. Doubling a selector
+ * to remove one is exactly the override `density="flush"` exists to delete.
+ */
+const CARD_CHROME_SPACING = ["gap", "padding"] as const;
+
+describe("flush cards", () => {
+  it("clears every spacing the default card sets", () => {
+    const base = declarationsFor(PANEL_STYLES, ".snui-card {");
+    const flush = declarationsFor(PANEL_STYLES, ".snui-card--flush {");
+
+    for (const property of CARD_CHROME_SPACING) {
+      expect(base, `.snui-card no longer sets ${property}`).toContain(
+        `${property}: `,
+      );
+      expect(
+        flush,
+        `.snui-card--flush inherits the ${property} the default card sets`,
+      ).toContain(`${property}: 0`);
+    }
+  });
+});
+
+describe("published panel container", () => {
+  it("names the container consumers query and the width it turns at", () => {
+    // PanelRoot declares the name once, from the constant, so the two cannot
+    // drift; every query below is written out and is checked against it here.
+    expect(PANEL_STYLES).toContain(`container-name: ${PANEL_CONTAINER_NAME};`);
+    expect(PANEL_STYLES).toContain("container-type: inline-size;");
+
+    let queryCount = 0;
+    for (const module of STYLE_MODULES) {
+      for (const match of module.styles.matchAll(/@container\s+([^{]*)\{/g)) {
+        const prelude = (match[1] ?? "").trim();
+        queryCount += 1;
+        expect(
+          prelude.startsWith(`${PANEL_CONTAINER_NAME} `),
+          `${module.id} queries a container this package does not publish: ${prelude}`,
+        ).toBe(true);
+        // A container condition cannot read a custom property, which is why
+        // the breakpoint ships as a constant rather than a token. A var()
+        // here would silently never match.
+        expect(prelude).not.toContain("var(");
+      }
+    }
+    expect(queryCount).toBeGreaterThan(0);
+  });
+
+  it("turns at the published breakpoint everywhere it turns", () => {
+    let narrowCount = 0;
+    for (const module of STYLE_MODULES) {
+      for (const match of module.styles.matchAll(
+        /@container[^{]*\(max-width:\s*([^)]+)\)/g,
+      )) {
+        narrowCount += 1;
+        expect((match[1] ?? "").trim()).toBe(CONTAINER_BREAKPOINT_NARROW);
+      }
+    }
+    expect(narrowCount).toBeGreaterThan(0);
   });
 });

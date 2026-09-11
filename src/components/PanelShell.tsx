@@ -1,7 +1,12 @@
 import { type ReactNode, useState } from "react";
 
 import { supportsNativeCssScope } from "../styles/install.js";
-import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
+import {
+  HEADING_ELEMENTS,
+  type HeadingLevel,
+  nextHeadingLevel,
+} from "../utils/heading.js";
+import { HeadingLevelProvider } from "../utils/heading-level.js";
 import { hasReactContent } from "../utils/react-node.js";
 import { type SpaceScale, Stack } from "./Layout.js";
 import {
@@ -14,7 +19,8 @@ import { UnsupportedBrowserNotice } from "./UnsupportedBrowserNotice.js";
 
 /**
  * Where the theme toggle sits: after the content, between title and content,
- * or nowhere. Either placement aligns it to the trailing edge.
+ * or nowhere. Either placement aligns it to the trailing edge. `"between"`
+ * needs a title to follow, so a panel without one resolves it to `"end"`.
  */
 export type PanelShellThemeToggle = "end" | "between" | "none";
 
@@ -41,7 +47,9 @@ export interface PanelShellProps
   /**
    * Level of the panel title, default 2. Signal K Admin renders the plugin
    * card header as an `h5` and the page title as its own heading, so a panel
-   * must not add another `h1`.
+   * must not add another `h1`. A titled shell also offers the next level down
+   * to the sections inside it, so they nest under the panel heading without
+   * being told where they are.
    */
   readonly headingLevel?: HeadingLevel | undefined;
   /** Called for every error the boundary catches; replaces the div's native `onError`. */
@@ -89,8 +97,13 @@ export function PanelShell({
 
   const Heading = HEADING_ELEMENTS[headingLevel];
   const hasTitle = hasReactContent(title);
+  // "Between" has nothing to sit between without a title: the selector would
+  // lead the panel and take its first tab stop, which no placement describes.
+  // It resolves to the default trailing slot instead.
+  const placement =
+    themeToggle === "between" && !hasTitle ? "end" : themeToggle;
   const toggle =
-    themeToggle === "none" ? null : (
+    placement === "none" ? null : (
       // The selector is a control over the panel, not one of its sections, so
       // the shell keeps it at the trailing edge of the single-column stack.
       <div className="snui-panel-shell__theme-toggle">
@@ -100,26 +113,37 @@ export function PanelShell({
 
   return (
     <PanelRoot {...rootProps} className={className}>
-      <Stack gap={gap}>
-        {hasTitle ? (
-          <div className="snui-panel-shell__header">
-            <Heading className="snui-panel-shell__title">{title}</Heading>
-            {hasReactContent(description) ? (
-              <div className="snui-panel-shell__description">{description}</div>
-            ) : null}
-          </div>
-        ) : null}
-        {themeToggle === "between" ? toggle : null}
-        <PanelErrorBoundary
-          {...errorLabels}
-          fallback={errorFallback}
-          onError={onError}
-          onReload={onReload}
-        >
-          {children}
-        </PanelErrorBoundary>
-        {themeToggle === "end" ? toggle : null}
-      </Stack>
+      {/*
+       * A section under the panel title is a section of the panel, so it takes
+       * the level below it. A shell with no title heads nothing, and passes
+       * its own level straight through.
+       */}
+      <HeadingLevelProvider
+        value={hasTitle ? nextHeadingLevel(headingLevel) : headingLevel}
+      >
+        <Stack gap={gap}>
+          {hasTitle ? (
+            <div className="snui-panel-shell__header">
+              <Heading className="snui-panel-shell__title">{title}</Heading>
+              {hasReactContent(description) ? (
+                <div className="snui-panel-shell__description">
+                  {description}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {placement === "between" ? toggle : null}
+          <PanelErrorBoundary
+            {...errorLabels}
+            fallback={errorFallback}
+            onError={onError}
+            onReload={onReload}
+          >
+            {children}
+          </PanelErrorBoundary>
+          {placement === "end" ? toggle : null}
+        </Stack>
+      </HeadingLevelProvider>
     </PanelRoot>
   );
 }

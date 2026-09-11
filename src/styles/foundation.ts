@@ -3,7 +3,7 @@ import {
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
+import { CONTAINER_BREAKPOINT_NARROW, PANEL_CONTAINER_NAME } from "./tokens.js";
 
 export const FOUNDATION_STYLES = scopeStyles(`
 :scope,
@@ -24,7 +24,7 @@ export const FOUNDATION_STYLES = scopeStyles(`
   font-family: var(--snui-font-family);
   font-size: var(--snui-font-size);
   line-height: var(--snui-line-height);
-  container-name: snui-panel;
+  container-name: ${PANEL_CONTAINER_NAME};
   container-type: inline-size;
 }
 
