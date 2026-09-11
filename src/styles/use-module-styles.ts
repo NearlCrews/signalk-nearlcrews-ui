@@ -1,5 +1,8 @@
 import { useLayoutEffect } from "react";
-import { usePanelPortalContainer } from "../utils/portal.js";
+import {
+  useOptionalPanelRoot,
+  usePanelPortalContainer,
+} from "../utils/portal.js";
 import { PACKAGE_VERSION } from "../version.js";
 import {
   installedRootStyleNonces,
@@ -26,6 +29,24 @@ export function useModuleStyles(
   componentName = "useModuleStyles",
 ): void {
   const panelRoot = usePanelPortalContainer(componentName);
+
+  useLayoutEffect(() => {
+    if (panelRoot === null) return undefined;
+    return installModuleStylesForRoot(panelRoot.ownerDocument, module);
+  }, [module, panelRoot]);
+}
+
+/**
+ * Installs a style module the same way {@link useModuleStyles} does, for a
+ * component that renders in flow rather than portaling into the panel root.
+ *
+ * The difference is what happens outside `PanelRoot`. An overlay has nowhere
+ * to portal to and throws; an in-flow control has always rendered there
+ * unstyled, exactly as it did while its rules traveled in the root sheet, so
+ * this hook installs nothing and stays silent.
+ */
+export function useOptionalModuleStyles(module: StyleModule): void {
+  const panelRoot = useOptionalPanelRoot();
 
   useLayoutEffect(() => {
     if (panelRoot === null) return undefined;

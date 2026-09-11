@@ -282,6 +282,47 @@ describe("RadioGroup", () => {
     expect(ref.current?.tagName).toBe("DIV");
     expect(ref.current?.classList.contains("snui-radio")).toBe(true);
   });
+
+  it("blocks a read-only selection while every radio stays reachable", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    renderInPanel(
+      <RadioGroup
+        label="Source"
+        readOnly
+        value="gps"
+        onValueChange={onValueChange}
+      >
+        <Radio value="gps" label="GPS" />
+        <Radio value="ais" label="AIS" />
+      </RadioGroup>,
+    );
+
+    const selected = screen.getByRole("radio", { name: "GPS" });
+    const other = screen.getByRole("radio", { name: "AIS" });
+    // Not natively disabled, so focus can rest here without being destroyed.
+    expect(selected).toBeEnabled();
+    expect(other).toBeEnabled();
+    selected.focus();
+    expect(selected).toHaveFocus();
+
+    await user.click(other);
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(selected).toBeChecked();
+    expect(other).not.toBeChecked();
+  });
+
+  it("takes a disabled group out of the tab order, as before", () => {
+    renderInPanel(
+      <RadioGroup label="Source" disabled value="gps">
+        <Radio value="gps" label="GPS" />
+      </RadioGroup>,
+    );
+
+    // The two are different requests: disabled says unavailable and gives up
+    // the tab stop, read-only says unchangeable and keeps it.
+    expect(screen.getByRole("radio", { name: "GPS" })).toBeDisabled();
+  });
 });
 
 describe("Switch", () => {

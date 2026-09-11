@@ -4,9 +4,11 @@ import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  CollapsibleSection,
   PanelErrorBoundary,
   type PanelErrorBoundaryFallbackProps,
   PanelShell,
+  Section,
   useUnsavedChangesGuard,
 } from "../../src/index.js";
 import { renderInPanel } from "../helpers.js";
@@ -110,6 +112,106 @@ describe("PanelShell", () => {
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.getByRole("radio", { name: "Light" })).toBeVisible();
     expect(screen.queryByRole("radio", { name: "Night" })).toBeNull();
+  });
+
+  it("resolves a between placement with no title to the trailing edge", () => {
+    render(
+      <PanelShell themeToggle="between">
+        <p>Body</p>
+      </PanelShell>,
+    );
+
+    // Without a title there is nothing to sit between, and leading the panel
+    // would hand the theme selector the panel's first tab stop.
+    const toggle = screen.getByRole("radiogroup", { name: "Panel theme" });
+    expect(follows(screen.getByText("Body"), toggle)).toBe(true);
+  });
+
+  describe("heading levels", () => {
+    it("nests the sections inside a titled panel under its title", () => {
+      render(
+        <PanelShell title="Chart locker">
+          <Section title="Storage">Cached charts</Section>
+          <CollapsibleSection title="Advanced">Tile cache</CollapsibleSection>
+        </PanelShell>,
+      );
+
+      expect(
+        screen.getByRole("heading", { level: 2, name: "Chart locker" }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("heading", { level: 3, name: "Storage" }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("heading", { level: 3, name: "Advanced" }),
+      ).toBeVisible();
+    });
+
+    it("follows the panel title's own level, and stops at six", () => {
+      const { rerender } = render(
+        <PanelShell title="Chart locker" headingLevel={3}>
+          <Section title="Storage">Cached charts</Section>
+        </PanelShell>,
+      );
+
+      expect(
+        screen.getByRole("heading", { level: 4, name: "Storage" }),
+      ).toBeVisible();
+
+      rerender(
+        <PanelShell title="Chart locker" headingLevel={6}>
+          <Section title="Storage">Cached charts</Section>
+        </PanelShell>,
+      );
+
+      // Six is the last level the outline can name, so a deeper section
+      // repeats it rather than inventing a level no element carries.
+      expect(
+        screen.getByRole("heading", { level: 6, name: "Storage" }),
+      ).toBeVisible();
+    });
+
+    it("leaves the sections where they are when the panel has no title", () => {
+      render(
+        <PanelShell>
+          <Section title="Storage">Cached charts</Section>
+        </PanelShell>,
+      );
+
+      expect(
+        screen.getByRole("heading", { level: 2, name: "Storage" }),
+      ).toBeVisible();
+    });
+
+    it("keeps an explicit section level whatever the panel offers", () => {
+      render(
+        <PanelShell title="Chart locker">
+          <Section title="Storage" headingLevel={5}>
+            Cached charts
+          </Section>
+        </PanelShell>,
+      );
+
+      expect(
+        screen.getByRole("heading", { level: 5, name: "Storage" }),
+      ).toBeVisible();
+    });
+
+    it("leaves a section outside any shell at level 2", () => {
+      renderInPanel(
+        <>
+          <Section title="Storage">Cached charts</Section>
+          <CollapsibleSection title="Advanced">Tile cache</CollapsibleSection>
+        </>,
+      );
+
+      expect(
+        screen.getByRole("heading", { level: 2, name: "Storage" }),
+      ).toBeVisible();
+      expect(
+        screen.getByRole("heading", { level: 2, name: "Advanced" }),
+      ).toBeVisible();
+    });
   });
 
   describe("without native CSS scope", () => {

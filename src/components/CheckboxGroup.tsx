@@ -9,6 +9,13 @@ import { Checkbox } from "./Inputs.js";
 import { StatusIndicator } from "./StatusIndicator.js";
 
 export interface CheckboxGroupOption<Value extends string> {
+  /**
+   * Blocks this option's change while its box stays focusable and keeps its
+   * value, the way `Checkbox.ariaDisabled` does. Reach for it where the
+   * option cannot change right now, such as the last remaining selection;
+   * `disabled` takes the box out of the tab order instead.
+   */
+  readonly ariaDisabled?: boolean | undefined;
   readonly description?: ReactNode | undefined;
   readonly disabled?: boolean | undefined;
   readonly label: ReactNode;
@@ -37,7 +44,9 @@ export interface CheckboxGroupProps<Value extends string>
   /**
    * Adds a tri-state select-all checkbox to the legend row with this label.
    * It completes a partial selection and clears a full one, and it leaves
-   * disabled options as they are.
+   * blocked options as they are, whether they are `disabled` or
+   * `ariaDisabled`: an option the user cannot change is not one select-all
+   * may change for them.
    */
   readonly selectAllLabel?: ReactNode | undefined;
   readonly value?: readonly Value[] | undefined;
@@ -95,7 +104,9 @@ export function CheckboxGroup<Value extends string>({
     commit(next);
   };
 
-  const enabledOptions = options.filter((option) => option.disabled !== true);
+  const enabledOptions = options.filter(
+    (option) => option.disabled !== true && option.ariaDisabled !== true,
+  );
   const enabledSelected = enabledOptions.filter((option) =>
     selected.has(option.value),
   ).length;
@@ -150,6 +161,7 @@ export function CheckboxGroup<Value extends string>({
         {options.map((option) => (
           <Checkbox
             key={option.value}
+            ariaDisabled={option.ariaDisabled}
             checked={selected.has(option.value)}
             description={option.description}
             disabled={option.disabled}

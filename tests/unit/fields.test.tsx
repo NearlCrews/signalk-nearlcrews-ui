@@ -195,6 +195,53 @@ describe("LabeledField control injection", () => {
     expect(primary).not.toHaveAttribute("errorId");
   });
 
+  it("merges caller ids into the control description without a join", () => {
+    renderInPanel(
+      <>
+        <p id="retention-note">Applies to every logged source.</p>
+        <p id="retention-limit">The server keeps four weeks at most.</p>
+        <LabeledField
+          label="Retention"
+          description="Whole days"
+          error="Choose at least one day."
+          controlDescribedBy={["retention-note", undefined, "retention-limit"]}
+        >
+          {(fieldProps) => {
+            const { controlProps } = splitLabeledFieldControlProps(fieldProps);
+            // The caller spreads and nothing else: the ids arrive merged.
+            return <TextInput {...controlProps} />;
+          }}
+        </LabeledField>
+      </>,
+    );
+
+    // The field's own text is read first, then the caller's, so the order the
+    // reader hears follows the order the page shows.
+    expect(
+      screen.getByRole("textbox", { name: "Retention" }),
+    ).toHaveAccessibleDescription(
+      "Whole days Choose at least one day. Applies to every logged source. The server keeps four weeks at most.",
+    );
+  });
+
+  it("merges a single caller id for an element child too", () => {
+    renderInPanel(
+      <>
+        <p id="port-note">Restarting the plugin frees the old port.</p>
+        <LabeledField label="Port" controlDescribedBy="port-note">
+          <TextInput aria-describedby="port-hint" />
+        </LabeledField>
+        <p id="port-hint">1 to 65535.</p>
+      </>,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: "Port" }),
+    ).toHaveAccessibleDescription(
+      "1 to 65535. Restarting the plugin frees the old port.",
+    );
+  });
+
   it("splits the render-prop argument into control props and region ids", () => {
     const split = splitLabeledFieldControlProps({
       id: "control",

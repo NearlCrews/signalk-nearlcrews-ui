@@ -104,6 +104,29 @@ export function assertVersionStamp(sources, expectedVersion) {
   }
 }
 
+/** Substrings that appear only when the development JSX runtime was bundled. */
+export const DEVELOPMENT_JSX_MARKERS = Object.freeze([
+  "jsxDEV",
+  "jsx-dev-runtime",
+]);
+
+/**
+ * Asserts the remote was built against the production JSX runtime. `files` are
+ * the JavaScript files of the remote as name and source pairs, so the message
+ * names the one that carries the development runtime.
+ */
+export function assertProductionJsxRuntime(files, label = "The built remote") {
+  for (const { name, source } of files) {
+    for (const marker of DEVELOPMENT_JSX_MARKERS) {
+      if (source.includes(marker)) {
+        throw new Error(
+          `${label} uses the React development JSX runtime: ${name} contains ${marker}. Build the panel with the automatic runtime in production mode.`,
+        );
+      }
+    }
+  }
+}
+
 /** Asserts no React runtime was bundled into the remote. */
 export function assertNoReactRuntime(source, label = "The built remote") {
   for (const marker of REACT_RUNTIME_MARKERS) {

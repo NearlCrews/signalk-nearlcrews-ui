@@ -50,25 +50,31 @@ function panelId(baseId: string, value: string): string {
   return `${baseId}-panel-${encodeURIComponent(value)}`;
 }
 
-export interface TabsProps
+export interface TabsProps<Value extends string = string>
   extends Omit<HTMLAttributes<HTMLDivElement>, "defaultValue" | "onChange">,
     RefAttributes<HTMLDivElement> {
   readonly activation?: TabsActivation | undefined;
   readonly children: ReactNode;
   /** Value of the initially selected tab when uncontrolled. */
-  readonly defaultValue?: string | undefined;
-  readonly onValueChange?: ((value: string) => void) | undefined;
+  readonly defaultValue?: Value | undefined;
+  /** Receives the value of the newly selected tab. */
+  readonly onValueChange?: ((value: Value) => void) | undefined;
   readonly orientation?: Orientation | undefined;
   /** Value of the selected tab when controlled. */
-  readonly value?: string | undefined;
+  readonly value?: Value | undefined;
 }
 
 /**
  * A tab interface following the ARIA tabs pattern: one tab stop into the list,
  * arrows move between tabs, Home and End jump to the ends, and each panel is
  * labeled by its tab. Give every Tab and TabPanel the same `value`.
+ *
+ * The value type follows the consumer's own union, so `onValueChange` reports
+ * it without a guard on the way back. Anything typed at the boundary pins it: a
+ * `value` or `defaultValue` of that type, or an explicit `<Tabs<Category>>`.
+ * Instantiate the children the same way to have their values checked too.
  */
-export function Tabs({
+export function Tabs<Value extends string = string>({
   activation = "automatic",
   children,
   className,
@@ -78,11 +84,11 @@ export function Tabs({
   ref,
   value,
   ...props
-}: TabsProps): React.JSX.Element {
+}: TabsProps<Value>): React.JSX.Element {
   const baseId = useId();
-  // The selection is `string | undefined` while nothing is selected, but a
+  // The selection is `Value | undefined` while nothing is selected, but a
   // tab only ever reports a real value, so the callback stays outside the hook.
-  const [selected, commitSelected] = useControllableState<string | undefined>(
+  const [selected, commitSelected] = useControllableState<Value | undefined>(
     value,
     defaultValue,
   );
@@ -90,8 +96,12 @@ export function Tabs({
   const select = useCallback(
     (next: string): void => {
       if (next === selected) return;
-      commitSelected(next);
-      onValueChange?.(next);
+      // A selection carries the value the tab put in the DOM, so the union is
+      // the consumer's claim about the tabs it rendered rather than something
+      // this component can check.
+      const nextValue = next as Value;
+      commitSelected(nextValue);
+      onValueChange?.(nextValue);
     },
     [commitSelected, onValueChange, selected],
   );
@@ -210,7 +220,7 @@ export function TabList({
   );
 }
 
-export interface TabProps
+export interface TabProps<Value extends string = string>
   extends Omit<
       ButtonHTMLAttributes<HTMLButtonElement>,
       "role" | "type" | "value"
@@ -219,10 +229,11 @@ export interface TabProps
   /** A count or `Badge` shown after the label; it joins the tab's name. */
   readonly badge?: ReactNode | undefined;
   readonly children: ReactNode;
-  readonly value: string;
+  /** Names the tab, and with it the TabPanel written with the same value. */
+  readonly value: Value;
 }
 
-export function Tab({
+export function Tab<Value extends string = string>({
   badge,
   children,
   className,
@@ -231,7 +242,7 @@ export function Tab({
   ref,
   value,
   ...props
-}: TabProps): React.JSX.Element {
+}: TabProps<Value>): React.JSX.Element {
   requireContent(children, "Tab requires a non-empty label.");
   const { activation, baseId, orientation, select, selected } =
     useTabsContext("Tab");
@@ -307,29 +318,47 @@ export function Tab({
   );
 }
 
-export interface TabPanelProps
-  extends Omit<HTMLAttributes<HTMLDivElement>, "hidden" | "id" | "role">,
+/**
+ * Builds a panel's content, calling a function child, so an unmounting panel
+ * constructs nothing at all while another tab is selected.
+ */
+function panelContent(children: ReactNode | (() => ReactNode)): ReactNode {
+  return typeof children === "function" ? children() : children;
+}
+
+export interface TabPanelProps<Value extends string = string>
+  extends Omit<
+      HTMLAttributes<HTMLDivElement>,
+      "children" | "hidden" | "id" | "role"
+    >,
     RefAttributes<HTMLDivElement> {
-  readonly children?: ReactNode | undefined;
+  /**
+   * The panel's content. A function child runs only where the panel renders
+   * it, so under `mountStrategy="unmount"` an unselected tab builds nothing;
+   * plain children are built by the surrounding render either way.
+   */
+  readonly children?: ReactNode | (() => ReactNode) | undefined;
   /** Removes the hidden panels' children while another tab is selected. */
   readonly mountStrategy?: "retain" | "unmount" | undefined;
-  readonly value: string;
+  /** Names the panel, matching the value of the tab that controls it. */
+  readonly value: Value;
 }
 
 /**
  * The panel a tab controls. It is focusable so a keyboard user can Tab from
  * the list straight into its content even when the panel holds no control.
  */
-export function TabPanel({
+export function TabPanel<Value extends string = string>({
   children,
   className,
   mountStrategy = "retain",
   ref,
   value,
   ...props
-}: TabPanelProps): React.JSX.Element {
+}: TabPanelProps<Value>): React.JSX.Element {
   const { baseId, selected } = useTabsContext("TabPanel");
   const isSelected = selected === value;
+  const mounted = isSelected || mountStrategy !== "unmount";
 
   return (
     <div
@@ -345,7 +374,7 @@ export function TabPanel({
       hidden={!isSelected}
       className={classNames("snui-tabpanel", className)}
     >
-      {mountStrategy === "unmount" && !isSelected ? null : children}
+      {mounted ? panelContent(children) : null}
     </div>
   );
 }

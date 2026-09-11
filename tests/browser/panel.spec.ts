@@ -907,8 +907,8 @@ test("retains focus when an internal confirmation action becomes busy", async ({
   const confirm = confirmation.getByRole("button", { name: "Reset" });
   await confirm.click();
 
-  // Busy blocks activation through aria-disabled, so the control stays in the
-  // tab order and focus is never destroyed and chased.
+  // Busy blocks Confirm through aria-disabled, so it stays in the tab order
+  // and focus is never destroyed and chased.
   await expect(confirm).toBeFocused();
   await expect(confirmation).toHaveAttribute("aria-busy", "true");
 });
@@ -922,6 +922,14 @@ test("focuses an initially busy confirmation container", async ({ page }) => {
   });
   await expect(confirmation).toBeFocused();
   await expect(confirmation).toHaveAttribute("aria-busy", "true");
+
+  // Busy never closes the route out: Cancel keeps its enabled presentation
+  // and Escape still dismisses the region.
+  const cancel = confirmation.getByRole("button", { name: "Cancel" });
+  await expect(cancel).not.toHaveAttribute("aria-disabled");
+  await expect(cancel).toHaveCSS("cursor", "pointer");
+  await page.keyboard.press("Escape");
+  await expect(confirmation).toBeHidden();
 });
 
 test("renders compliant placeholders and a red-preserving Night accent", async ({

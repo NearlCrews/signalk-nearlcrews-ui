@@ -184,6 +184,59 @@ describe("Tabs", () => {
     expect(screen.queryByText("First panel")).toBeNull();
   });
 
+  it("builds a function child only where an unmounting panel renders it", async () => {
+    const user = userEvent.setup();
+    const buildFirst = vi.fn(() => <p>First panel</p>);
+    const buildSecond = vi.fn(() => <p>Second panel</p>);
+    renderInPanel(
+      <Tabs defaultValue="a">
+        <TabList aria-label="Pages">
+          <Tab value="a">First</Tab>
+          <Tab value="b">Second</Tab>
+        </TabList>
+        <TabPanel value="a" mountStrategy="unmount">
+          {buildFirst}
+        </TabPanel>
+        <TabPanel value="b" mountStrategy="unmount">
+          {buildSecond}
+        </TabPanel>
+      </Tabs>,
+    );
+
+    expect(buildFirst).toHaveBeenCalled();
+    expect(buildSecond).not.toHaveBeenCalled();
+    expect(screen.getByText("First panel")).toBeVisible();
+
+    await user.click(screen.getByRole("tab", { name: "Second" }));
+    expect(buildSecond).toHaveBeenCalled();
+    expect(screen.getByText("Second panel")).toBeVisible();
+    expect(screen.queryByText("First panel")).toBeNull();
+
+    // The function form keeps the wiring the plain children form has.
+    const second = screen.getByRole("tab", { name: "Second" });
+    const secondPanel = screen.getByRole("tabpanel", { name: "Second" });
+    expect(secondPanel.id).toBe(second.getAttribute("aria-controls"));
+    expect(secondPanel).toHaveAttribute("aria-labelledby", second.id);
+    expect(secondPanel).toHaveAttribute("tabindex", "0");
+  });
+
+  it("builds a retained panel's function child while it is hidden", () => {
+    const buildSecond = vi.fn(() => <p>Second panel</p>);
+    renderInPanel(
+      <Tabs defaultValue="a">
+        <TabList aria-label="Pages">
+          <Tab value="a">First</Tab>
+          <Tab value="b">Second</Tab>
+        </TabList>
+        <TabPanel value="a">First panel</TabPanel>
+        <TabPanel value="b">{buildSecond}</TabPanel>
+      </Tabs>,
+    );
+
+    expect(buildSecond).toHaveBeenCalled();
+    expect(screen.getByText("Second panel")).not.toBeVisible();
+  });
+
   it("forwards refs and attributes on every part", () => {
     const tabsRef = createRef<HTMLDivElement>();
     const listRef = createRef<HTMLDivElement>();

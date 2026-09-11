@@ -13,6 +13,8 @@ import {
   RadioField,
   Text,
 } from "react-aria-components";
+import { RADIO_STYLES } from "../styles/radio.js";
+import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
@@ -50,6 +52,14 @@ export interface RadioGroupProps
   /** @deprecated Use `onValueChange`. */
   readonly onChange?: ((value: string) => void) | undefined;
   readonly orientation?: Orientation | undefined;
+  /**
+   * Blocks the selection from changing while every radio stays focusable and
+   * in the roving tab order. Reach for it where the choice is real but cannot
+   * be changed right now; `disabled` takes the group out of the tab order
+   * instead, which destroys focus if it lands on the radio the user is
+   * standing on. React Aria owns the blocking, as it does for `Switch`.
+   */
+  readonly readOnly?: boolean | undefined;
   readonly value?: string | undefined;
 }
 
@@ -68,10 +78,15 @@ export function RadioGroup({
   onChange,
   onValueChange,
   orientation = "vertical",
+  readOnly,
   ref,
   value,
   ...props
 }: RadioGroupProps): React.JSX.Element {
+  // The group and its options share one module, and the install is
+  // reference-counted, so either one bundled alone still reaches its rules.
+  useOptionalModuleStyles(RADIO_STYLES);
+
   requireContent(label, "RadioGroup requires a non-empty label.");
 
   const generatedId = useId();
@@ -102,6 +117,7 @@ export function RadioGroup({
       ref={ref}
       className={classNames("snui-radio-group", className)}
       isDisabled={disabled ?? false}
+      isReadOnly={readOnly ?? false}
       isInvalid={hasError}
       orientation={orientation}
       {...(name === undefined ? {} : { name })}
@@ -157,6 +173,8 @@ export function Radio({
   value,
   ...props
 }: RadioProps): React.JSX.Element {
+  useOptionalModuleStyles(RADIO_STYLES);
+
   const labelContent = hasReactContent(label) ? label : children;
   requireContent(labelContent, "Radio requires a non-empty label.");
 

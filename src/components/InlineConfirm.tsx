@@ -28,6 +28,12 @@ const DEFAULT_TITLE = "Confirm action";
 export interface InlineConfirmProps
   extends Omit<HTMLAttributes<HTMLElement>, "children" | "onCancel" | "title">,
     RefAttributes<HTMLElement> {
+  /**
+   * Blocks Confirm while the confirmed action runs. Cancel and Escape stay
+   * live: declining is the user's route out of the region, and work already
+   * under way is not in conflict with it. `onCancel` may therefore fire while
+   * `busy` is true, and the consumer decides what that means.
+   */
   readonly busy?: boolean | undefined;
   readonly cancelLabel?: ReactNode | undefined;
   /** The escape action is always available, so it never paints as danger. */
@@ -186,9 +192,9 @@ export function InlineConfirm({
     // would announce the button and skip the message it is asking the user to
     // act on.
     //
-    // Nothing chases focus across the busy transition: both actions block
-    // activation through aria-disabled rather than leaving the tab order, so
-    // whatever the user focused stays focused.
+    // Nothing chases focus across the busy transition: Cancel stays live and
+    // Confirm blocks activation through aria-disabled rather than leaving the
+    // tab order, so whatever the user focused stays focused.
     (initialFocusRef?.current ?? container).focus();
   }, [effectiveOpen, initialFocusRef]);
 
@@ -204,7 +210,9 @@ export function InlineConfirm({
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>): void => {
     onKeyDown?.(event);
     if (event.defaultPrevented) return;
-    if (event.key !== "Escape" || busy) return;
+    // Escape survives busy: it is the keyboard route out of the region, and a
+    // decision the user is declining has nothing to conflict with.
+    if (event.key !== "Escape") return;
     event.preventDefault();
     event.stopPropagation();
     cancel("escape");
@@ -234,11 +242,7 @@ export function InlineConfirm({
         {message}
       </div>
       <div className="snui-inline-confirm__actions">
-        <Button
-          variant={cancelVariant}
-          ariaDisabled={busy}
-          onClick={() => cancel("cancel")}
-        >
+        <Button variant={cancelVariant} onClick={() => cancel("cancel")}>
           {effectiveCancelLabel}
         </Button>
         <Button

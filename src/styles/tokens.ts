@@ -199,7 +199,22 @@ ${DARK_SHADOW_BLOCK}`;
 const NIGHT_BLOCK = `${renderTokenBlock(NIGHT_TOKENS)}
 ${NIGHT_SHADOW_BLOCK}`;
 
-/** Inline-size breakpoint below which panels switch to their narrow layout. */
+/**
+ * The `container-name` `PanelRoot` sets on itself, together with
+ * `container-type: inline-size`. Public API: a consumer writes
+ * `@container snui-panel (...)` against it so its own rules respond to the
+ * panel's width rather than the viewport's, which is what the panel actually
+ * gets inside the Signal K Admin frame.
+ */
+export const PANEL_CONTAINER_NAME = "snui-panel";
+
+/**
+ * Inline-size breakpoint below which panels switch to their narrow layout.
+ * Public API, and published as a string rather than a CSS custom property
+ * because a container or media query condition cannot read one: a consumer
+ * that wants to turn at the same width as the package interpolates this
+ * value, or writes the documented number.
+ */
 export const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
 
 /**

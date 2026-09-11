@@ -4,6 +4,8 @@ import {
   ProgressBar,
   type ProgressBarProps as RACProgressBarProps,
 } from "react-aria-components";
+import { PROGRESS_STYLES } from "../styles/progress.js";
+import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
 import { requireContent } from "../utils/react-node.js";
 import type { SemanticTone } from "../utils/tone.js";
@@ -38,6 +40,8 @@ export function Progress({
   valueText,
   ...props
 }: ProgressProps): React.JSX.Element {
+  useOptionalModuleStyles(PROGRESS_STYLES);
+
   requireContent(label, "Progress requires a non-empty label.");
 
   // NaN and Infinity have no place on the track or in aria-valuenow, so they

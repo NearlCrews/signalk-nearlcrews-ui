@@ -6,9 +6,16 @@ import {
   PRESSED_FILL_DECLARATION,
   RAISED_OVERLAY_DECLARATIONS,
 } from "./fragments.js";
+import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
-export const MENU_STYLES = scopeStyles(`
+/**
+ * Menu popover styles. Installed by `Menu` through `useModuleStyles`, so a
+ * panel without a menu never injects them.
+ */
+export const MENU_STYLES: StyleModule = {
+  id: "menu",
+  styles: scopeStyles(`
 /* ==== Menu (Menu, MenuItem, MenuSeparator, MenuSection) ==== */
 
 .snui-menu-popover {
@@ -100,4 +107,5 @@ ${FORCED_COLORS_OUTLINE_DECLARATIONS}
     color: HighlightText;
   }
 }
-`);
+`),
+};

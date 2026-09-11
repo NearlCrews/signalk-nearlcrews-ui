@@ -76,6 +76,25 @@ export function usePanelPortalContainerReady(componentName: string): boolean {
   return usePanelPortalContainer(componentName) !== null;
 }
 
+/**
+ * The owning PanelRoot when there is one, and null when there is not.
+ *
+ * The strict resolver below is for consumers that have to portal, so it treats
+ * a missing panel root as a caller error. An in-flow component that only wants
+ * to install its style module has no such requirement: outside PanelRoot there
+ * is no root sheet to install beside, and the component renders unstyled just
+ * as it always has. It resolves one commit late for the same reason the strict
+ * resolver does, which is the commit PanelRoot's callback ref installed the
+ * root sheet in.
+ */
+export function useOptionalPanelRoot(): HTMLElement | null {
+  const ownerGetContainer = useContext(PanelPortalOwnerContext);
+  const ready = usePortalContainerReady();
+
+  if (!ready || ownerGetContainer === null) return null;
+  return ownerGetContainer();
+}
+
 /** Resolves and verifies the exact PanelRoot that owns a portal consumer. */
 export function usePanelPortalContainer(
   componentName: string,

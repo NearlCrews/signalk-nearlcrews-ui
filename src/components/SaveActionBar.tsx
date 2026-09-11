@@ -1,4 +1,4 @@
-import { type ReactNode, useRef } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 
 import type { AnnouncementMode } from "../utils/announcement.js";
 import { resolveLabel } from "../utils/labels.js";
@@ -31,6 +31,13 @@ const DEFAULT_LABELS: SaveActionBarLabels = {
 
 const DEFAULT_SAVED_MESSAGE = "Save requested";
 
+/**
+ * How long the saved message stays up, measured from the save request. Long
+ * enough to be read and heard, short enough that the bar returns to reporting
+ * the configuration rather than the last thing that happened to it.
+ */
+const DEFAULT_SAVED_MESSAGE_DURATION_MS = 2_500;
+
 export interface SaveActionBarProps
   extends Omit<ActionBarProps, "actions" | "status" | "statusRef"> {
   /** The working configuration differs from the last requested snapshot. */
@@ -45,10 +52,21 @@ export interface SaveActionBarProps
   readonly labels?: Partial<SaveActionBarLabels> | undefined;
   readonly onDiscard: () => void;
   readonly onSave: () => void;
-  /** Epoch milliseconds of the last save request, or null before the first. */
+  /**
+   * Epoch milliseconds of the last save request, or null before the first.
+   * The bar reports the request for `savedMessageDurationMs` from that
+   * instant and then falls back to the state underneath, so a panel keeps no
+   * timer of its own and never has to write the timestamp back to null.
+   */
   readonly saveRequestedAt?: number | null | undefined;
   /** Status text once a save has been requested and nothing is pending. */
   readonly savedMessage?: string | undefined;
+  /**
+   * How long the saved message stays up after a save request. Zero leaves it
+   * up until `saveRequestedAt` changes, for a panel that ends the window on
+   * something other than the clock, such as a server confirmation.
+   */
+  readonly savedMessageDurationMs?: number | undefined;
   readonly saving?: boolean | undefined;
   /**
    * The host supplied no configuration, so the plugin has never been set up.
@@ -80,6 +98,11 @@ export interface SaveActionBarStateInput {
   readonly dirty: boolean;
   readonly invalidMessage?: string | null | undefined;
   readonly labels?: Partial<SaveActionBarLabels> | undefined;
+  /**
+   * A save request while its message is still up. The component owns that
+   * window, so a rules test passes the timestamp for the reported state and
+   * null for the state the bar falls back to once the window closes.
+   */
   readonly saveRequestedAt?: number | null | undefined;
   /** Defaults to the component's own "Save requested". */
   readonly savedMessage?: string | undefined;
@@ -178,10 +201,76 @@ function resolveLabels(
 }
 
 /**
+ * Milliseconds left of the window a save request opened, or null where no
+ * window is running: no request, an unusable timestamp, or a consumer that
+ * keeps the window itself with a duration of zero. A timestamp ahead of this
+ * clock counts as now, so skew between the host and the panel lengthens no
+ * window.
+ */
+function remainingWindowMs(
+  saveRequestedAt: number | null | undefined,
+  durationMs: number,
+  nowMs: number,
+): number | null {
+  if (saveRequestedAt === null || saveRequestedAt === undefined) return null;
+  if (!Number.isFinite(saveRequestedAt) || durationMs <= 0) return null;
+  return Math.max(0, durationMs - Math.max(0, nowMs - saveRequestedAt));
+}
+
+/**
+ * Reports whether the message for a save request has outlived its window.
+ *
+ * One timeout per request, armed for what is left of the window rather than
+ * its full length, so a panel that mounts holding an older timestamp shows no
+ * confirmation for a save the user finished with minutes ago. A second
+ * request restarts the window instead of inheriting what the first had left,
+ * because the effect re-runs on the new timestamp.
+ */
+function useSavedMessageWindowClosed(
+  saveRequestedAt: number | null | undefined,
+  durationMs: number,
+): boolean {
+  // A panel mounting after the window has already run out starts closed, so
+  // the stale confirmation is never rendered and never announced.
+  const [closedRequestAt, setClosedRequestAt] = useState<number | null>(() => {
+    if (saveRequestedAt === null || saveRequestedAt === undefined) return null;
+    const remainingMs = remainingWindowMs(
+      saveRequestedAt,
+      durationMs,
+      Date.now(),
+    );
+    return remainingMs === 0 ? saveRequestedAt : null;
+  });
+  const closed =
+    closedRequestAt !== null && closedRequestAt === saveRequestedAt;
+
+  useEffect(() => {
+    if (closed || saveRequestedAt === null || saveRequestedAt === undefined) {
+      return undefined;
+    }
+    const remainingMs = remainingWindowMs(
+      saveRequestedAt,
+      durationMs,
+      Date.now(),
+    );
+    if (remainingMs === null) return undefined;
+    const timer = setTimeout(() => {
+      setClosedRequestAt(saveRequestedAt);
+    }, remainingMs);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [closed, durationMs, saveRequestedAt]);
+
+  return closed;
+}
+
+/**
  * The Save and Discard footer of a configuration panel with its status line.
  * After either action, focus moves to the status, because the button that was
  * pressed usually disables itself and would otherwise drop focus to the body.
- * State stays with the consumer; this component owns presentation and focus.
+ * Configuration state stays with the consumer; this component owns
+ * presentation, focus, and how long the saved message stays up.
  */
 export function SaveActionBar({
   dirty,
@@ -191,6 +280,7 @@ export function SaveActionBar({
   onSave,
   saveRequestedAt,
   savedMessage,
+  savedMessageDurationMs = DEFAULT_SAVED_MESSAGE_DURATION_MS,
   saving = false,
   sticky = "viewport-bottom",
   unconfigured = false,
@@ -198,12 +288,16 @@ export function SaveActionBar({
 }: SaveActionBarProps): React.JSX.Element {
   const statusRef = useRef<HTMLDivElement>(null);
   const labels = resolveLabels(labelOverrides);
+  const savedWindowClosed = useSavedMessageWindowClosed(
+    saveRequestedAt,
+    savedMessageDurationMs,
+  );
   const state = resolveSaveActionBarState({
     dirty,
     invalidMessage,
     labels,
     savedMessage,
-    saveRequestedAt,
+    saveRequestedAt: savedWindowClosed ? null : saveRequestedAt,
     saving,
     unconfigured,
   });

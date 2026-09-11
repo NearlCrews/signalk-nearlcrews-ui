@@ -310,3 +310,58 @@ describe("CheckboxGroup option description", () => {
     ).not.toHaveAccessibleDescription();
   });
 });
+
+describe("CheckboxGroup blocked options", () => {
+  const OPTIONS = [
+    { label: "Primary", value: "primary", ariaDisabled: true },
+    { label: "Backup", value: "backup" },
+  ] as const;
+
+  it("keeps a blocked option focusable and out of select-all's reach", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    renderInPanel(
+      <CheckboxGroup
+        legend="Providers"
+        options={OPTIONS}
+        value={["primary"]}
+        selectAllLabel="Select all"
+        onValueChange={onValueChange}
+      />,
+    );
+
+    const primary = screen.getByRole("checkbox", { name: "Primary" });
+    // The last remaining provider: real, checked, reachable, and unchangeable.
+    expect(primary).toHaveAttribute("aria-disabled", "true");
+    expect(primary).toBeEnabled();
+    expect(primary).toBeChecked();
+
+    await user.click(primary);
+    expect(onValueChange).not.toHaveBeenCalled();
+
+    // Select-all completes the options the user could have checked by hand,
+    // so it must not reach the one they cannot.
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
+    expect(onValueChange).toHaveBeenCalledExactlyOnceWith([
+      "primary",
+      "backup",
+    ]);
+  });
+
+  it("counts only the options select-all can reach", () => {
+    renderInPanel(
+      <CheckboxGroup
+        legend="Providers"
+        options={OPTIONS}
+        value={["backup"]}
+        selectAllLabel="Select all"
+      />,
+    );
+
+    // Every reachable option is selected, so the box reads checked even
+    // though the blocked option is not.
+    const selectAll = screen.getByRole("checkbox", { name: "Select all" });
+    expect(selectAll).toBeChecked();
+    expect(selectAll).not.toBePartiallyChecked();
+  });
+});

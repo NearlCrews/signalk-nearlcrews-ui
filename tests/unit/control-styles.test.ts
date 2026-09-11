@@ -5,6 +5,11 @@ import { describe, expect, it } from "vitest";
 
 import { CONTROL_STYLES } from "../../src/styles/controls.js";
 import { FORM_STYLES } from "../../src/styles/forms.js";
+import { PROGRESS_STYLES } from "../../src/styles/progress.js";
+import { RADIO_STYLES } from "../../src/styles/radio.js";
+import { RANGE_STYLES } from "../../src/styles/range.js";
+import { SWITCH_STYLES } from "../../src/styles/switch.js";
+import { TEXTAREA_STYLES } from "../../src/styles/textarea.js";
 
 /** The module source, so assertions can exclude the shared fragments. */
 const CONTROLS_SOURCE = readFileSync(
@@ -52,9 +57,24 @@ function stripComments(css: string): string {
 describe("control and form stylesheets", () => {
   const controls = stripComments(CONTROL_STYLES);
   const forms = stripComments(FORM_STYLES);
+  /* The per-control modules the root sheet no longer carries. */
+  const progress = stripComments(PROGRESS_STYLES.styles);
+  const radio = stripComments(RADIO_STYLES.styles);
+  const range = stripComments(RANGE_STYLES.styles);
+  const control = stripComments(SWITCH_STYLES.styles);
+  const textarea = stripComments(TEXTAREA_STYLES.styles);
+  const everySheet = [
+    controls,
+    forms,
+    progress,
+    radio,
+    range,
+    control,
+    textarea,
+  ];
 
   it("gates every raw hover rule on a hover-capable pointer", () => {
-    const hovers = [...hoverSelectors(controls), ...hoverSelectors(forms)];
+    const hovers = everySheet.flatMap((sheet) => hoverSelectors(sheet));
     expect(hovers.length).toBeGreaterThan(0);
     for (const { atRules, selector } of hovers) {
       const gated = atRules.some(
@@ -70,7 +90,11 @@ describe("control and form stylesheets", () => {
 
   it("lifts text controls to 16px on coarse pointers", () => {
     expect(controls).toMatch(
-      /@media \(any-pointer: coarse\) \{\s*\.snui-input,\s*\.snui-select,\s*\.snui-textarea \{\s*font-size: max\(1rem, var\(--snui-font-size\)\);/,
+      /@media \(any-pointer: coarse\) \{\s*\.snui-input,\s*\.snui-select \{\s*font-size: max\(1rem, var\(--snui-font-size\)\);/,
+    );
+    // The textarea carries the same floor from its own module.
+    expect(textarea).toMatch(
+      /@media \(any-pointer: coarse\) \{\s*\.snui-textarea \{\s*font-size: max\(1rem, var\(--snui-font-size\)\);/,
     );
   });
 
@@ -79,7 +103,7 @@ describe("control and form stylesheets", () => {
       "color-mix(in srgb, var(--snui-color-danger)",
     );
     expect(controls).toContain("background: var(--snui-color-danger-subtle);");
-    expect(controls).toMatch(
+    expect(progress).toMatch(
       /\.snui-progress__track \{[^}]*background: var\(--snui-color-track\);/,
     );
     expect(forms).toMatch(
@@ -95,14 +119,25 @@ describe("control and form stylesheets", () => {
     expect(controls).toMatch(
       /\.snui-button--primary:disabled,\s*\.snui-button--primary\[aria-disabled="true"\]:not\(\[aria-busy="true"\]\) \{\s*background: var\(--snui-color-text-disabled\);\s*color: var\(--snui-color-surface\);/,
     );
-    for (const selector of [
-      ".snui-range:disabled::-webkit-slider-thumb",
-      ".snui-checkbox__input:disabled:checked",
-      ".snui-radio__button[data-disabled][data-selected] .snui-radio__control",
-      ".snui-switch__button[data-disabled][data-selected] .snui-switch__track",
-      '.snui-segmented__option:disabled[aria-checked="true"]',
-    ]) {
-      expect(controls, `${selector} keeps its accent fill`).toContain(selector);
+    for (const [sheet, selector] of [
+      [range, ".snui-range:disabled::-webkit-slider-thumb"],
+      // The box repaints its fill whichever way it is blocked, so the
+      // selector covers the focusable aria-disabled form as well.
+      [
+        controls,
+        '.snui-checkbox__input:is(:disabled, [aria-disabled="true"]):checked',
+      ],
+      [
+        radio,
+        ".snui-radio__button[data-disabled][data-selected] .snui-radio__control",
+      ],
+      [
+        control,
+        ".snui-switch__button[data-disabled][data-selected] .snui-switch__track",
+      ],
+      [controls, '.snui-segmented__option:disabled[aria-checked="true"]'],
+    ] as const) {
+      expect(sheet, `${selector} keeps its accent fill`).toContain(selector);
     }
     // Aria-disabled buttons that are busy keep their fill; the others share
     // the native disabled rule.
@@ -112,7 +147,7 @@ describe("control and form stylesheets", () => {
   });
 
   it("writes block-axis offsets with logical properties", () => {
-    for (const sheet of [controls, forms]) {
+    for (const sheet of everySheet) {
       expect(sheet).not.toMatch(/\bmargin-(?:top|bottom):/);
       expect(sheet).not.toMatch(/(?<![-\w])(?:top|bottom):/);
     }
@@ -141,7 +176,7 @@ describe("control and form stylesheets", () => {
     expect(controls).toMatch(
       /\.snui-input--monospace \{\s*font-family: var\(--snui-font-family-mono\);/,
     );
-    expect(controls).toMatch(
+    expect(textarea).toMatch(
       /\.snui-textarea--rows \{\s*min-height: auto;\s*field-sizing: content;/,
     );
     expect(controls).toMatch(

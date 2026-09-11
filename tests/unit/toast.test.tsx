@@ -844,7 +844,7 @@ describe("toast host stylesheet", () => {
   it("keeps a host outside the visual viewport in the accessibility tree", () => {
     const rule =
       /\.snui-toast-region-host:not\(\[data-snui-toast-host-visible\]\) \{([^}]*)\}/.exec(
-        TOAST_STYLES,
+        TOAST_STYLES.styles,
       );
     expect(rule).not.toBeNull();
     const declarations = rule?.[1] ?? "";

@@ -1,5 +1,6 @@
 import {
   type InputHTMLAttributes,
+  type MouseEventHandler,
   type ReactNode,
   type RefAttributes,
   type SelectHTMLAttributes,
@@ -9,6 +10,14 @@ import {
   useLayoutEffect,
   useRef,
 } from "react";
+import { RANGE_STYLES } from "../styles/range.js";
+import { TEXTAREA_STYLES } from "../styles/textarea.js";
+import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
+import {
+  blockActivationKeys,
+  blockChange,
+  blockClick,
+} from "../utils/activation.js";
 import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
@@ -109,6 +118,8 @@ export function RangeInput({
   ref,
   ...props
 }: RangeInputProps): React.JSX.Element {
+  useOptionalModuleStyles(RANGE_STYLES);
+
   const inputElement = useRef<HTMLInputElement | null>(null);
 
   // One callback ref owns the node so the caller ref and the form reset
@@ -195,6 +206,8 @@ export function Textarea({
   rows,
   ...props
 }: TextareaProps): React.JSX.Element {
+  useOptionalModuleStyles(TEXTAREA_STYLES);
+
   return (
     <textarea
       {...props}
@@ -216,6 +229,16 @@ export type CheckboxLabelVisibility = "hidden" | "visible";
 export interface CheckboxProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "children" | "type">,
     RefAttributes<HTMLInputElement> {
+  /**
+   * Blocks the state change while the box stays focusable, keeps its checked
+   * state, and goes on submitting with its form. Reach for it where the value
+   * is real but cannot be changed right now, such as the last remaining
+   * selection in a list: native `disabled` takes the box out of the tab
+   * order, so setting it on the box the user is standing on destroys their
+   * focus. When set it decides; when omitted, a native `aria-disabled`
+   * attribute is read instead. `Button.ariaDisabled` follows the same rule.
+   */
+  readonly ariaDisabled?: boolean | undefined;
   readonly description?: ReactNode | undefined;
   readonly error?: ReactNode | undefined;
   readonly errorLive?: AnnouncementMode | undefined;
@@ -238,20 +261,32 @@ export interface CheckboxProps
 /** @deprecated Use {@link AnnouncementMode}. */
 export type CheckboxErrorLive = AnnouncementMode;
 
+/*
+ * Space toggles a checkbox. Enter belongs to the surrounding form, not to
+ * the box, so a blocked box still submits with the Enter key.
+ */
+const CHECKBOX_ACTIVATION_KEYS = new Set([" ", "Spacebar"]);
+
 export function Checkbox({
   "aria-describedby": ariaDescribedBy,
+  "aria-disabled": nativeAriaDisabled,
   "aria-errormessage": ariaErrorMessage,
   "aria-invalid": ariaInvalid,
   "aria-labelledby": ariaLabelledBy,
+  ariaDisabled,
   checked,
   className,
   description,
+  disabled,
   error,
   errorLive = "off",
   id,
   indeterminate,
   label,
   labelVisibility = "visible",
+  onChange,
+  onClick,
+  onKeyDown,
   ref,
   required,
   ...props
@@ -318,6 +353,35 @@ export function Checkbox({
   const errorMessage = joinIdReferences(ariaErrorMessage, referencedErrorId);
 
   const labelHidden = labelVisibility === "hidden";
+  // The camelCase prop is the documented spelling, so when it is set it
+  // decides; the native attribute only counts while the prop is absent.
+  const blocksActivation =
+    ariaDisabled ??
+    (nativeAriaDisabled === true || nativeAriaDisabled === "true");
+
+  const guardedClick = blockClick(blocksActivation, onClick);
+  const handleClick: MouseEventHandler<HTMLInputElement> = (event) => {
+    if (blocksActivation) {
+      /*
+       * The browser flips the box before it dispatches the click, and React
+       * re-applies its own idea of the state once the event batch ends, after
+       * every handler here has run. So the box is put back in a microtask,
+       * which lands after that pass and still before the next paint, rather
+       * than left to the canceled activation the click guard asks for.
+       * Toggling also clears the mixed state, and the layout effect that
+       * re-asserts it only runs on a render that a blocked click never causes.
+       */
+      const input = event.currentTarget;
+      const restoredChecked = checked ?? !input.checked;
+      const restoredIndeterminate = indeterminate ?? false;
+      queueMicrotask(() => {
+        if (!input.isConnected) return;
+        input.checked = restoredChecked;
+        input.indeterminate = restoredIndeterminate;
+      });
+    }
+    guardedClick(event);
+  };
 
   return (
     <div
@@ -343,11 +407,27 @@ export function Checkbox({
           type="checkbox"
           checked={checked}
           className="snui-checkbox__input"
+          disabled={disabled}
           required={required}
           aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
           aria-describedby={describedBy}
           aria-errormessage={errorMessage}
           aria-invalid={hasError ? true : ariaInvalid}
+          // A natively disabled box already exposes its state; aria-disabled
+          // beside it would describe the same control twice.
+          aria-disabled={
+            disabled === true ? undefined : blocksActivation || undefined
+          }
+          // Canceling the click reverts the checkedness the browser applied
+          // before dispatching it, which is the one route every pointer press
+          // and the Space key all arrive through, the label included.
+          onChange={blockChange(blocksActivation, onChange)}
+          onClick={handleClick}
+          onKeyDown={blockActivationKeys(
+            blocksActivation,
+            CHECKBOX_ACTIVATION_KEYS,
+            onKeyDown,
+          )}
         />
         <span
           id={labelId}

@@ -1,73 +1,24 @@
 import { Buffer } from "node:buffer";
-import { spawnSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import process from "node:process";
+import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
+import { gzipBytesOf } from "../../bin/lib/consumer-checks.mjs";
 import {
-  encodeRequiredVersion,
-  gzipBytesOf,
-} from "../../bin/lib/consumer-checks.mjs";
-import { renderFederationEntry } from "../../scripts/lib/federation-share.mjs";
-import { repositoryPath } from "../../scripts/lib/paths.mjs";
-
-const manifest = createRequire(import.meta.url)("../../package.json");
-const CLI = repositoryPath("bin", "snui-check-consumer.mjs");
-const { cjs: FEDERATION_ENTRY, shared } = renderFederationEntry(
-  manifest.peerDependencies,
-  manifest.version,
-);
-
-/*
- * The names and paths written into the generated source below are literals in
- * this file rather than values read from the manifest, because a fixture that
- * assembles JavaScript should not assemble it out of anything it has not
- * fixed itself. A test asserts the manifest still shares exactly these, so the
- * two cannot drift apart quietly.
- */
-const SHARED_NAMES = ["react", "react-dom"];
-const FEDERATION_REQUEST = "signalk-nearlcrews-ui/federation";
-
-/**
- * The version tuple Webpack encodes a range into, rebuilt from its numbers so
- * only numbers reach the generated source.
- */
-function versionTuple(range) {
-  const parsed = JSON.parse(encodeRequiredVersion(range));
-  if (!Array.isArray(parsed) || parsed.some((part) => !Number.isFinite(part))) {
-    throw new Error(`Unexpected requiredVersion encoding for ${range}.`);
-  }
-  return `[${parsed.map(Number).join(",")}]`;
-}
-
-/** The version stamp PanelRoot writes, as digits and dots or nothing. */
-const STAMP = /^\d+\.\d+\.\d+$/.test(manifest.version)
-  ? manifest.version
-  : "0.0.0";
-
-/** The share registrations Webpack 5 minifies into a remote entry. */
-const REMOTE_ENTRY = `var l={${SHARED_NAMES.map((name, index) => {
-  const share = shared[name];
-  if (share === undefined)
-    throw new Error(`The manifest no longer shares ${name}.`);
-  return `${String(90 + index)}:()=>s("default","${name}",!1,${versionTuple(share.requiredVersion)})`;
-}).join(",")}};`;
-
-/** The chunk the library lands in, carrying the PanelRoot version stamp. */
-const CHUNK = `jsx("div",{"data-snui-root":"","data-snui-version":"${STAMP}"});`;
+  CHUNK,
+  createConsumer,
+  FEDERATION_REQUEST,
+  manifest,
+  removeConsumers,
+  runCli,
+  SHARE_REGISTRATIONS,
+  SHARED_NAMES,
+  STAMP,
+  shared,
+} from "./lib/consumer-fixture.mjs";
 
 const REMOTE_GZIP_BYTES = gzipBytesOf([
-  Buffer.from(REMOTE_ENTRY),
+  Buffer.from(SHARE_REGISTRATIONS),
   Buffer.from(CHUNK),
 ]);
 
@@ -76,67 +27,7 @@ function pluginConfig(source) {
   return `const { shared } = require("${FEDERATION_REQUEST}");\nmodule.exports = ${source};\n`;
 }
 
-const workspaces = [];
-
-afterAll(() => {
-  for (const workspace of workspaces) {
-    rmSync(workspace, { force: true, recursive: true });
-  }
-});
-
-/**
- * A consumer directory as `npm ci` leaves one: the published manifest and
- * federation entry under node_modules, an exact pin beside them, and a built
- * remote to check.
- */
-function createConsumer({
-  baseline,
-  config,
-  configName = "webpack.config.cjs",
-  linkWebpack = false,
-} = {}) {
-  const root = mkdtempSync(join(tmpdir(), "snui-consumer-"));
-  workspaces.push(root);
-
-  const installed = join(root, "node_modules", manifest.name);
-  mkdirSync(join(installed, "dist"), { recursive: true });
-  writeFileSync(join(installed, "package.json"), JSON.stringify(manifest));
-  writeFileSync(join(installed, "dist", "federation.cjs"), FEDERATION_ENTRY);
-  writeFileSync(
-    join(root, "package.json"),
-    JSON.stringify({
-      name: "consumer-fixture",
-      private: true,
-      devDependencies: { [manifest.name]: manifest.version },
-    }),
-  );
-
-  const remoteDirectory = join(root, "public");
-  mkdirSync(remoteDirectory);
-  writeFileSync(join(remoteDirectory, "remoteEntry.js"), REMOTE_ENTRY);
-  writeFileSync(join(remoteDirectory, "main.chunk.js"), CHUNK);
-
-  if (config !== undefined) {
-    const configPath = join(root, configName);
-    mkdirSync(dirname(configPath), { recursive: true });
-    writeFileSync(configPath, config);
-  }
-  if (linkWebpack) {
-    symlinkSync(
-      repositoryPath("node_modules", "webpack"),
-      join(root, "node_modules", "webpack"),
-      "junction",
-    );
-  }
-  if (baseline !== undefined) {
-    writeFileSync(join(root, "size-baseline.json"), JSON.stringify(baseline));
-  }
-  return root;
-}
-
-function runCli(...args) {
-  return spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8" });
-}
+afterAll(removeConsumers);
 
 describe("snui-check-consumer", () => {
   it("writes a fixture that matches the manifest it stands in for", () => {
@@ -155,7 +46,7 @@ describe("snui-check-consumer", () => {
       config: pluginConfig(
         "{ plugins: [{}, { _options: { shared: { ...shared } } }] }",
       ),
-      linkWebpack: true,
+      link: ["webpack"],
     });
 
     const result = runCli(

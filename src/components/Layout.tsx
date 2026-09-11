@@ -8,6 +8,7 @@ import {
 
 import {
   type AnnouncementMode,
+  announcesUpdates,
   liveRegionProps,
 } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
@@ -312,6 +313,12 @@ export interface MetricProps
     RefAttributes<HTMLDivElement> {
   readonly detail?: ReactNode | undefined;
   readonly label: ReactNode;
+  /**
+   * Announces the value's own updates. Render the metric whenever the panel
+   * can produce a reading and let `value` go empty until one arrives, rather
+   * than mounting the metric beside its first value; an empty announcing
+   * value region occupies no space.
+   */
   readonly live?: AnnouncementMode | undefined;
   readonly tone?: StatusTone | undefined;
   readonly toneLabel?: string | undefined;
@@ -336,6 +343,11 @@ export function Metric({
 
   const labelId = useId();
   const valueRegion = liveRegionProps(live);
+  // An announcing value keeps its region mounted so a screen reader observes
+  // it before the first reading arrives. With no reading the region renders
+  // empty, and the stylesheet takes it out of the flow, so the label stands
+  // alone rather than over a tone glyph or a bare unit.
+  const silent = announcesUpdates(valueRegion) && !hasReactContent(value);
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: Metrics may render outside MetricGrid, and fieldset would imply form controls.
@@ -354,18 +366,22 @@ export function Metric({
         role={valueRegion.role}
         aria-live={valueRegion["aria-live"]}
       >
-        <ToneMark
-          className="snui-metric__tone-glyph"
-          tone={tone}
-          toneLabel={toneLabel}
-        />
-        {value}
-        {hasReactContent(unit) ? (
+        {silent ? null : (
           <>
-            {" "}
-            <span className="snui-metric__unit">{unit}</span>
+            <ToneMark
+              className="snui-metric__tone-glyph"
+              tone={tone}
+              toneLabel={toneLabel}
+            />
+            {value}
+            {hasReactContent(unit) ? (
+              <>
+                {" "}
+                <span className="snui-metric__unit">{unit}</span>
+              </>
+            ) : null}
           </>
-        ) : null}
+        )}
       </div>
       {hasReactContent(detail) ? (
         <div className="snui-metric__detail">{detail}</div>

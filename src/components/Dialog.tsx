@@ -12,7 +12,7 @@ import {
   Modal,
   ModalOverlay,
 } from "react-aria-components";
-import { OVERLAY_STYLES } from "../styles/overlay-styles.js";
+import { DIALOG_STYLES } from "../styles/dialog.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
@@ -120,7 +120,7 @@ function DialogSurface({
 }: DialogSurfaceProps): React.JSX.Element | null {
   requireContent(title, "Dialog requires a non-empty title.");
 
-  useModuleStyles(OVERLAY_STYLES, role === "dialog" ? "Dialog" : "AlertDialog");
+  useModuleStyles(DIALOG_STYLES, role === "dialog" ? "Dialog" : "AlertDialog");
   const generatedId = useId();
   const portalReady = usePanelPortalContainerReady("Dialog");
   const parentOverlayLayer = useOverlayLayer();

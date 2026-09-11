@@ -1,4 +1,6 @@
 import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
+import { EMPTY_STATE_STYLES } from "../styles/empty-state.js";
+import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 
@@ -22,6 +24,8 @@ export function EmptyState({
   title,
   ...props
 }: EmptyStateProps): React.JSX.Element {
+  useOptionalModuleStyles(EMPTY_STATE_STYLES);
+
   requireContent(title, "EmptyState requires a non-empty title.");
 
   return (

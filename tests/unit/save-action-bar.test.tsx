@@ -1,13 +1,13 @@
-import { screen } from "@testing-library/react";
+import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   resolveSaveActionBarState,
   SaveActionBar,
   type SaveActionBarLabels,
 } from "../../src/composites.js";
-import { renderInPanel } from "../helpers.js";
+import { panel, renderInPanel } from "../helpers.js";
 
 const LABELS: SaveActionBarLabels = {
   clean: "No unsaved changes",
@@ -225,5 +225,184 @@ describe("SaveActionBar", () => {
     expect(onDiscard).toHaveBeenCalledOnce();
     expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
     expect(screen.getByTestId("footer")).toHaveClass("snui-action-bar");
+  });
+});
+
+describe("SaveActionBar saved message window", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("takes the saved message down when its window closes", () => {
+    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
+    vi.useFakeTimers({ now });
+    const { unmount } = renderInPanel(
+      <SaveActionBar
+        dirty={false}
+        saveRequestedAt={now}
+        onSave={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Save requested");
+
+    act(() => {
+      vi.advanceTimersByTime(2_500);
+    });
+    // The bar falls back to the state underneath, which is what a panel used
+    // to do by writing the timestamp back to null.
+    expect(status).toHaveTextContent("No unsaved changes");
+    expect(vi.getTimerCount()).toBe(0);
+
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("restarts the window for a second save rather than inheriting the first", () => {
+    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
+    vi.useFakeTimers({ now });
+    const { rerender } = renderInPanel(
+      <SaveActionBar
+        dirty={false}
+        saveRequestedAt={now}
+        onSave={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+    rerender(
+      panel(
+        <SaveActionBar
+          dirty={false}
+          saveRequestedAt={now + 2_000}
+          onSave={vi.fn()}
+          onDiscard={vi.fn()}
+        />,
+      ),
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(2_000);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Save requested");
+
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("No unsaved changes");
+  });
+
+  it("measures the window from the request, not from the mount", () => {
+    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
+    vi.useFakeTimers({ now });
+    const { rerender } = renderInPanel(
+      <SaveActionBar
+        dirty={false}
+        saveRequestedAt={now - 5_000}
+        onSave={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+
+    // A panel that remounts holding an old timestamp does not replay a save
+    // the user finished minutes ago.
+    expect(screen.getByRole("status")).toHaveTextContent("No unsaved changes");
+    const idleTimers = vi.getTimerCount();
+
+    rerender(
+      panel(
+        <SaveActionBar
+          dirty={false}
+          saveRequestedAt={now}
+          onSave={vi.fn()}
+          onDiscard={vi.fn()}
+        />,
+      ),
+    );
+
+    // A closed window waits for nothing; an open one waits once.
+    expect(screen.getByRole("status")).toHaveTextContent("Save requested");
+    expect(vi.getTimerCount()).toBe(idleTimers + 1);
+  });
+
+  it("leaves an unusable timestamp alone and clamps one from a fast clock", () => {
+    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
+    vi.useFakeTimers({ now });
+    const { rerender } = renderInPanel(
+      <SaveActionBar
+        dirty={false}
+        saveRequestedAt={Number.NaN}
+        onSave={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+
+    // Nothing to measure from, so the bar keeps reporting the request and
+    // waits for the panel to say otherwise.
+    expect(screen.getByRole("status")).toHaveTextContent("Save requested");
+    const idleTimers = vi.getTimerCount();
+
+    // A host clock a minute ahead of this one cannot stretch the window.
+    rerender(
+      panel(
+        <SaveActionBar
+          dirty={false}
+          saveRequestedAt={now + 60_000}
+          onSave={vi.fn()}
+          onDiscard={vi.fn()}
+        />,
+      ),
+    );
+    expect(vi.getTimerCount()).toBe(idleTimers + 1);
+    act(() => {
+      vi.advanceTimersByTime(2_500);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("No unsaved changes");
+  });
+
+  it("honors a custom window and leaves zero to the consumer", () => {
+    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
+    vi.useFakeTimers({ now });
+    const { rerender } = renderInPanel(
+      <SaveActionBar
+        dirty={false}
+        saveRequestedAt={now}
+        savedMessageDurationMs={6_000}
+        onSave={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(5_999);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Save requested");
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("No unsaved changes");
+
+    rerender(
+      panel(
+        <SaveActionBar
+          dirty={false}
+          saveRequestedAt={now + 6_000}
+          savedMessageDurationMs={0}
+          onSave={vi.fn()}
+          onDiscard={vi.fn()}
+        />,
+      ),
+    );
+    // Nothing is waiting to take it down: the panel owns the window again.
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(600_000);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("Save requested");
   });
 });

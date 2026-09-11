@@ -1,15 +1,10 @@
-import { SPINNER_ANIMATION_NAME, versionedAnimationName } from "../version.js";
+import { SPINNER_ANIMATION_NAME } from "../version.js";
 import {
   DISABLED_DECLARATIONS,
   FIELD_ERROR_DECLARATIONS,
-  focusRingDeclarations,
   PRESSED_FILL_DECLARATION,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { toneColorRules } from "./tone-rules.js";
-
-const PROGRESS_INDETERMINATE_ANIMATION =
-  versionedAnimationName("progress-slide");
 
 /**
  * Edge of the checkbox box. The description and the error sit outside the
@@ -18,14 +13,17 @@ const PROGRESS_INDETERMINATE_ANIMATION =
  */
 const CHECKBOX_BOX_SIZE = "1.25rem";
 
+/*
+ * A control blocked either way: natively disabled, or held focusable through
+ * aria-disabled so closing it on a focused control cannot destroy that focus.
+ * Both arguments weigh (0,1,0) and `:is()` takes the weight of its most
+ * specific argument, so writing it this way changes no rule's specificity.
+ */
+const BLOCKED = ':is(:disabled, [aria-disabled="true"])';
+
 export const CONTROL_STYLES = `
 @keyframes ${SPINNER_ANIMATION_NAME} {
   to { transform: rotate(1turn); }
-}
-
-@keyframes ${PROGRESS_INDETERMINATE_ANIMATION} {
-  from { inset-inline-start: -40%; }
-  to { inset-inline-start: 100%; }
 }
 
 ${scopeStyles(`
@@ -184,8 +182,7 @@ ${PRESSED_FILL_DECLARATION}
  */
 @media (any-pointer: coarse) {
   .snui-input,
-  .snui-select,
-  .snui-textarea {
+  .snui-select {
     font-size: max(1rem, var(--snui-font-size));
   }
 }
@@ -207,90 +204,6 @@ ${PRESSED_FILL_DECLARATION}
   background-position:
     0.7rem 50%,
     1rem 50%;
-}
-
-.snui-textarea {
-  min-height: 6rem;
-  resize: vertical;
-}
-
-/*
- * A row count replaces the fixed minimum height, and where the engine sizes
- * fields from content the control grows with its text from that floor.
- */
-.snui-textarea--rows {
-  min-height: auto;
-  field-sizing: content;
-}
-
-.snui-range {
-  appearance: none;
-  width: 100%;
-  min-height: var(--snui-control-min-height);
-  margin: 0;
-  background: transparent;
-  accent-color: var(--snui-color-accent-fill);
-  cursor: pointer;
-}
-
-.snui-range::-webkit-slider-runnable-track {
-  height: 0.375rem;
-  border: 0;
-  border-radius: var(--snui-radius-pill);
-  background: linear-gradient(
-    to right,
-    var(--snui-range-progress-color) 0 var(--snui-range-progress, 0%),
-    var(--snui-range-track-color) var(--snui-range-progress, 0%)
-  );
-}
-
-.snui-range:dir(rtl)::-webkit-slider-runnable-track {
-  background: linear-gradient(
-    to left,
-    var(--snui-range-progress-color) 0 var(--snui-range-progress, 0%),
-    var(--snui-range-track-color) var(--snui-range-progress, 0%)
-  );
-}
-
-/*
- * The thumb opts out of native rendering, so the user-agent target-size
- * exception no longer applies to it. It scales with the density contract
- * instead of staying fixed while every other control grows.
- */
-.snui-range::-webkit-slider-thumb {
-  appearance: none;
-  width: var(--snui-range-thumb-size);
-  height: var(--snui-range-thumb-size);
-  margin-block-start: calc((0.375rem - var(--snui-range-thumb-size)) / 2);
-  border: 2px solid var(--snui-color-surface);
-  border-radius: 50%;
-  background: var(--snui-color-accent-fill);
-}
-
-.snui-range::-moz-range-track {
-  height: 0.375rem;
-  border: 0;
-  border-radius: var(--snui-radius-pill);
-  background: var(--snui-range-track-color);
-}
-
-.snui-range::-moz-range-progress {
-  height: 0.375rem;
-  border-radius: var(--snui-radius-pill);
-  background: var(--snui-range-progress-color);
-}
-
-.snui-range::-moz-range-thumb {
-  width: var(--snui-range-thumb-size);
-  height: var(--snui-range-thumb-size);
-  border: 2px solid var(--snui-color-surface);
-  border-radius: 50%;
-  background: var(--snui-color-accent-fill);
-}
-
-.snui-range[aria-invalid="true"] {
-  --snui-range-progress-color: var(--snui-color-danger);
-  --snui-range-track-color: var(--snui-color-danger);
 }
 
 /*
@@ -331,7 +244,7 @@ ${PRESSED_FILL_DECLARATION}
 }
 
 @media (hover: hover) {
-  .snui-checkbox__control:hover .snui-checkbox__input:not(:disabled):not([aria-invalid="true"]) {
+  .snui-checkbox__control:hover .snui-checkbox__input:not(:disabled):not([aria-disabled="true"]):not([aria-invalid="true"]) {
     border-color: var(--snui-color-accent-fill);
   }
 }
@@ -403,256 +316,6 @@ ${FIELD_ERROR_DECLARATIONS}
 
 .snui-checkbox__input[aria-invalid="true"] {
   border-color: var(--snui-color-danger);
-}
-
-.snui-radio-group {
-  display: grid;
-  min-width: 0;
-  gap: var(--snui-space-1);
-}
-
-.snui-radio-group__label {
-  min-width: 0;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  overflow-wrap: anywhere;
-}
-
-.snui-radio-group__description {
-  display: block;
-  min-width: 0;
-  color: var(--snui-color-text-muted);
-  font-size: var(--snui-font-size-sm);
-  overflow-wrap: anywhere;
-}
-
-.snui-radio-group__options {
-  display: flex;
-  flex-direction: column;
-  gap: var(--snui-space-1);
-}
-
-.snui-radio-group[data-orientation="horizontal"] .snui-radio-group__options {
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: var(--snui-space-1) var(--snui-space-4);
-}
-
-.snui-radio-group__error {
-${FIELD_ERROR_DECLARATIONS}
-}
-
-/*
- * The field wrapper is the component root; the interactive label inside it
- * carries every state attribute (selected, hovered, focus-visible, and the
- * rest), so all visual rules key off the button.
- */
-.snui-radio__button {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--snui-space-1) var(--snui-space-3);
-  align-items: start;
-  min-height: var(--snui-control-min-height);
-  padding-block: var(--snui-space-2);
-  cursor: pointer;
-}
-
-.snui-radio__control {
-  display: grid;
-  place-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  margin: 0.125rem 0 0;
-  border: 2px solid var(--snui-color-border);
-  border-radius: 50%;
-  background: var(--snui-color-surface);
-  transition:
-    background-color var(--snui-transition-fast),
-    border-color var(--snui-transition-fast);
-}
-
-.snui-radio__button[data-hovered]:not([data-disabled]) .snui-radio__control {
-  border-color: var(--snui-color-accent-fill);
-}
-
-.snui-radio__control::before {
-  width: 0.625rem;
-  height: 0.625rem;
-  border-radius: 50%;
-  background: var(--snui-color-on-accent);
-  content: "";
-  opacity: 0;
-}
-
-.snui-radio__button[data-selected] .snui-radio__control {
-  border-color: var(--snui-color-accent-fill);
-  background: var(--snui-color-accent-fill);
-}
-
-.snui-radio__button[data-selected] .snui-radio__control::before {
-  opacity: 1;
-}
-
-.snui-radio__button[data-focus-visible] .snui-radio__control {
-${focusRingDeclarations("2px", true)}
-}
-
-.snui-radio__button[data-invalid] .snui-radio__control {
-  border-color: var(--snui-color-danger);
-}
-
-.snui-radio__button[data-disabled] {
-${DISABLED_DECLARATIONS}
-}
-
-.snui-radio__button[data-disabled] .snui-radio__control {
-  border-color: var(--snui-color-text-disabled);
-}
-
-.snui-radio__button[data-disabled][data-selected] .snui-radio__control {
-  background: var(--snui-color-text-disabled);
-}
-
-.snui-radio__button[data-disabled][data-selected] .snui-radio__control::before {
-  background: var(--snui-color-surface);
-}
-
-.snui-radio__label {
-  min-width: 0;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  overflow-wrap: anywhere;
-}
-
-.snui-switch__button {
-  display: flex;
-  min-height: var(--snui-control-min-height);
-  align-items: center;
-  gap: var(--snui-space-3);
-  padding-block: var(--snui-space-2);
-  cursor: pointer;
-}
-
-.snui-switch__track {
-  position: relative;
-  width: 2.25rem;
-  height: 1.25rem;
-  flex: none;
-  border: 2px solid var(--snui-color-border);
-  border-radius: var(--snui-radius-pill);
-  background: var(--snui-color-surface);
-  transition:
-    background-color var(--snui-transition-fast),
-    border-color var(--snui-transition-fast);
-}
-
-.snui-switch__thumb {
-  position: absolute;
-  inset-inline-start: 0.125rem;
-  inset-block-start: 50%;
-  width: 0.875rem;
-  height: 0.875rem;
-  border-radius: 50%;
-  background: var(--snui-color-text-muted);
-  transform: translateY(-50%);
-  transition:
-    inset-inline-start var(--snui-transition-fast),
-    background-color var(--snui-transition-fast);
-}
-
-.snui-switch__button[data-hovered]:not([data-disabled]) .snui-switch__track {
-  border-color: var(--snui-color-accent-fill);
-}
-
-.snui-switch__button[data-selected] .snui-switch__track {
-  border-color: var(--snui-color-accent-fill);
-  background: var(--snui-color-accent-fill);
-}
-
-.snui-switch__button[data-selected] .snui-switch__thumb {
-  inset-inline-start: calc(100% - 0.875rem - 0.125rem);
-  background: var(--snui-color-on-accent);
-}
-
-.snui-switch__button[data-focus-visible] .snui-switch__track {
-${focusRingDeclarations("2px", true)}
-}
-
-.snui-switch__button[data-disabled] {
-${DISABLED_DECLARATIONS}
-}
-
-.snui-switch__button[data-disabled] .snui-switch__track {
-  border-color: var(--snui-color-text-disabled);
-}
-
-.snui-switch__button[data-disabled] .snui-switch__thumb {
-  background: var(--snui-color-text-disabled);
-}
-
-.snui-switch__button[data-disabled][data-selected] .snui-switch__track {
-  background: var(--snui-color-text-disabled);
-}
-
-.snui-switch__button[data-disabled][data-selected] .snui-switch__thumb {
-  background: var(--snui-color-surface);
-}
-
-.snui-switch__label {
-  min-width: 0;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  overflow-wrap: anywhere;
-}
-
-.snui-progress {
-  display: grid;
-  min-width: 0;
-  gap: var(--snui-space-1);
-}
-
-.snui-progress__label {
-  min-width: 0;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  overflow-wrap: anywhere;
-}
-
-.snui-progress__track {
-  position: relative;
-  height: 0.375rem;
-  overflow: hidden;
-  border-radius: var(--snui-radius-pill);
-  background: var(--snui-color-track);
-}
-
-.snui-progress__fill {
-  height: 100%;
-  border-radius: var(--snui-radius-pill);
-  background: var(--snui-color-accent-fill);
-  transition: inline-size var(--snui-transition-fast);
-}
-
-${toneColorRules((tone) => `.snui-progress--tone-${tone} .snui-progress__fill`, "background")}
-
-.snui-progress--indeterminate .snui-progress__fill {
-  position: absolute;
-  inset-block: 0;
-  inset-inline-start: 0;
-  inline-size: 40%;
-  animation: ${PROGRESS_INDETERMINATE_ANIMATION} 1.4s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  /*
-   * The indeterminate slide stops moving rather than slowing down, so the
-   * static 40 percent fill keeps signaling activity without motion.
-   */
-  .snui-progress--indeterminate .snui-progress__fill {
-    /* Longhand: the stylesheet keyframe audit scans animation shorthands. */
-    animation-name: none;
-    inset-inline-start: 0;
-  }
 }
 
 .snui-segmented {
@@ -747,7 +410,6 @@ ${PRESSED_FILL_DECLARATION}
 .snui-button:disabled,
 .snui-button[aria-disabled="true"]:not([aria-busy="true"]),
 .snui-input:disabled,
-.snui-range:disabled,
 .snui-segmented:not([aria-disabled="true"]) .snui-segmented__option:disabled {
 ${DISABLED_DECLARATIONS}
 }
@@ -769,40 +431,28 @@ ${DISABLED_DECLARATIONS}
   cursor: not-allowed;
 }
 
-.snui-range:disabled {
-  --snui-range-progress-color: var(--snui-color-text-disabled);
-}
-
-.snui-range:disabled::-webkit-slider-thumb {
-  background: var(--snui-color-text-disabled);
-}
-
-.snui-range:disabled::-moz-range-thumb {
-  background: var(--snui-color-text-disabled);
-}
-
-.snui-checkbox:has(.snui-checkbox__input:disabled),
+.snui-checkbox:has(.snui-checkbox__input${BLOCKED}),
 .snui-segmented[aria-disabled="true"] {
 ${DISABLED_DECLARATIONS}
 }
 
-.snui-checkbox:has(.snui-checkbox__input:disabled) > .snui-checkbox__control,
-.snui-checkbox:has(.snui-checkbox__input:disabled) .snui-checkbox__input,
+.snui-checkbox:has(.snui-checkbox__input${BLOCKED}) > .snui-checkbox__control,
+.snui-checkbox:has(.snui-checkbox__input${BLOCKED}) .snui-checkbox__input,
 .snui-segmented[aria-disabled="true"] .snui-segmented__option {
   cursor: not-allowed;
 }
 
-.snui-checkbox__input:disabled {
+.snui-checkbox__input${BLOCKED} {
   border-color: var(--snui-color-text-disabled);
 }
 
-.snui-checkbox__input:disabled:checked,
-.snui-checkbox__input:disabled:indeterminate {
+.snui-checkbox__input${BLOCKED}:checked,
+.snui-checkbox__input${BLOCKED}:indeterminate {
   border-color: var(--snui-color-text-disabled);
   background: var(--snui-color-text-disabled);
 }
 
-.snui-checkbox__input:disabled::before {
+.snui-checkbox__input${BLOCKED}::before {
   border-color: var(--snui-color-surface);
 }
 
@@ -915,35 +565,9 @@ ${DISABLED_DECLARATIONS}
    */
   .snui-input[aria-invalid="true"],
   .snui-select[aria-invalid="true"],
-  .snui-textarea[aria-invalid="true"],
-  .snui-range[aria-invalid="true"],
-  .snui-checkbox__input[aria-invalid="true"],
-  .snui-radio__button[data-invalid] .snui-radio__control {
+  .snui-checkbox__input[aria-invalid="true"] {
     outline: 2px dashed CanvasText;
     outline-offset: 1px;
-  }
-
-  .snui-range::-webkit-slider-runnable-track,
-  .snui-range:dir(rtl)::-webkit-slider-runnable-track {
-    forced-color-adjust: none;
-    background: ButtonText;
-  }
-
-  .snui-range::-webkit-slider-thumb {
-    forced-color-adjust: none;
-    border-color: Canvas;
-    background: Highlight;
-  }
-
-  .snui-range::-moz-range-track {
-    forced-color-adjust: none;
-    background: ButtonText;
-  }
-
-  .snui-range::-moz-range-thumb {
-    forced-color-adjust: none;
-    border-color: Canvas;
-    background: Highlight;
   }
 
   .snui-segmented__option[aria-checked="true"],
@@ -952,66 +576,6 @@ ${DISABLED_DECLARATIONS}
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
-  }
-
-  .snui-radio__control {
-    forced-color-adjust: none;
-    border-color: ButtonText;
-    background: Canvas;
-  }
-
-  .snui-radio__button[data-selected] .snui-radio__control {
-    border-color: Highlight;
-    background: Highlight;
-  }
-
-  .snui-radio__button[data-selected] .snui-radio__control::before {
-    forced-color-adjust: none;
-    background: HighlightText;
-  }
-
-  .snui-radio__button[data-focus-visible] .snui-radio__control,
-  .snui-switch__button[data-focus-visible] .snui-switch__track {
-    outline: 2px solid CanvasText;
-    outline-offset: 2px;
-    box-shadow: none;
-  }
-
-  .snui-radio__button[data-hovered]:not([data-disabled]) .snui-radio__control,
-  .snui-switch__button[data-hovered]:not([data-disabled]) .snui-switch__track {
-    border-color: Highlight;
-  }
-
-  .snui-switch__track {
-    forced-color-adjust: none;
-    border-color: ButtonText;
-    background: Canvas;
-  }
-
-  .snui-switch__thumb {
-    forced-color-adjust: none;
-    background: ButtonText;
-  }
-
-  .snui-switch__button[data-selected] .snui-switch__track {
-    forced-color-adjust: none;
-    border-color: Highlight;
-    background: Highlight;
-  }
-
-  .snui-switch__button[data-selected] .snui-switch__thumb {
-    forced-color-adjust: none;
-    background: HighlightText;
-  }
-
-  .snui-progress__track {
-    forced-color-adjust: none;
-    background: ButtonText;
-  }
-
-  .snui-progress__fill {
-    forced-color-adjust: none;
-    background: Highlight;
   }
 }
 `)}

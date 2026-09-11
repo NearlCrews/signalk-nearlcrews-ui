@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CONTROL_STYLES } from "../../src/styles/controls.js";
-import { PANEL_STYLES, STYLE_MODULES } from "../../src/styles/index.js";
+import { PANEL_STYLES } from "../../src/styles/index.js";
+import { STYLE_MODULES } from "../../src/styles/modules.js";
 import {
   CONTAINER_BREAKPOINT_NARROW,
   PUBLIC_TOKEN_NAMES,

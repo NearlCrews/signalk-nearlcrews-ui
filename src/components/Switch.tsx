@@ -4,6 +4,8 @@ import {
   SwitchButton,
   SwitchField,
 } from "react-aria-components";
+import { SWITCH_STYLES } from "../styles/switch.js";
+import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
 import {
   hasReactContent,
@@ -65,6 +67,8 @@ export function Switch({
   value,
   ...props
 }: SwitchProps): React.JSX.Element {
+  useOptionalModuleStyles(SWITCH_STYLES);
+
   const labelContent = hasReactContent(label) ? label : children;
   requireContent(labelContent, "Switch requires a non-empty label.");
 

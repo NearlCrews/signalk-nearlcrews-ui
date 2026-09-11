@@ -2,13 +2,12 @@ import {
   type AnchorHTMLAttributes,
   type AriaAttributes,
   type ButtonHTMLAttributes,
-  type KeyboardEventHandler,
-  type MouseEventHandler,
   type ReactNode,
   type RefAttributes,
   useId,
 } from "react";
 
+import { blockActivationKeys, blockClick } from "../utils/activation.js";
 import { hasAccessibleName, joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { isDevelopment } from "../utils/environment.js";
@@ -172,38 +171,8 @@ function useButtonState<Props extends ButtonProps>(
   };
 }
 
-function guardClick<TElement>(
-  blocksActivation: boolean,
-  onClick: MouseEventHandler<TElement> | undefined,
-): MouseEventHandler<TElement> {
-  return (event) => {
-    if (blocksActivation) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    onClick?.(event);
-  };
-}
-
-function guardKeyDown<TElement>(
-  blocksActivation: boolean,
-  onKeyDown: KeyboardEventHandler<TElement> | undefined,
-): KeyboardEventHandler<TElement> {
-  return (event) => {
-    // Activation keys stay blocked while the control is inert, but
-    // navigation and dismissal keys must still reach the consumer.
-    if (
-      blocksActivation &&
-      (event.key === "Enter" || event.key === " " || event.key === "Spacebar")
-    ) {
-      event.preventDefault();
-      event.stopPropagation();
-      return;
-    }
-    onKeyDown?.(event);
-  };
-}
+/** Enter and Space press a button; "Spacebar" is the legacy key name. */
+const BUTTON_ACTIVATION_KEYS = new Set(["Enter", " ", "Spacebar"]);
 
 const SAFE_ANCHOR_PROTOCOLS = new Set(["http:", "https:", "mailto:", "tel:"]);
 
@@ -263,8 +232,12 @@ function NativeButton(props: ButtonAsButtonProps): React.JSX.Element {
       ref={ref}
       type={type}
       disabled={disabled}
-      onClick={guardClick(blocksActivation, onClick)}
-      onKeyDown={guardKeyDown(blocksActivation, onKeyDown)}
+      onClick={blockClick(blocksActivation, onClick)}
+      onKeyDown={blockActivationKeys(
+        blocksActivation,
+        BUTTON_ACTIVATION_KEYS,
+        onKeyDown,
+      )}
     />
   );
 }
@@ -296,8 +269,12 @@ function AnchorButton(props: ButtonAsAnchorProps): React.JSX.Element {
       role={blocksActivation ? (role ?? "link") : role}
       tabIndex={blocksActivation ? (tabIndex ?? 0) : tabIndex}
       aria-disabled={blocksActivation || undefined}
-      onClick={guardClick(blocksActivation, onClick)}
-      onKeyDown={guardKeyDown(blocksActivation, onKeyDown)}
+      onClick={blockClick(blocksActivation, onClick)}
+      onKeyDown={blockActivationKeys(
+        blocksActivation,
+        BUTTON_ACTIVATION_KEYS,
+        onKeyDown,
+      )}
     />
   );
 }

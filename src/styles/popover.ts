@@ -3,9 +3,16 @@ import {
   OVERLAY_TRANSITION_DECLARATIONS,
   RAISED_OVERLAY_DECLARATIONS,
 } from "./fragments.js";
+import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
-export const POPOVER_STYLES = scopeStyles(`
+/**
+ * Anchored popover styles. Installed by `Popover` through `useModuleStyles`,
+ * so a panel without a popover never injects them.
+ */
+export const POPOVER_STYLES: StyleModule = {
+  id: "popover",
+  styles: scopeStyles(`
 /* ==== Popover (anchored content overlay) ==== */
 
 .snui-popover {
@@ -36,4 +43,5 @@ ${OVERLAY_TRANSITION_DECLARATIONS}
 ${FORCED_COLORS_OUTLINE_DECLARATIONS}
   }
 }
-`);
+`),
+};

@@ -1,11 +1,22 @@
-import type { ComponentProps, ErrorInfo, Ref, RefObject } from "react";
+import type {
+  ComponentProps,
+  ErrorInfo,
+  ReactNode,
+  Ref,
+  RefObject,
+} from "react";
 import { describe, expectTypeOf, it } from "vitest";
 
 import type {
   Accordion,
+  DisclosureProps,
   SaveActionBarProps,
   TableProps,
+  TabPanelProps,
+  TabProps,
   TabsActivation,
+  TabsProps,
+  UseDisclosureOptions,
 } from "../../src/composites.js";
 import type {
   AnnouncementMode,
@@ -35,7 +46,8 @@ import { isThemeChoice, PACKAGE_VERSION } from "../../src/index.js";
 /**
  * Type-level contract for the 0.9.0 additions: element-typed layout props,
  * the shared variant vocabularies, refs on single-root components, and the
- * new root and composite exports.
+ * new root and composite exports. The tab value type and the disclosure id
+ * options came with 0.10.0 and are checked here too.
  */
 describe("polymorphic layout props", () => {
   it("admits form attributes and a form ref only under as=form", () => {
@@ -88,10 +100,71 @@ describe("shared vocabularies", () => {
     expectTypeOf<LiveRegionProps["live"]>().toEqualTypeOf<
       AnnouncementMode | undefined
     >();
+    // Anything that changes per announcement: a counter or an event id.
+    expectTypeOf<LiveRegionProps["announceKey"]>().toEqualTypeOf<
+      string | number | undefined
+    >();
     expectTypeOf<TextTone>().toEqualTypeOf<
       "neutral" | "muted" | "info" | "success" | "warning" | "danger"
     >();
     expectTypeOf<TabsActivation>().toEqualTypeOf<"automatic" | "manual">();
+  });
+});
+
+describe("tab values", () => {
+  it("carries the consumer's union through every tab part", () => {
+    type Category = "engine" | "nav";
+    expectTypeOf<TabsProps<Category>["value"]>().toEqualTypeOf<
+      Category | undefined
+    >();
+    expectTypeOf<TabsProps<Category>["defaultValue"]>().toEqualTypeOf<
+      Category | undefined
+    >();
+    expectTypeOf<TabsProps<Category>["onValueChange"]>().toEqualTypeOf<
+      ((value: Category) => void) | undefined
+    >();
+    expectTypeOf<TabProps<Category>["value"]>().toEqualTypeOf<Category>();
+    expectTypeOf<TabPanelProps<Category>["value"]>().toEqualTypeOf<Category>();
+    // A tab written with a value outside the union fails to compile rather
+    // than dropping the press at runtime.
+    expectTypeOf<{ value: "engnie" }>().not.toExtend<
+      Pick<TabProps<Category>, "value">
+    >();
+  });
+
+  it("keeps the plain string shape for a reference carrying no value type", () => {
+    expectTypeOf<TabsProps["value"]>().toEqualTypeOf<string | undefined>();
+    expectTypeOf<TabsProps["onValueChange"]>().toEqualTypeOf<
+      ((value: string) => void) | undefined
+    >();
+    expectTypeOf<TabProps["value"]>().toEqualTypeOf<string>();
+    expectTypeOf<TabPanelProps["value"]>().toEqualTypeOf<string>();
+  });
+
+  it("takes a function child on a panel beside plain children", () => {
+    expectTypeOf<ReactNode>().toExtend<TabPanelProps["children"]>();
+    expectTypeOf<() => ReactNode>().toExtend<TabPanelProps["children"]>();
+    // The child is a thunk, so nothing tempts a consumer to read a selected
+    // flag the panel does not pass.
+    expectTypeOf<(selected: boolean) => ReactNode>().not.toExtend<
+      TabPanelProps["children"]
+    >();
+  });
+});
+
+describe("disclosure ids", () => {
+  it("names the trigger, the pair, or neither", () => {
+    expectTypeOf<UseDisclosureOptions["id"]>().toEqualTypeOf<
+      string | undefined
+    >();
+    expectTypeOf<UseDisclosureOptions["idPrefix"]>().toEqualTypeOf<
+      string | undefined
+    >();
+    expectTypeOf<{
+      children: ReactNode;
+      id: string;
+      idPrefix: string;
+    }>().toExtend<DisclosureProps>();
   });
 });
 

@@ -174,6 +174,14 @@ ${visuallyHiddenDeclarations()}
   min-width: 0;
 }
 
+/*
+ * An announcing indicator stays mounted for the same reason the error regions
+ * above do, and leaves the flow the same way while it has no status to show.
+ */
+.snui-status:empty {
+${visuallyHiddenDeclarations()}
+}
+
 /* Large enough for the per-tone shapes to read at a glance. */
 .snui-status__dot {
   width: 0.75rem;
@@ -361,41 +369,6 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
   .snui-action-bar__actions > .snui-button {
     flex: 1 1 auto;
   }
-}
-
-.snui-empty-state {
-  display: grid;
-  min-width: 0;
-  justify-items: center;
-  gap: var(--snui-space-2);
-  padding: var(--snui-space-6) var(--snui-space-4);
-  text-align: center;
-}
-
-.snui-empty-state__icon {
-  color: var(--snui-color-text-muted);
-  line-height: 1;
-}
-
-.snui-empty-state__title {
-  min-width: 0;
-  max-width: 100%;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-bold);
-  overflow-wrap: anywhere;
-  text-wrap: balance;
-}
-
-.snui-empty-state__description {
-  min-width: 0;
-  max-width: 100%;
-  color: var(--snui-color-text-muted);
-  overflow-wrap: anywhere;
-  text-wrap: pretty;
-}
-
-.snui-empty-state__action {
-  margin-block-start: var(--snui-space-2);
 }
 
 @media (prefers-reduced-transparency: reduce) {

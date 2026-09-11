@@ -578,5 +578,20 @@ describe("exact optional public props", () => {
     expectTypeOf<{ layout: undefined }>().toExtend<
       Pick<LabeledFieldProps, "layout">
     >();
+    expectTypeOf<{ controlDescribedBy: undefined }>().toExtend<
+      Pick<LabeledFieldProps, "controlDescribedBy">
+    >();
+    expectTypeOf<{ savedMessageDurationMs: undefined }>().toExtend<
+      Pick<SaveActionBarProps, "savedMessageDurationMs">
+    >();
+  });
+
+  it("takes one description id or a list of them", () => {
+    expectTypeOf<{ controlDescribedBy: "field-note" }>().toExtend<
+      Pick<LabeledFieldProps, "controlDescribedBy">
+    >();
+    expectTypeOf<{
+      controlDescribedBy: readonly (string | undefined)[];
+    }>().toExtend<Pick<LabeledFieldProps, "controlDescribedBy">>();
   });
 });
