@@ -231,7 +231,14 @@ function validateRuntimeContract(packageJson) {
   );
 }
 
-/** The lockfile root and the install-script allowlist, which tracks the locked esbuild. */
+/**
+ * The lockfile root and the install-script allowlist. The allowlist must name
+ * exactly the locked packages that declare an install script, each at its
+ * locked version, so strict-allow-scripts admits those scripts and nothing
+ * else. Optional platform packages count too: fsevents installs on macOS only,
+ * and an allowlist that omits it fails npm ci there while passing everywhere
+ * else.
+ */
 function validateLockAgreement(packageJson, packageLock) {
   if (
     packageLock.name !== packageJson.name ||
@@ -244,15 +251,28 @@ function validateLockAgreement(packageJson, packageLock) {
     );
   }
 
-  const lockedEsbuild = packageLock.packages?.["node_modules/esbuild"]?.version;
-  const expectedAllowScripts = { [`esbuild@${String(lockedEsbuild)}`]: true };
+  const expectedAllowScripts = Object.fromEntries(
+    Object.entries(packageLock.packages ?? {})
+      .filter(
+        ([path, entry]) => path !== "" && entry?.hasInstallScript === true,
+      )
+      .map(([path, entry]) => [
+        `${path.slice(path.lastIndexOf("node_modules/") + "node_modules/".length)}@${String(entry.version)}`,
+        true,
+      ])
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
+  const actualAllowScripts = Object.fromEntries(
+    Object.entries(packageJson.allowScripts ?? {}).sort(([a], [b]) =>
+      a.localeCompare(b),
+    ),
+  );
   if (
-    typeof lockedEsbuild !== "string" ||
-    JSON.stringify(packageJson.allowScripts) !==
-      JSON.stringify(expectedAllowScripts)
+    Object.keys(expectedAllowScripts).length === 0 ||
+    JSON.stringify(actualAllowScripts) !== JSON.stringify(expectedAllowScripts)
   ) {
     throw new Error(
-      `package.json allowScripts must equal ${JSON.stringify(expectedAllowScripts)} so strict-allow-scripts admits exactly the locked esbuild install script; update the key when esbuild is bumped.`,
+      `package.json allowScripts must equal ${JSON.stringify(expectedAllowScripts)} so strict-allow-scripts admits exactly the locked install scripts; update the keys when one of those packages is bumped.`,
     );
   }
 }

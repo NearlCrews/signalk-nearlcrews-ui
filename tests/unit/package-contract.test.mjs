@@ -85,7 +85,7 @@ const packageJson = {
     prepublishOnly:
       "node scripts/check-release-approval.mjs && npm run test:browser",
   },
-  allowScripts: { "esbuild@0.28.2": true },
+  allowScripts: { "esbuild@0.28.2": true, "fsevents@2.3.3": true },
   author: {
     name: "Nearl Crews",
     email: "NearlCrews@users.noreply.github.com",
@@ -106,7 +106,12 @@ const packageLock = {
   version,
   packages: {
     "": { name: packageJson.name, version },
-    "node_modules/esbuild": { version: "0.28.2" },
+    "node_modules/esbuild": { version: "0.28.2", hasInstallScript: true },
+    "node_modules/vite/node_modules/fsevents": {
+      version: "2.3.3",
+      hasInstallScript: true,
+      optional: true,
+    },
   },
 };
 const changelog = `## [${version}] - 2026-08-12\n\n[${version}]: https://example.test/v0.7.0...v${version}`;
@@ -178,7 +183,7 @@ describe("package release metadata", () => {
     ).toThrow("must not define a prepare script");
   });
 
-  it("keeps the allowScripts key equal to the locked esbuild version", () => {
+  it("keeps allowScripts equal to every locked package with an install script", () => {
     expect(() =>
       validatePackageMetadata({
         ...validMetadata,
@@ -186,11 +191,21 @@ describe("package release metadata", () => {
           ...packageLock,
           packages: {
             ...packageLock.packages,
-            "node_modules/esbuild": { version: "0.28.3" },
+            "node_modules/esbuild": {
+              version: "0.28.3",
+              hasInstallScript: true,
+            },
           },
         },
       }),
-    ).toThrow('allowScripts must equal {"esbuild@0.28.3":true}');
+    ).toThrow(
+      'allowScripts must equal {"esbuild@0.28.3":true,"fsevents@2.3.3":true}',
+    );
+    expect(() =>
+      validatePackageMetadata(
+        withPackageJson({ allowScripts: { "esbuild@0.28.2": true } }),
+      ),
+    ).toThrow("allowScripts must equal");
     expect(() =>
       validatePackageMetadata(
         withPackageJson({ allowScripts: { esbuild: true } }),
