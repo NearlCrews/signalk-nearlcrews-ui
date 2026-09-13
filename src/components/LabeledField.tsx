@@ -8,12 +8,15 @@ import {
   useId,
 } from "react";
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
+import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { resolveFieldError } from "../utils/field-error.js";
+import { resolveFieldRegions } from "../utils/field-error.js";
+import { forwardsFieldControlProps } from "../utils/field-forwarding.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { type Density, resolveDensity } from "../utils/variants.js";
+import { warnOnce } from "../utils/warn-once.js";
 import { FieldError } from "./FieldError.js";
+import { FieldMarker } from "./FieldMarker.js";
 
 export interface FieldControlProps {
   readonly "aria-describedby"?: AriaAttributes["aria-describedby"] | undefined;
@@ -21,6 +24,13 @@ export interface FieldControlProps {
     | AriaAttributes["aria-errormessage"]
     | undefined;
   readonly "aria-invalid"?: AriaAttributes["aria-invalid"] | undefined;
+  /**
+   * Exposes the required state on a control the native attribute cannot
+   * describe. A composite control renders a div, a fieldset, or an element
+   * with a group role, none of which expose `required`, so the field injects
+   * this beside it.
+   */
+  readonly "aria-required"?: AriaAttributes["aria-required"] | undefined;
   readonly disabled?: boolean | undefined;
   readonly id?: string | undefined;
   readonly name?: string | undefined;
@@ -38,7 +48,10 @@ export interface LabeledFieldControlProps extends FieldControlProps {
 /** The render-prop argument split into DOM attributes and the region ids. */
 export interface SplitLabeledFieldControlProps {
   /** Attributes safe to spread onto the control element. */
-  readonly controlProps: FieldControlProps & { readonly id: string };
+  readonly controlProps: Omit<
+    LabeledFieldControlProps,
+    "descriptionId" | "errorId"
+  >;
   readonly descriptionId: string | undefined;
   readonly errorId: string | undefined;
 }
@@ -58,10 +71,6 @@ export function splitLabeledFieldControlProps({
 }
 
 export type LabeledFieldLayout = "stacked" | "inline";
-/** @deprecated Use {@link Density}; "comfortable" maps to "default". */
-export type LabeledFieldDensity = Density | "comfortable";
-/** @deprecated Use {@link AnnouncementMode}. */
-export type FieldErrorLive = AnnouncementMode;
 
 export type LabeledFieldChild =
   | ReactElement<FieldControlProps>
@@ -73,16 +82,15 @@ export interface LabeledFieldProps
   readonly children: LabeledFieldChild;
   /**
    * Ids of elements outside the field that also describe the control, such as
-   * a note the whole section shares. They join the description and error the
-   * field owns, so the control receives one merged `aria-describedby` and no
-   * caller writes the join. Pass one id or a list.
+   * a note the whole section shares. They follow the description and the error
+   * the field owns, so the control receives one merged `aria-describedby` and
+   * no caller writes the join. Pass one id or a list.
    */
   readonly controlDescribedBy?:
     | string
     | readonly (string | undefined)[]
     | undefined;
-  /** "comfortable" is accepted as a deprecated alias of "default". */
-  readonly density?: Density | "comfortable" | undefined;
+  readonly density?: Density | undefined;
   readonly description?: ReactNode | undefined;
   readonly disabled?: boolean | undefined;
   readonly error?: ReactNode | undefined;
@@ -92,6 +100,11 @@ export interface LabeledFieldProps
   readonly name?: string | undefined;
   readonly optionalLabel?: ReactNode | undefined;
   readonly required?: boolean | undefined;
+  /**
+   * Marker drawn after the label when the field is required, so a panel can
+   * localize it or key it to a legend of its own. Blank content draws none.
+   */
+  readonly requiredLabel?: ReactNode | undefined;
 }
 
 const LABELABLE_INTRINSIC_ELEMENTS = new Set([
@@ -104,10 +117,39 @@ const LABELABLE_INTRINSIC_ELEMENTS = new Set([
   "textarea",
 ]);
 
+/**
+ * Elements that expose no required or disabled state of their own. React
+ * renders both as bare HTML attributes on any host element, so injecting them
+ * here would paint the label as required or disabled while the control
+ * announced nothing.
+ */
+const STATELESS_LABELABLE_ELEMENTS = new Set(["meter", "output", "progress"]);
+
+/**
+ * Checks the one child form this component can check.
+ *
+ * An intrinsic element is either labelable or it is not, and a wrong one is
+ * refused outright. A composite child is opaque: nothing here can tell whether
+ * it forwards the injected id and ARIA props down to a real control, so it is
+ * reported in development rather than accepted in silence, and the render-prop
+ * form stays the supported way to wire one. The package's own text controls
+ * carry a mark saying they forward the props, so the shipped pattern is quiet.
+ */
 function requireLabelableIntrinsicChild(
   child: ReactElement<FieldControlProps>,
 ): void {
-  if (typeof child.type !== "string") return;
+  if (typeof child.type !== "string") {
+    if (forwardsFieldControlProps(child.type)) return;
+    const name =
+      typeof child.type === "function" && child.type.name !== ""
+        ? child.type.name
+        : "an anonymous component";
+    warnOnce(
+      `labeled-field-composite:${name}`,
+      `LabeledField received ${name} as its child, which it cannot check for the injected id and description props. A component that does not forward them leaves the label pointing at nothing; use the render-prop form for a composite control.`,
+    );
+    return;
+  }
   if (
     !LABELABLE_INTRINSIC_ELEMENTS.has(child.type) ||
     (child.type === "input" &&
@@ -143,6 +185,7 @@ export function LabeledField({
   optionalLabel,
   ref,
   required = false,
+  requiredLabel = "*",
   ...props
 }: LabeledFieldProps): React.JSX.Element {
   requireContent(label, "LabeledField requires a non-empty label.");
@@ -155,19 +198,16 @@ export function LabeledField({
   const controlId = elementChild?.props.id ?? `${generatedId}-control`;
   const hasDescription = hasReactContent(description);
   const hasError = hasReactContent(error);
-  const descriptionId = resolveDescriptionId(generatedId, hasDescription);
-  const { errorId, referencedErrorId, rendersError } = resolveFieldError(
-    generatedId,
-    hasError,
-    errorLive,
-  );
-  // The field's own text is read first, then whatever the caller added, so a
-  // unit or a shared note follows the description and the error rather than
-  // displacing them.
+  const { descriptionId, errorId, referencedErrorId, rendersError } =
+    resolveFieldRegions(generatedId, hasDescription, hasError, errorLive);
+  // The field's own text is read first, then whatever the caller added,
+  // whichever route it arrived by: an `aria-describedby` already on the child
+  // element and the ids in `controlDescribedBy` both follow the description
+  // and the error rather than displacing them.
   const describedBy = joinIdReferences(
-    elementChild?.props["aria-describedby"],
     descriptionId,
     referencedErrorId,
+    elementChild?.props["aria-describedby"],
     ...describedByIds(controlDescribedBy),
   );
   const errorMessage = joinIdReferences(
@@ -177,18 +217,31 @@ export function LabeledField({
 
   const controlName = elementChild?.props.name ?? name;
   const controlDisabled = elementChild?.props.disabled ?? disabled;
+  // The child decides for itself here too, the way it does for name and
+  // disabled, so a control that is already required is not drawn as optional.
+  const controlRequired = elementChild?.props.required ?? required;
+  // meter, output, and progress carry neither state, so the field wires their
+  // ids and messages and leaves the two attributes off.
+  const statelessChild =
+    typeof elementChild?.type === "string" &&
+    STATELESS_LABELABLE_ELEMENTS.has(elementChild.type);
   const injectedProps: FieldControlProps & { readonly id: string } = {
     id: controlId,
     ...(describedBy === undefined ? {} : { "aria-describedby": describedBy }),
     ...(referencedErrorId === undefined
       ? {}
       : {
-          "aria-errormessage": errorMessage ?? referencedErrorId,
+          "aria-errormessage": errorMessage,
           "aria-invalid": true,
         }),
     ...(controlName === undefined ? {} : { name: controlName }),
-    ...(controlDisabled ? { disabled: true } : {}),
-    ...(required ? { required: true } : {}),
+    ...(controlDisabled && !statelessChild ? { disabled: true } : {}),
+    ...(controlRequired && !statelessChild
+      ? // The ARIA state travels beside the native attribute, because a
+        // composite control renders an element that exposes no required state
+        // of its own and would otherwise announce as optional.
+        { "aria-required": true, required: true }
+      : {}),
   };
   const control =
     typeof children === "function"
@@ -213,17 +266,12 @@ export function LabeledField({
       )}
     >
       <label className="snui-field__label" htmlFor={controlId}>
-        {label}{" "}
-        {required ? (
-          <span className="snui-required-mark" aria-hidden="true">
-            *
-          </span>
-        ) : hasReactContent(optionalLabel) ? (
-          // The optional marker stays in the accessible name so what the
-          // user hears matches what the user sees. The required asterisk is
-          // hidden instead because the native attribute already carries it.
-          <span className="snui-optional-mark">{optionalLabel}</span>
-        ) : null}
+        {label}
+        <FieldMarker
+          optionalLabel={optionalLabel}
+          required={controlRequired}
+          requiredLabel={requiredLabel}
+        />
       </label>
       {hasDescription ? (
         <div id={descriptionId} className="snui-field__description">

@@ -1,10 +1,23 @@
 import { classNames } from "../utils/class-names.js";
+import { resolveBundledLabel } from "../utils/labels.js";
+import { usePanelLabels } from "../utils/panel-labels.js";
 import {
   isSemanticTone,
-  resolveToneLabel,
   type StatusTone,
   TONE_GLYPHS,
+  TONE_LABELS,
 } from "../utils/tone.js";
+
+/**
+ * Sentence punctuation a resolved tone label may already end with. The mark is
+ * read straight into whatever text follows it, so the label needs a stop, but a
+ * consumer whose own label ends in one must not be announced as "Caution!.".
+ */
+const SENTENCE_ENDINGS = new Set([".", "!", "?", "…"]);
+
+function toneSentence(label: string): string {
+  return SENTENCE_ENDINGS.has(label.slice(-1)) ? label : `${label}.`;
+}
 
 export interface ToneMarkProps {
   /** Class for the decorative glyph element, normally the block's own glyph class. */
@@ -27,7 +40,14 @@ export function ToneMark({
   tone,
   toneLabel,
 }: ToneMarkProps): React.JSX.Element | null {
+  const bundledToneLabels = usePanelLabels()?.tone;
   if (!isSemanticTone(tone)) return null;
+
+  const label = resolveBundledLabel(
+    toneLabel,
+    bundledToneLabels?.[tone],
+    TONE_LABELS[tone],
+  );
 
   return (
     <>
@@ -37,9 +57,7 @@ export function ToneMark({
       >
         {TONE_GLYPHS[tone]}
       </span>
-      <span className="snui-visually-hidden">
-        {resolveToneLabel(tone, toneLabel)}.{" "}
-      </span>
+      <span className="snui-visually-hidden">{toneSentence(label)} </span>
     </>
   );
 }

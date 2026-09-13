@@ -3,6 +3,7 @@ export {
   type AlertDialogProps,
   Dialog,
   type DialogActions,
+  type DialogCancelReason,
   type DialogProps,
   type DialogWidth,
 } from "./components/Dialog.js";
@@ -31,7 +32,10 @@ export {
   createToastQueue,
   type QueuedToast,
   type ToastContent,
+  type ToastEviction,
+  type ToastEvictionReason,
   type ToastQueue,
+  type ToastQueueOptions,
   ToastRegion,
   type ToastRegionProps,
   toast,

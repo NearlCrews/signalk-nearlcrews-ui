@@ -1,12 +1,11 @@
-/* eslint-disable @typescript-eslint/no-deprecated -- deprecated aliases stay exported for one minor release */
 export {
   ActionBar,
   type ActionBarProps,
   type ActionBarSticky,
+  type ActionBarVariant,
 } from "./components/ActionBar.js";
 export {
   Banner,
-  type BannerLive,
   type BannerProps,
   type BannerTone,
 } from "./components/Banner.js";
@@ -18,6 +17,7 @@ export {
   type ButtonShape,
   type ButtonSize,
   type ButtonVariant,
+  type IconOnlyButtonProps,
 } from "./components/Button.js";
 export {
   type CollapsibleMountStrategy,
@@ -38,7 +38,6 @@ export {
 } from "./components/InlineConfirm.js";
 export {
   Checkbox,
-  type CheckboxErrorLive,
   type CheckboxLabelVisibility,
   type CheckboxProps,
   type MonospaceControlProps,
@@ -56,11 +55,9 @@ export {
 } from "./components/Inputs.js";
 export {
   type FieldControlProps,
-  type FieldErrorLive,
   LabeledField,
   type LabeledFieldChild,
   type LabeledFieldControlProps,
-  type LabeledFieldDensity,
   type LabeledFieldLayout,
   type LabeledFieldProps,
   type SplitLabeledFieldControlProps,
@@ -82,9 +79,9 @@ export {
   InputGroupControl,
   type InputGroupControlProps,
   type InputGroupControlWidth,
-  type InputGroupDensity,
   type InputGroupProps,
   type LayoutAlignment,
+  type LayoutJustification,
   Metric,
   MetricGrid,
   type MetricGridElement,
@@ -121,6 +118,7 @@ export {
   type PanelShellErrorLabels,
   type PanelShellProps,
   type PanelShellThemeToggle,
+  type PanelShellUnsupportedLabels,
 } from "./components/PanelShell.js";
 export {
   RelativeAge,
@@ -131,9 +129,7 @@ export { Section, type SectionProps } from "./components/Section.js";
 export {
   SegmentedControl,
   type SegmentedControlLabelVisibility,
-  type SegmentedControlLegendVisibility,
   type SegmentedControlOption,
-  type SegmentedControlOrientation,
   type SegmentedControlProps,
 } from "./components/SegmentedControl.js";
 export {
@@ -143,6 +139,7 @@ export {
 } from "./components/StatusIndicator.js";
 export {
   Code,
+  type CodeBreak,
   type CodeElement,
   type CodeProps,
   Text,
@@ -150,6 +147,7 @@ export {
   type TextProps,
   type TextSize,
   type TextTone,
+  type TextWrap,
 } from "./components/Text.js";
 export {
   ThemeToggle,
@@ -165,6 +163,11 @@ export {
   type VisuallyHiddenProps,
 } from "./components/VisuallyHidden.js";
 export {
+  type FieldValidity,
+  type FieldValidityHandlers,
+  useFieldValidity,
+} from "./hooks/use-field-validity.js";
+export {
   type NumberDraft,
   type NumberDraftInputProps,
   type NumberDraftInvalidReason,
@@ -174,6 +177,11 @@ export {
   type UseNumberDraftOptions,
   useNumberDraft,
 } from "./hooks/use-number-draft.js";
+export {
+  type PollFreshness,
+  type PollFreshnessOptions,
+  usePollFreshness,
+} from "./hooks/use-poll-freshness.js";
 export { useUnsavedChangesGuard } from "./hooks/use-unsaved-changes-guard.js";
 export {
   supportsNativeCssScope,
@@ -202,14 +210,41 @@ export {
 } from "./theme/contract.js";
 export type { AnnouncementMode } from "./utils/announcement.js";
 export {
+  type PanelAnnounce,
+  type PanelAnnounceOptions,
+  usePanelAnnouncer,
+} from "./utils/announcer.js";
+export { joinIdReferences } from "./utils/aria.js";
+export {
+  type RevealOptions,
+  revealAndFocus,
+  revealElement,
+} from "./utils/focus.js";
+export {
   type FormatRelativeAgeOptions,
   formatRelativeAge,
   formatRelativeAgeSince,
+  RELATIVE_AGE_EN,
   RELATIVE_AGE_NARROW,
   type RelativeAgeNegative,
   type RelativeAgeTimestamp,
 } from "./utils/format-relative-age.js";
+export {
+  type Freshness,
+  resolveFreshness,
+} from "./utils/freshness.js";
 export type { HeadingLevel } from "./utils/heading.js";
+export { type PanelLocale, usePanelLocale } from "./utils/locale.js";
+export { prefersReducedMotion } from "./utils/motion.js";
+export type { MountStrategy } from "./utils/mount-strategy.js";
+export { type PanelLabels, usePanelLabels } from "./utils/panel-labels.js";
+export {
+  REACHABILITY_STATUS,
+  type Reachability,
+  type ReachabilityStatus,
+  resolveReachability,
+} from "./utils/reachability.js";
+export { formatCount, joinList } from "./utils/text.js";
 export type { SemanticTone, StatusTone } from "./utils/tone.js";
 export type {
   Density,

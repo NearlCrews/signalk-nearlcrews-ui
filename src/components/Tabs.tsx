@@ -1,12 +1,10 @@
 import {
   type ButtonHTMLAttributes,
-  createContext,
   type HTMLAttributes,
   type KeyboardEvent,
   type ReactNode,
   type RefAttributes,
   useCallback,
-  useContext,
   useId,
   useLayoutEffect,
   useMemo,
@@ -14,13 +12,16 @@ import {
   useState,
 } from "react";
 
-import { useControllableState } from "../hooks/use-controllable-state.js";
+import { useNodeRef } from "../hooks/use-node-ref.js";
 import { TABS_STYLES } from "../styles/tabs.js";
 import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
-import { hasAccessibleName } from "../utils/aria.js";
+import { requireAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { createRequiredContext, createValueContext } from "../utils/context.js";
+import { isRightToLeft } from "../utils/direction.js";
+import type { MountStrategy } from "../utils/mount-strategy.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
-import { composeRef } from "../utils/ref.js";
+import { nextRovingIndex } from "../utils/roving.js";
 import type { Orientation } from "../utils/variants.js";
 
 /** `"automatic"` selects a tab as arrow keys focus it; `"manual"` waits for Enter or Space. */
@@ -34,15 +35,15 @@ interface TabsContextValue {
   readonly selected: string | undefined;
 }
 
-const TabsContext = createContext<TabsContextValue | null>(null);
+const { Provider: TabsProvider, useValue: useTabsContext } =
+  createRequiredContext<TabsContextValue>("Tabs");
 
-function useTabsContext(component: string): TabsContextValue {
-  const value = useContext(TabsContext);
-  if (value === null) {
-    throw new Error(`${component} must be rendered inside Tabs.`);
-  }
-  return value;
-}
+/**
+ * Value of the tab holding the list's fallback stop, published by the list so
+ * the question is asked once per commit rather than once per tab.
+ */
+const { Provider: TabListFallbackProvider, useValue: useTabListFallback } =
+  createValueContext<string | undefined>(undefined);
 
 function tabId(baseId: string, value: string): string {
   return `${baseId}-tab-${encodeURIComponent(value)}`;
@@ -62,7 +63,12 @@ export interface TabsProps<Value extends string = string>
   /** Receives the value of the newly selected tab. */
   readonly onValueChange?: ((value: Value) => void) | undefined;
   readonly orientation?: Orientation | undefined;
-  /** Value of the selected tab when controlled. */
+  /**
+   * Value of the selected tab when controlled, or `undefined` for a
+   * controlled set with nothing selected yet. Passing the prop at all is what
+   * makes the set controlled, so a panel that owns the selection must keep
+   * passing it.
+   */
   readonly value?: Value | undefined;
 }
 
@@ -74,28 +80,41 @@ export interface TabsProps<Value extends string = string>
  * The value type follows the consumer's own union, so `onValueChange` reports
  * it without a guard on the way back. Anything typed at the boundary pins it: a
  * `value` or `defaultValue` of that type, or an explicit `<Tabs<Category>>`.
- * Instantiate the children the same way to have their values checked too.
+ *
+ * The union reaches the children only if they are instantiated too. The
+ * context carries a plain string, so `<Tab value="typo">` inside a
+ * `<Tabs<Category>>` is a type error only when the tab itself is written
+ * `<Tab<Category> value="typo">`. Do that on every Tab and TabPanel of a set
+ * whose values must be checked; the API reference records the gap.
  */
-export function Tabs<Value extends string = string>({
-  activation = "automatic",
-  children,
-  className,
-  defaultValue,
-  onValueChange,
-  orientation = "horizontal",
-  ref,
-  value,
-  ...props
-}: TabsProps<Value>): React.JSX.Element {
+export function Tabs<Value extends string = string>(
+  props: TabsProps<Value>,
+): React.JSX.Element {
+  const {
+    activation = "automatic",
+    children,
+    className,
+    defaultValue,
+    onValueChange,
+    orientation = "horizontal",
+    ref,
+    value,
+    ...rest
+  } = props;
   useOptionalModuleStyles(TABS_STYLES);
 
   const baseId = useId();
-  // The selection is `Value | undefined` while nothing is selected, but a
-  // tab only ever reports a real value, so the callback stays outside the hook.
-  const [selected, commitSelected] = useControllableState<Value | undefined>(
-    value,
+  /*
+   * A controlled set with nothing selected passes `value={undefined}`, which
+   * no value can be told apart from an uncontrolled set, so control is decided
+   * by whether the prop was supplied and latched for the lifetime of the
+   * component the way React decides it for a native input.
+   */
+  const [controlled] = useState(() => "value" in props);
+  const [internalValue, setInternalValue] = useState<Value | undefined>(
     defaultValue,
   );
+  const selected = controlled ? value : internalValue;
 
   const select = useCallback(
     (next: string): void => {
@@ -104,10 +123,10 @@ export function Tabs<Value extends string = string>({
       // the consumer's claim about the tabs it rendered rather than something
       // this component can check.
       const nextValue = next as Value;
-      commitSelected(nextValue);
+      if (!controlled) setInternalValue(nextValue);
       onValueChange?.(nextValue);
     },
-    [commitSelected, onValueChange, selected],
+    [controlled, onValueChange, selected],
   );
 
   const context = useMemo(
@@ -116,9 +135,9 @@ export function Tabs<Value extends string = string>({
   );
 
   return (
-    <TabsContext value={context}>
+    <TabsProvider value={context}>
       <div
-        {...props}
+        {...rest}
         ref={ref}
         className={classNames(
           "snui-tabs",
@@ -128,7 +147,7 @@ export function Tabs<Value extends string = string>({
       >
         {children}
       </div>
-    </TabsContext>
+    </TabsProvider>
   );
 }
 
@@ -161,30 +180,20 @@ function moveFocus(
   const current = tabs.indexOf(event.currentTarget);
   if (current === -1) return;
 
-  const rtl = list.matches(":dir(rtl)");
-  const forwardKey = orientation === "vertical" ? "ArrowDown" : "ArrowRight";
-  const backwardKey = orientation === "vertical" ? "ArrowUp" : "ArrowLeft";
-  // Horizontal arrows follow document direction; vertical ones never mirror.
-  const step = rtl && orientation === "horizontal" ? -1 : 1;
-  let next: number;
-  switch (event.key) {
-    case forwardKey:
-      next = current + step;
-      break;
-    case backwardKey:
-      next = current - step;
-      break;
-    case "Home":
-      next = 0;
-      break;
-    case "End":
-      next = tabs.length - 1;
-      break;
-    default:
-      return;
-  }
+  // Only the horizontal arrows mirror, and reading the computed direction is
+  // the costly half of the step, so it is read for those keys alone.
+  const mirroring = event.key === "ArrowLeft" || event.key === "ArrowRight";
+  const next = nextRovingIndex({
+    count: tabs.length,
+    currentIndex: current,
+    key: event.key,
+    orientation,
+    rtl: mirroring && isRightToLeft(list),
+  });
+  if (next === null) return;
+
   event.preventDefault();
-  const target = tabs[(next + tabs.length) % tabs.length];
+  const target = tabs[next];
   if (target === undefined) return;
   target.focus();
   if (activation === "automatic") {
@@ -202,24 +211,52 @@ export function TabList({
   ref,
   ...props
 }: TabListProps): React.JSX.Element {
-  if (!hasAccessibleName(ariaLabel, ariaLabelledBy)) {
-    throw new Error(
-      "TabList requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
-    );
-  }
+  // The ancestor is read first, so a list outside Tabs reports that rather
+  // than whichever of the two mistakes the consumer made second.
   const { orientation } = useTabsContext("TabList");
+  requireAccessibleName("TabList", ariaLabel, ariaLabelledBy);
+
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const attachList = useNodeRef(listRef, ref);
+  const [fallbackValue, setFallbackValue] = useState<string | undefined>(
+    undefined,
+  );
+
+  /*
+   * A selection matching no enabled tab, a saved value from an earlier release
+   * or a value still empty while configuration loads, would otherwise leave
+   * the list without a tab stop and the interface unreachable by keyboard. The
+   * first enabled tab takes the stop instead, as a SegmentedControl option
+   * does. The list is read from the DOM, the way arrow-key movement already
+   * reads it, so its order and disabled state stay authoritative, and it is
+   * read after every commit because a list can gain, lose, or disable a tab
+   * without any of its own props changing. Writing the same answer back bails
+   * out of rendering, so the update chain the exhaustive-deps rule guards
+   * against ends on the first pass.
+   */
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- the list is read from the DOM after every commit
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    const fallback =
+      list !== null && list.querySelector(SELECTED_TAB_SELECTOR) === null
+        ? list.querySelector<HTMLButtonElement>(TAB_SELECTOR)
+        : null;
+    setFallbackValue(fallback?.dataset.snuiTabValue);
+  });
 
   return (
     <div
       {...props}
-      ref={ref}
+      ref={attachList}
       role="tablist"
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledBy}
       aria-orientation={orientation}
       className={classNames("snui-tablist", className)}
     >
-      {children}
+      <TabListFallbackProvider value={fallbackValue}>
+        {children}
+      </TabListFallbackProvider>
     </div>
   );
 }
@@ -227,7 +264,7 @@ export function TabList({
 export interface TabProps<Value extends string = string>
   extends Omit<
       ButtonHTMLAttributes<HTMLButtonElement>,
-      "role" | "type" | "value"
+      "role" | "tabIndex" | "type" | "value"
     >,
     RefAttributes<HTMLButtonElement> {
   /** A count or `Badge` shown after the label; it joins the tab's name. */
@@ -251,46 +288,12 @@ export function Tab<Value extends string = string>({
   const { activation, baseId, orientation, select, selected } =
     useTabsContext("Tab");
   const isSelected = selected === value;
-  const tabNode = useRef<HTMLButtonElement | null>(null);
-  const [holdsFallbackStop, setHoldsFallbackStop] = useState(false);
-
-  // A selection matching no enabled tab, a saved value from an earlier release
-  // or a value still empty while configuration loads, would otherwise leave
-  // the list without a tab stop and the interface unreachable by keyboard.
-  // The first enabled tab takes the stop instead, as a SegmentedControl option
-  // does. The list is read from the DOM, the way arrow-key movement already
-  // reads it, so its order and disabled state stay authoritative, and it is
-  // read after every commit because a list can gain, lose, or disable a tab
-  // without this tab's own props changing. Writing the same answer back bails
-  // out of rendering, so the update chain the rule below guards against ends
-  // on the first pass.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- see above
-  useLayoutEffect(() => {
-    const tab = tabNode.current;
-    const list = tab?.closest('[role="tablist"]') ?? null;
-    setHoldsFallbackStop(
-      list !== null &&
-        list.querySelector(SELECTED_TAB_SELECTOR) === null &&
-        list.querySelector(TAB_SELECTOR) === tab,
-    );
-  });
-
-  const setTabNode = useCallback(
-    (tab: HTMLButtonElement) => {
-      tabNode.current = tab;
-      const release = composeRef(ref, tab);
-      return () => {
-        tabNode.current = null;
-        release();
-      };
-    },
-    [ref],
-  );
+  const holdsFallbackStop = useTabListFallback() === value;
 
   return (
     <button
       {...props}
-      ref={setTabNode}
+      ref={ref}
       type="button"
       role="tab"
       id={tabId(baseId, value)}
@@ -333,7 +336,7 @@ function panelContent(children: ReactNode | (() => ReactNode)): ReactNode {
 export interface TabPanelProps<Value extends string = string>
   extends Omit<
       HTMLAttributes<HTMLDivElement>,
-      "children" | "hidden" | "id" | "role"
+      "aria-labelledby" | "children" | "hidden" | "id" | "role" | "tabIndex"
     >,
     RefAttributes<HTMLDivElement> {
   /**
@@ -342,8 +345,18 @@ export interface TabPanelProps<Value extends string = string>
    * plain children are built by the surrounding render either way.
    */
   readonly children?: ReactNode | (() => ReactNode) | undefined;
-  /** Removes the hidden panels' children while another tab is selected. */
-  readonly mountStrategy?: "retain" | "unmount" | undefined;
+  /**
+   * Whether the panel itself takes a tab stop, which it does by default. Pass
+   * false for a panel that is nothing but controls, where the stop lands on a
+   * container the reader has no reason to visit.
+   */
+  readonly focusable?: boolean | undefined;
+  /**
+   * Removes the hidden panels' children while another tab is selected.
+   * `"retain"`, the default, keeps them mounted and hidden, and their effects
+   * keep running, unlike a retaining `CollapsibleSection`, which pauses them.
+   */
+  readonly mountStrategy?: MountStrategy | undefined;
   /** Names the panel, matching the value of the tab that controls it. */
   readonly value: Value;
 }
@@ -355,6 +368,7 @@ export interface TabPanelProps<Value extends string = string>
 export function TabPanel<Value extends string = string>({
   children,
   className,
+  focusable = true,
   mountStrategy = "retain",
   ref,
   value,
@@ -373,8 +387,7 @@ export function TabPanel<Value extends string = string>({
       aria-labelledby={tabId(baseId, value)}
       // The tabs pattern puts the panel in the tab sequence so a keyboard
       // user reaches content that holds no control of its own.
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: see above
-      tabIndex={0}
+      tabIndex={focusable ? 0 : undefined}
       hidden={!isSelected}
       className={classNames("snui-tabpanel", className)}
     >

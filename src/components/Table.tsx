@@ -7,7 +7,9 @@ import type {
   ThHTMLAttributes,
 } from "react";
 
-import { hasAccessibleName } from "../utils/aria.js";
+import { SIMPLE_TABLE_STYLES } from "../styles/simple-table.js";
+import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
+import { requireAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasReactContent } from "../utils/react-node.js";
 import type { Density, Visibility } from "../utils/variants.js";
@@ -33,6 +35,14 @@ export interface TableProps
  * `thead`, `tbody`, `tr`, `th`, and `td` as usual; `TableHeaderCell` and
  * `TableCell` add the `numeric` option. Reach for `DataGrid` when rows need
  * sorting, selection, or virtualization.
+ *
+ * Cells that hold controls follow three rules, because a column header does
+ * not name a control inside a cell. Name each control with its column and its
+ * row, for example "Source, row 3", so two cells of the same column read
+ * apart when they are tabbed through. Put `aria-invalid` and
+ * `aria-describedby` on the control in the cell rather than on the row, so a
+ * message reaches the field it belongs to. Leave the row a plain `tr` with no
+ * role of its own.
  */
 export function Table({
   "aria-label": ariaLabel,
@@ -46,11 +56,11 @@ export function Table({
   zebra = false,
   ...props
 }: TableProps): React.JSX.Element {
+  useOptionalModuleStyles(SIMPLE_TABLE_STYLES);
+
   const hasCaption = hasReactContent(caption);
-  if (!hasCaption && !hasAccessibleName(ariaLabel, ariaLabelledBy)) {
-    throw new Error(
-      "Table requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
-    );
+  if (!hasCaption) {
+    requireAccessibleName("Table", ariaLabel, ariaLabelledBy, ["caption"]);
   }
 
   return (
@@ -61,6 +71,9 @@ export function Table({
       aria-labelledby={ariaLabelledBy}
       className={classNames(
         "snui-table",
+        // Every density emits its modifier, the default included, so a
+        // consumer override and a test key on the resolved density rather
+        // than on the absence of a class.
         `snui-table--${density}`,
         zebra && "snui-table--zebra",
         className,
@@ -139,6 +152,11 @@ export interface TableScrollRegionProps
  * users can reach the overflow and the panel never scrolls horizontally.
  * Name it after the table it wraps, for example with `aria-labelledby` set to
  * the caption's id.
+ *
+ * The region is a tab stop whether or not the table currently overflows,
+ * because the oldest supported engines give a scroll container no keyboard
+ * focus of their own and no measurement sees content-driven overflow
+ * reliably. A panel that manages this focus itself passes its own `tabIndex`.
  */
 export function TableScrollRegion({
   "aria-label": ariaLabel,
@@ -148,26 +166,26 @@ export function TableScrollRegion({
   ref,
   ...props
 }: TableScrollRegionProps): React.JSX.Element {
-  if (!hasAccessibleName(ariaLabel, ariaLabelledBy)) {
-    throw new Error(
-      "TableScrollRegion requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
-    );
-  }
+  // The region carries the module's own class, so it installs the module even
+  // where a consumer scrolls something other than this package's table.
+  useOptionalModuleStyles(SIMPLE_TABLE_STYLES);
 
-  // The overflow is only keyboard-scrollable when the region takes focus.
-  /* eslint-disable jsx-a11y-x/no-noninteractive-tabindex */
+  requireAccessibleName("TableScrollRegion", ariaLabel, ariaLabelledBy);
+
   return (
     <section
+      // Declared before the rest props so a consumer can still set its own
+      // tabIndex. The overflow is only keyboard-scrollable when the region
+      // takes focus.
+      // biome-ignore lint/a11y/noNoninteractiveTabindex: the region scrolls only while focused
+      tabIndex={0} // eslint-disable-line jsx-a11y-x/no-noninteractive-tabindex -- the region scrolls only while focused
       {...props}
       ref={ref}
       aria-label={ariaLabel}
       aria-labelledby={ariaLabelledBy}
-      // biome-ignore lint/a11y/noNoninteractiveTabindex: the region scrolls only while focused
-      tabIndex={0}
       className={classNames("snui-table-scroll", className)}
     >
       {children}
     </section>
   );
-  /* eslint-enable jsx-a11y-x/no-noninteractive-tabindex */
 }

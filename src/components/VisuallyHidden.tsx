@@ -24,6 +24,11 @@ export type VisuallyHiddenProps = PolymorphicProps<
  * tree. Use it for text that names or describes something a sighted user
  * already infers from layout. Never wrap a focusable control in it without a
  * visible focus treatment of its own.
+ *
+ * The rule that hides the text lives in the root sheet, which `PanelRoot`
+ * installs, so this component and `LiveRegion` are the two whose unstyled
+ * rendering is not merely cosmetic: outside a panel root their screen-reader
+ * text lands in the visible layout. Render them inside one.
  */
 export function VisuallyHidden({
   as = "span",

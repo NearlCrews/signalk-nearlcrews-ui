@@ -2,19 +2,22 @@ import {
   Activity,
   type HTMLAttributes,
   type ReactNode,
+  type Ref,
   type RefAttributes,
-  useEffect,
-  useEffectEvent,
   useId,
   useRef,
   useState,
 } from "react";
 import { useControllableState } from "../hooks/use-controllable-state.js";
-import { joinIdReferences } from "../utils/aria.js";
+import { useFocusReturnOnClose } from "../hooks/use-focus-return.js";
+import { useNodeRef } from "../hooks/use-node-ref.js";
+import { landmarkLabel, requireIdToken } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
-import { useHeadingLevel } from "../utils/heading-level.js";
+import type { HeadingLevel } from "../utils/heading.js";
+import { useResolvedHeading } from "../utils/heading-level.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
+import type { StatusTone } from "../utils/tone.js";
+import { ToneMark } from "./ToneMark.js";
 
 export type CollapsibleMountStrategy = "lazy-retain" | "retain" | "unmount";
 export type CollapsibleSummaryPlacement = "below" | "header";
@@ -33,7 +36,18 @@ export interface CollapsibleSectionProps
    * rather than repeating the level its own title already took.
    */
   readonly headingLevel?: HeadingLevel | undefined;
-  /** Removes the region landmark naming when false. Accordion defaults it to false. */
+  /**
+   * Names the toggle, the title, and the content region: the toggle becomes
+   * `<idPrefix>-toggle`, the title `<idPrefix>-title`, and the content
+   * `<idPrefix>-content`. Reach for it when a harness or a deep link has to
+   * know an id before the section renders.
+   */
+  readonly idPrefix?: string | undefined;
+  /**
+   * Removes the region landmark naming when false, including any
+   * `aria-labelledby` the consumer passed: the section is then named by its
+   * heading in the ordinary way. Accordion defaults it to false.
+   */
   readonly landmark?: boolean | undefined;
   /**
    * Content placed before the heading, such as an enable checkbox. It sits
@@ -49,6 +63,8 @@ export interface CollapsibleSectionProps
    * lifetime, so guard one-time work with a ref and keep each cleanup
    * symmetric with its own setup. Under "unmount" hidden content is removed
    * and its state is discarded. The API reference records the failure shapes.
+   * `TabPanel` and `DisclosurePanel` spell "retain" differently: they leave
+   * the children mounted and hidden with their effects still running.
    */
   readonly mountStrategy?: CollapsibleMountStrategy | undefined;
   readonly onOpenChange?: ((open: boolean) => void) | undefined;
@@ -58,6 +74,21 @@ export interface CollapsibleSectionProps
   /** Keeps the summary rendered while open under "always". */
   readonly summaryVisibility?: CollapsibleSummaryVisibility | undefined;
   readonly title: ReactNode;
+  /**
+   * Marks the section with a tone, as `Card` does: a leading accent bar plus
+   * the tone glyph and its announcement on the toggle, so a problem inside a
+   * collapsed section is visible and spoken while the section is shut. The
+   * embedded variant draws no chrome of its own, so it carries the glyph
+   * alone.
+   */
+  readonly tone?: StatusTone | undefined;
+  /** Accessible name announced for the tone. Blank falls back to the default name. */
+  readonly toneLabel?: string | undefined;
+  /**
+   * Receives the toggle button, so a panel can focus the section it is
+   * jumping to instead of querying the DOM for the heading's button.
+   */
+  readonly triggerRef?: Ref<HTMLButtonElement> | undefined;
   /** `"embedded"` drops the border, radius, and shadow for nesting inside a Card. */
   readonly variant?: CollapsibleVariant | undefined;
 }
@@ -70,6 +101,7 @@ export function CollapsibleSection({
   defaultOpen = false,
   disabled = false,
   headingLevel,
+  idPrefix,
   landmark = true,
   leading,
   mountStrategy = "retain",
@@ -80,71 +112,50 @@ export function CollapsibleSection({
   summaryPlacement = "below",
   summaryVisibility = "collapsed",
   title,
+  tone = "neutral",
+  toneLabel,
+  triggerRef,
   variant = "default",
   ...props
 }: CollapsibleSectionProps): React.JSX.Element {
   requireContent(title, "CollapsibleSection requires a non-empty title.");
 
   const generatedId = useId();
-  const contentId = `${generatedId}-content`;
-  const titleId = `${generatedId}-title`;
+  const baseId =
+    idPrefix === undefined
+      ? generatedId
+      : requireIdToken(idPrefix, "CollapsibleSection idPrefix");
+  const contentId = `${baseId}-content`;
+  const titleId = `${baseId}-title`;
+  const toggleId = `${baseId}-toggle`;
   const [effectiveOpen, commitOpen] = useControllableState(
     open,
     defaultOpen,
     onOpenChange,
   );
   const [hasOpened, setHasOpened] = useState(effectiveOpen);
-  const toggleRef = useRef<HTMLButtonElement>(null);
+  const toggleRef = useRef<HTMLButtonElement | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  const focusWasInside = useRef(false);
-  const shellHeadingLevel = useHeadingLevel();
-  const level = headingLevel ?? shellHeadingLevel;
-  const Heading = HEADING_ELEMENTS[level];
+  const setToggleNode = useNodeRef(toggleRef, triggerRef);
+  const { Heading, level } = useResolvedHeading(headingLevel);
 
   // Latch first-open for lazy-retain: guarded render-phase adjustment, so the
-  // content mounts in the same commit that first opens the section.
-  if (effectiveOpen && !hasOpened) {
+  // content mounts in the same commit that first opens the section. No other
+  // strategy reads the latch, so no other strategy pays for the extra pass.
+  if (mountStrategy === "lazy-retain" && effectiveOpen && !hasOpened) {
     setHasOpened(true);
   }
 
-  const trackFocus = useEffectEvent((event: FocusEvent): void => {
-    const ownerWindow = contentRef.current?.ownerDocument.defaultView;
-    focusWasInside.current =
-      ownerWindow !== null &&
-      ownerWindow !== undefined &&
-      event.target instanceof ownerWindow.Node &&
-      (contentRef.current?.contains(event.target) ?? false);
+  // Closing a section that holds focus would drop the reader on the body, so
+  // the toggle takes it back. The restore runs once the close is committed,
+  // which keeps focus in place when a controlling owner declines it.
+  useFocusReturnOnClose(contentRef, effectiveOpen, {
+    returnFocusRef: toggleRef,
   });
-
-  useEffect(() => {
-    const ownerDocument = contentRef.current?.ownerDocument;
-    if (ownerDocument === undefined || !effectiveOpen) {
-      return undefined;
-    }
-
-    ownerDocument.addEventListener("focusin", trackFocus);
-    return () => ownerDocument.removeEventListener("focusin", trackFocus);
-  }, [effectiveOpen]);
-
-  useEffect(() => {
-    if (effectiveOpen || !focusWasInside.current) return;
-    toggleRef.current?.focus();
-    focusWasInside.current = false;
-  }, [effectiveOpen]);
 
   const toggle = (): void => {
     if (disabled) return;
-    const nextOpen = !effectiveOpen;
-    if (!nextOpen && contentRef.current !== null) {
-      const { activeElement } = contentRef.current.ownerDocument;
-      if (
-        activeElement !== null &&
-        contentRef.current.contains(activeElement)
-      ) {
-        toggleRef.current?.focus();
-      }
-    }
-    commitOpen(nextOpen);
+    commitOpen(!effectiveOpen);
   };
 
   const childrenMounted =
@@ -161,12 +172,11 @@ export function CollapsibleSection({
       ref={ref}
       className={classNames(
         "snui-collapsible",
-        variant === "embedded" && "snui-collapsible--embedded",
+        `snui-collapsible--${variant}`,
+        tone !== "neutral" && `snui-collapsible--${tone}`,
         className,
       )}
-      aria-labelledby={
-        landmark ? joinIdReferences(ariaLabelledBy, titleId) : undefined
-      }
+      aria-labelledby={landmarkLabel(landmark, ariaLabelledBy, titleId)}
     >
       <header className="snui-collapsible__header">
         {hasReactContent(leading) ? (
@@ -179,8 +189,9 @@ export function CollapsibleSection({
           )}
         >
           <button
-            ref={toggleRef}
+            ref={setToggleNode}
             type="button"
+            id={toggleId}
             className="snui-collapsible__toggle"
             aria-controls={contentId}
             aria-expanded={effectiveOpen}
@@ -190,6 +201,11 @@ export function CollapsibleSection({
             <span className="snui-collapsible__chevron" aria-hidden="true">
               ›
             </span>
+            <ToneMark
+              className="snui-collapsible__tone-glyph"
+              tone={tone}
+              toneLabel={toneLabel}
+            />
             <span id={titleId} className="snui-collapsible__title">
               {title}
             </span>

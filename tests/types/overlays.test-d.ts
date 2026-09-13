@@ -3,23 +3,29 @@ import { describe, expectTypeOf, it } from "vitest";
 
 import type {
   Column,
+  DataGridCaptionVisibility,
   DataGridColumnProps,
-  DataGridDensity,
   DataGridProps,
+  DataGridVirtualizeMode,
 } from "../../src/data-grid.js";
 import type { ActionBar } from "../../src/index.js";
-import type {
-  AlertDialogProps,
-  DialogProps,
-  Menu,
-  MenuItem,
-  MenuItemProps,
-  MenuSection,
-  MenuSeparator,
-  PopoverProps,
-  ToastRegionProps,
+import {
+  type AlertDialogProps,
+  createToastQueue,
+  type DialogCancelReason,
+  type DialogProps,
+  type Menu,
+  type MenuItem,
+  type MenuItemProps,
+  type MenuSection,
+  type MenuSeparator,
+  type PopoverProps,
+  type ToastEviction,
+  type ToastEvictionReason,
+  type ToastQueueOptions,
+  type ToastRegionProps,
 } from "../../src/overlays.js";
-import type { Density } from "../../src/utils/variants.js";
+import type { Density, Visibility } from "../../src/utils/variants.js";
 
 /**
  * Overlay and data-grid ref targets and prop vocabularies are versioned API.
@@ -87,14 +93,41 @@ describe("overlay prop vocabularies", () => {
     expectTypeOf<DataGridProps<unknown>["density"]>().toEqualTypeOf<
       Density | undefined
     >();
-    // The alias is deprecated but must keep matching the shared union.
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    expectTypeOf<DataGridDensity>().toEqualTypeOf<Density>();
+    expectTypeOf<DataGridCaptionVisibility>().toEqualTypeOf<Visibility>();
+    expectTypeOf<DataGridVirtualizeMode>().toEqualTypeOf<
+      "always" | "auto" | "never"
+    >();
     expectTypeOf<DataGridColumnProps["numeric"]>().toEqualTypeOf<
       boolean | undefined
     >();
     expectTypeOf<DataGridColumnProps["wrap"]>().toEqualTypeOf<
       boolean | undefined
+    >();
+  });
+});
+
+describe("overlay cancellation and toast queue options", () => {
+  it("names why a dialog closed", () => {
+    expectTypeOf<DialogCancelReason>().toEqualTypeOf<
+      "cancel" | "escape" | "scrim"
+    >();
+    expectTypeOf<DialogProps["onCancel"]>().toEqualTypeOf<
+      ((reason: DialogCancelReason) => void) | undefined
+    >();
+  });
+
+  it("takes a queue-wide eviction callback and a region-wide duration", () => {
+    expectTypeOf<ToastEvictionReason>().toEqualTypeOf<
+      "overflow" | "rejected"
+    >();
+    expectTypeOf<NonNullable<ToastQueueOptions["onEvict"]>>().toEqualTypeOf<
+      (eviction: ToastEviction) => void
+    >();
+    expectTypeOf(createToastQueue)
+      .parameter(0)
+      .toEqualTypeOf<ToastQueueOptions | undefined>();
+    expectTypeOf<ToastRegionProps["defaultDuration"]>().toEqualTypeOf<
+      number | undefined
     >();
   });
 });

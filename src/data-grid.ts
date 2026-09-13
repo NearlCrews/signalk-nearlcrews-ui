@@ -3,12 +3,11 @@ export {
   type CellProps,
   Column,
   DataGrid,
+  type DataGridCaptionVisibility,
   type DataGridColumnProps,
-  // The deprecated alias stays exported for one minor release.
-  // eslint-disable-next-line @typescript-eslint/no-deprecated
-  type DataGridDensity,
   type DataGridProps,
   type DataGridSelectionMode,
+  type DataGridVirtualizeMode,
   type Key,
   Row,
   type RowProps,

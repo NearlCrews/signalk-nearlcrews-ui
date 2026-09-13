@@ -19,18 +19,15 @@ import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { resolveFieldError } from "../utils/field-error.js";
+import { racDomProps } from "../utils/react-aria.js";
 import {
   hasReactContent,
   requireContent,
+  resolveLabelContent,
   type WithLabel,
 } from "../utils/react-node.js";
 import type { Orientation } from "../utils/variants.js";
 import { FieldError } from "./FieldError.js";
-
-/** @deprecated Use {@link Orientation}. */
-export type RadioGroupOrientation = Orientation;
-/** @deprecated Use {@link AnnouncementMode}. */
-export type RadioGroupErrorLive = AnnouncementMode;
 
 export interface RadioGroupProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">,
@@ -49,8 +46,6 @@ export interface RadioGroupProps
    * change events; the native inputs keep the event form.
    */
   readonly onValueChange?: ((value: string) => void) | undefined;
-  /** @deprecated Use `onValueChange`. */
-  readonly onChange?: ((value: string) => void) | undefined;
   readonly orientation?: Orientation | undefined;
   /**
    * Blocks the selection from changing while every radio stays focusable and
@@ -74,8 +69,6 @@ export function RadioGroup({
   errorLive = "off",
   label,
   name,
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-  onChange,
   onValueChange,
   orientation = "vertical",
   readOnly,
@@ -98,18 +91,7 @@ export function RadioGroup({
     errorLive,
   );
   const describedBy = joinIdReferences(ariaDescribedBy, referencedErrorId);
-  // react-aria's optional DOM props are not declared with `| undefined`,
-  // which makes the target unexpressible for a React HTMLAttributes spread
-  // under exactOptionalPropertyTypes. The rest props are plain DOM
-  // attributes, so this boundary assertion is sound.
-  const domProps = props as RACRadioGroupProps;
-  const handleChange =
-    onValueChange === undefined && onChange === undefined
-      ? undefined
-      : (next: string): void => {
-          onValueChange?.(next);
-          onChange?.(next);
-        };
+  const domProps = racDomProps<RACRadioGroupProps>(props);
 
   return (
     <RACRadioGroup
@@ -123,7 +105,7 @@ export function RadioGroup({
       {...(name === undefined ? {} : { name })}
       {...(value === undefined ? {} : { value })}
       {...(defaultValue === undefined ? {} : { defaultValue })}
-      {...(handleChange === undefined ? {} : { onChange: handleChange })}
+      {...(onValueChange === undefined ? {} : { onChange: onValueChange })}
       {...(describedBy === undefined
         ? {}
         : { "aria-describedby": describedBy })}
@@ -175,11 +157,12 @@ export function Radio({
 }: RadioProps): React.JSX.Element {
   useOptionalModuleStyles(RADIO_STYLES);
 
-  const labelContent = hasReactContent(label) ? label : children;
-  requireContent(labelContent, "Radio requires a non-empty label.");
-
-  // See RadioGroup for why the DOM prop spread needs a boundary assertion.
-  const domProps = props as RACRadioFieldProps;
+  const labelContent = resolveLabelContent(
+    label,
+    children,
+    "Radio requires a non-empty label.",
+  );
+  const domProps = racDomProps<RACRadioFieldProps>(props);
 
   return (
     <RadioField
