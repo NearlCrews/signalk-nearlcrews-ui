@@ -60,6 +60,8 @@ function systemColors(
 async function radiusRatio(dot: Locator): Promise<number> {
   return dot.evaluate((element) => {
     const { borderRadius, width } = getComputedStyle(element);
+    // `split` always yields a first segment, so the default never applies at
+    // runtime; it is what satisfies noUncheckedIndexedAccess.
     const [horizontal = "0"] = borderRadius.split(" ");
     const px = horizontal.endsWith("%")
       ? (Number.parseFloat(horizontal) / 100) * Number.parseFloat(width)
@@ -311,7 +313,9 @@ test("neutralizes the remaining Bootstrap Reboot element rules inside the panel"
   expect(styles.kbd["padding-left"]).toBe("0px");
   expect(styles.kbd["background-color"]).toBe("rgba(0, 0, 0, 0)");
   expect(styles.kbd["border-radius"]).toBe("0px");
-  expect(styles.mark["background-color"]).toBe("rgba(0, 0, 0, 0)");
+  // The host highlight is replaced rather than erased, so the mark paints the
+  // package's own accent tint instead of nothing at all.
+  expect(styles.mark["background-color"]).not.toBe("rgba(0, 0, 0, 0)");
   expect(styles.mark["padding-left"]).toBe("0px");
   expect(styles.pre["margin-bottom"]).toBe("0px");
   expect(styles.label.display).toBe("inline");

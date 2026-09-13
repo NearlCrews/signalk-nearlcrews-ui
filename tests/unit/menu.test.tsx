@@ -154,7 +154,7 @@ describe("Menu", () => {
 
     await user.click(screen.getByRole("button", { name: "Crew" }));
 
-    expect(screen.getByRole("menuitem", { name: "Remove" })).toHaveClass(
+    expect(screen.getByRole("menuitem", { name: /Remove/ })).toHaveClass(
       "snui-menu__item",
       "snui-menu__item--destructive",
     );
@@ -163,16 +163,17 @@ describe("Menu", () => {
     );
   });
 
-  it("honors the deprecated destructive prop and lets tone override it", async () => {
+  it("announces the danger tone after the item's own words", async () => {
     const user = userEvent.setup();
     renderInPanel(
       <Menu label="Crew">
-        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored */}
-        <MenuItem id="remove" destructive>
+        <MenuItem id="remove" tone="danger">
           Remove
         </MenuItem>
-        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- tone must win over the deprecated spelling */}
-        <MenuItem id="archive" destructive tone="neutral">
+        <MenuItem id="purge" tone="danger" toneLabel="Cannot be undone">
+          Purge history
+        </MenuItem>
+        <MenuItem id="archive" tone="neutral">
           Archive
         </MenuItem>
       </Menu>,
@@ -180,12 +181,18 @@ describe("Menu", () => {
 
     await user.click(screen.getByRole("button", { name: "Crew" }));
 
-    expect(screen.getByRole("menuitem", { name: "Remove" })).toHaveClass(
-      "snui-menu__item--destructive",
+    const remove = screen.getByRole("menuitem", { name: /Remove/ });
+    const purge = screen.getByRole("menuitem", { name: /Purge history/ });
+    // The name reads the item's own words first, then the tone.
+    expect(remove).toHaveTextContent(/^Remove Destructive action\.$/);
+    expect(purge).toHaveTextContent(/^Purge history Cannot be undone\.$/);
+    expect(screen.getByRole("menuitem", { name: "Archive" })).toHaveTextContent(
+      "Archive",
     );
-    expect(screen.getByRole("menuitem", { name: "Archive" })).not.toHaveClass(
-      "snui-menu__item--destructive",
-    );
+
+    // The tone name is not part of the string keystrokes match against.
+    await user.keyboard("p");
+    expect(purge).toHaveFocus();
   });
 
   it("does not activate disabled items and skips them in keyboard navigation", async () => {
@@ -252,6 +259,27 @@ describe("Menu", () => {
     await user.keyboard("d");
 
     expect(screen.getByRole("menuitem", { name: "Delta" })).toHaveFocus();
+  });
+
+  it("separates the words of sibling elements in the typeahead text", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <Menu label="Jump">
+        <MenuItem id="alpha">Alpha</MenuItem>
+        <MenuItem id="delete-route" data-testid="delete-route">
+          <span>Delete</span>
+          <span>route</span>
+        </MenuItem>
+      </Menu>,
+    );
+
+    screen.getByRole("button", { name: "Jump" }).focus();
+    await user.keyboard("{ArrowDown}");
+    // Typeahead matches a prefix, so the space is the whole test: joined edge
+    // to edge the two spans read "Deleteroute" and "delete r" matches nothing.
+    await user.keyboard("delete r");
+
+    expect(screen.getByTestId("delete-route")).toHaveFocus();
   });
 
   it("forwards refs and forwarded DOM attributes to the menu elements", async () => {
@@ -352,6 +380,26 @@ describe("Menu", () => {
     ).toBeInTheDocument();
   });
 
+  it("renders no section header for a blank title", async () => {
+    const user = userEvent.setup();
+    const { container } = renderInPanel(
+      <Menu label="View">
+        <MenuSection title="">
+          <MenuItem id="charts">Charts</MenuItem>
+        </MenuSection>
+        {/* The shape conditional copy arrives in. */}
+        <MenuSection title={false}>
+          <MenuItem id="reset">Reset layout</MenuItem>
+        </MenuSection>
+      </Menu>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "View" }));
+
+    expect(container.querySelector(".snui-menu__section-header")).toBeNull();
+    expect(screen.getAllByRole("group")).toHaveLength(2);
+  });
+
   it("defaults to bottom placement and maps explicit placements", async () => {
     const user = userEvent.setup();
     renderInPanel(
@@ -361,6 +409,12 @@ describe("Menu", () => {
         </Menu>
         <Menu label="Aside" placement="end">
           <MenuItem id="two">Two</MenuItem>
+        </Menu>
+        <Menu label="Beside" placement="start">
+          <MenuItem id="three">Three</MenuItem>
+        </Menu>
+        <Menu label="Above" placement="top">
+          <MenuItem id="four">Four</MenuItem>
         </Menu>
       </>,
     );
@@ -375,6 +429,70 @@ describe("Menu", () => {
     expect(
       screen.getByRole("menu").closest(".snui-menu-popover"),
     ).toHaveAttribute("data-placement", "right");
+    await user.keyboard("{Escape}");
+
+    // The start edge resolves against the writing direction, so it is the
+    // left side of a left-to-right panel.
+    await user.click(screen.getByRole("button", { name: "Beside" }));
+    expect(
+      screen.getByRole("menu").closest(".snui-menu-popover"),
+    ).toHaveAttribute("data-placement", "left");
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("button", { name: "Above" }));
+    expect(
+      screen.getByRole("menu").closest(".snui-menu-popover"),
+    ).toHaveAttribute("data-placement", "top");
+  });
+
+  it("names an icon-only trigger from triggerLabel and refuses an unnamed one", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <Menu
+        label={<span aria-hidden="true">⋯</span>}
+        triggerLabel="Row actions"
+      >
+        <MenuItem id="rename">Rename</MenuItem>
+      </Menu>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Row actions" });
+    await user.click(trigger);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+
+    expect(() =>
+      renderInPanel(
+        <Menu label={<span aria-hidden="true">⋯</span>}>
+          <MenuItem id="rename">Rename</MenuItem>
+        </Menu>,
+      ),
+    ).toThrow(
+      "Menu requires a triggerLabel when its label renders no text, so the trigger button is not left unnamed.",
+    );
+  });
+
+  it("names an icon-only item from aria-label while typeahead uses textValue", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <Menu label="Crew">
+        <MenuItem id="rename">Rename</MenuItem>
+        <MenuItem
+          id="delete"
+          aria-label="Delete route"
+          textValue="Delete route"
+        >
+          <span aria-hidden="true">×</span>
+        </MenuItem>
+      </Menu>,
+    );
+
+    screen.getByRole("button", { name: "Crew" }).focus();
+    await user.keyboard("{ArrowDown}");
+    await user.keyboard("d");
+
+    expect(
+      screen.getByRole("menuitem", { name: "Delete route" }),
+    ).toHaveFocus();
   });
 
   it("passes variant and size through to the trigger button", () => {

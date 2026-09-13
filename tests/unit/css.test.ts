@@ -3,9 +3,8 @@ import { join } from "node:path";
 
 import { transform } from "lightningcss";
 import { describe, expect, it } from "vitest";
-
-import { PANEL_STYLES } from "../../src/styles/index.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
+import { PANEL_STYLES } from "../../src/styles/root-sheet.js";
 import {
   PUBLIC_COLOR_TOKEN_NAMES,
   PUBLIC_TOKEN_NAMES,
@@ -186,9 +185,15 @@ describe("class coverage", () => {
   });
 });
 
-/** Extracts the body of the first rule whose selector exactly matches. */
+/**
+ * Extracts the body of the first rule whose selector exactly matches. The
+ * opening brace is part of the search, because the base root selector is a
+ * prefix of every qualified theme selector and a bare substring search would
+ * read whichever of them came first.
+ */
 function ruleBody(styles: string, selector: string): string {
-  const start = styles.indexOf(selector);
+  const opening = `${selector} {`;
+  const start = styles.indexOf(opening);
   expect(start, `no rule for ${selector}`).toBeGreaterThanOrEqual(0);
   const open = styles.indexOf("{", start + selector.length);
   let depth = 0;
@@ -210,9 +215,6 @@ function definedTokens(body: string): Set<string> {
     ),
   );
 }
-
-/** Tokens the token stylesheet defines without exposing them as public API. */
-const PRIVATE_TOKEN_NAMES: Record<string, true> = {};
 
 describe("theme token blocks", () => {
   const THEME_SELECTORS = [
@@ -254,7 +256,7 @@ describe("theme token blocks", () => {
     }
   });
 
-  it("lists every defined token as public or explicitly private", () => {
+  it("lists every defined token as public API", () => {
     const publicNames = new Set<string>(PUBLIC_TOKEN_NAMES);
     const defined = new Set([
       ...definedTokens(ruleBody(TOKEN_STYLES, ROOT_SELECTOR)),
@@ -263,10 +265,9 @@ describe("theme token blocks", () => {
       ]),
     ]);
     for (const token of [...defined].sort()) {
-      if (PRIVATE_TOKEN_NAMES[token] === true) continue;
       expect(
         publicNames.has(token),
-        `${token} is defined by the token stylesheet but is neither in PUBLIC_TOKEN_NAMES nor explicitly private`,
+        `${token} is defined by the token stylesheet but is not in PUBLIC_TOKEN_NAMES; every token the sheet declares is public API`,
       ).toBe(true);
     }
   });

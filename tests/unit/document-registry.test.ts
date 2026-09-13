@@ -133,6 +133,25 @@ describe("createDocumentRegistry", () => {
     expect(record.dispose).toHaveBeenCalledTimes(1);
   });
 
+  it("registers nothing when the first attach fails", () => {
+    const registry = createDocumentRegistry<string, FixtureValue>(
+      "fixture.registry.attach-failure",
+    );
+    const record = fixtureRecord("unattachable");
+    record.attach.mockImplementation(() => {
+      throw new Error("the head is gone");
+    });
+
+    expect(() => {
+      registry.acquire(document, "key", () => record);
+    }).toThrow("the head is gone");
+
+    // A record left behind here would hold no references, so nothing could
+    // ever release it, and the style conflict check would go on reporting it
+    // as installed.
+    expect(registry.values(document)).toEqual([]);
+  });
+
   it("ignores a release for a key it never registered", () => {
     const registry = createDocumentRegistry<string, FixtureValue>(
       "fixture.registry.unknown",

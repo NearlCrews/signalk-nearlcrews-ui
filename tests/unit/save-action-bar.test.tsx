@@ -1,6 +1,6 @@
 import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   resolveSaveActionBarState,
@@ -10,11 +10,12 @@ import {
 import { panel, renderInPanel } from "../helpers.js";
 
 const LABELS: SaveActionBarLabels = {
-  clean: "No unsaved changes",
+  clean: "All changes saved",
   discard: "Discard",
   save: "Save",
+  saved: "Save sent to the server",
   saving: "Saving changes",
-  unconfigured: "Save to enable the plugin.",
+  unconfigured: "Save to enable the plugin",
   unsaved: "Unsaved changes",
 };
 
@@ -22,7 +23,6 @@ const BASE = {
   dirty: false,
   invalidMessage: undefined,
   labels: LABELS,
-  savedMessage: "Save requested",
   saveRequestedAt: null,
   saving: false,
   unconfigured: false,
@@ -31,20 +31,22 @@ const BASE = {
 describe("resolveSaveActionBarState", () => {
   it("disables both actions for a clean, configured plugin", () => {
     expect(resolveSaveActionBarState(BASE)).toEqual({
+      blocked: false,
       discardDisabled: true,
       live: "polite",
-      message: "No unsaved changes",
+      message: "All changes saved",
       saveDisabled: true,
       tone: "neutral",
     });
   });
 
-  it("enables Save for edits and warns about them", () => {
+  it("enables Save for edits and reports them without alarm", () => {
     expect(resolveSaveActionBarState({ ...BASE, dirty: true })).toMatchObject({
+      blocked: false,
       discardDisabled: false,
       message: "Unsaved changes",
       saveDisabled: false,
-      tone: "warning",
+      tone: "info",
     });
   });
 
@@ -52,7 +54,7 @@ describe("resolveSaveActionBarState", () => {
     expect(
       resolveSaveActionBarState({ ...BASE, unconfigured: true }),
     ).toMatchObject({
-      message: "Save to enable the plugin.",
+      message: "Save to enable the plugin",
       saveDisabled: false,
       tone: "info",
     });
@@ -62,7 +64,7 @@ describe("resolveSaveActionBarState", () => {
     expect(
       resolveSaveActionBarState({ ...BASE, saveRequestedAt: 1 }),
     ).toMatchObject({
-      message: "Save requested",
+      message: "Save sent to the server",
       saveDisabled: true,
       tone: "info",
     });
@@ -83,6 +85,7 @@ describe("resolveSaveActionBarState", () => {
         invalidMessage: " Fix the port. ",
       }),
     ).toEqual({
+      blocked: true,
       discardDisabled: false,
       live: "polite",
       message: "Fix the port.",
@@ -92,7 +95,7 @@ describe("resolveSaveActionBarState", () => {
     // A blank message is no message.
     expect(
       resolveSaveActionBarState({ ...BASE, dirty: true, invalidMessage: "  " }),
-    ).toMatchObject({ tone: "warning" });
+    ).toMatchObject({ blocked: false, tone: "info" });
   });
 
   it("blocks both actions while saving, ahead of every other state", () => {
@@ -104,6 +107,7 @@ describe("resolveSaveActionBarState", () => {
         saving: true,
       }),
     ).toEqual({
+      blocked: false,
       discardDisabled: true,
       live: "polite",
       message: "Saving changes",
@@ -120,8 +124,8 @@ describe("SaveActionBar", () => {
     );
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("Warning. Unsaved changes");
-    expect(container.querySelector(".snui-status--warning")).not.toBeNull();
+    expect(status).toHaveTextContent("Information. Unsaved changes");
+    expect(container.querySelector(".snui-status--info")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Discard" })).toBeEnabled();
     expect(
@@ -161,7 +165,14 @@ describe("SaveActionBar", () => {
     expect(status).not.toHaveAttribute("aria-live");
     expect(status).toHaveTextContent("Choose a port between 1 and 65535.");
     expect(container.querySelector(".snui-status--danger")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    // Validation refuses the save rather than taking the button away, so the
+    // reader keeps their place and hears the reason from the status line.
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeEnabled();
+    expect(save).toHaveAttribute("aria-disabled", "true");
+    expect(save).toHaveAccessibleDescription(
+      /Choose a port between 1 and 65535\./,
+    );
     expect(screen.getByRole("button", { name: "Discard" })).toBeEnabled();
   });
 
@@ -193,7 +204,7 @@ describe("SaveActionBar", () => {
       <SaveActionBar
         dirty={false}
         saveRequestedAt={Date.now()}
-        savedMessage="Sent to the server"
+        labels={{ saved: "Sent to the server" }}
         onSave={vi.fn()}
         onDiscard={vi.fn()}
       />,
@@ -229,10 +240,6 @@ describe("SaveActionBar", () => {
 });
 
 describe("SaveActionBar saved message window", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("takes the saved message down when its window closes", () => {
     const now = Date.UTC(2026, 8, 10, 9, 0, 0);
     vi.useFakeTimers({ now });
@@ -246,14 +253,14 @@ describe("SaveActionBar saved message window", () => {
     );
 
     const status = screen.getByRole("status");
-    expect(status).toHaveTextContent("Save requested");
+    expect(status).toHaveTextContent("Save sent to the server");
 
     act(() => {
       vi.advanceTimersByTime(2_500);
     });
     // The bar falls back to the state underneath, which is what a panel used
     // to do by writing the timestamp back to null.
-    expect(status).toHaveTextContent("No unsaved changes");
+    expect(status).toHaveTextContent("All changes saved");
     expect(vi.getTimerCount()).toBe(0);
 
     unmount();
@@ -289,12 +296,14 @@ describe("SaveActionBar saved message window", () => {
     act(() => {
       vi.advanceTimersByTime(2_000);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("Save requested");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Save sent to the server",
+    );
 
     act(() => {
       vi.advanceTimersByTime(500);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("No unsaved changes");
+    expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
   });
 
   it("measures the window from the request, not from the mount", () => {
@@ -311,7 +320,7 @@ describe("SaveActionBar saved message window", () => {
 
     // A panel that remounts holding an old timestamp does not replay a save
     // the user finished minutes ago.
-    expect(screen.getByRole("status")).toHaveTextContent("No unsaved changes");
+    expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
     const idleTimers = vi.getTimerCount();
 
     rerender(
@@ -326,7 +335,9 @@ describe("SaveActionBar saved message window", () => {
     );
 
     // A closed window waits for nothing; an open one waits once.
-    expect(screen.getByRole("status")).toHaveTextContent("Save requested");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Save sent to the server",
+    );
     expect(vi.getTimerCount()).toBe(idleTimers + 1);
   });
 
@@ -344,7 +355,9 @@ describe("SaveActionBar saved message window", () => {
 
     // Nothing to measure from, so the bar keeps reporting the request and
     // waits for the panel to say otherwise.
-    expect(screen.getByRole("status")).toHaveTextContent("Save requested");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Save sent to the server",
+    );
     const idleTimers = vi.getTimerCount();
 
     // A host clock a minute ahead of this one cannot stretch the window.
@@ -362,7 +375,7 @@ describe("SaveActionBar saved message window", () => {
     act(() => {
       vi.advanceTimersByTime(2_500);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("No unsaved changes");
+    expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
   });
 
   it("honors a custom window and leaves zero to the consumer", () => {
@@ -381,11 +394,13 @@ describe("SaveActionBar saved message window", () => {
     act(() => {
       vi.advanceTimersByTime(5_999);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("Save requested");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Save sent to the server",
+    );
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("No unsaved changes");
+    expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
 
     rerender(
       panel(
@@ -403,6 +418,77 @@ describe("SaveActionBar saved message window", () => {
     act(() => {
       vi.advanceTimersByTime(600_000);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("Save requested");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Save sent to the server",
+    );
+  });
+});
+
+describe("SaveActionBar focus and repeated requests", () => {
+  it("leaves focus alone when the panel owns the destination", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const { container } = renderInPanel(
+      <SaveActionBar
+        dirty
+        focusOnAction="none"
+        onSave={onSave}
+        onDiscard={vi.fn()}
+      />,
+    );
+
+    const save = screen.getByRole("button", { name: "Save" });
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledOnce();
+    // The panel sends focus to the field it refused, so the bar must not have
+    // taken it first.
+    expect(
+      container.querySelector(".snui-action-bar__status"),
+    ).not.toHaveFocus();
+    expect(save).toHaveFocus();
+  });
+
+  it("reopens the saved window for a second save stamped with the same instant", () => {
+    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
+    vi.useFakeTimers({ now });
+    const { rerender } = renderInPanel(
+      <SaveActionBar
+        dirty={false}
+        saveRequestedAt={now}
+        onSave={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+
+    act(() => {
+      vi.advanceTimersByTime(2_500);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
+
+    // An edit and a second save inside the same millisecond carry the same
+    // timestamp, and the second one is still its own request.
+    rerender(
+      panel(
+        <SaveActionBar
+          dirty
+          saveRequestedAt={now}
+          onSave={vi.fn()}
+          onDiscard={vi.fn()}
+        />,
+      ),
+    );
+    rerender(
+      panel(
+        <SaveActionBar
+          dirty={false}
+          saveRequestedAt={now}
+          onSave={vi.fn()}
+          onDiscard={vi.fn()}
+        />,
+      ),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Save sent to the server",
+    );
   });
 });

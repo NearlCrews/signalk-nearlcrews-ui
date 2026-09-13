@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
 import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { Progress } from "../../src/composites.js";
 import { Switch } from "../../src/forms.js";
@@ -11,6 +11,7 @@ import {
   installPanelStyles,
   installStyleModule,
   type StyleModule,
+  supportsNativeCssScope,
 } from "../../src/styles/install.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { TABLE_STYLES } from "../../src/styles/table.js";
@@ -325,6 +326,35 @@ describe("installStyleModule", () => {
   });
 });
 
+describe("supportsNativeCssScope", () => {
+  const descriptor = Object.getOwnPropertyDescriptor(window, "CSSScopeRule");
+
+  afterEach(() => {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(window, "CSSScopeRule");
+    } else {
+      Object.defineProperty(window, "CSSScopeRule", descriptor);
+    }
+  });
+
+  function stubScopeSupport(value: unknown): void {
+    Object.defineProperty(window, "CSSScopeRule", {
+      configurable: true,
+      value,
+    });
+  }
+
+  it("reads the ambient window when called with no argument", () => {
+    stubScopeSupport(function CSSScopeRule() {
+      return undefined;
+    });
+    expect(supportsNativeCssScope()).toBe(true);
+
+    stubScopeSupport(undefined);
+    expect(supportsNativeCssScope()).toBe(false);
+  });
+});
+
 describe("useModuleStyles", () => {
   it("installs one module sheet per panel document under the root nonce", () => {
     const { unmount } = render(
@@ -472,5 +502,55 @@ describe("useOptionalModuleStyles", () => {
     expect(() => render(<Switch label="Autopilot" />)).not.toThrow();
     expect(headSheets(MODULE_SHEET)).toHaveLength(0);
     expect(headSheets(ROOT_SHEET)).toHaveLength(0);
+  });
+});
+
+describe("supportsNativeCssScope", () => {
+  it("reads the module's own window when the caller names none", () => {
+    expect(supportsNativeCssScope()).toBe(true);
+
+    // The default argument is what a non-browser evaluation reaches: a build
+    // step or a static render importing the entry point has no window, and
+    // the preflight answers no instead of throwing.
+    let withoutWindow: boolean | undefined;
+    vi.stubGlobal("window", undefined);
+    try {
+      withoutWindow = supportsNativeCssScope();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(withoutWindow).toBe(false);
+  });
+});
+
+describe("a module installing with no root sheet", () => {
+  it("names the missing root sheet rather than styling the document blind", () => {
+    // Unreachable through the public API, because PanelRoot installs the root
+    // sheet in a callback ref that runs before every layout effect. Dropping
+    // the shared registry is a consumer reaching past the package, which is
+    // the case the guard is kept for.
+    const { rerender } = render(
+      <PanelRoot>
+        <ModuleConsumer module={DIALOG_STYLES} name="Dialog" />
+      </PanelRoot>,
+    );
+    Reflect.deleteProperty(
+      document,
+      Symbol.for("signalk-nearlcrews-ui.style-registry.v2"),
+    );
+
+    expect(() =>
+      rerender(
+        <PanelRoot>
+          <ModuleConsumer
+            module={{ id: "dialog", styles: DIALOG_STYLES.styles }}
+            name="Dialog"
+          />
+        </PanelRoot>,
+      ),
+    ).toThrow(
+      `signalk-nearlcrews-ui ${PACKAGE_VERSION} panel styles are not installed in this document; render inside PanelRoot.`,
+    );
   });
 });

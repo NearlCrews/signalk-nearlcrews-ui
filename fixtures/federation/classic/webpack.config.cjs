@@ -5,6 +5,11 @@ const { container } = require("webpack");
 const { shared } = require("signalk-nearlcrews-ui/federation");
 
 const { ModuleFederationPlugin } = container;
+// The fixture stands in for a consumer plugin and has no manifest of its own,
+// so it derives its container name from this package. A real plugin derives it
+// from its OWN package name with the same replacement, which is what
+// docs/migration.md and README.md tell it to do and what
+// tests/unit/panel-runtime.test.mjs covers. Do not copy this line verbatim.
 const packageJson = require("signalk-nearlcrews-ui/package.json");
 const moduleName = packageJson.name.replace(/[-@/]/g, "_");
 

@@ -170,7 +170,7 @@ function Fixture(): React.JSX.Element {
                 const { descriptionId, errorId, ...rangeProps } = controlProps;
                 return (
                   <InputGroup density="compact">
-                    <InputGroupControl width="grow">
+                    <InputGroupControl controlWidth="grow">
                       <RangeInput
                         {...rangeProps}
                         defaultValue={75}
@@ -178,7 +178,7 @@ function Fixture(): React.JSX.Element {
                         max={100}
                       />
                     </InputGroupControl>
-                    <InputGroupControl width="fixed">
+                    <InputGroupControl controlWidth="fixed">
                       <NumberInput
                         aria-label="Confidence threshold exact value"
                         aria-describedby={controlProps["aria-describedby"]}

@@ -91,6 +91,47 @@ describe("host contract registry compatibility", () => {
     );
   });
 
+  it("orders peer dependency keys by code unit, not by the runtime locale", () => {
+    const contract = parseRegistryContract(
+      JSON.stringify({
+        version: "2.23.0",
+        peerDependencies: {
+          react_native: "^19.2.0",
+          "react.js": "^19.2.0",
+          "react-dom": "^19.2.0",
+        },
+      }),
+      PACKAGE_NAME,
+    );
+
+    expect(Object.keys(contract.peerDependencies)).toEqual([
+      "react-dom",
+      "react.js",
+      "react_native",
+    ]);
+  });
+
+  it("explains drift that no per-field branch describes", () => {
+    const committed = parseRegistryContract(
+      JSON.stringify(REGISTRY_RESULT),
+      PACKAGE_NAME,
+    );
+    const published = {
+      ...committed,
+      peerDependencies: {
+        "react-dom": committed.peerDependencies["react-dom"],
+        react: committed.peerDependencies.react,
+      },
+    };
+
+    expect(contractsMatch(committed, published)).toBe(false);
+    expect(formatContractDiff(committed, published).split("\n")).toEqual([
+      "Host contract drift detected:",
+      `- peerDependencies: ${JSON.stringify(committed.peerDependencies)}`,
+      `+ peerDependencies: ${JSON.stringify(published.peerDependencies)}`,
+    ]);
+  });
+
   it("stops after the bounded retry budget", async () => {
     const runNpm = vi.fn(() => {
       throw Object.assign(new Error("private registry response"), {

@@ -79,4 +79,18 @@ describe("workflow readers", () => {
       expandMatrixName(`Node \${{ matrix.node }}`, "node", ["22.22.2", "26"]),
     ).toEqual(["Node 22.22.2", "Node 26"]);
   });
+
+  it("takes a matrix value literally, dollar signs included", () => {
+    expect(
+      expandMatrixName(`Node \${{ matrix.node }}`, "node", ["$&", "$1"]),
+    ).toEqual(["Node $&", "Node $1"]);
+  });
+
+  it("treats a key as a literal, not as a pattern", () => {
+    const source = "  node.js: 22\n  nodexjs: 24\n";
+    expect(readScalarValues(source, "node.js")).toEqual(["22"]);
+    expect(
+      expandMatrixName(`Node \${{ matrix.node.js }}`, "node.js", ["22.22.2"]),
+    ).toEqual(["Node 22.22.2"]);
+  });
 });

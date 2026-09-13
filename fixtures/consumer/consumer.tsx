@@ -9,13 +9,13 @@
  */
 import { createRef, useRef, useState } from "react";
 import {
+  type AnnouncementMode,
   Banner,
   Button,
   Checkbox,
   Code,
   type Density,
   type FieldControlProps,
-  type FieldErrorLive,
   FieldGroup,
   type FormatRelativeAgeOptions,
   formatRelativeAge,
@@ -56,6 +56,12 @@ import {
   Tabs,
 } from "signalk-nearlcrews-ui/composites";
 import { Cell, Column, DataGrid, Row } from "signalk-nearlcrews-ui/data-grid";
+import {
+  joinList,
+  type Reachability,
+  resolveFreshness,
+  resolveReachability,
+} from "signalk-nearlcrews-ui/format";
 import { SecretInput, Switch } from "signalk-nearlcrews-ui/forms";
 import {
   createToastQueue,
@@ -183,7 +189,7 @@ export const statusTones: readonly StatusTone[] = [
   "danger",
 ];
 export const semanticTone: SemanticTone = "warning";
-export const errorLive: FieldErrorLive = "polite";
+export const errorLive: AnnouncementMode = "polite";
 export const savedTheme: ThemeChoice = "night";
 export const sectionLevel: HeadingLevel = 3;
 export const closedState: OverlayOpenState = { defaultOpen: false };
@@ -217,10 +223,10 @@ export function RenderPropField(): React.JSX.Element {
       <LabeledField label="Depth" description="Meters below the transducer">
         {(controlProps: LabeledFieldControlProps) => (
           <InputGroup density="compact">
-            <InputGroupControl width="grow">
+            <InputGroupControl controlWidth="grow">
               <DepthControl {...controlProps} />
             </InputGroupControl>
-            <InputGroupControl width="fixed">
+            <InputGroupControl controlWidth="fixed">
               <NumberInput
                 aria-label="Depth exact value"
                 aria-describedby={controlProps.descriptionId}
@@ -249,9 +255,9 @@ export function UnitControl({
   return (
     <PanelRoot>
       <SegmentedControl
-        legend="Units"
+        label="Units"
         options={UNIT_OPTIONS}
-        onChange={(value) => {
+        onValueChange={(value) => {
           const unit: Unit = value;
           onUnit(unit);
         }}
@@ -313,3 +319,16 @@ export function NewIn090(): React.JSX.Element {
     </PanelShell>
   );
 }
+
+/**
+ * The React-free entry a worker or a plain script imports. It must resolve and
+ * type check from the packed artifact the same way the component entries do.
+ */
+const pending: Reachability = null;
+export const reachabilityLabel: string = resolveReachability(pending).label;
+export const staleSample: boolean = resolveFreshness(
+  Date.now() - 90_000,
+  Date.now(),
+  30_000,
+).stale;
+export const affectedPaths: string = joinList(["depth", "speed", "wind angle"]);

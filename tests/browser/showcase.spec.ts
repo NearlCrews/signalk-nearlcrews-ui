@@ -1,6 +1,8 @@
 import {
+  controlTargetFloor,
   expect,
   expectNoAxeViolations,
+  expectTargetFloor,
   settleAnimations,
   settledScrollLeft,
   test,
@@ -9,15 +11,24 @@ import {
 /** Bootstrap's fixed header z-index in the Signal K Admin, mirrored by the fixture. */
 const HOST_HEADER_Z_INDEX = 1020;
 
-test("renders the showcase without console errors", async ({ page }) => {
-  const errors: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text());
-  });
-  page.on("pageerror", (error: Error) => {
-    errors.push(error.message);
-  });
+/** Animation frames the scripted grid scroll is measured over. */
+const SCROLL_FRAMES = 20;
 
+/**
+ * Layout reads one scrolling frame may cost.
+ *
+ * This is a runaway guard rather than a tight budget: measuring the rows a
+ * virtualized grid actually renders costs tens of reads per frame, while
+ * measuring the whole 241 row collection, or re-measuring the toast host and
+ * the docked bar on every frame, costs hundreds. The ceiling sits between the
+ * two so the second one fails and ordinary work does not.
+ */
+const SCROLL_LAYOUT_READS_PER_FRAME = 200;
+
+// Console errors and uncaught page errors are the automatic
+// `browserErrorCapture` fixture's job for every test in this file, so this one
+// asserts only that the showcase rendered.
+test("renders the showcase", async ({ page }) => {
   await page.goto("/showcase.html");
   await expect(
     page.getByRole("heading", { name: "Component showcase" }),
@@ -33,7 +44,6 @@ test("renders the showcase without console errors", async ({ page }) => {
     .count();
   expect(renderedRows).toBeGreaterThan(1);
   expect(renderedRows).toBeLessThan(241);
-  expect(errors).toEqual([]);
 });
 
 test("keeps a nested popover above its dialog", async ({ page }) => {
@@ -50,6 +60,207 @@ test("keeps a nested popover above its dialog", async ({ page }) => {
 
   expect(popoverZIndex).toBeGreaterThan(dialogZIndex);
   await expect(popover).toBeVisible();
+});
+
+test("flips a popover anchored in panel flow and keeps its width", async ({
+  page,
+}) => {
+  // A popover in ordinary panel flow, rather than the one inside the dialog:
+  // collision flipping and the width variable are layout behaviors, so this is
+  // the only place either is exercised against a real box.
+  await page.setViewportSize({ width: 1024, height: 400 });
+  await page.goto("/showcase.html");
+  const trigger = page.getByRole("button", { name: "About this anchorage" });
+  await trigger.evaluate((element) => {
+    element.scrollIntoView({ behavior: "instant", block: "end" });
+  });
+  // The panel carries a sticky action bar, which publishes a scroll clearance
+  // that stops this scroll with the trigger above the bar rather than under
+  // it. A trigger under the bar is pressed only after the click scrolls the
+  // panel again, which puts it back where the popover has room to open
+  // downward and the flip under test never happens.
+  const triggerBox = await trigger.boundingBox();
+  expect(triggerBox).not.toBeNull();
+  await trigger.click();
+
+  const popover = page.getByRole("dialog", { name: "About this anchorage" });
+  await expect(popover).toBeVisible();
+  await expect(popover).toHaveAttribute("data-placement", "top");
+  await expect(popover).toHaveCSS("width", "280px");
+
+  const box = await popover.boundingBox();
+  expect(box).not.toBeNull();
+  if (box !== null && triggerBox !== null) {
+    expect(box.y).toBeGreaterThanOrEqual(0);
+    expect(box.y + box.height).toBeLessThanOrEqual(400);
+    // The flip was forced rather than incidental: the popover is taller than
+    // the room its trigger left below itself.
+    expect(400 - (triggerBox.y + triggerBox.height)).toBeLessThan(box.height);
+  }
+  // Free-form content is shown rather than clipped away to the border.
+  const clipped = await popover.evaluate(
+    (element) => element.scrollHeight > element.clientHeight,
+  );
+  expect(clipped).toBe(false);
+});
+
+test("opens an anchored overlay at full height in a scrolled panel", async ({
+  page,
+}) => {
+  // The panel is many viewports tall, so the trigger is a long way below the
+  // top of the panel by the time it is pressed. An overlay whose room to grow
+  // is measured from the panel rather than from the viewport reports none left
+  // and opens clipped to an empty sliver, which reads as a menu that refuses
+  // to open.
+  await page.setViewportSize({ width: 1024, height: 400 });
+  await page.goto("/showcase.html");
+  await page.getByRole("button", { name: "Panel actions" }).click();
+
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  const clipped = await menu.evaluate(
+    (element) => element.scrollHeight > element.clientHeight,
+  );
+  expect(clipped).toBe(false);
+
+  const [surfaceBox, lastItemBox] = await Promise.all([
+    page.locator(".snui-menu-popover").boundingBox(),
+    page.getByRole("menuitem", { name: "Reset layout" }).boundingBox(),
+  ]);
+  expect(surfaceBox).not.toBeNull();
+  expect(lastItemBox).not.toBeNull();
+  if (surfaceBox !== null && lastItemBox !== null) {
+    expect(lastItemBox.y + lastItemBox.height).toBeLessThanOrEqual(
+      surfaceBox.y + surfaceBox.height,
+    );
+    expect(surfaceBox.y + surfaceBox.height).toBeLessThanOrEqual(400);
+  }
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+});
+
+test("applies the control target floor to the dense showcase controls", async ({
+  page,
+}, testInfo) => {
+  // The panel fixture measures the form controls; these are the dense ones it
+  // has none of, and axe is no backstop because its target-size rule is off by
+  // default. The data grid is left out on purpose: the fixture sets
+  // density="compact" on it, which is a deliberate step below the floor.
+  const floor = controlTargetFloor(testInfo);
+  await page.goto("/showcase.html");
+
+  await expectTargetFloor(page.getByRole("tab", { name: "Overview" }), floor);
+  await expectTargetFloor(
+    page.getByRole("button", { name: "Connection log" }),
+    floor,
+  );
+  await expectTargetFloor(
+    page.getByRole("button", { name: "Show" }),
+    floor,
+    "both",
+  );
+  await expectTargetFloor(
+    page.getByRole("button", { name: "About this anchorage" }),
+    floor,
+  );
+
+  await page.getByRole("button", { name: "Panel actions" }).click();
+  await expectTargetFloor(
+    page.getByRole("menuitem", { name: "Refresh data" }),
+    floor,
+  );
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "info toast" }).click();
+  const region = page.getByRole("region", { name: "Notifications" });
+  const dismiss = region.getByRole("button", { name: "Dismiss" });
+  await expect(dismiss).toBeVisible();
+  await expectTargetFloor(dismiss, floor, "both");
+  await dismiss.click();
+  await expect(region.locator(".snui-toast")).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Open dialog" }).click();
+  const dialog = page.getByRole("dialog", { name: "Anchorage details" });
+  await expect(dialog).toBeVisible();
+  await expectTargetFloor(dialog.getByRole("button", { name: "Done" }), floor);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("announces and dismisses the destructive alert dialog", async ({
+  page,
+}) => {
+  await page.goto("/showcase.html");
+  const trigger = page.getByRole("button", { name: "Open alert dialog" });
+  await trigger.click();
+
+  const alert = page.getByRole("alertdialog", { name: "Delete route?" });
+  await expect(alert).toBeVisible();
+  await expect(alert.getByRole("button", { name: "Delete" })).toBeVisible();
+  await expect(alert.getByRole("button", { name: "Keep route" })).toBeVisible();
+
+  // The scrim and the surface fade in, and an axe pass mid-fade measures
+  // composited colors rather than the ones the tokens set.
+  await settleAnimations(page);
+  await expectNoAxeViolations(page);
+
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+});
+
+test("bounds the layout reads a scrolling grid costs per frame", async ({
+  page,
+}) => {
+  // Scrolling many virtualized rows is slow on a loaded runner.
+  test.slow();
+  await page.goto("/showcase.html");
+  const grid = page.getByRole("grid", { name: "Fleet" });
+  await expect(grid).toBeVisible();
+
+  const measured = await grid.evaluate(async (element, frames) => {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      Element.prototype,
+      "getBoundingClientRect",
+    );
+    if (descriptor === undefined) {
+      throw new Error("Expected Element.prototype.getBoundingClientRect.");
+    }
+    const original = descriptor.value as (this: Element) => DOMRect;
+    let reads = 0;
+    Object.defineProperty(Element.prototype, "getBoundingClientRect", {
+      ...descriptor,
+      value: function counted(this: Element): DOMRect {
+        reads += 1;
+        return original.call(this);
+      },
+    });
+
+    let scrolled = 0;
+    try {
+      for (let frame = 1; frame <= frames; frame += 1) {
+        element.scrollTop = frame * 120;
+        element.dispatchEvent(new Event("scroll"));
+        await new Promise<void>((resolve) => {
+          requestAnimationFrame(() => resolve());
+        });
+        scrolled += 1;
+      }
+    } finally {
+      Object.defineProperty(
+        Element.prototype,
+        "getBoundingClientRect",
+        descriptor,
+      );
+    }
+    return { reads, scrolled };
+  }, SCROLL_FRAMES);
+
+  expect(measured.scrolled).toBe(SCROLL_FRAMES);
+  expect(measured.reads / measured.scrolled).toBeLessThanOrEqual(
+    SCROLL_LAYOUT_READS_PER_FRAME,
+  );
 });
 
 test("keeps tall popover content scrollable inside the visual viewport", async ({
@@ -255,7 +466,7 @@ test("audits open overlays and every toast tone with axe", async ({ page }) => {
   await page.goto("/showcase.html");
   // Transitions and animations both, because the toast entry is a keyframe
   // animation rather than a transition, and auditing it mid-flight measures
-  // colours composited against what is behind the card.
+  // colors composited against what is behind the card.
   await page.addStyleTag({
     content: "* { transition: none !important; animation: none !important; }",
   });
@@ -326,7 +537,7 @@ test("keeps toasts reachable while a dialog is open", async ({ page }) => {
   ).toBeVisible();
 
   // The scrim and the dialog fade in on `--snui-transition-normal`, and an axe
-  // pass that starts mid-fade measures composited colours rather than the ones
+  // pass that starts mid-fade measures composited colors rather than the ones
   // the tokens set, which reads as a contrast failure that does not exist.
   await settleAnimations(page);
 
@@ -388,4 +599,47 @@ test("paints the dialog scrim and toasts above the Admin header and sidebar", as
     Number(getComputedStyle(element).zIndex),
   );
   expect(hostZIndex).toBeGreaterThan(HOST_HEADER_Z_INDEX);
+});
+
+test("reconstructs every overlay module under forced colors", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium");
+  await page.goto("/showcase.html");
+  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+
+  // Every overlay module at once: the three existing forced-colors probes
+  // cover controls, tabs, and the inline confirmation, so the blocks in
+  // toast.ts, dialog.ts, menu.ts, and popover.ts are otherwise never painted
+  // in a test.
+  await page.getByRole("button", { name: "danger toast" }).click();
+  const toneDot = page.locator(".snui-toast__tone-dot").first();
+  await expect(toneDot).toHaveCSS("forced-color-adjust", "none");
+
+  await page.getByRole("button", { name: "Panel actions" }).click();
+  const menuPopover = page.locator(".snui-menu-popover");
+  await expect(menuPopover).toHaveCSS("outline-style", "solid");
+  await expect(menuPopover).toHaveCSS("outline-width", "2px");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "About this anchorage" }).click();
+  const popover = page.locator(".snui-popover").first();
+  await expect(popover).toHaveCSS("outline-style", "solid");
+  await expect(popover).toHaveCSS("outline-width", "2px");
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Open dialog" }).click();
+  const dialog = page.locator(".snui-dialog");
+  await expect(dialog).toHaveCSS("outline-style", "solid");
+  await expect(dialog).toHaveCSS("outline-width", "2px");
+
+  await expectNoAxeViolations(page, {
+    disableRules: [
+      {
+        id: "color-contrast",
+        reason:
+          "Under forced colors the browser replaces author colors with the system palette at paint time while computed values keep the author colors, so axe grades pairs the user never sees; the contrast of the system palette belongs to the operating system.",
+      },
+    ],
+  });
 });

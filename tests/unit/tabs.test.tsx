@@ -396,3 +396,64 @@ describe("Tabs", () => {
     );
   });
 });
+
+describe("Tabs selection ownership", () => {
+  it("reports nothing when the selected tab is chosen again", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    renderTabs({ onValueChange });
+
+    const engine = screen.getByRole("tab", { name: "Engine" });
+    expect(engine).toHaveAttribute("aria-selected", "true");
+
+    await user.click(engine);
+    expect(onValueChange).not.toHaveBeenCalled();
+
+    // Home lands on the tab that is already selected, and automatic
+    // activation has to stay quiet for that arrival too.
+    engine.focus();
+    await user.keyboard("{Home}");
+    expect(engine).toHaveFocus();
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
+  it("stays controlled while nothing is selected yet", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    renderInPanel(
+      <Tabs value={undefined} onValueChange={onValueChange}>
+        <TabList aria-label="Sources">
+          <Tab value="engine">Engine</Tab>
+          <Tab value="nav">Navigation</Tab>
+        </TabList>
+        <TabPanel value="engine">Engine panel</TabPanel>
+        <TabPanel value="nav">Navigation panel</TabPanel>
+      </Tabs>,
+    );
+
+    const engine = screen.getByRole("tab", { name: "Engine" });
+    // The owner passed the prop, so it owns the selection even while that is
+    // nothing: the press is reported and the tab does not select itself.
+    await user.click(engine);
+    expect(onValueChange).toHaveBeenCalledWith("engine");
+    expect(engine).toHaveAttribute("aria-selected", "false");
+
+    // The first enabled tab still holds the list's only tab stop.
+    expect(engine).toHaveAttribute("tabindex", "0");
+  });
+
+  it("drops the panel tab stop when a panel opts out", () => {
+    renderInPanel(
+      <Tabs defaultValue="engine">
+        <TabList aria-label="Sources">
+          <Tab value="engine">Engine</Tab>
+        </TabList>
+        <TabPanel value="engine" focusable={false}>
+          <button type="button">Rescan</button>
+        </TabPanel>
+      </Tabs>,
+    );
+
+    expect(screen.getByRole("tabpanel")).not.toHaveAttribute("tabindex");
+  });
+});

@@ -231,7 +231,7 @@ describe("SegmentedControl form participation", () => {
     expect(new FormData(form).has("units")).toBe(false);
   });
 
-  it("restores the defaultValue selection on form reset", () => {
+  it("restores the defaultValue selection on form reset", async () => {
     render(
       <form data-testid="units-form">
         <SegmentedControl
@@ -251,8 +251,12 @@ describe("SegmentedControl form participation", () => {
     );
 
     const form = screen.getByTestId<HTMLFormElement>("units-form");
-    act(() => {
+    // The restore waits a microtask, because a native reset finishes
+    // rewriting its controls only once the event has finished dispatching.
+    await act(async () => {
       form.reset();
+      // The restore lands on the microtask after the reset event.
+      await Promise.resolve();
     });
 
     expect(screen.getByRole("radio", { name: "Metric" })).toHaveAttribute(
@@ -325,66 +329,42 @@ describe("SegmentedControl form participation", () => {
 });
 
 describe("SegmentedControl label and value callbacks", () => {
-  it("names the group from label and falls back to the deprecated legend", () => {
-    render(
-      <>
-        <SegmentedControl label="Units" options={OPTIONS} />
-        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep naming the group */}
-        <SegmentedControl legend="Legacy units" options={OPTIONS} />
-      </>,
-    );
+  it("names the group from its label", () => {
+    render(<SegmentedControl label="Units" options={OPTIONS} />);
 
     expect(screen.getByRole("radiogroup", { name: "Units" })).toBeVisible();
-    expect(
-      screen.getByRole("radiogroup", { name: "Legacy units" }),
-    ).toBeVisible();
   });
 
-  it("rejects a control with neither label nor legend content", () => {
+  it("rejects a control with no label content", () => {
     expect(() =>
       render(<SegmentedControl label="  " options={OPTIONS} />),
     ).toThrow("SegmentedControl requires a non-empty label.");
   });
 
-  it("reports the value through onValueChange beside the deprecated onChange", () => {
+  it("reports the value through onValueChange", () => {
     const onValueChange = vi.fn();
-    const onChange = vi.fn();
     render(
       <SegmentedControl
         label="Units"
         options={OPTIONS}
         onValueChange={onValueChange}
-        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
-        onChange={onChange}
       />,
     );
 
     fireEvent.click(screen.getByRole("radio", { name: "Nautical" }));
     expect(onValueChange).toHaveBeenCalledWith("nautical");
-    expect(onChange).toHaveBeenCalledWith("nautical");
   });
 
-  it("shows the label through labelVisibility and the deprecated legendVisibility", () => {
+  it("shows the label through labelVisibility", () => {
     render(
-      <>
-        <SegmentedControl
-          label="Units"
-          labelVisibility="visible"
-          options={OPTIONS}
-        />
-        <SegmentedControl
-          label="Legacy units"
-          // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep showing the label
-          legendVisibility="visible"
-          options={OPTIONS}
-        />
-      </>,
+      <SegmentedControl
+        label="Units"
+        labelVisibility="visible"
+        options={OPTIONS}
+      />,
     );
 
     expect(screen.getByText("Units")).toHaveClass("snui-segmented__legend");
-    expect(screen.getByText("Legacy units")).toHaveClass(
-      "snui-segmented__legend",
-    );
   });
 
   it("keeps the hidden input attached while the controlled value changes", () => {
@@ -457,7 +437,7 @@ describe("SegmentedControl legend visibility", () => {
 });
 
 describe("SegmentedControl orientation", () => {
-  it("maps arrow keys to the vertical axis in vertical orientation", () => {
+  it("moves along both axes in vertical orientation", () => {
     const onChange = vi.fn();
     render(
       <SegmentedControl
@@ -485,11 +465,13 @@ describe("SegmentedControl orientation", () => {
     fireEvent.keyDown(imperial, { key: "ArrowUp" });
     expect(onChange).toHaveBeenCalledWith("metric");
 
-    // Horizontal arrows are inert in vertical mode.
+    // The radio pattern binds both axes, so the horizontal pair moves here
+    // too, and an operator who learned one axis keeps it in either group.
     onChange.mockClear();
-    fireEvent.keyDown(metric, { key: "ArrowLeft" });
     fireEvent.keyDown(metric, { key: "ArrowRight" });
-    expect(onChange).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenLastCalledWith("imperial");
+    fireEvent.keyDown(metric, { key: "ArrowLeft" });
+    expect(onChange).toHaveBeenLastCalledWith("nautical");
 
     // Home and End stay active in both orientations.
     fireEvent.keyDown(metric, { key: "End" });
@@ -500,7 +482,7 @@ describe("SegmentedControl orientation", () => {
     expect(onChange).toHaveBeenCalledWith("metric");
   });
 
-  it("ignores vertical arrow keys in horizontal orientation", () => {
+  it("moves along both axes in horizontal orientation", () => {
     const onChange = vi.fn();
     render(
       <SegmentedControl
@@ -519,9 +501,78 @@ describe("SegmentedControl orientation", () => {
 
     const metric = screen.getByRole("radio", { name: "Metric" });
     metric.focus();
-    fireEvent.keyDown(metric, { key: "ArrowDown" });
+    // The vertical pair is answered rather than left to scroll the page.
+    expect(fireEvent.keyDown(metric, { key: "ArrowDown" })).toBe(false);
+    expect(onChange).toHaveBeenLastCalledWith("imperial");
     fireEvent.keyDown(metric, { key: "ArrowUp" });
+    expect(onChange).toHaveBeenLastCalledWith("nautical");
+  });
+
+  it("leaves a key it does not answer to the page", () => {
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl
+        label="Units"
+        defaultValue="metric"
+        onValueChange={onChange}
+        options={OPTIONS}
+      />,
+    );
+
+    const metric = screen.getByRole("radio", { name: "Metric" });
+    metric.focus();
+    expect(fireEvent.keyDown(metric, { key: "PageDown" })).toBe(true);
     expect(onChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("SegmentedControl read-only state", () => {
+  it("refuses every selection route while every option keeps its tab stop", () => {
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl
+        label="Units"
+        readOnly
+        defaultValue="metric"
+        onValueChange={onChange}
+        options={OPTIONS}
+      />,
+    );
+
+    const metric = screen.getByRole("radio", { name: "Metric" });
+    const imperial = screen.getByRole("radio", { name: "Imperial" });
+    // A save in flight must not drop the operator's focus on the body.
+    expect(metric).toBeEnabled();
+    expect(metric).toHaveAttribute("aria-disabled", "true");
+    expect(metric).toHaveAttribute("tabindex", "0");
+
+    metric.focus();
+    fireEvent.click(imperial);
+    fireEvent.keyDown(metric, { key: " " });
+    expect(onChange).not.toHaveBeenCalled();
+    expect(metric).toHaveAttribute("aria-checked", "true");
+
+    // Arrows still move focus, so the group can be read through.
+    fireEvent.keyDown(metric, { key: "ArrowRight" });
+    expect(imperial).toHaveFocus();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(metric).toHaveAttribute("aria-checked", "true");
+  });
+
+  it("leaves a disabled group its native state alone", () => {
+    render(
+      <SegmentedControl
+        label="Units"
+        disabled
+        defaultValue="metric"
+        options={OPTIONS}
+      />,
+    );
+
+    const metric = screen.getByRole("radio", { name: "Metric" });
+    // A natively disabled control already reports its state.
+    expect(metric).toBeDisabled();
+    expect(metric).not.toHaveAttribute("aria-disabled");
   });
 });
 
@@ -621,5 +672,46 @@ describe("SegmentedControl ref", () => {
     );
 
     expect(ref.current).toBe(screen.getByRole("radiogroup", { name: "Units" }));
+  });
+});
+
+describe("SegmentedControl description and error", () => {
+  it("describes the group with its own text and marks it invalid", () => {
+    render(
+      <SegmentedControl
+        label="Units"
+        description="Applies to every reading in this panel."
+        error="Pick the units the crew reads."
+        onValueChange={noop}
+        options={OPTIONS}
+      />,
+    );
+
+    const group = screen.getByRole("radiogroup", { name: "Units" });
+    expect(group).toHaveAttribute("aria-invalid", "true");
+    expect(group).toHaveAttribute("aria-errormessage");
+    expect(group).toHaveAccessibleDescription(
+      "Applies to every reading in this panel. Error.Pick the units the crew reads.",
+    );
+  });
+
+  it("mounts an announcing error region before its content arrives", () => {
+    const { container } = render(
+      <SegmentedControl
+        label="Units"
+        errorLive="polite"
+        onValueChange={noop}
+        options={OPTIONS}
+      />,
+    );
+
+    // The region has to exist before the message so a screen reader observes
+    // the change rather than the arrival of a new element.
+    const region = container.querySelector(".snui-segmented__error");
+    expect(region).not.toBeNull();
+    expect(region).toBeEmptyDOMElement();
+    expect(
+      screen.getByRole("radiogroup", { name: "Units" }),
+    ).not.toHaveAttribute("aria-errormessage");
   });
 });

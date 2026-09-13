@@ -3,6 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { createRef, type ReactElement, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import {
+  applyCheckboxGroupValue,
+  toCheckboxGroupValue,
+} from "../../src/components/CheckboxGroup.js";
 import { CheckboxGroup } from "../../src/composites.js";
 import { formOf, renderInPanel } from "../helpers.js";
 
@@ -185,21 +189,31 @@ describe("CheckboxGroup select all", () => {
     }
   });
 
-  it("disables the select-all box when every option is disabled", () => {
+  it("blocks the select-all box when every option is disabled", async () => {
     // A parent toggle that disables the whole group is an ordinary panel
     // state, and a select-all that looked live there would toggle nothing.
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
     renderInPanel(
       <CheckboxGroup
         legend="Import layers"
         selectAllLabel="All layers"
         options={LAYERS.map((option) => ({ ...option, disabled: true }))}
+        onValueChange={onValueChange}
       />,
     );
 
     const all = screen.getByRole("checkbox", { name: "All layers" });
-    expect(all).toBeDisabled();
+    // The box keeps its tab stop, because disabling the box the user is
+    // standing on destroys their focus.
+    expect(all).toHaveAttribute("aria-disabled", "true");
+    expect(all).toBeEnabled();
     expect(all).not.toBeChecked();
     expect(all).not.toBePartiallyChecked();
+
+    await user.click(all);
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(all).not.toBeChecked();
   });
 
   it("renders the select-all control in the legend row beside consumer actions", () => {
@@ -283,6 +297,91 @@ describe("CheckboxGroup empty warning", () => {
     renderInPanel(<CheckboxGroup legend="Import layers" options={LAYERS} />);
 
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("announces the warning assertively on request", () => {
+    renderInPanel(
+      <CheckboxGroup
+        legend="Import layers"
+        options={LAYERS}
+        emptyWarning="Nothing will be imported."
+        emptyWarningLive="assertive"
+      />,
+    );
+
+    // A blocking empty selection on a safety-relevant panel interrupts.
+    const region = screen.getByRole("alert");
+    expect(region).toHaveClass("snui-checkbox-group__warning");
+    expect(region).toHaveTextContent("Nothing will be imported.");
+  });
+});
+
+describe("CheckboxGroup form reset", () => {
+  it("returns an uncontrolled selection to its default", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <form data-testid="layers-form">
+        <CheckboxGroup
+          legend="Import layers"
+          name="layers"
+          options={LAYERS}
+          defaultValue={["buoys"]}
+        />
+        <button type="reset">Reset</button>
+      </form>,
+    );
+
+    const buoys = screen.getByRole("checkbox", { name: "Buoys" });
+    await user.click(screen.getByRole("checkbox", { name: "Lights" }));
+    expect(new FormData(formOf(buoys)).getAll("layers")).toEqual([
+      "buoys",
+      "lights",
+    ]);
+
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    // Every other choice control in the package restores its default here, so
+    // a group that kept the edited selection would submit what the operator
+    // just discarded.
+    expect(buoys).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Lights" })).not.toBeChecked();
+    expect(new FormData(formOf(buoys)).getAll("layers")).toEqual(["buoys"]);
+  });
+
+  it("leaves a controlled selection to its parent", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    renderInPanel(
+      <form>
+        <CheckboxGroup
+          legend="Import layers"
+          name="layers"
+          options={LAYERS}
+          value={["lights"]}
+          onValueChange={onValueChange}
+        />
+        <button type="reset">Reset</button>
+      </form>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(onValueChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("checkbox", { name: "Lights" })).toBeChecked();
+  });
+});
+
+describe("CheckboxGroup value adapters", () => {
+  const FLAGS = { buoys: true, depth: false, lights: true };
+
+  it("reads a record of flags in option order", () => {
+    expect(toCheckboxGroupValue(FLAGS, LAYERS)).toEqual(["buoys", "lights"]);
+  });
+
+  it("writes every option's key back, cleared ones included", () => {
+    expect(applyCheckboxGroupValue(["lights"], LAYERS)).toEqual({
+      buoys: false,
+      depth: false,
+      lights: true,
+    });
   });
 });
 

@@ -1,9 +1,4 @@
-import {
-  Button,
-  PanelRoot,
-  StatusIndicator,
-  ThemeToggle,
-} from "signalk-nearlcrews-ui";
+import { Button, PanelShell, StatusIndicator } from "signalk-nearlcrews-ui";
 import { EmptyState } from "signalk-nearlcrews-ui/composites";
 import { Cell, Column, DataGrid, Row } from "signalk-nearlcrews-ui/data-grid";
 import { SecretInput } from "signalk-nearlcrews-ui/forms";
@@ -33,6 +28,14 @@ function readConfiguration(value: unknown): FixtureConfiguration {
   throw new Error("Federation fixture received an invalid configuration prop.");
 }
 
+/**
+ * The package's reference panel: the module a plugin exposes through Module
+ * Federation, built the way a plugin should build one. `PanelShell` carries
+ * the browser preflight, the error boundary, and the panel announcer, and it
+ * takes no title because Signal K Admin already names the plugin in its card
+ * header. The theme selector goes at the foot of the panel, written out rather
+ * than left to the default so adding a title later cannot move it.
+ */
 export default function PluginConfigurationPanel({
   configuration: configurationValue,
   save,
@@ -40,8 +43,7 @@ export default function PluginConfigurationPanel({
   const configuration = readConfiguration(configurationValue);
 
   return (
-    <PanelRoot>
-      <ThemeToggle />
+    <PanelShell themeToggle="end">
       <StatusIndicator tone="success">Fixture ready</StatusIndicator>
       <p>Saved {configuration.saveCount} times</p>
       <EmptyState
@@ -80,6 +82,6 @@ export default function PluginConfigurationPanel({
         Notify
       </Button>
       <ToastRegion queue={queue} />
-    </PanelRoot>
+    </PanelShell>
   );
 }

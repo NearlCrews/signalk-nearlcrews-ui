@@ -3,8 +3,13 @@ import { expect, test } from "./fixtures.js";
 test("loads classic and ESM remotes against host React and ReactDOM", async ({
   page,
 }) => {
-  const pageErrors: string[] = [];
-  page.on("pageerror", (error) => pageErrors.push(error.message));
+  // Uncaught page errors are the automatic `browserErrorCapture` fixture's
+  // job. Warnings are not, and one remote is initialized against a share
+  // scope that under-reports its React version, so they are read here.
+  const warnings: string[] = [];
+  page.on("console", (message) => {
+    if (message.type() === "warning") warnings.push(message.text());
+  });
 
   await page.goto("/federation.html");
   await expect(page.locator("body")).toHaveAttribute(
@@ -56,5 +61,12 @@ test("loads classic and ESM remotes against host React and ReactDOM", async ({
   await expect(page.getByText("Fixture ready")).toHaveCount(0);
   await expect(page.locator("style[data-snui-styles]")).toHaveCount(0);
   await expect(page.getByRole("alert")).toBeEmpty();
-  expect(pageErrors).toEqual([]);
+
+  // Webpack is allowed to say the registered share does not satisfy the range
+  // the remote asked for, which is exactly the case the non-strict singleton
+  // exists to survive. Anything else the page warned about is not accounted
+  // for and would otherwise go unread.
+  expect(
+    warnings.filter((text) => !/unsatisfied version|shared module/i.test(text)),
+  ).toEqual([]);
 });

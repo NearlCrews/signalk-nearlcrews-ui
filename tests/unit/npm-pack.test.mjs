@@ -1,6 +1,4 @@
-import process from "node:process";
-
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { parseNpmPackResult, runNpmPack } from "../../scripts/lib/npm-pack.mjs";
 
@@ -41,19 +39,16 @@ describe("npm pack JSON compatibility", () => {
   });
 });
 
-it("requires the package script npm executable", () => {
-  const originalNpmExecPath = process.env.npm_execpath;
-  delete process.env.npm_execpath;
+describe("npm executable resolution", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
-  try {
+  it("requires the package script npm executable", () => {
+    vi.stubEnv("npm_execpath", undefined);
+
     expect(() => runNpmPack([])).toThrow(
       "Package validation must run through npm so npm_execpath is available.",
     );
-  } finally {
-    if (originalNpmExecPath === undefined) {
-      delete process.env.npm_execpath;
-    } else {
-      process.env.npm_execpath = originalNpmExecPath;
-    }
-  }
+  });
 });

@@ -12,6 +12,7 @@ import { REQUIRED_RELEASE_CHECKS } from "../../scripts/lib/release-checks.mjs";
 import {
   hostedSnapshotVariants,
   missingSnapshotFiles,
+  orphanSnapshotFiles,
 } from "../../scripts/lib/snapshot-families.mjs";
 import {
   expandMatrixName,
@@ -109,6 +110,16 @@ describe("hosted visual-baseline families", () => {
       expect(
         missingSnapshotFiles(panelSpec, variant, present),
         `Refresh the ${variant} family through the Update visual baselines workflow.`,
+      ).toEqual([]);
+    }
+  });
+
+  it("keeps no baseline a renamed or deleted screenshot left behind", () => {
+    const present = readdirSync(SNAPSHOT_DIRECTORY);
+    for (const variant of ciVariants) {
+      expect(
+        orphanSnapshotFiles(panelSpec, variant, present),
+        `Delete the ${variant} images no screenshot in ${PANEL_SPEC_PATH} asks for.`,
       ).toEqual([]);
     }
   });

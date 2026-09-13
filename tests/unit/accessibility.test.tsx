@@ -1,9 +1,14 @@
-import { render } from "@testing-library/react";
-import axe from "axe-core";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { Accordion, EmptyState, Progress } from "../../src/composites.js";
+import {
+  Accordion,
+  CheckboxGroup,
+  EmptyState,
+  Progress,
+} from "../../src/composites.js";
 import { Cell, Column, DataGrid, Row } from "../../src/data-grid.js";
-import { Radio, RadioGroup, Switch } from "../../src/forms.js";
+import { Radio, RadioGroup, SecretInput, Switch } from "../../src/forms.js";
 import {
   ActionBar,
   Badge,
@@ -16,16 +21,19 @@ import {
   InlineConfirm,
   LabeledField,
   Metric,
+  NumberField,
   NumberInput,
   PanelRoot,
   RangeInput,
   Section,
+  SegmentedControl,
   Select,
   StatusIndicator,
   Textarea,
   TextInput,
   ThemeToggle,
 } from "../../src/index.js";
+import { expectNoAxeViolations } from "../helpers.js";
 
 interface FixtureRow {
   readonly id: string;
@@ -141,20 +149,90 @@ describe("accessibility", () => {
       </main>,
     );
 
-    const result = await axe.run(container, {
-      runOnly: {
-        type: "tag",
-        values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
-      },
-      rules: {
-        // jsdom cannot compute rendered colors, so color-contrast would
-        // report incomplete rather than pass. The browser suite covers
-        // contrast against real layout, and contrast.test.ts audits the
-        // token pairs directly.
-        "color-contrast": { enabled: false },
-      },
-    });
+    await expectNoAxeViolations(container);
+  });
 
-    expect(result.violations).toEqual([]);
+  it("has no detectable violations while fields are refusing input", async () => {
+    // The invalid state is the most intricate wiring in the forms layer,
+    // aria-invalid against aria-errormessage against the live region that
+    // reads the message, and it is the state the fixture above never enters.
+    const user = userEvent.setup();
+    const { container } = render(
+      <main>
+        <PanelRoot>
+          <Section title="Refused input">
+            <LabeledField
+              label="Server URL"
+              description="The address of the Signal K server."
+              error="Enter an HTTP or HTTPS URL."
+              errorLive="polite"
+            >
+              <TextInput defaultValue="not a URL" />
+            </LabeledField>
+            <NumberField
+              label="Refresh interval"
+              defaultValue={10}
+              min={1}
+              unit="s"
+            />
+            <LabeledField label="API key">
+              <SecretInput defaultValue="fixture-secret" />
+            </LabeledField>
+            <Checkbox
+              label="Accept the provider agreement"
+              error="Accept the provider agreement before saving."
+              errorLive="polite"
+            />
+            <RadioGroup
+              label="Announcement level"
+              error="Choose an announcement level."
+              errorLive="polite"
+            >
+              <Radio value="all">Everything</Radio>
+              <Radio value="none">Nothing</Radio>
+            </RadioGroup>
+            <SegmentedControl
+              label="Log detail"
+              defaultValue="normal"
+              error="Verbose logging is unavailable on this server."
+              errorLive="polite"
+              options={[
+                { value: "minimal", label: "Minimal" },
+                { value: "normal", label: "Normal" },
+              ]}
+            />
+            <CheckboxGroup
+              legend="Data sources"
+              options={[
+                { label: "AIS targets", value: "ais" },
+                { label: "Depth", value: "depth" },
+              ]}
+              defaultValue={[]}
+              emptyWarning="Select at least one data source."
+              selectAllLabel="Select all sources"
+            />
+            <FieldGroup
+              label="Provider behavior"
+              description="Optional capabilities remain consumer-owned."
+              error="Enable at least one capability."
+            >
+              <Checkbox label="Enable provider" />
+            </FieldGroup>
+          </Section>
+        </PanelRoot>
+      </main>,
+    );
+
+    // Every other field is refused by a prop; the number field is refused by
+    // what the operator typed, so the draft has to be made invalid before the
+    // sweep sees that state at all.
+    const interval = screen.getByRole("spinbutton", {
+      name: /Refresh interval/,
+    });
+    await user.clear(interval);
+    await user.type(interval, "0");
+    expect(interval).toHaveAttribute("aria-invalid", "true");
+
+    await expectNoAxeViolations(container);
   });
 });

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { CONTROL_STYLES } from "../../src/styles/controls.js";
 import { FORM_STYLES } from "../../src/styles/forms.js";
+import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { PROGRESS_STYLES } from "../../src/styles/progress.js";
 import { RADIO_STYLES } from "../../src/styles/radio.js";
 import { RANGE_STYLES } from "../../src/styles/range.js";
@@ -61,17 +62,27 @@ describe("control and form stylesheets", () => {
   const progress = stripComments(PROGRESS_STYLES.styles);
   const radio = stripComments(RADIO_STYLES.styles);
   const range = stripComments(RANGE_STYLES.styles);
-  const control = stripComments(SWITCH_STYLES.styles);
+  const switchStyles = stripComments(SWITCH_STYLES.styles);
   const textarea = stripComments(TEXTAREA_STYLES.styles);
-  const everySheet = [
+  /* The control sheets, for the assertions that name a control rule. */
+  const controlSheets = [
     controls,
     forms,
     progress,
     radio,
     range,
-    control,
+    switchStyles,
     textarea,
   ];
+  /*
+   * Every shipped rule, root sheet first, for the guards that must hold
+   * across the package rather than across a hand-kept list. A hover rule
+   * added to a tab, a collapsible toggle, or the foundation reset has to go
+   * through the same gate as one added here.
+   */
+  const everySheet = STYLE_MODULES.map((module) =>
+    stripComments(module.styles),
+  );
 
   it("gates every raw hover rule on a hover-capable pointer", () => {
     const hovers = everySheet.flatMap((sheet) => hoverSelectors(sheet));
@@ -92,9 +103,21 @@ describe("control and form stylesheets", () => {
     expect(controls).toMatch(
       /@media \(any-pointer: coarse\) \{\s*\.snui-input,\s*\.snui-select \{\s*font-size: max\(1rem, var\(--snui-font-size\)\);/,
     );
-    // The textarea carries the same floor from its own module.
-    expect(textarea).toMatch(
-      /@media \(any-pointer: coarse\) \{\s*\.snui-textarea \{\s*font-size: max\(1rem, var\(--snui-font-size\)\);/,
+    // The textarea reaches the same floor through snui-input, which it always
+    // carries, so its own module restates neither that rule nor the
+    // forced-colors invalid outline.
+    expect(textarea).not.toContain("any-pointer: coarse");
+    expect(textarea).not.toContain("forced-colors: active");
+  });
+
+  it("marks an invalid control with a shape as well as a color", () => {
+    // Night caps every foreground's red, so the danger border alone cannot
+    // separate a refused field from an ordinary one.
+    expect(controls).toMatch(
+      /\.snui-input\[aria-invalid="true"\]:not\(:focus-visible\) \{\s*outline: 1px dashed var\(--snui-color-danger\);/,
+    );
+    expect(controls).toMatch(
+      /\.snui-button--danger \{[^}]*border-style: dashed;/,
     );
   });
 
@@ -132,7 +155,7 @@ describe("control and form stylesheets", () => {
         ".snui-radio__button[data-disabled][data-selected] .snui-radio__control",
       ],
       [
-        control,
+        switchStyles,
         ".snui-switch__button[data-disabled][data-selected] .snui-switch__track",
       ],
       [controls, '.snui-segmented__option:disabled[aria-checked="true"]'],
@@ -147,7 +170,7 @@ describe("control and form stylesheets", () => {
   });
 
   it("writes block-axis offsets with logical properties", () => {
-    for (const sheet of everySheet) {
+    for (const sheet of controlSheets) {
       expect(sheet).not.toMatch(/\bmargin-(?:top|bottom):/);
       expect(sheet).not.toMatch(/(?<![-\w])(?:top|bottom):/);
     }

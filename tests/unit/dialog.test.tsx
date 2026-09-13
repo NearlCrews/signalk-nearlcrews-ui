@@ -1,4 +1,5 @@
 import {
+  act,
   type RenderResult,
   render,
   screen,
@@ -16,7 +17,11 @@ import {
   type DialogProps,
   Popover,
 } from "../../src/overlays.js";
-import { renderInPanel } from "../helpers.js";
+import {
+  PanelPortalProvider,
+  usePanelPortalContainer,
+} from "../../src/utils/portal.js";
+import { flushAnimationFrames, renderInPanel } from "../helpers.js";
 
 function renderDialog(
   props: Omit<DialogProps, "children" | "title"> = {},
@@ -60,7 +65,25 @@ describe("Dialog", () => {
           </UNSAFE_PortalProvider>
         </PanelRoot>,
       ),
-    ).toThrow("Dialog portal container must be its owning PanelRoot.");
+    ).toThrow(
+      "Dialog portal container must be its owning PanelRoot. The resolved container is another element.",
+    );
+  });
+
+  it("names a cleared portal container apart from a redirected one", () => {
+    expect(() =>
+      render(
+        <PanelRoot>
+          <UNSAFE_PortalProvider getContainer={null}>
+            <Dialog title="Connection settings" defaultOpen>
+              <p>Dialog body</p>
+            </Dialog>
+          </UNSAFE_PortalProvider>
+        </PanelRoot>,
+      ),
+    ).toThrow(
+      "Dialog portal container must be its owning PanelRoot. No portal container is installed.",
+    );
   });
 
   it("renders nothing while closed by default", () => {
@@ -178,11 +201,11 @@ describe("Dialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("reports Escape and scrim dismissal through onCancel", async () => {
+  it("reports Escape and scrim dismissal through onCancel with the route taken", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
     const onOpenChange = vi.fn();
-    const { container, unmount } = renderDialog({
+    const { unmount } = renderDialog({
       defaultOpen: true,
       onCancel,
       onOpenChange,
@@ -190,13 +213,58 @@ describe("Dialog", () => {
 
     await user.keyboard("{Escape}");
     expect(onCancel).toHaveBeenCalledTimes(1);
+    expect(onCancel).toHaveBeenLastCalledWith("escape");
     expect(onOpenChange).toHaveBeenCalledWith(false);
     unmount();
 
     const scrimView = renderDialog({ defaultOpen: true, onCancel });
     await user.click(getScrim(scrimView.container));
     expect(onCancel).toHaveBeenCalledTimes(2);
-    expect(container).toBeDefined();
+    expect(onCancel).toHaveBeenLastCalledWith("scrim");
+    expect(scrimView.queryByRole("dialog")).toBeNull();
+  });
+
+  it("keeps reporting cancellations after an action closes an already closed dialog", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    let closeFromAction: (() => void) | undefined;
+
+    function Harness(): React.JSX.Element {
+      const [open, setOpen] = useState(true);
+      return (
+        <PanelRoot>
+          <Button onClick={() => setOpen(true)}>Open dialog</Button>
+          <Dialog
+            title="Connection settings"
+            open={open}
+            onOpenChange={setOpen}
+            onCancel={onCancel}
+            actions={(close) => {
+              closeFromAction = close;
+              return <Button onClick={close}>Done</Button>;
+            }}
+          >
+            <p>Dialog body</p>
+          </Dialog>
+        </PanelRoot>
+      );
+    }
+
+    render(<Harness />);
+
+    // Escape closes first, then the action's own close arrives late, as an
+    // asynchronous save that finished after the user gave up would.
+    await user.keyboard("{Escape}");
+    expect(onCancel).toHaveBeenCalledTimes(1);
+    act(() => {
+      closeFromAction?.();
+    });
+
+    // Reopening and declining again must still report the cancellation.
+    await user.click(screen.getByRole("button", { name: "Open dialog" }));
+    await user.keyboard("{Escape}");
+    expect(onCancel).toHaveBeenCalledTimes(2);
+    expect(onCancel).toHaveBeenLastCalledWith("escape");
   });
 
   it("lets an uncontrolled dialog close from its actions without canceling", async () => {
@@ -329,6 +397,95 @@ describe("Dialog", () => {
     expect(withoutActions.querySelector(".snui-dialog__actions")).toBeNull();
   });
 
+  it("renders no actions row for a function that returns nothing", () => {
+    const { container } = renderDialog({
+      defaultOpen: true,
+      actions: () => null,
+    });
+
+    expect(container.querySelector(".snui-dialog__actions")).toBeNull();
+  });
+
+  it("renders no body wrapper without children", () => {
+    const { container } = renderInPanel(
+      <Dialog title="Connection settings" defaultOpen />,
+    );
+
+    expect(container.querySelector(".snui-dialog__body")).toBeNull();
+    expect(screen.getByRole("dialog")).toBeVisible();
+  });
+
+  it("sizes itself against the visible viewport", () => {
+    renderDialog({ defaultOpen: true });
+
+    expect(
+      screen
+        .getByRole("dialog")
+        .style.getPropertyValue("--snui-visual-viewport-height"),
+    ).toBe(`${String(window.innerHeight)}px`);
+  });
+
+  it("reports a dialog that offers no route out", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderDialog({
+      defaultOpen: true,
+      dismissable: false,
+      keyboardDismissable: false,
+    });
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("may have no way out"),
+    );
+  });
+
+  it("keeps focus in the panel when the control that opened it is gone", async () => {
+    const user = userEvent.setup();
+
+    function Harness(): React.JSX.Element {
+      const [rows, setRows] = useState(["Route A", "Route B"]);
+      const [open, setOpen] = useState(false);
+      return (
+        <PanelRoot>
+          {rows.map((row) => (
+            <Button key={row} onClick={() => setOpen(true)}>
+              Delete {row}
+            </Button>
+          ))}
+          <AlertDialog
+            title="Delete route?"
+            cancelLabel="Keep route"
+            open={open}
+            onOpenChange={setOpen}
+            actions={(close) => (
+              <Button
+                variant="danger"
+                onClick={() => {
+                  setRows(["Route B"]);
+                  close();
+                }}
+              >
+                Delete
+              </Button>
+            )}
+          >
+            <p>This cannot be undone.</p>
+          </AlertDialog>
+        </PanelRoot>
+      );
+    }
+
+    const { container } = render(<Harness />);
+    await user.click(screen.getByRole("button", { name: "Delete Route A" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+
+    // The button that opened the dialog is gone, so react-aria has nothing to
+    // restore to; focus must stay in the panel rather than drop to the body.
+    await flushAnimationFrames();
+    const root = container.querySelector(".snui-root");
+    expect(document.activeElement).toBe(root);
+  });
+
   it("supports an explicit heading level for the title", () => {
     renderDialog({ defaultOpen: true, headingLevel: 3 });
     expect(
@@ -395,6 +552,65 @@ describe("AlertDialog", () => {
     expect(
       screen.getByRole("alertdialog", { name: "Discard route?" }),
     ).toBeVisible();
+  });
+
+  it("describes itself with the consequence it renders", () => {
+    const { container, unmount } = renderInPanel(
+      <AlertDialog title="Discard route?" defaultOpen cancelLabel="Keep route">
+        <p>This cannot be undone.</p>
+      </AlertDialog>,
+    );
+
+    const alert = screen.getByRole("alertdialog");
+    const body = container.querySelector(".snui-dialog__body");
+    expect(body?.id).not.toBe("");
+    expect(alert).toHaveAttribute("aria-describedby", body?.id);
+    unmount();
+
+    // An explicit description wins: the consumer named the summary already.
+    renderInPanel(
+      <AlertDialog
+        title="Discard route?"
+        defaultOpen
+        cancelLabel="Keep route"
+        description="Every unsaved leg is discarded."
+      >
+        <p>This cannot be undone.</p>
+      </AlertDialog>,
+    );
+    const described = screen.getByRole("alertdialog");
+    expect(described).toHaveAttribute(
+      "aria-describedby",
+      screen.getByText("Every unsaved leg is discarded.").id,
+    );
+  });
+
+  it("reports its cancel button as the route the user took, and closes", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    renderInPanel(
+      <AlertDialog
+        title="Discard route?"
+        defaultOpen
+        cancelLabel="Keep route"
+        onCancel={onCancel}
+        actions={<Button variant="danger">Discard</Button>}
+      >
+        <p>This cannot be undone.</p>
+      </AlertDialog>,
+    );
+
+    // The cancel button is the leading action every alert dialog renders, and
+    // it closes the dialog through the same route Escape reports.
+    await user.click(screen.getByRole("button", { name: "Keep route" }));
+    expect(onCancel).toHaveBeenCalledWith("cancel");
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+  });
+
+  it("leaves a plain dialog's body undescribed", () => {
+    renderDialog({ defaultOpen: true });
+
+    expect(screen.getByRole("dialog")).not.toHaveAttribute("aria-describedby");
   });
 
   it("throws when cancelLabel is empty", () => {
@@ -524,5 +740,28 @@ describe("AlertDialog", () => {
     await user.click(cancel);
     expect(onCancel).toHaveBeenCalledTimes(1);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("panel portal container", () => {
+  function Probe(): React.JSX.Element {
+    const container = usePanelPortalContainer("Probe");
+    return (
+      <span data-testid="probe">
+        {container === null ? "pending" : "resolved"}
+      </span>
+    );
+  }
+
+  it("waits rather than throwing while the owning root is unresolved", () => {
+    render(
+      <PanelPortalProvider getContainer={() => null}>
+        <Probe />
+      </PanelPortalProvider>,
+    );
+
+    // A panel root resolves its element a commit after mounting, so an
+    // overlay defers instead of portaling into nothing.
+    expect(screen.getByTestId("probe")).toHaveTextContent("pending");
   });
 });

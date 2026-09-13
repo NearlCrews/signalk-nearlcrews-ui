@@ -2,11 +2,11 @@ import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
-import { Checkbox } from "../../src/index.js";
+import { Checkbox, NumberInput, Select, Textarea } from "../../src/index.js";
 import { formOf, renderInPanel } from "../helpers.js";
 
 describe("Checkbox activation area", () => {
-  it("wraps the box and its label alone, so a message is not a toggle", () => {
+  it("places both messages outside the label that toggles the box", () => {
     const { container } = renderInPanel(
       <Checkbox
         label="Emit computed values"
@@ -16,12 +16,10 @@ describe("Checkbox activation area", () => {
       />,
     );
 
+    // The test below proves behaviorally that pressing a message does not
+    // toggle; this one pins where the two messages sit, which is what makes
+    // that true and what a restructuring could quietly undo.
     const control = container.querySelector("label.snui-checkbox__control");
-    expect(control).not.toBeNull();
-    expect(control?.querySelector(".snui-checkbox__input")).not.toBeNull();
-    expect(control?.querySelector(".snui-checkbox__label")).not.toBeNull();
-    // Both messages stay outside the label; aria-describedby and
-    // aria-errormessage already tie them to the control.
     expect(control?.querySelector(".snui-checkbox__description")).toBeNull();
     expect(control?.querySelector(".snui-checkbox__error")).toBeNull();
     const block = container.querySelector(".snui-checkbox");
@@ -56,6 +54,62 @@ describe("Checkbox activation area", () => {
     // The label itself still toggles, so the control keeps its own hit area.
     await user.click(screen.getByText("Emit computed values"));
     expect(checkbox).toBeChecked();
+  });
+
+  it("marks a required box and keeps the mark out of its name", () => {
+    const { container } = renderInPanel(
+      <Checkbox required label="Accept the provider agreement" />,
+    );
+
+    const box = screen.getByRole("checkbox", {
+      name: "Accept the provider agreement",
+    });
+    expect(box).toBeRequired();
+    const marks = container.querySelectorAll(".snui-required-mark");
+    expect(marks).toHaveLength(1);
+    expect(marks[0]).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it("takes markers of its own for the required and optional cases", () => {
+    const { container } = renderInPanel(
+      <>
+        <Checkbox required requiredLabel="(required)" label="Accept terms" />
+        <Checkbox optionalLabel="(optional)" label="Send diagnostics" />
+        <Checkbox label="Publish depth" />
+      </>,
+    );
+
+    const labels = container.querySelectorAll(".snui-checkbox__label");
+    expect(labels[0]?.querySelector(".snui-required-mark")).toHaveTextContent(
+      "(required)",
+    );
+    // The optional marker stays in the name, so what is heard matches what is
+    // drawn; a box with neither marker gains no trailing space.
+    expect(
+      screen.getByRole("checkbox", { name: "Send diagnostics (optional)" }),
+    ).toBeTruthy();
+    expect(labels[2]?.textContent).toBe("Publish depth");
+  });
+
+  it("reports an aria-label the rendered label overrides", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      renderInPanel(
+        <Checkbox
+          aria-label="Wind"
+          label="Publish wind alerts to the vessel bus"
+        />,
+      );
+      expect(warn.mock.calls[0]?.[0]).toContain("aria-label");
+      // The rendered label is what names the box, whatever was passed.
+      expect(
+        screen.getByRole("checkbox", {
+          name: "Publish wind alerts to the vessel bus",
+        }),
+      ).toBeTruthy();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("puts the hidden-label modifier on the block that owns the layout", () => {
@@ -200,5 +254,49 @@ describe("Checkbox mixed state while blocked", () => {
     await user.click(box);
     expect(box.indeterminate).toBe(true);
     expect(box).not.toBeChecked();
+  });
+});
+
+describe("Monospace and row-count options", () => {
+  it("renders numeric and select identifiers in the monospace stack", () => {
+    renderInPanel(
+      <>
+        <NumberInput monospace aria-label="PGN" defaultValue={130306} />
+        <Select monospace aria-label="Source">
+          <option value="a">A</option>
+        </Select>
+      </>,
+    );
+
+    // PGN numbers, MMSI values, and port numbers are exactly the digits the
+    // tabular stack is for.
+    expect(screen.getByRole("spinbutton", { name: "PGN" })).toHaveClass(
+      "snui-input--monospace",
+    );
+    expect(screen.getByRole("combobox", { name: "Source" })).toHaveClass(
+      "snui-input--monospace",
+    );
+  });
+
+  it("releases the textarea height floor for either row count", () => {
+    renderInPanel(
+      <>
+        <Textarea rows={2} aria-label="Notes" />
+        <Textarea minRows={2} aria-label="Remarks" />
+        <Textarea aria-label="Comments" />
+      </>,
+    );
+
+    // A row count states the height whichever prop carried it, so a small
+    // count is not swallowed by the module's own minimum.
+    expect(screen.getByRole("textbox", { name: "Notes" })).toHaveClass(
+      "snui-textarea--rows",
+    );
+    expect(screen.getByRole("textbox", { name: "Remarks" })).toHaveClass(
+      "snui-textarea--rows",
+    );
+    expect(screen.getByRole("textbox", { name: "Comments" })).not.toHaveClass(
+      "snui-textarea--rows",
+    );
   });
 });

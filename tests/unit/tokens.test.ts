@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { CONTROL_STYLES } from "../../src/styles/controls.js";
-import { PANEL_STYLES } from "../../src/styles/index.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
+import { PANEL_STYLES } from "../../src/styles/root-sheet.js";
 import {
   CONTAINER_BREAKPOINT_NARROW,
+  DATA_GRID_ROW_HEIGHTS,
+  DATA_GRID_ROW_HEIGHTS_FINE,
   PUBLIC_TOKEN_NAMES,
   renderTokenStyles,
   TOKEN_STYLES,
@@ -52,10 +54,34 @@ describe("design token scales", () => {
     expect(TOKEN_STYLES).toContain("--snui-z-toast: 1090;");
   });
 
-  it("paints a two-tone focus ring", () => {
+  it("paints a two-tone focus ring over a remappable band", () => {
     expect(TOKEN_STYLES).toContain(
-      "--snui-focus-ring: 0 0 0 2px var(--snui-color-surface), 0 0 0 6px color-mix(in srgb, var(--snui-color-focus) 38%, transparent);",
+      "--snui-color-focus-ring-band: var(--snui-color-surface);",
     );
+    expect(TOKEN_STYLES).toContain(
+      `--snui-focus-ring:
+    0 0 0 2px var(--snui-color-focus-ring-band),
+    0 0 0 6px color-mix(in srgb, var(--snui-color-focus) 38%, transparent);`,
+    );
+  });
+
+  it("emits each hover alias as a reference to the token it names", () => {
+    // A copied value would keep the packaged fill when a consumer overrides
+    // the token, or when a dialog remaps it to the raised fill.
+    expect(TOKEN_STYLES).toContain(
+      "--snui-color-surface-hover: var(--snui-color-interactive-hover);",
+    );
+    expect(TOKEN_STYLES).toContain(
+      "--snui-color-surface-raised-hover: var(--snui-color-hover-raised);",
+    );
+  });
+
+  it("carries the light palette once, in the base block", () => {
+    // Light is the base, so a host light marker and a light system preference
+    // have nothing to declare; only the dark markers get a block.
+    expect(TOKEN_STYLES).not.toContain('[data-bs-theme="light"]');
+    expect(TOKEN_STYLES).not.toContain("@media (prefers-color-scheme: light)");
+    expect(TOKEN_STYLES).toContain('[data-bs-theme="dark"]');
   });
 
   it("keeps the motion scale values stable on one easing curve", () => {
@@ -87,6 +113,29 @@ describe("design token scales", () => {
     expect(TOKEN_STYLES).toContain(
       "--snui-shadow-overlay: 0 0.5rem 1.5rem rgb(90 0 0 / 42%);",
     );
+  });
+
+  it("gives the coarse pointer both target size and target separation", () => {
+    const coarse = TOKEN_STYLES.slice(
+      TOKEN_STYLES.indexOf("@media (any-pointer: coarse)"),
+    );
+    expect(coarse).toContain("--snui-space-2: 0.75rem;");
+    expect(coarse).toContain("--snui-control-min-height: 2.75rem;");
+    expect(coarse).toContain("--snui-range-thumb-size: 2.75rem;");
+  });
+
+  it("estimates a row from the control height its pointer resolves to", () => {
+    // 2.75rem coarse and 2.5rem fine at a 16 pixel root, with a compact row
+    // one --snui-space-3 (0.75rem) shorter than the default row.
+    expect(
+      DATA_GRID_ROW_HEIGHTS.default - DATA_GRID_ROW_HEIGHTS_FINE.default,
+    ).toBe(4);
+    expect(
+      DATA_GRID_ROW_HEIGHTS.compact - DATA_GRID_ROW_HEIGHTS_FINE.compact,
+    ).toBe(4);
+    for (const heights of [DATA_GRID_ROW_HEIGHTS, DATA_GRID_ROW_HEIGHTS_FINE]) {
+      expect(heights.default - heights.compact).toBe(12);
+    }
   });
 
   it("keeps 999px behind the pill radius token", () => {

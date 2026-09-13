@@ -171,7 +171,12 @@ interface Boat {
   readonly name: string;
   readonly depth: number;
   readonly wind: number;
+  /** Renders this row taller than the layout estimate. */
+  readonly expanded?: boolean;
 }
+
+/** The row the expand control makes tall enough to need a measured height. */
+const EXPANDING_BOAT_ID = "vessel-1";
 
 const BOATS: readonly Boat[] = Array.from({ length: 240 }, (_, index) => ({
   id: `vessel-${String(index + 1)}`,
@@ -202,10 +207,21 @@ function Showcase(): React.JSX.Element {
   const [units, setUnits] = useState("server");
   const [depthAlarm, setDepthAlarm] = useState(2.5);
 
-  const sortedBoats = useMemo(
-    () => [...BOATS].sort((a, b) => compareBoats(a, b, sortDescriptor)),
-    [sortDescriptor],
-  );
+  /*
+   * The expanded flag travels in the row data rather than in the render
+   * closure. A virtualized grid caches each rendered row against the item it
+   * was built from, so a row picks up new content when its item is replaced,
+   * which is the same contract a consumer follows for any row state.
+   */
+  const sortedBoats = useMemo(() => {
+    const sorted = [...BOATS].sort((a, b) =>
+      compareBoats(a, b, sortDescriptor),
+    );
+    if (!expandedFirstVessel) return sorted;
+    return sorted.map((boat) =>
+      boat.id === EXPANDING_BOAT_ID ? { ...boat, expanded: true } : boat,
+    );
+  }, [expandedFirstVessel, sortDescriptor]);
 
   return (
     <PanelRoot width="wide">
@@ -345,7 +361,7 @@ function Showcase(): React.JSX.Element {
             <LabeledField label="Crew size" layout="inline" density="compact">
               {(controlProps) => (
                 <InputGroup density="compact">
-                  <InputGroupControl width="grow">
+                  <InputGroupControl controlWidth="grow">
                     <RangeInput
                       {...controlProps}
                       defaultValue={4}
@@ -353,7 +369,7 @@ function Showcase(): React.JSX.Element {
                       max={12}
                     />
                   </InputGroupControl>
-                  <InputGroupControl width="fixed">
+                  <InputGroupControl controlWidth="fixed">
                     <NumberInput
                       aria-label="Crew size exact value"
                       aria-describedby={controlProps["aria-describedby"]}
@@ -490,10 +506,7 @@ function Showcase(): React.JSX.Element {
                   <span
                     style={{
                       display: "block",
-                      minHeight:
-                        expandedFirstVessel && boat.id === "vessel-1"
-                          ? 72
-                          : undefined,
+                      minHeight: boat.expanded === true ? 72 : undefined,
                     }}
                   >
                     {boat.name}

@@ -47,6 +47,10 @@ describe("federation share map", () => {
       writeFileSync(entryPath, cjs);
       const loaded = createRequire(import.meta.url)(entryPath);
       expect(loaded.shared).toEqual(shared);
+      expect(Object.isFrozen(loaded.shared)).toBe(true);
+      for (const share of Object.values(loaded.shared)) {
+        expect(Object.isFrozen(share)).toBe(true);
+      }
       expect(loaded.hostNotes).toBe(HOST_NOTES);
       expect([...loaded.SIGNALK_HOST_SHARED_MODULES]).toEqual([
         "react",

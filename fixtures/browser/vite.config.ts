@@ -88,6 +88,9 @@ function cspFixtureServer(): Plugin {
               [
                 "default-src 'self'",
                 "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+                // Only the fallback for the two directives below, and every
+                // browser under test implements both, so this governs nothing
+                // here. It stays for a host that implements neither.
                 "style-src 'none'",
                 `style-src-elem 'nonce-${CSP_FIXTURE_NONCE}'`,
                 "style-src-attr 'unsafe-inline'",

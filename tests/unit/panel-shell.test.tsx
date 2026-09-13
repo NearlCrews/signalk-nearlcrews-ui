@@ -1,5 +1,6 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import axe from "axe-core";
 import { createRef } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -9,13 +10,33 @@ import {
   type PanelErrorBoundaryFallbackProps,
   PanelShell,
   Section,
+  UnsupportedBrowserNotice,
   useUnsavedChangesGuard,
 } from "../../src/index.js";
+import { usePanelAnnouncer } from "../../src/utils/announcer.js";
 import { renderInPanel } from "../helpers.js";
 
 function follows(first: Element, second: Element): boolean {
   return Boolean(
     first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+  );
+}
+
+interface AnnounceProps {
+  readonly assertive?: boolean | undefined;
+  readonly message: string;
+}
+
+/** A panel child that speaks through the shell's own regions. */
+function Announce({
+  assertive = false,
+  message,
+}: AnnounceProps): React.JSX.Element {
+  const announce = usePanelAnnouncer();
+  return (
+    <button type="button" onClick={() => announce(message, { assertive })}>
+      Announce
+    </button>
   );
 }
 
@@ -112,6 +133,56 @@ describe("PanelShell", () => {
     expect(screen.queryByRole("heading")).toBeNull();
     expect(screen.getByRole("radio", { name: "Light" })).toBeVisible();
     expect(screen.queryByRole("radio", { name: "Night" })).toBeNull();
+  });
+
+  it("shows a description even when the panel has no title", () => {
+    render(
+      <PanelShell description="Values stay in SI units." themeToggle="none">
+        <p>Body</p>
+      </PanelShell>,
+    );
+
+    // Panels are titleless by convention, so a description that rendered only
+    // beside a title would be dropped on almost every panel that passes one.
+    expect(screen.getByText("Values stay in SI units.")).toBeVisible();
+    expect(screen.queryByRole("heading")).toBeNull();
+  });
+
+  it("mounts both announcer regions empty and speaks politely on request", async () => {
+    const user = userEvent.setup();
+    render(
+      <PanelShell themeToggle="none">
+        <Announce message="Three paths detected." />
+      </PanelShell>,
+    );
+
+    // The regions exist before the first message, which is the whole reason
+    // the shell owns them rather than each panel mounting its own.
+    const polite = screen.getByRole("status");
+    const assertive = screen.getByRole("alert");
+    expect(polite.textContent).toBe("");
+    expect(assertive.textContent).toBe("");
+
+    await user.click(screen.getByRole("button", { name: "Announce" }));
+    await waitFor(() =>
+      expect(polite).toHaveTextContent("Three paths detected."),
+    );
+    expect(assertive.textContent).toBe("");
+  });
+
+  it("interrupts through the assertive region when asked", async () => {
+    const user = userEvent.setup();
+    render(
+      <PanelShell themeToggle="none">
+        <Announce assertive message="Provider offline." />
+      </PanelShell>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Announce" }));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("Provider offline."),
+    );
+    expect(screen.getByRole("status").textContent).toBe("");
   });
 
   it("resolves a between placement with no title to the trailing edge", () => {
@@ -249,6 +320,38 @@ describe("PanelShell", () => {
       expect(screen.queryByText("Body")).toBeNull();
     });
 
+    it("carries the shell's own attributes and labels into the notice", () => {
+      Object.defineProperty(window, "CSSScopeRule", {
+        configurable: true,
+        value: undefined,
+      });
+      render(
+        <PanelShell
+          id="chart-locker"
+          className="host-panel"
+          data-testid="shell"
+          unsupportedLabels={{
+            title: "Update the vessel browser",
+            children: "Open Signal K Admin in a newer browser.",
+          }}
+        >
+          <p>Body</p>
+        </PanelShell>,
+      );
+
+      // A host that finds the panel by id or a data attribute still finds
+      // something on the one engine where it can least afford surprises.
+      const notice = screen.getByTestId("shell");
+      expect(notice).toHaveAttribute("id", "chart-locker");
+      expect(notice).toHaveClass("host-panel");
+      expect(
+        screen.getByRole("region", { name: "Update the vessel browser" }),
+      ).toBeVisible();
+      expect(
+        screen.getByText("Open Signal K Admin in a newer browser."),
+      ).toBeVisible();
+    });
+
     it("renders a consumer notice when one is supplied", () => {
       Object.defineProperty(window, "CSSScopeRule", {
         configurable: true,
@@ -324,19 +427,111 @@ describe("PanelShell error boundary", () => {
   it("keeps the default fallback and recovery when no fallback is given", async () => {
     const user = userEvent.setup();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { container } = render(
+      <PanelShell title="Chart locker">
+        <Bomb />
+      </PanelShell>,
+    );
+
+    const fallback = container.querySelector(".snui-banner--danger");
+    expect(fallback).toHaveTextContent("This panel stopped working");
+    // The crash unmounted whatever held focus, so the fallback takes it and
+    // the reader arrives on the recovery action instead of on the body.
+    expect(document.activeElement).toBe(fallback);
+
+    armed = false;
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(screen.getByText("Recovered content")).toBeVisible();
+  });
+
+  it("offers a page reload by default and drops it when asked", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { rerender } = render(
+      <PanelShell title="Chart locker">
+        <Bomb />
+      </PanelShell>,
+    );
+
+    // A retry cannot clear a stale chunk, so the shell offers the page reload
+    // every panel used to wire for itself, and one panel shipped without.
+    expect(screen.getByRole("button", { name: "Reload page" })).toBeVisible();
+
+    rerender(
+      <PanelShell title="Chart locker" onReload={null}>
+        <Bomb />
+      </PanelShell>,
+    );
+    expect(screen.queryByRole("button", { name: "Reload page" })).toBeNull();
+  });
+
+  it("reloads the host page from the default secondary action", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const reload = vi.fn();
+    // Only the one method the fallback calls: jsdom's own Location cannot be
+    // spied on, and copying it would spread a class instance.
+    vi.stubGlobal("location", { href: window.location.href, reload });
+    const user = userEvent.setup();
     render(
       <PanelShell title="Chart locker">
         <Bomb />
       </PanelShell>,
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
-      "This panel stopped working",
+    await user.click(screen.getByRole("button", { name: "Reload page" }));
+
+    expect(reload).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+
+  it("records the failure on the console with no error handler wired", () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    render(
+      <PanelShell title="Chart locker">
+        <Bomb />
+      </PanelShell>,
     );
 
+    expect(
+      consoleError.mock.calls.some(
+        (call) =>
+          call[0] === "PanelErrorBoundary caught a render error." &&
+          call[1] instanceof Error,
+      ),
+    ).toBe(true);
+  });
+
+  it("announces the failure rather than taking focus that sits elsewhere", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
     armed = false;
-    await user.click(screen.getByRole("button", { name: "Try again" }));
-    expect(screen.getByText("Recovered content")).toBeVisible();
+    // Built fresh per render: React skips re-rendering a subtree handed the
+    // very same element, and this test needs the second render to run.
+    const tree = (): React.JSX.Element => (
+      <>
+        <button type="button" data-testid="outside">
+          Elsewhere
+        </button>
+        <PanelShell title="Chart locker">
+          <Bomb />
+        </PanelShell>
+      </>
+    );
+    const { rerender } = render(tree());
+    const outside = screen.getByTestId("outside");
+    outside.focus();
+
+    armed = true;
+    rerender(tree());
+
+    // Nothing was pulled out from under the operator, so the panel's own
+    // region, mounted long before this message, says what happened.
+    expect(document.activeElement).toBe(outside);
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "This panel stopped working",
+      ),
+    );
   });
 
   it("gives the outer stack the requested gap", () => {
@@ -378,14 +573,15 @@ describe("PanelErrorBoundary", () => {
     const user = userEvent.setup();
     const onError = vi.fn();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    renderInPanel(
+    const { container } = renderInPanel(
       <PanelErrorBoundary onError={onError}>
         <Bomb />
       </PanelErrorBoundary>,
     );
 
-    const alert = screen.getByRole("alert");
-    expect(alert).toHaveTextContent("This panel stopped working");
+    expect(container.querySelector(".snui-banner--danger")).toHaveTextContent(
+      "This panel stopped working",
+    );
     expect(onError).toHaveBeenCalledOnce();
     expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
     expect(screen.queryByRole("button", { name: "Reload page" })).toBeNull();
@@ -393,14 +589,14 @@ describe("PanelErrorBoundary", () => {
     armed = false;
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(screen.getByText("Recovered content")).toBeVisible();
-    expect(screen.queryByRole("alert")).toBeNull();
+    expect(container.querySelector(".snui-banner--danger")).toBeNull();
   });
 
   it("offers the secondary reload action only when a handler is given", async () => {
     const user = userEvent.setup();
     const onReload = vi.fn();
     vi.spyOn(console, "error").mockImplementation(() => undefined);
-    renderInPanel(
+    const { container } = renderInPanel(
       <PanelErrorBoundary
         onReload={onReload}
         reloadLabel="Reload Admin"
@@ -412,12 +608,37 @@ describe("PanelErrorBoundary", () => {
       </PanelErrorBoundary>,
     );
 
-    expect(screen.getByRole("alert")).toHaveTextContent(
+    expect(container.querySelector(".snui-banner--danger")).toHaveTextContent(
       "Panel error. Reload if it keeps failing.",
     );
     expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Reload Admin" }));
     expect(onReload).toHaveBeenCalledOnce();
+  });
+
+  it("warns about discarded changes only where the reload is offered", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const { container } = renderInPanel(
+      <>
+        <PanelErrorBoundary>
+          <Bomb />
+        </PanelErrorBoundary>
+        <PanelErrorBoundary onReload={() => undefined}>
+          <Bomb />
+        </PanelErrorBoundary>
+      </>,
+    );
+
+    // The warning belongs to the action that certainly throws unsaved entries
+    // away, and the retry, which only rebuilds the panel, carries none.
+    const fallbacks = container.querySelectorAll(".snui-banner--danger");
+    expect(fallbacks[0]).toHaveTextContent(
+      "Try again rebuilds this panel's content.",
+    );
+    expect(fallbacks[0]).not.toHaveTextContent("Reloading the page");
+    expect(fallbacks[1]).toHaveTextContent(
+      "Reloading the page discards unsaved changes in every panel.",
+    );
   });
 
   it("hands a custom fallback the error and both actions", async () => {
@@ -461,6 +682,66 @@ describe("PanelErrorBoundary", () => {
 
     expect(screen.getByText("Recovered content")).toBeVisible();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("UnsupportedBrowserNotice", () => {
+  it("passes an accessibility audit with its defaults and with overrides", async () => {
+    const { container } = render(
+      <main>
+        <UnsupportedBrowserNotice />
+        <UnsupportedBrowserNotice
+          headingLevel={3}
+          title="Update the vessel browser"
+        >
+          Open Signal K Admin in a newer browser.
+        </UnsupportedBrowserNotice>
+      </main>,
+    );
+
+    const result = await axe.run(container, {
+      runOnly: {
+        type: "tag",
+        values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
+      },
+      rules: {
+        // jsdom cannot compute rendered colors, so this reports incomplete
+        // rather than pass; the token pairs are audited directly elsewhere.
+        "color-contrast": { enabled: false },
+      },
+    });
+
+    expect(result.violations).toEqual([]);
+  });
+
+  it("keeps its own heading beside a consumer's label reference", () => {
+    render(
+      <>
+        <span id="host-name">Chart locker</span>
+        <UnsupportedBrowserNotice aria-labelledby="host-name" />
+      </>,
+    );
+
+    // Every other titled surface joins the two references, so a consumer
+    // adding context does not silently drop the words on screen.
+    expect(
+      screen.getByRole("region", {
+        name: "Chart locker Browser update required",
+      }),
+    ).toBeVisible();
+  });
+
+  it("renders the heading alone when the body is suppressed", () => {
+    const { container } = render(
+      <UnsupportedBrowserNotice>{null}</UnsupportedBrowserNotice>,
+    );
+
+    const notice = screen.getByRole("region", {
+      name: "Browser update required",
+    });
+    expect(notice).toHaveAttribute("data-snui-unsupported");
+    expect(notice).toHaveAttribute("data-browser-compatibility-message");
+    expect(container.querySelector("section > div")).toBeNull();
   });
 });
 

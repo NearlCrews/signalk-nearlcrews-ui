@@ -23,7 +23,7 @@ describe("UnsupportedBrowserNotice", () => {
       }),
     ).toBeVisible();
     expect(notice).toHaveTextContent(
-      "This panel needs a newer browser or a newer app to embed it. Update the browser or the app that opens Signal K Admin, then reopen this panel.",
+      "This panel needs a newer browser. Update the browser, or the app that opens Signal K Admin, then open this panel again.",
     );
   });
 

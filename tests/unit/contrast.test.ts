@@ -8,7 +8,9 @@ import {
   PUBLIC_FOUNDATION_TOKEN_NAMES,
   PUBLIC_TOKEN_NAMES,
   type ThemeTokenSet,
+  TOKEN_STYLES,
 } from "../../src/styles/tokens.js";
+import { ROOT_SELECTOR } from "../../src/version.js";
 
 function channels(hex: string): [number, number, number] {
   const value = hex.replace("#", "");
@@ -83,15 +85,24 @@ const TEXT_SURFACES = [
   "--snui-color-surface-stripe",
 ] as const satisfies readonly ColorTokenName[];
 
-/**
- * Surfaces a bordered control can sit on. Hover-raised is the transient fill
- * under menu items and header cells, which carry text rather than controls.
- */
-const CONTROL_SURFACES = TEXT_SURFACES.filter(
-  (surface) => surface !== "--snui-color-hover-raised",
-);
-
 const STATUS_TONES = ["info", "success", "warning", "danger"] as const;
+
+/**
+ * The tinted fills a boundary or a piece of text can land on: a selected data
+ * grid row, a pressed control, and every tone-colored surface. They are
+ * measured beside the plain surfaces, because a separator or a disabled label
+ * inside one of them is the same pixel problem as on the surface itself.
+ */
+const SUBTLE_FILLS = [
+  "--snui-color-accent-subtle",
+  "--snui-color-success-subtle",
+  "--snui-color-warning-subtle",
+  "--snui-color-danger-subtle",
+  "--snui-color-info-subtle",
+] as const satisfies readonly ColorTokenName[];
+
+/** Every fill the package paints behind text, a boundary, or a control. */
+const ALL_FILLS = [...TEXT_SURFACES, ...SUBTLE_FILLS];
 
 describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
   it("keeps primary and muted text above WCAG AA on every surface", () => {
@@ -157,15 +168,17 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
     }
   });
 
-  it("keeps control boundaries distinguishable from adjacent surfaces", () => {
-    for (const surface of CONTROL_SURFACES) {
+  it("keeps control boundaries distinguishable from every fill behind them", () => {
+    // Including the hover fills and the subtle fills: a data-grid separator
+    // sits on both, under the pointer and on a selected row.
+    for (const fill of ALL_FILLS) {
       expect(
-        contrastRatio(tokens["--snui-color-border"], tokens[surface]),
-        `border on ${surface}`,
+        contrastRatio(tokens["--snui-color-border"], tokens[fill]),
+        `border on ${fill}`,
       ).toBeGreaterThanOrEqual(3);
       expect(
-        contrastRatio(tokens["--snui-color-accent-fill"], tokens[surface]),
-        `accent-fill on ${surface}`,
+        contrastRatio(tokens["--snui-color-accent-fill"], tokens[fill]),
+        `accent-fill on ${fill}`,
       ).toBeGreaterThanOrEqual(3);
     }
   });
@@ -182,6 +195,31 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
         tokens["--snui-color-interactive-hover"],
         tokens["--snui-color-surface"],
       ),
+    ).toBeGreaterThanOrEqual(1.05);
+  });
+
+  /**
+   * The hovered selected row is not measured with the resting fills above.
+   * Darkening a selected row far enough to be felt under the pointer and still
+   * clearing a 3:1 floor for a grey disabled label and a grey separator is not
+   * possible on the light palette, and a selected row is identified by its
+   * leading accent bar rather than by the tint alone. What has to hold is that
+   * the row keeps its text readable and stays visibly a step from the resting
+   * selected fill.
+   */
+  it("keeps the hovered selected row readable and a visible step", () => {
+    const hovered = tokens["--snui-color-row-selected-hover"];
+    expect(
+      contrastRatio(tokens["--snui-color-text"], hovered),
+      "text on row-selected-hover",
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(tokens["--snui-color-text-muted"], hovered),
+      "text-muted on row-selected-hover",
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrastRatio(hovered, tokens["--snui-color-accent-subtle"]),
+      "row-selected-hover against the resting selected fill",
     ).toBeGreaterThanOrEqual(1.05);
   });
 
@@ -224,15 +262,25 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
   });
 
   it("keeps disabled text legible without opacity", () => {
-    for (const surface of [
-      "--snui-color-surface",
-      "--snui-color-surface-raised",
-    ] as const) {
+    // Every fill, not just the two resting surfaces: a disabled control sits
+    // in hovered and selected rows too, and disabled text is exempt from the
+    // WCAG floor but not from being read.
+    for (const fill of ALL_FILLS) {
       expect(
-        contrastRatio(tokens["--snui-color-text-disabled"], tokens[surface]),
-        `text-disabled on ${surface}`,
+        contrastRatio(tokens["--snui-color-text-disabled"], tokens[fill]),
+        `text-disabled on ${fill}`,
       ).toBeGreaterThanOrEqual(3);
     }
+    // A disabled fill also carries text of the surface color: a disabled
+    // Switch track, a disabled checked box, a disabled progress fill. The pair
+    // has to clear the same floor read the other way round.
+    expect(
+      contrastRatio(
+        tokens["--snui-color-surface"],
+        tokens["--snui-color-text-disabled"],
+      ),
+      "surface on text-disabled",
+    ).toBeGreaterThanOrEqual(3);
     expect(
       contrastRatio(
         tokens["--snui-color-text-muted"],
@@ -243,18 +291,42 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
   });
 
   it("keeps the track visible and the progress fill distinct from it", () => {
-    expect(
-      contrastRatio(
-        tokens["--snui-color-track"],
-        tokens["--snui-color-surface"],
-      ),
-    ).toBeGreaterThanOrEqual(1.5);
+    // Raised as well as flat: a range or a progress bar inside a dialog, a
+    // popover, or a toast sits on the raised surface.
+    for (const surface of [
+      "--snui-color-surface",
+      "--snui-color-surface-raised",
+    ] as const) {
+      expect(
+        contrastRatio(tokens["--snui-color-track"], tokens[surface]),
+        `track on ${surface}`,
+      ).toBeGreaterThanOrEqual(1.5);
+    }
     expect(
       contrastRatio(
         tokens["--snui-color-accent-fill"],
         tokens["--snui-color-track"],
       ),
     ).toBeGreaterThanOrEqual(3);
+  });
+
+  it("separates the danger tone from the resting boundary and from text", () => {
+    // Night is exempt by design: the green and blue cap plus the text-class
+    // red floor converge every bright token, which is why Night never signals
+    // status by hue. Light and Dark carry the separation the danger button and
+    // the invalid control border rely on.
+    if (tokens === NIGHT_TOKENS) return;
+    expect(
+      contrastRatio(
+        tokens["--snui-color-danger"],
+        tokens["--snui-color-border"],
+      ),
+      "danger against border",
+    ).toBeGreaterThanOrEqual(1.5);
+    expect(
+      contrastRatio(tokens["--snui-color-danger"], tokens["--snui-color-text"]),
+      "danger against text",
+    ).toBeGreaterThanOrEqual(1.5);
   });
 
   it("derives the surface-first hover aliases from the hover pair", () => {
@@ -377,6 +449,75 @@ describe("Night red preservation", () => {
     expect(green).toBeLessThanOrEqual(32);
     expect(blue).toBeLessThanOrEqual(32);
   });
+
+  /**
+   * The rendered Night block rather than the typed token names, so the scrim
+   * and the elevation shadows, which are plain strings beside the tokens, are
+   * held to the same cap. The focus halo is not here: it lives in the base
+   * block as a `color-mix` over `--snui-color-focus`, and mixing a capped
+   * color with transparent cannot raise a channel above the cap.
+   */
+  function nightBlock(): string {
+    const opening = `${ROOT_SELECTOR}[data-snui-theme="night"] {`;
+    const start = TOKEN_STYLES.indexOf(opening);
+    expect(start, "no Night theme block").toBeGreaterThanOrEqual(0);
+    const end = TOKEN_STYLES.indexOf("\n}", start);
+    return TOKEN_STYLES.slice(start + opening.length, end);
+  }
+
+  it("caps green and blue on every color the Night block emits", () => {
+    const block = nightBlock();
+    let hexLiterals = 0;
+    for (const match of block.matchAll(/#([0-9a-f]{6})\b/g)) {
+      const [, green, blue] = channels(`#${match[1] ?? ""}`);
+      hexLiterals += 1;
+      expect(green, `${match[0]} green`).toBeLessThanOrEqual(0x40);
+      expect(blue, `${match[0]} blue`).toBeLessThanOrEqual(0x40);
+    }
+    let rgbLiterals = 0;
+    for (const match of block.matchAll(/rgb\(\s*\d+\s+(\d+)\s+(\d+)/g)) {
+      rgbLiterals += 1;
+      expect(
+        Number.parseInt(match[1] ?? "", 10),
+        `${match[0]} green`,
+      ).toBeLessThanOrEqual(0x40);
+      expect(
+        Number.parseInt(match[2] ?? "", 10),
+        `${match[0]} blue`,
+      ).toBeLessThanOrEqual(0x40);
+    }
+    expect(hexLiterals, "no Night token colors were measured").toBeGreaterThan(
+      0,
+    );
+    // The scrim and the two elevation shadows, the colors the typed token
+    // names never reach.
+    expect(
+      rgbLiterals,
+      "the Night scrim and shadows were not measured",
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it("keeps the Night scrim dark enough to protect a dark-adapted eye", () => {
+    const scrim =
+      /--snui-color-scrim:\s*rgb\(\s*(\d+)\s+(\d+)\s+(\d+)\s*\/\s*(\d+)%\s*\)/.exec(
+        nightBlock(),
+      );
+    expect(scrim, "no Night scrim declaration").not.toBeNull();
+    const [, red = "0", green = "0", blue = "0", alpha = "0"] = scrim ?? [];
+    const share = Number.parseInt(alpha, 10) / 100;
+    // Composited over a white host page, the worst case behind the panel.
+    const composite = [red, green, blue]
+      .map((channel) =>
+        Math.round(share * Number.parseInt(channel, 10) + (1 - share) * 255)
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("");
+    expect(
+      contrastRatio(`#${composite}`, NIGHT_TOKENS["--snui-color-surface"]),
+      "Night scrim over white, against the Night surface",
+    ).toBeLessThanOrEqual(1.5);
+  });
 });
 
 it("exports the complete public foundation token surface", () => {
@@ -412,8 +553,12 @@ it("exports the complete public foundation token surface", () => {
     "--snui-range-track-color",
     "--snui-input-group-control-min",
     "--snui-input-group-control-basis",
+    "--snui-field-inline-label-min",
+    "--snui-grid-track-min",
+    "--snui-action-bar-surface",
     "--snui-content-width-standard",
     "--snui-content-width-wide",
+    "--snui-color-focus-ring-band",
     "--snui-focus-ring",
     "--snui-shadow-flat",
     "--snui-shadow-raised",

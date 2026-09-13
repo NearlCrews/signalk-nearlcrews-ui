@@ -1,5 +1,4 @@
 import { render, screen } from "@testing-library/react";
-import axe from "axe-core";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -27,6 +26,7 @@ import {
   Text,
   VisuallyHidden,
 } from "../../src/index.js";
+import { expectNoAxeViolations } from "../helpers.js";
 
 describe("composites accessibility", () => {
   it("has no detectable accessibility violations across the new primitives", async () => {
@@ -95,15 +95,7 @@ describe("composites accessibility", () => {
       </main>,
     );
 
-    const result = await axe.run(container, {
-      rules: {
-        // jsdom cannot compute rendered colors, so color-contrast would
-        // report every element; the browser suite owns that check.
-        "color-contrast": { enabled: false },
-      },
-    });
-
-    expect(result.violations).toEqual([]);
+    await expectNoAxeViolations(container);
   });
 });
 
