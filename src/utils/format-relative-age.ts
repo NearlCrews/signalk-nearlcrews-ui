@@ -15,6 +15,14 @@ export interface FormatRelativeAgeOptions {
    * ages, and every negative age under `"fallback"`, return `fallback`.
    */
   readonly negative?: RelativeAgeNegative | undefined;
+  /**
+   * Wording for the number. Left unset, an age of a day or more counts in
+   * numbers ("1 day ago") while shorter ages take the reader's own words
+   * ("now", "2 minutes ago"). Pass `"auto"` for the calendar wording
+   * `Intl.RelativeTimeFormat` gives those larger units ("yesterday", "last
+   * week"), remembering that this is an elapsed duration and no calendar was
+   * consulted: a sample thirty-four hours old rounds to one day.
+   */
   readonly numeric?: Intl.RelativeTimeFormatNumeric | undefined;
   readonly style?: Intl.RelativeTimeFormatStyle | undefined;
 }
@@ -23,6 +31,15 @@ export interface FormatRelativeAgeOptions {
 export const RELATIVE_AGE_NARROW = {
   numeric: "always",
   style: "narrow",
+} as const satisfies FormatRelativeAgeOptions;
+
+/**
+ * Pins the wording to English, for a panel whose surrounding copy is not
+ * localized either. Without it the age phrase follows the browser's language
+ * and mixes locales with the untranslated sentence around it.
+ */
+export const RELATIVE_AGE_EN = {
+  locale: "en",
 } as const satisfies FormatRelativeAgeOptions;
 
 /** Skew this large still reads as "now" under `negative: "clamp"`. */
@@ -53,34 +70,50 @@ const formatters = new Map<string, Intl.RelativeTimeFormat>();
 
 function getFormatter(
   locale: string | readonly string[] | undefined,
-  options: Intl.RelativeTimeFormatOptions,
+  numeric: Intl.RelativeTimeFormatNumeric,
+  style: Intl.RelativeTimeFormatStyle,
 ): Intl.RelativeTimeFormat {
+  // Concatenated rather than serialized, and read straight off the caller's
+  // value: this runs on every render of every relative age on screen, and the
+  // default path has no locale at all. The copy Intl needs waits for a miss.
+  const tags = typeof locale === "string" ? locale : (locale?.join(",") ?? "");
+  const key = `${tags}\u0000${numeric}\u0000${style}`;
+  const cached = formatters.get(key);
+  if (cached !== undefined) return cached;
+
   const locales =
     locale === undefined
       ? undefined
       : typeof locale === "string"
         ? [locale]
         : [...locale];
-  // Concatenated rather than serialized: this runs on every render of every
-  // relative age on screen, and the default path has no locale at all.
-  const key = `${locales?.join(",") ?? ""}\u0000${options.numeric ?? ""}\u0000${options.style ?? ""}`;
-  const cached = formatters.get(key);
-  if (cached !== undefined) return cached;
-
   let formatter: Intl.RelativeTimeFormat;
   try {
-    formatter = new Intl.RelativeTimeFormat(locales, options);
+    formatter = new Intl.RelativeTimeFormat(locales, { numeric, style });
   } catch (error) {
     // A malformed or unsupported locale tag is data, often from a host
     // setting, so it degrades to the runtime default rather than breaking a
     // render. Anything else is a real failure and propagates.
     if (!(error instanceof RangeError)) throw error;
-    formatter = new Intl.RelativeTimeFormat(undefined, options);
+    formatter = new Intl.RelativeTimeFormat(undefined, { numeric, style });
   }
+  // A full clear rather than an eviction: the cap is only there to bound a
+  // pathological caller, and rebuilding a handful of formatters is cheaper
+  // than tracking use order.
   if (formatters.size >= FORMATTER_CACHE_LIMIT) formatters.clear();
   formatters.set(key, formatter);
   return formatter;
 }
+
+/**
+ * Units whose automatic wording is a calendar claim rather than an elapsed
+ * duration. Nothing here reads a calendar: an age of thirty-four hours rounds
+ * to one day, which "yesterday" would report as a date the code never checked,
+ * so these units count in numbers unless the caller asks for the words.
+ */
+const CALENDAR_WORDED_UNITS: ReadonlySet<Intl.RelativeTimeFormatUnit> = new Set(
+  ["day", "week", "month", "year"],
+);
 
 /**
  * Formats an elapsed age in milliseconds with deterministic unit thresholds.
@@ -91,10 +124,10 @@ function getFormatter(
 export function formatRelativeAge(
   ageMs: number | null | undefined,
   {
-    fallback = "unknown",
+    fallback = "Unknown",
     locale,
     negative = "clamp",
-    numeric = "auto",
+    numeric,
     style = "long",
   }: FormatRelativeAgeOptions = {},
 ): string {
@@ -118,6 +151,8 @@ export function formatRelativeAge(
   while (unitIndex > 0) {
     const unit = RELATIVE_UNITS[unitIndex];
     const largerUnit = RELATIVE_UNITS[unitIndex - 1];
+    // The index cannot leave the tuple, so this guard and the one below are
+    // the compiler's price for indexed access rather than reachable branches.
     if (unit === undefined || largerUnit === undefined) break;
     if (Math.round(ageSeconds / unit[1]) * unit[1] < largerUnit[1]) break;
     unitIndex -= 1;
@@ -125,8 +160,13 @@ export function formatRelativeAge(
 
   const selected = RELATIVE_UNITS[unitIndex];
   if (selected === undefined) return fallback;
-  const formatter = getFormatter(locale, { numeric, style });
-  return formatter.format(-Math.round(ageSeconds / selected[1]), selected[0]);
+  const [unit, unitSeconds] = selected;
+  const formatter = getFormatter(
+    locale,
+    numeric ?? (CALENDAR_WORDED_UNITS.has(unit) ? "always" : "auto"),
+    style,
+  );
+  return formatter.format(-Math.round(ageSeconds / unitSeconds), unit);
 }
 
 /** A point in time: epoch milliseconds, a `Date`, or a parseable timestamp string. */

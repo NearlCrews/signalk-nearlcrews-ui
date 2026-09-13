@@ -48,6 +48,9 @@ export interface DocumentRegistry<K, V> {
  * `Symbol.for(symbolKey)`. Change the key whenever the record shape changes, so
  * a package version that stores the old shape never reads the new one.
  */
+/** Shared answer for a document that holds no records, so no call allocates. */
+const NO_VALUES: readonly never[] = Object.freeze([]);
+
 export function createDocumentRegistry<K, V>(
   symbolKey: string,
 ): DocumentRegistry<K, V> {
@@ -74,13 +77,20 @@ export function createDocumentRegistry<K, V>(
   return {
     acquire(ownerDocument, key, create) {
       const records = open(ownerDocument);
-      let record = records.get(key);
-      if (record === undefined) {
-        record = { ...create(), references: 0 };
-        records.set(key, record);
+      const existing = records.get(key);
+      if (existing !== undefined) {
+        if (!existing.element.isConnected) existing.attach();
+        existing.references += 1;
+        return existing.value;
       }
+
+      const record: CountedRecord<V> = { ...create(), references: 1 };
+      // Attached before the map hears about it. An attach that throws, against
+      // a head the host has replaced for example, would otherwise leave a
+      // record with no references that nothing can ever release and that the
+      // conflict check goes on reporting as installed.
       if (!record.element.isConnected) record.attach();
-      record.references += 1;
+      records.set(key, record);
       return record.value;
     },
 
@@ -101,9 +111,26 @@ export function createDocumentRegistry<K, V>(
 
     values(ownerDocument) {
       const records = read(ownerDocument);
-      return records === undefined
-        ? []
-        : [...records.values()].map((record) => record.value);
+      if (records === undefined) return NO_VALUES;
+
+      const values: V[] = [];
+      for (const record of records.values()) values.push(record.value);
+      return values;
     },
+  };
+}
+
+/**
+ * Wraps a release so it runs at most once, however many times a caller hands
+ * it back. React can run an effect cleanup and an explicit teardown for the
+ * same subscription, and a second release would drop a reference the registry
+ * never took.
+ */
+export function once(release: () => void): () => void {
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    release();
   };
 }

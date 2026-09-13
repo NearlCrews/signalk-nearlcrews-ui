@@ -1,4 +1,5 @@
 import type { AnnouncementMode } from "./announcement.js";
+import { resolveDescriptionId } from "./aria.js";
 
 export interface FieldErrorState {
   /** Id of the error container, set whenever that container is in the DOM. */
@@ -28,5 +29,29 @@ export function resolveFieldError(
     errorId,
     referencedErrorId: hasError ? errorId : undefined,
     rendersError,
+  };
+}
+
+export interface FieldRegions extends FieldErrorState {
+  /** Id of the description element, set whenever the field renders one. */
+  readonly descriptionId: string | undefined;
+}
+
+/**
+ * Resolves every id and mounting rule a field's own text needs, so a field,
+ * a group, a checkbox, and a radio group all answer the description and error
+ * questions the same way. Each caller still builds its own
+ * `aria-describedby`, because the reading order of the ids the consumer adds
+ * belongs to the component that renders them.
+ */
+export function resolveFieldRegions(
+  idBase: string,
+  hasDescription: boolean,
+  hasError: boolean,
+  errorLive: AnnouncementMode,
+): FieldRegions {
+  return {
+    descriptionId: resolveDescriptionId(idBase, hasDescription),
+    ...resolveFieldError(idBase, hasError, errorLive),
   };
 }
