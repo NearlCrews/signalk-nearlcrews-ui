@@ -191,7 +191,8 @@
     "smol-toml": "1.8.0"
   },
   "allowScripts": {
-    "esbuild@0.28.2": true
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
   },
   "dependencies": {
     "react-aria": "^3.52.1",

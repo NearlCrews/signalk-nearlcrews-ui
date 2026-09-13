@@ -52,8 +52,24 @@ jobs:
           # Read-only token so GitHub links are checked through the API rather
           # than rate-limited anonymous requests.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+        # A release pull request names URLs that exist only once the release is
+        # tagged and published: the changelog compare links for the new tag and
+        # the unpkg screenshot URLs for the new version. Those are excluded on
+        # pull requests only; the weekly run still checks them after release.
         run: |
+          version="$(node -p "require('./package.json').version")"
+          excludes=()
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            escaped="${version//./\\.}"
+            excludes=(
+              --exclude "compare/v${escaped}\\.\\.\\.HEAD"
+              --exclude "compare/v[0-9.]+\\.\\.\\.v${escaped}"
+              --exclude "unpkg\\.com/signalk-nearlcrews-ui@${escaped}/"
+            )
+          fi
           ./lychee \
+            "${excludes[@]}" \
             --no-progress \
             --max-retries 2 \
             --retry-wait-time 2 \
