@@ -8,6 +8,7 @@
  * throw when a workflow stops matching them, so a rewrite into a shape they
  * cannot read fails the alignment tests instead of passing vacuously.
  */
+import { escapeRegExp } from "./regexp.mjs";
 
 function unquote(value) {
   const trimmed = value.trim();
@@ -19,7 +20,7 @@ function unquote(value) {
 export function readInlineList(source, key) {
   const matches = [
     ...source.matchAll(
-      new RegExp(String.raw`^\s*${key}:\s*\[([^\]]*)\]`, "gm"),
+      new RegExp(String.raw`^\s*${escapeRegExp(key)}:\s*\[([^\]]*)\]`, "gm"),
     ),
   ];
   if (matches.length !== 1) {
@@ -37,7 +38,7 @@ export function readInlineList(source, key) {
 export function readScalarValues(source, key) {
   return [
     ...source.matchAll(
-      new RegExp(String.raw`^\s*-?\s*${key}:\s*(.+?)\s*$`, "gm"),
+      new RegExp(String.raw`^\s*-?\s*${escapeRegExp(key)}:\s*(.+?)\s*$`, "gm"),
     ),
   ].map((match) => unquote(match[1]));
 }
@@ -72,8 +73,10 @@ export function readJobNames(source) {
  */
 export function expandMatrixName(template, key, values) {
   const placeholder = new RegExp(
-    String.raw`\$\{\{\s*matrix\.${key}\s*\}\}`,
+    String.raw`\$\{\{\s*matrix\.${escapeRegExp(key)}\s*\}\}`,
     "g",
   );
-  return values.map((value) => template.replace(placeholder, value));
+  // A replacer function, because a matrix value containing $& or $1 would
+  // otherwise be read as a replacement pattern rather than as literal text.
+  return values.map((value) => template.replace(placeholder, () => value));
 }

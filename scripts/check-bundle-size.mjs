@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import { build } from "esbuild";
 
@@ -8,7 +9,13 @@ import {
 } from "./lib/bundle-contract.mjs";
 import { SIGNALK_HOST_SHARED_MODULES } from "./lib/federation-share.mjs";
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
-import { formatSizeTable } from "./lib/size-table.mjs";
+import {
+  assertRecordedSize,
+  budgetFor,
+  formatSizeTable,
+  parseSizeTable,
+  SIZE_TABLE_DOCUMENT,
+} from "./lib/size-table.mjs";
 
 /** Host-shared modules and their subpaths stay outside every bundle. */
 const hostExternals = SIGNALK_HOST_SHARED_MODULES.flatMap((name) => [
@@ -16,7 +23,12 @@ const hostExternals = SIGNALK_HOST_SHARED_MODULES.flatMap((name) => [
   `${name}/*`,
 ]);
 
-/** `--table` also prints the Markdown table docs/api-reference.md carries. */
+/**
+ * `--table` prints the Markdown table docs/api-reference.md carries, for a
+ * release that refreshes it. It measures and reports rather than enforcing,
+ * because the numbers it prints are the ones the enforcing run compares
+ * against, and the release diff is where the new numbers get reviewed.
+ */
 const printTable = process.argv.includes("--table");
 
 /*
@@ -24,21 +36,28 @@ const printTable = process.argv.includes("--table");
  * counts against the entry that exports it, and the install machinery counts
  * against every entry that reaches it. A consumer bundles the root entry
  * beside its focused ones and pays for both once.
+ *
+ * The recorded sizes and the budgets they imply are the committed table in
+ * docs/api-reference.md, so the documented numbers cannot drift away from the
+ * measured ones and no budget is written by hand.
  */
-const entryBudgets = {
-  composites: 17 * 1024,
-  "data-grid": 82 * 1024,
-  forms: 26 * 1024,
-  index: 32 * 1024,
-  overlays: 66 * 1024,
-};
-
 const manifest = await readPackageJson();
-const publicEntries = assertPublicBundleBudgets(manifest.exports, entryBudgets);
-const tableRows = [];
+const recordedSizes = parseSizeTable(
+  manifest.name,
+  await readFile(repositoryPath(SIZE_TABLE_DOCUMENT), "utf8"),
+);
 
-for (const [entry, entryTarget] of publicEntries) {
-  const maximumGzipBytes = entryBudgets[entry];
+const TOKENS_CSS_ENTRY = "tokens.css";
+const entryBudgets = Object.fromEntries(
+  [...recordedSizes]
+    .filter(([entry]) => entry !== TOKENS_CSS_ENTRY)
+    .map(([entry, { budgetBytes }]) => [entry, budgetBytes]),
+);
+
+const publicEntries = assertPublicBundleBudgets(manifest.exports, entryBudgets);
+
+/** One measured entry, gzipped and checked against everything it must satisfy. */
+async function measureEntry(entry, entryTarget) {
   const result = await build({
     entryPoints: [repositoryPath(entryTarget)],
     bundle: true,
@@ -52,8 +71,15 @@ for (const [entry, entryTarget] of publicEntries) {
     external: hostExternals,
   });
 
-  const output = result.outputFiles[0]?.contents;
-  if (output === undefined) {
+  // A sidecar output, a stylesheet from a future asset import for example,
+  // would leave its bytes out of the measurement and out of the React scan.
+  if (result.outputFiles.length !== 1) {
+    throw new Error(
+      `esbuild produced ${String(result.outputFiles.length)} output files for the ${entry} bundle; expected exactly one.`,
+    );
+  }
+  const [outputFile] = result.outputFiles;
+  if (outputFile === undefined) {
     throw new Error(`esbuild did not produce the ${entry} bundle.`);
   }
 
@@ -66,27 +92,48 @@ for (const [entry, entryTarget] of publicEntries) {
     );
   }
 
-  const gzipBytes = gzipSync(output, { level: 9 }).byteLength;
-  if (gzipBytes > maximumGzipBytes) {
-    throw new Error(
-      `${entry} is ${gzipBytes} gzip bytes, above the ${maximumGzipBytes} byte budget.`,
-    );
+  assertNoReactRuntime(outputFile.text, `The ${entry} entry`);
+
+  return gzipSync(outputFile.contents, { level: 9 }).byteLength;
+}
+
+// The entries are independent, so they build together rather than one after
+// another; Promise.all keeps the table in the order the entries were listed.
+const measuredEntries = await Promise.all(
+  [...publicEntries].map(async ([entry, entryTarget]) => ({
+    entry,
+    gzipBytes: await measureEntry(entry, entryTarget),
+  })),
+);
+
+const tableRows = [];
+for (const { entry, gzipBytes } of measuredEntries) {
+  const recorded = recordedSizes.get(entry);
+  if (recorded === undefined) {
+    throw new Error(`${SIZE_TABLE_DOCUMENT} records no size for ${entry}.`);
   }
 
-  assertNoReactRuntime(
-    Buffer.from(output).toString("utf8"),
-    `The ${entry} entry`,
-  );
+  if (gzipBytes > recorded.budgetBytes) {
+    throw new Error(
+      `${entry} is ${String(gzipBytes)} gzip bytes, above the ${String(recorded.budgetBytes)} byte budget.`,
+    );
+  }
+  if (!printTable) assertRecordedSize(entry, recorded.gzipBytes, gzipBytes);
 
-  tableRows.push({ budgetBytes: maximumGzipBytes, entry, gzipBytes });
-  console.log(`${entry} bundle is ${gzipBytes} gzip bytes.`);
+  tableRows.push({ budgetBytes: budgetFor(gzipBytes), entry, gzipBytes });
+  process.stdout.write(`${entry} bundle is ${String(gzipBytes)} gzip bytes.\n`);
 }
 
 // The public token stylesheet must stay framework-neutral. Bundling the public
 // export catches imported script or React inputs in addition to measuring its
 // actual standalone consumer output.
-const TOKENS_CSS_GZIP_BUDGET = 2 * 1024;
 const tokensTarget = "./dist/tokens.css";
+const recordedTokens = recordedSizes.get(TOKENS_CSS_ENTRY);
+if (recordedTokens === undefined) {
+  throw new Error(
+    `${SIZE_TABLE_DOCUMENT} records no size for ${TOKENS_CSS_ENTRY}.`,
+  );
+}
 assertPublicCssExport(manifest.exports, tokensTarget);
 const tokensResult = await build({
   entryPoints: [repositoryPath(tokensTarget)],
@@ -97,8 +144,13 @@ const tokensResult = await build({
   write: false,
   metafile: true,
 });
-const tokensOutput = tokensResult.outputFiles[0]?.contents;
-if (tokensOutput === undefined) {
+if (tokensResult.outputFiles.length !== 1) {
+  throw new Error(
+    `esbuild produced ${String(tokensResult.outputFiles.length)} output files for the tokens.css bundle; expected exactly one.`,
+  );
+}
+const [tokensOutputFile] = tokensResult.outputFiles;
+if (tokensOutputFile === undefined) {
   throw new Error("esbuild did not produce the tokens.css bundle.");
 }
 
@@ -111,21 +163,30 @@ if (tokensScriptInputs.length > 0) {
   );
 }
 
-const tokensGzipBytes = gzipSync(tokensOutput, { level: 9 }).byteLength;
+const tokensGzipBytes = gzipSync(tokensOutputFile.contents, {
+  level: 9,
+}).byteLength;
 
-if (tokensGzipBytes > TOKENS_CSS_GZIP_BUDGET) {
+if (tokensGzipBytes > recordedTokens.budgetBytes) {
   throw new Error(
-    `tokens.css is ${tokensGzipBytes} gzip bytes, above the ${TOKENS_CSS_GZIP_BUDGET} byte budget.`,
+    `tokens.css is ${String(tokensGzipBytes)} gzip bytes, above the ${String(recordedTokens.budgetBytes)} byte budget.`,
+  );
+}
+if (!printTable) {
+  assertRecordedSize(
+    TOKENS_CSS_ENTRY,
+    recordedTokens.gzipBytes,
+    tokensGzipBytes,
   );
 }
 
 tableRows.push({
-  budgetBytes: TOKENS_CSS_GZIP_BUDGET,
-  entry: "tokens.css",
+  budgetBytes: budgetFor(tokensGzipBytes),
+  entry: TOKENS_CSS_ENTRY,
   gzipBytes: tokensGzipBytes,
 });
-console.log(`tokens.css is ${tokensGzipBytes} gzip bytes.`);
+process.stdout.write(`tokens.css is ${String(tokensGzipBytes)} gzip bytes.\n`);
 
 if (printTable) {
-  console.log(`\n${formatSizeTable(manifest.name, tableRows)}`);
+  process.stdout.write(`\n${formatSizeTable(manifest.name, tableRows)}\n`);
 }

@@ -21,12 +21,6 @@ const PROJECT_BY_SNAPSHOT = new Map([
   ["panel-native-controls-webkit.png", "webkit"],
 ]);
 
-/** Every Playwright project a complete family needs. */
-export const FAMILY_PROJECTS = Object.freeze([
-  "chromium",
-  ...new Set(PROJECT_BY_SNAPSHOT.values()),
-]);
-
 export function hostedSnapshotVariants(ciWorkflowSource) {
   const variants = readScalarValues(ciWorkflowSource, "snapshot_variant");
   if (variants.length === 0) {
@@ -39,6 +33,11 @@ export function collectSnapshotNames(specSource) {
   const names = new Set();
   for (const match of specSource.matchAll(LITERAL_SNAPSHOT_CALL)) {
     if (match[1] !== undefined) names.add(match[1]);
+  }
+  // A spec that builds its names dynamically, or a renamed helper, would leave
+  // every reader comparing an empty set and reporting a family as complete.
+  if (names.size === 0) {
+    throw new Error("The browser spec declares no literal screenshot names.");
   }
   return [...names].sort();
 }
@@ -60,4 +59,16 @@ export function missingSnapshotFiles(specSource, variant, presentFiles) {
   return expectedSnapshotFiles(specSource, variant).filter(
     (file) => !present.has(file),
   );
+}
+
+/**
+ * Committed images of this family that no screenshot asks for any more, which
+ * is what a renamed or deleted screenshot leaves behind.
+ */
+export function orphanSnapshotFiles(specSource, variant, presentFiles) {
+  const expected = new Set(expectedSnapshotFiles(specSource, variant));
+  const suffix = `-linux-${variant}.png`;
+  return presentFiles
+    .filter((file) => file.endsWith(suffix) && !expected.has(file))
+    .sort();
 }

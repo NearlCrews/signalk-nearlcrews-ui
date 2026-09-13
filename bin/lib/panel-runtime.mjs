@@ -8,6 +8,12 @@
  * a development JSX runtime, a chunk that throws while it evaluates, a panel
  * that renders nothing, and a stale copy of this library rendering under a
  * current pin.
+ *
+ * The context below is an API-compatibility harness, not a security boundary.
+ * The host's own React, its DOM stubs, and its timers cross into it by
+ * reference, so a bundle evaluated here can reach the host realm and run with
+ * the privileges of whoever started the check. Point it only at a build the
+ * operator trusts.
  */
 import vm from "node:vm";
 
@@ -38,10 +44,25 @@ const HOST_GLOBALS = Object.freeze([
   "crypto",
   "performance",
   "queueMicrotask",
-  "setInterval",
-  "setTimeout",
   "structuredClone",
 ]);
+
+/**
+ * Timers a context scheduled, keyed by the context, so `disposePanelContext`
+ * can clear them. `setInterval` and `setTimeout` are not in the list above
+ * because a real Node timer keeps the event loop alive: a panel that starts a
+ * poll or a retry while its chunk evaluates would otherwise leave the check
+ * printing its result and then never exiting, which reads in CI as a hang.
+ */
+const CONTEXT_TIMERS = new WeakMap();
+
+/**
+ * How long a panel gets to evaluate, initialize, or answer a module. A bundle
+ * that loops or never settles is a bug in the build being checked, and without
+ * a bound it stops the check rather than failing it. Callers can pass their
+ * own `timeoutMs`.
+ */
+const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
  * The DOM members a panel remote touches before anything renders, in one
@@ -121,14 +142,43 @@ export function createPanelContext({ scriptUrl = DEFAULT_SCRIPT_URL } = {}) {
   for (const name of HOST_GLOBALS) {
     if (name in globalThis) sandbox[name] = globalThis[name];
   }
+  const timers = new Set();
+  const scheduler =
+    (start) =>
+    (...args) => {
+      const handle = start(...args);
+      timers.add(handle);
+      // Unreferenced as well as recorded, so a timer scheduled after the
+      // renders cannot hold the process open on its own.
+      if (typeof handle?.unref === "function") handle.unref();
+      return handle;
+    };
+  sandbox.setInterval = scheduler(globalThis.setInterval);
+  sandbox.setTimeout = scheduler(globalThis.setTimeout);
 
   const context = vm.createContext(sandbox);
+  CONTEXT_TIMERS.set(context, timers);
   context.self = context;
   context.window = context;
   context.globalThis = context;
   Object.assign(context, stubs.window);
   setNativeCssScope(context, true);
   return context;
+}
+
+/**
+ * Clears every timer the panel scheduled through the context, which is what
+ * lets the check exit once it has printed its result. A context is finished
+ * with once its renders are over, so the harness disposes its own.
+ */
+export function disposePanelContext(context) {
+  const timers = CONTEXT_TIMERS.get(context);
+  if (timers === undefined) return;
+  for (const handle of timers) {
+    globalThis.clearTimeout(handle);
+    globalThis.clearInterval(handle);
+  }
+  timers.clear();
 }
 
 /**
@@ -158,54 +208,132 @@ function shareEntry(module, version) {
 }
 
 /**
+ * A top-level import or export statement, which only an ES module carries.
+ * Consulted after a script compilation fails, so a string holding the word
+ * export cannot be mistaken for one.
+ */
+const MODULE_SYNTAX =
+  /(?:^|[\s;}])(?:export\s*(?:\{|\*|default[\s({[]|(?:const|let|var|function|class|async)\b)|import\s*(?:\{|\*|["'])|import\s+[\w$]+\s*(?:,|from\b))/;
+
+/**
+ * Compiles one built file as the classic script the Signal K Admin host loads.
+ * An output-module remote is a supported build that this check cannot run, so
+ * it is named as such rather than left as a bare SyntaxError.
+ */
+function compileBundle(name, source) {
+  try {
+    return new vm.Script(source, { filename: name });
+  } catch (cause) {
+    if (MODULE_SYNTAX.test(source)) {
+      throw new Error(
+        `${name} is an ES module. This check loads a remote the way the Admin host loads a classic container, so it cannot run a remote built with a library type of "module". Run the check without --runtime, which reads the same build without evaluating it.`,
+        { cause },
+      );
+    }
+    throw cause;
+  }
+}
+
+/**
+ * Bounds a step the remote controls. A container whose init or get never
+ * settles is a bug in the build being checked, and without a bound it stops
+ * the check rather than failing it.
+ */
+function withTimeout(work, timeoutMs, description) {
+  let timer;
+  const bound = new Promise((_resolve, reject) => {
+    timer = globalThis.setTimeout(() => {
+      reject(new Error(`${description} within ${timeoutMs}ms.`));
+    }, timeoutMs);
+    if (typeof timer?.unref === "function") timer.unref();
+  });
+  return Promise.race([work, bound]).finally(() => {
+    globalThis.clearTimeout(timer);
+  });
+}
+
+/**
  * Loads the exposed module out of a built classic container. `bundles` are the
  * JavaScript files beside the remote entry, which are pre-registered after the
  * container runtime exists: the browser loads them on demand, and registering
  * them here keeps the check deterministic without a networked script loader.
+ * `entryName` is the file the caller pointed the check at, because a consumer
+ * may give its container any filename.
  */
 async function loadPanelModule({
   bundles,
   containerName,
   context,
+  entryName = "remoteEntry.js",
   exposedModule,
   react,
   reactDom,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 }) {
-  const remoteEntry = bundles.find(({ name }) => name === "remoteEntry.js");
+  const remoteEntry = bundles.find(({ name }) => name === entryName);
   if (remoteEntry === undefined) {
-    throw new Error("The panel build produced no remoteEntry.js.");
+    throw new Error(`The panel build produced no ${entryName}.`);
   }
-  vm.runInContext(remoteEntry.source, context, { filename: "remoteEntry.js" });
+  compileBundle(entryName, remoteEntry.source).runInContext(context, {
+    timeout: timeoutMs,
+  });
 
   const container = context[containerName];
   if (container === null || typeof container !== "object") {
     throw new Error(
-      `remoteEntry.js did not assign a container to window.${containerName}. Pass --container when the Webpack library name is not the package name with its punctuation replaced by underscores.`,
+      `${entryName} did not assign a container to window.${containerName}. Pass --container when the Webpack library name is not the package name with its punctuation replaced by underscores.`,
     );
   }
 
-  await container.init({
-    react: shareEntry(react, react.version),
-    "react-dom": shareEntry(reactDom, reactDom.version),
-  });
+  await withTimeout(
+    container.init({
+      react: shareEntry(react, react.version),
+      "react-dom": shareEntry(reactDom, reactDom.version),
+    }),
+    timeoutMs,
+    `${entryName} did not finish initializing the share scope`,
+  );
   for (const { name, source } of bundles) {
-    if (name !== "remoteEntry.js") {
-      vm.runInContext(source, context, { filename: name });
+    if (name !== entryName) {
+      compileBundle(name, source).runInContext(context, { timeout: timeoutMs });
     }
   }
 
-  const factory = await container.get(exposedModule);
+  const factory = await withTimeout(
+    container.get(exposedModule),
+    timeoutMs,
+    `The remote did not answer ${exposedModule}`,
+  );
   if (typeof factory !== "function") {
     throw new Error(`The remote exposes no ${exposedModule} module.`);
   }
-  return factory();
+  return await withTimeout(
+    Promise.resolve(factory()),
+    timeoutMs,
+    `${exposedModule} did not finish loading`,
+  );
+}
+
+/**
+ * Whether React can render this as an element type. `memo` and `forwardRef`
+ * return an object carrying a `$$typeof` marker rather than a function, and
+ * the host renders those as readily as a plain component.
+ */
+function isElementType(value) {
+  if (typeof value === "function") return true;
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof value.$$typeof === "symbol"
+  );
 }
 
 /** The component the host renders out of an exposed panel module. */
 function panelComponentOf(panelModule, exposedModule) {
-  const component =
-    typeof panelModule === "function" ? panelModule : panelModule?.default;
-  if (typeof component !== "function") {
+  const component = isElementType(panelModule)
+    ? panelModule
+    : panelModule?.default;
+  if (!isElementType(component)) {
     throw new Error(
       `${exposedModule} has no default export the host can render.`,
     );
@@ -216,7 +344,7 @@ function panelComponentOf(panelModule, exposedModule) {
 /** Versions stamped on rendered markup, by this package and by any other. */
 function markupVersionStamps(markup) {
   return new Set(
-    [...markup.matchAll(/data-snui-version="(\d+\.\d+\.\d+)"/g)].map(
+    [...markup.matchAll(/data-snui-version="(\d+\.\d+\.\d+[\w.+-]*)"/g)].map(
       (match) => match[1],
     ),
   );
@@ -252,6 +380,15 @@ export function assertMarkupIncludes(markup, expectations, description) {
 }
 
 /**
+ * The type errors a member this context does not answer produces, as the
+ * engines word them. An ordinary type error in the panel's own code is the
+ * commonest failure of all, and pointing its author at this package's stub
+ * list sends them into the wrong file.
+ */
+const MISSING_MEMBER =
+  /is not a function|Cannot read properties of (?:undefined|null)|is (?:undefined|not an object)/i;
+
+/**
  * Why a load failed, and where to fix it when the panel reached for something
  * this context does not answer. A missing global surfaces as a reference or
  * type error out of the sandbox, whose intrinsics are its own, so the name
@@ -262,7 +399,8 @@ function failureOf(cause) {
     typeof cause?.message === "string" ? cause.message : String(cause);
   const sentence = /[!.?]$/.test(reason) ? reason : `${reason}.`;
   const missingGlobal =
-    cause?.name === "ReferenceError" || cause?.name === "TypeError";
+    cause?.name === "ReferenceError" ||
+    (cause?.name === "TypeError" && MISSING_MEMBER.test(reason));
   return missingGlobal
     ? `${sentence} A global the panel reached for at import time may be missing: the DOM stubs in bin/lib/panel-runtime.mjs are where one goes.`
     : sentence;
@@ -271,11 +409,13 @@ function failureOf(cause) {
 /**
  * Renders the exposed panel twice: once without native CSS `@scope`, which is
  * what this package's preflight turns into a compatibility notice, and once
- * with it, which is the panel itself. Returns both markups.
+ * with it, which is the panel itself. Returns both markups and the number of
+ * times the panel called `save` in each render.
  */
 export async function renderPanelRemote({
   bundles,
   containerName,
+  entryName,
   exposedModule,
   props,
   react,
@@ -283,32 +423,59 @@ export async function renderPanelRemote({
   renderCompatibilityNotice = true,
   renderToStaticMarkup,
   scriptUrl,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 }) {
   const context = createPanelContext({ scriptUrl });
-  let panelModule;
   try {
-    panelModule = await loadPanelModule({
-      bundles,
-      containerName,
-      context,
-      exposedModule,
-      react,
-      reactDom,
-    });
-  } catch (cause) {
-    throw new Error(`The panel remote did not load: ${failureOf(cause)}`, {
-      cause,
-    });
-  }
-  const component = panelComponentOf(panelModule, exposedModule);
-  const render = () =>
-    renderToStaticMarkup(react.createElement(component, props));
+    let panelModule;
+    try {
+      panelModule = await loadPanelModule({
+        bundles,
+        containerName,
+        context,
+        entryName,
+        exposedModule,
+        react,
+        reactDom,
+        timeoutMs,
+      });
+    } catch (cause) {
+      throw new Error(`The panel remote did not load: ${failureOf(cause)}`, {
+        cause,
+      });
+    }
+    const component = panelComponentOf(panelModule, exposedModule);
+    // The host passes `save` for a user action, so the check supplies it and
+    // counts each render separately: a panel with one call site saves once per
+    // render, and a total would report it as though it had two.
+    const saveCalls = [];
+    const renderProps = {
+      ...props,
+      save: () => {
+        saveCalls[saveCalls.length - 1] += 1;
+      },
+    };
+    const render = () => {
+      saveCalls.push(0);
+      try {
+        return renderToStaticMarkup(
+          react.createElement(component, renderProps),
+        );
+      } catch (cause) {
+        throw new Error(`The panel did not render: ${failureOf(cause)}`, {
+          cause,
+        });
+      }
+    };
 
-  let compatibilityMarkup;
-  if (renderCompatibilityNotice) {
-    setNativeCssScope(context, false);
-    compatibilityMarkup = render();
-    setNativeCssScope(context, true);
+    let compatibilityMarkup;
+    if (renderCompatibilityNotice) {
+      setNativeCssScope(context, false);
+      compatibilityMarkup = render();
+      setNativeCssScope(context, true);
+    }
+    return { compatibilityMarkup, markup: render(), saveCalls };
+  } finally {
+    disposePanelContext(context);
   }
-  return { compatibilityMarkup, markup: render() };
 }

@@ -16,7 +16,6 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
-  readFileSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -26,7 +25,7 @@ import { join } from "node:path";
 
 import { createFederationShared } from "./lib/federation-share.mjs";
 import { parseNpmPackResult, runNpmPack } from "./lib/npm-pack.mjs";
-import { repositoryPath } from "./lib/paths.mjs";
+import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 import { typescriptCompilerEntry } from "./lib/typescript-compiler.mjs";
 
 const fixtureDirectory = repositoryPath("fixtures", "consumer");
@@ -47,9 +46,7 @@ try {
     "--pack-destination",
     workspace,
   ]);
-  const packageJson = JSON.parse(
-    readFileSync(repositoryPath("package.json"), "utf8"),
-  );
+  const packageJson = await readPackageJson();
   const packageName = packageJson.name;
   const tarball = parseNpmPackResult(output, packageName).filename;
 

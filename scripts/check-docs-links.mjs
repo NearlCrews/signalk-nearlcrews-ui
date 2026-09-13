@@ -1,7 +1,13 @@
-import { existsSync } from "node:fs";
+/**
+ * Checks every repository-local Markdown link and anchor.
+ *
+ * The rules themselves live in ./lib/docs-links.mjs; this file is the runner
+ * `npm run docs:links` invokes.
+ */
 import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
 
+import { localDestinations, markdownAnchors } from "./lib/docs-links.mjs";
 import { repositoryPath } from "./lib/paths.mjs";
 
 const repositoryRoot = repositoryPath();
@@ -15,58 +21,6 @@ const ignoredDirectories = new Set([
   "playwright-report",
   "test-results",
 ]);
-
-function stripHtmlTags(text) {
-  let result = "";
-  let insideTag = false;
-
-  for (const character of text) {
-    if (character === "<") {
-      insideTag = true;
-      continue;
-    }
-    if (character === ">" && insideTag) {
-      insideTag = false;
-      continue;
-    }
-    if (!insideTag) result += character;
-  }
-
-  return result;
-}
-
-export function githubSlug(text) {
-  return stripHtmlTags(text)
-    .trim()
-    .toLowerCase()
-    .replace(/[`*_~]/g, "")
-    .replace(/[^\p{L}\p{N}\s-]/gu, "")
-    .replace(/\s+/g, "-");
-}
-
-function markdownAnchors(markdown) {
-  const anchors = new Set();
-  const counts = new Map();
-  let fenced = false;
-
-  for (const line of markdown.split(/\r?\n/)) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
-      continue;
-    }
-    if (fenced) continue;
-
-    const heading = line.match(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/)?.[1];
-    if (heading === undefined) continue;
-
-    const base = githubSlug(heading);
-    const count = counts.get(base) ?? 0;
-    counts.set(base, count + 1);
-    anchors.add(count === 0 ? base : `${base}-${count}`);
-  }
-
-  return anchors;
-}
 
 async function markdownFiles(directory = repositoryRoot) {
   const files = [];
@@ -87,44 +41,23 @@ async function markdownFiles(directory = repositoryRoot) {
   return files;
 }
 
-function localDestinations(markdown) {
-  const destinations = [];
-  let fenced = false;
-
-  for (const [index, line] of markdown.split(/\r?\n/).entries()) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
-      continue;
-    }
-    if (fenced) continue;
-
-    const withoutInlineCode = line.replace(/`[^`]*`/g, "");
-    const expressions = [
-      /!?\[[^\]]*\]\(\s*<?([^\s)>]+)>?(?:\s+["'][^"']*["'])?\s*\)/g,
-      /^\s*\[[^\]]+\]:\s*<?([^\s>]+)>?/g,
-    ];
-
-    for (const expression of expressions) {
-      for (const match of withoutInlineCode.matchAll(expression)) {
-        const destination = match[1];
-        if (
-          destination === undefined ||
-          destination.startsWith("//") ||
-          /^[a-z][a-z\d+.-]*:/i.test(destination)
-        ) {
-          continue;
-        }
-        destinations.push({ destination, line: index + 1 });
-      }
-    }
+/** Whether the target exists, and whether it is a file rather than a directory. */
+async function describeTarget(targetFile) {
+  try {
+    return (await stat(targetFile)).isFile() ? "file" : "directory";
+  } catch {
+    return "missing";
   }
-
-  return destinations;
 }
 
 const anchorCache = new Map();
 const failures = [];
 const files = await markdownFiles();
+
+// A walk that found nothing would otherwise report a pass it never earned.
+if (files.length === 0) {
+  throw new Error(`No Markdown files found under ${repositoryRoot}.`);
+}
 
 for (const sourceFile of files) {
   const markdown = await readFile(sourceFile, "utf8");
@@ -138,9 +71,16 @@ for (const sourceFile of files) {
         : resolve(dirname(sourceFile), decodeURIComponent(pathPart));
     const sourceName = relative(repositoryRoot, sourceFile);
 
-    if (!existsSync(targetFile) || !(await stat(targetFile)).isFile()) {
+    const target = await describeTarget(targetFile);
+    if (target === "missing") {
       failures.push(
         `${sourceName}:${line}: missing local target ${destination}`,
+      );
+      continue;
+    }
+    if (target === "directory") {
+      failures.push(
+        `${sourceName}:${line}: local target is a directory ${destination}`,
       );
       continue;
     }
@@ -172,6 +112,6 @@ if (failures.length > 0) {
   throw new Error(`Documentation link check failed:\n${failures.join("\n")}`);
 }
 
-console.log(
-  `Documentation link check passed for ${files.length} Markdown files.`,
+process.stdout.write(
+  `Documentation link check passed for ${String(files.length)} Markdown files.\n`,
 );

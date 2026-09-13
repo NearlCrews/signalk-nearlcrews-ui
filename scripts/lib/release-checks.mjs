@@ -1,6 +1,16 @@
 const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const CODEQL_WORKFLOW_PATH = "dynamic/github-code-scanning/codeql";
 
+/**
+ * The checks a release commit must carry, each with the workflow that is
+ * allowed to have produced it.
+ *
+ * The host contract drift workflow is deliberately absent: it runs on a
+ * schedule and on manual dispatch, never on a push, so it has no run on the
+ * release commit for assertSuccessfulReleaseChecks to match by head SHA. A
+ * release proves the baseline against the registry by dispatching that
+ * workflow, not by listing it here.
+ */
 export const REQUIRED_RELEASE_CHECKS = Object.freeze(
   [
     ["Workflow lint", CI_WORKFLOW_PATH],
@@ -24,7 +34,12 @@ function requireCheckRun(check) {
     typeof check.head_sha !== "string" ||
     typeof check.status !== "string" ||
     (check.conclusion !== null && typeof check.conclusion !== "string") ||
-    typeof check.details_url !== "string" ||
+    // GitHub documents details_url as nullable, and this runs over every check
+    // run on the commit, third-party apps included, before any filtering to
+    // the required names.
+    (check.details_url !== null &&
+      check.details_url !== undefined &&
+      typeof check.details_url !== "string") ||
     check.app === null ||
     typeof check.app !== "object" ||
     typeof check.app.slug !== "string"
@@ -54,6 +69,7 @@ function requireWorkflowRun(run) {
 }
 
 function actionsRunId(detailsUrl, repository) {
+  if (typeof detailsUrl !== "string") return undefined;
   let url;
   try {
     url = new URL(detailsUrl);
@@ -215,9 +231,12 @@ export function resolveDistTag(candidate, latestPublished) {
   if (typeof candidate !== "string" || candidate.length === 0) {
     throw new Error("A candidate version is required.");
   }
-  if (candidate.includes("-")) return "next";
+  // Build metadata carries no precedence and may hold a hyphen of its own, so
+  // it comes off before the prerelease test rather than reading as one.
+  const [core = ""] = candidate.split("+", 1);
+  if (core.includes("-")) return "next";
 
-  const candidateParts = parseStableVersion(candidate, "the candidate");
+  const candidateParts = parseStableVersion(core, "the candidate");
   const currentParts = parseStableVersion(latestPublished, "npm latest");
   for (let index = 0; index < candidateParts.length; index += 1) {
     if (candidateParts[index] > currentParts[index]) return "latest";
@@ -228,11 +247,77 @@ export function resolveDistTag(candidate, latestPublished) {
   );
 }
 
-export function hasMoreCheckRunPages({
+/** Whether a paged GitHub list has pages left after the one just collected. */
+export function hasMorePages({
   collectedCount,
   pageCount,
   perPage,
   totalCount,
 }) {
   return collectedCount < totalCount && pageCount === perPage;
+}
+
+const GITHUB_PER_PAGE = 100;
+const GITHUB_MAXIMUM_PAGES = 20;
+
+/**
+ * Collects every page of one paged GitHub list endpoint. Both release lists
+ * page the same way, so the paging, the headers, and the overflow guard have
+ * one definition rather than a copy per endpoint.
+ */
+export async function fetchAllPages({
+  url,
+  searchParams = {},
+  parse,
+  arrayKey,
+  token,
+  label,
+  fetchPage = fetch,
+  perPage = GITHUB_PER_PAGE,
+  maximumPages = GITHUB_MAXIMUM_PAGES,
+}) {
+  const collected = [];
+  let expectedTotal;
+
+  for (let page = 1; page <= maximumPages; page += 1) {
+    const target = new URL(url);
+    for (const [name, value] of Object.entries(searchParams)) {
+      target.searchParams.set(name, value);
+    }
+    target.searchParams.set("per_page", String(perPage));
+    target.searchParams.set("page", String(page));
+
+    const response = await fetchPage(target, {
+      headers: {
+        Accept: "application/vnd.github+json",
+        Authorization: `Bearer ${token}`,
+        "User-Agent": "signalk-nearlcrews-ui-release-check",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!response.ok) {
+      throw new Error(
+        `GitHub ${label} request failed with HTTP ${String(response.status)}.`,
+      );
+    }
+
+    const result = parse(await response.json());
+    expectedTotal ??= result.total_count;
+    const items = result[arrayKey];
+    collected.push(...items);
+    if (
+      !hasMorePages({
+        collectedCount: collected.length,
+        pageCount: items.length,
+        perPage,
+        totalCount: expectedTotal,
+      })
+    ) {
+      return collected;
+    }
+  }
+
+  throw new Error(
+    `GitHub returned more than ${String(maximumPages * perPage)} ${label} records for the release commit.`,
+  );
 }

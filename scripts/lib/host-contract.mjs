@@ -69,8 +69,11 @@ export function parseRegistryContract(output, contractPackage) {
   return {
     package: contractPackage,
     peerDependencies: Object.fromEntries(
+      // Code-unit order, not localeCompare: the serialized key order is part of
+      // the equality test, and a locale-sensitive sort can order the same names
+      // differently on the machine that refreshed the baseline than in CI.
       Object.entries(result.peerDependencies).sort(([left], [right]) =>
-        left.localeCompare(right),
+        left < right ? -1 : left > right ? 1 : 0,
       ),
     ),
     version: result.version,
@@ -105,6 +108,16 @@ export function formatContractDiff(committed, published) {
         `+ peerDependencies.${name}: ${publishedRange}`,
       );
     }
+  }
+
+  // contractsMatch compares the serialized peer map, so contracts can differ
+  // by key order alone, which none of the branches above describes. A heading
+  // with nothing under it would leave the maintainer nothing to act on.
+  if (lines.length === 1) {
+    lines.push(
+      `- peerDependencies: ${JSON.stringify(committed.peerDependencies)}`,
+      `+ peerDependencies: ${JSON.stringify(published.peerDependencies)}`,
+    );
   }
 
   return lines.join("\n");

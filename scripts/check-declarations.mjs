@@ -39,9 +39,16 @@ function collectDeclarations(directory) {
   return found;
 }
 
+// The graph walk and the snapshot ask for the same files, so each one is read
+// from disk once rather than once per reader.
+const declarations = new Map();
+
 function readDeclaration(file) {
+  if (declarations.has(file)) return declarations.get(file);
   const path = join(distDirectory, ...file.split("/"));
-  return existsSync(path) ? readFileSync(path, "utf8") : undefined;
+  const source = existsSync(path) ? readFileSync(path, "utf8") : undefined;
+  declarations.set(file, source);
+  return source;
 }
 
 const emitted = collectDeclarations(distDirectory)
@@ -54,7 +61,9 @@ if (emitted.length === 0) {
 const { exports: exportsMap } = await readPackageJson();
 const entries = entryDeclarationFiles(exportsMap);
 const reachable = reachableDeclarations(entries, readDeclaration);
-const privateCount = emitted.filter((file) => !reachable.includes(file)).length;
+const reachableFiles = new Set(reachable);
+const emittedFiles = new Set(emitted);
+const privateCount = emitted.filter((file) => !reachableFiles.has(file)).length;
 const snapshot = renderDeclarationSnapshot(reachable, readDeclaration);
 const summary = `${String(reachable.length)} public declaration files reachable from ${String(entries.length)} entry points (${String(privateCount)} private files not compared)`;
 
@@ -77,7 +86,7 @@ if (shouldUpdate) {
     const differences = describeSnapshotDifference(baseline, snapshot).map(
       (difference) => {
         const file = difference.replace(/ \(removed\)$/, "");
-        return difference.endsWith(" (removed)") && emitted.includes(file)
+        return difference.endsWith(" (removed)") && emittedFiles.has(file)
           ? `${file} (left the public contract: still emitted, no longer reachable from an entry)`
           : difference;
       },
