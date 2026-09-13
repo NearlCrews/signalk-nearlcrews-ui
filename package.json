@@ -1,6 +1,6 @@
 {
   "name": "signalk-nearlcrews-ui",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "Accessible, theme-aware React primitives for Signal K administration panels.",
   "type": "module",
   "sideEffects": [
@@ -20,6 +20,7 @@
     "bin",
     "dist",
     "docs",
+    "!docs/repository-setup.md",
     "CHANGELOG.md",
     "LICENSE",
     "README.md"
@@ -47,6 +48,11 @@
       "types": "./dist/federation.d.cts",
       "require": "./dist/federation.cjs",
       "default": "./dist/federation.cjs"
+    },
+    "./format": {
+      "types": "./dist/format.d.ts",
+      "import": "./dist/format.js",
+      "default": "./dist/format.js"
     },
     "./forms": {
       "types": "./dist/forms.d.ts",
@@ -104,12 +110,12 @@
     "build": "node scripts/clean.mjs && node scripts/tsc7.mjs -p tsconfig.build.json && node scripts/build-tokens-css.mjs && node scripts/build-federation-entry.mjs",
     "clean": "node scripts/clean.mjs",
     "format": "biome check --write . && prettier --write \"**/*.{md,yml,yaml}\"",
-    "format:check": "biome format . && prettier --check \"**/*.{md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{md,yml,yaml}\"",
     "lint": "npm run lint:biome && npm run lint:eslint",
     "lint:biome": "biome check --error-on-warnings .",
     "lint:eslint": "eslint . --max-warnings 0",
-    "lint:docs": "markdownlint-cli2 \"**/*.md\" \"#node_modules\" \"#.claude\" \"#coverage\" \"#dist\" \"#playwright-report\" \"#test-results\"",
-    "spellcheck": "cspell lint --no-progress --show-suggestions --config cspell.json \"**/*.md\"",
+    "lint:docs": "markdownlint-cli2",
+    "spellcheck": "cspell lint --no-progress --show-suggestions --config cspell.json \"**/*.md\" \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"bin/**/*.mjs\"",
     "docs:links": "node scripts/check-docs-links.mjs",
     "docs:check": "npm run lint:docs && npm run spellcheck && npm run docs:links",
     "knip": "knip",
@@ -119,8 +125,8 @@
     "dependency-contract": "node scripts/check-react-aria-contract.mjs",
     "type-check": "node scripts/tsc7.mjs --noEmit",
     "type-check:ts6": "tsc6 --noEmit && tsc6 --noEmit -p tsconfig.build.json",
-    "audit": "npm audit --audit-level=moderate",
-    "audit:runtime": "npm audit --omit=dev --audit-level=moderate",
+    "audit": "npm audit",
+    "audit:runtime": "npm audit --omit=dev",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage && node scripts/check-coverage.mjs",

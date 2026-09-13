@@ -15,6 +15,8 @@ git diff --check
 
 `npm run validate` includes the committed Signal K host contract, the locked React Aria dependency contract, aggregate coverage thresholds, and per-file coverage floors. Use `npm run host-contract:drift` to compare the committed host baseline with the registry without changing files. Run `npm run host-contract:update` only when reviewed upstream drift should replace the baseline.
 
+Coverage is measured over three roots. `src` carries the package's own floors, set in `COVERAGE_FLOORS` in `scripts/lib/coverage-contract.mjs`: 65 percent branches, 85 percent functions, 82 percent lines, and 80 percent statements per file, under the aggregate thresholds in `vitest.config.ts`. The published CLI under `bin/lib` and the release-gate modules under `scripts/lib` carry the lower `TOOLING_COVERAGE_FLOORS`: 45 percent branches and 65 percent functions, lines, and statements per file, with their own aggregate thresholds keyed by glob so they never move the `src` numbers. They sit lower because those modules are tested through the behavior a release depends on rather than line by line. The two entry scripts, `bin/snui-check-consumer.mjs` and the gate scripts directly under `scripts`, are outside the measurement: the specs that exercise them spawn them as child processes, which the in-process coverage provider cannot see, so a floor there would record a permanent zero rather than a real gap. Their behavior is covered by those spawning specs.
+
 `react-aria` is a direct dependency that no source file imports. It is the lever `scripts/check-react-aria-contract.mjs` uses to require exactly one installed copy at a version compatible with `react-aria-components` and with the React peer range; the script header explains the check. Do not remove it as unused.
 
 `.npmrc` sets `strict-allow-scripts`, so `npm ci` fails if a dependency runs an install script that `allowScripts` in `package.json` does not name. Today that list is the locked esbuild version alone, and `npm run validate` asserts the key matches the lockfile, so a Dependabot bump of esbuild fails with the fix in the message: update the `allowScripts` key to the new version.
@@ -47,7 +49,7 @@ Never relabel an image generated on one platform as another platform's baseline.
 
 Two TypeScript compilers are installed on purpose, through npm aliases in `devDependencies`:
 
-- `@typescript/native` is the real `typescript` package at 7.x. `npm run build` and `npm run type-check` run its compiler by path through `scripts/tsc7.mjs`. Both aliases declare a `tsc` binary and npm links `node_modules/.bin/tsc` to whichever it installed last, so a bare `tsc` call could silently compile with TypeScript 6 after a fresh install; never call bare `tsc` from a script.
+- `@typescript/native` is the real `typescript` package at 7.x. `npm run build` and `npm run type-check` run its compiler by path through `scripts/tsc7.mjs`. Only `@typescript/native` claims the `tsc` binary today, but a future TypeScript 6 alias could claim it again and npm links `node_modules/.bin/tsc` to whichever package installed last, so the scripts resolve the compiler by package path rather than by bin name; never call bare `tsc` from a script.
 - `typescript` is aliased to `@typescript/typescript6`, which provides the TypeScript 6 JavaScript compiler API plus a `tsc6` binary.
 
 The alias exists because tools that import the compiler API, most importantly typescript-eslint, do not yet run under TypeScript 7. Resolving the bare `typescript` specifier to the TypeScript 6 API keeps type-aware linting working while builds use the native compiler.
@@ -63,7 +65,7 @@ Collapse this back to a single `typescript` dependency once typescript-eslint su
 - Keep components presentational and independent of plugin domain state.
 - Add or update keyboard and accessibility tests with interaction changes.
 - Add contrast coverage when theme colors change.
-- Keep every descendant selector inside the exact version-qualified native scope. Root token declarations and host-ancestor theme selectors may target the exact versioned root outside that scope. The unversioned `snui-tokens` class in `dist/tokens.css` is the one isolation exception recorded in the design contract; do not add a second.
+- Keep every descendant selector inside the exact version-qualified native scope. Root token declarations and the selectors matching host theme markers may target the exact versioned root outside that scope. The unversioned `snui-tokens` class in `dist/tokens.css` is the one isolation exception recorded in the design contract; do not add a second.
 - Keep descendant styles from crossing a nested root with another package version.
 - Update `src/version.ts` and the root package metadata in `package-lock.json` whenever `package.json` changes version.
 - Document public API changes in `CHANGELOG.md`, `docs/api-reference.md`, and `docs/migration.md`.
@@ -79,7 +81,9 @@ Collapse this back to a single `typescript` dependency once typescript-eslint su
 - `docs/api-reference.md` inventories public entry points, package-specific props, ref targets, defaults, public values, and localization hooks.
 - `docs/design-contract.md` defines stable ownership, theme, token, accessibility, isolation, overlay, density, and compatibility behavior.
 - `docs/migration.md` gives current adoption guidance and preserves version-specific upgrade history.
-- `docs/release-policy.md` records semantic-versioning and publication requirements. `docs/repository-setup.md` records external GitHub and npm settings.
+- `docs/release-policy.md` records semantic-versioning and publication requirements. `docs/repository-setup.md` records external GitHub and npm settings for this repository and is not published in the package tarball.
+- `SUPPORT.md` routes usage questions, bug reports, feature proposals, and security reports to their channels.
+- `.github/SECURITY.md` records the supported release line and the package security boundary, including the boundary the shipped `snui-check-consumer` command runs outside of.
 - `CHANGELOG.md` records notable user-facing changes. Preserve released sections as historical statements, even when the current contract later changes. It follows Keep a Changelog with one deliberate extension: a `### Breaking` category, listed first in a release that has one, so a consumer scanning the file sees every change that needs migration work before the Added, Changed, Deprecated, Removed, Fixed, and Security categories.
 
 Update every affected document in the same change. Do not copy exhaustive prop lists into the README when the API reference can remain the single detailed inventory. Run `npm run docs:check` to lint Markdown, check spelling, and verify repository-local links and anchors. External URL availability is not part of the blocking local gate because remote services can be transient. Run the documentation formatter and `git diff --check` before opening a pull request.
