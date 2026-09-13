@@ -148,7 +148,11 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          sparse-checkout: scripts
+          # The release scripts import the argument helper the shipped CLI
+          # keeps under bin/lib, so both trees come along.
+          sparse-checkout: |
+            scripts
+            bin
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
