@@ -1,9 +1,10 @@
 import {
   FIELD_ERROR_DECLARATIONS,
+  NARROW_PANEL_QUERY,
+  SURFACE_DECLARATIONS,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
 export const FORM_STYLES = scopeStyles(`
 .snui-field__control {
@@ -11,11 +12,16 @@ export const FORM_STYLES = scopeStyles(`
 }
 
 .snui-field--compact {
-  gap: calc(var(--snui-space-1) / 2);
+  gap: var(--snui-space-1);
 }
 
+/*
+ * The label column is a token so a panel can align inline labels across its
+ * own fields, or widen the column for a longer language, the way the input
+ * group already publishes its widths.
+ */
 .snui-field--inline {
-  grid-template-columns: minmax(9rem, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(var(--snui-field-inline-label-min, 9rem), 1fr) minmax(0, 2fr);
   column-gap: var(--snui-space-4);
 }
 
@@ -97,18 +103,17 @@ export const FORM_STYLES = scopeStyles(`
 }
 
 .snui-field-group {
+${SURFACE_DECLARATIONS}
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: var(--snui-space-3);
   min-width: 0;
   padding: var(--snui-space-4);
   margin: 0;
-  border: 1px solid var(--snui-color-border);
-  border-radius: var(--snui-radius-md);
-  background: var(--snui-color-surface);
 }
 
 .snui-field-group__legend {
+  text-wrap: balance;
   grid-column: 1;
   grid-row: 1;
   max-width: 100%;
@@ -137,6 +142,7 @@ export const FORM_STYLES = scopeStyles(`
   margin-block-start: var(--snui-space-1);
   color: var(--snui-color-text-muted);
   overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .snui-field-group__content {
@@ -156,6 +162,16 @@ ${FIELD_ERROR_DECLARATIONS}
  */
 .snui-field-group:disabled > .snui-field-group__legend,
 .snui-field-group:disabled > .snui-field-group__description {
+  color: var(--snui-color-text-disabled);
+}
+
+/*
+ * The field's own label dims with the control it names. A field whose control
+ * is held either way reads as editable at a glance otherwise, while its input
+ * is not, and the group and the checkbox beside it already say so.
+ */
+.snui-field:has(> .snui-field__control :is(:disabled, [aria-disabled="true"]))
+  > .snui-field__label {
   color: var(--snui-color-text-disabled);
 }
 
@@ -182,7 +198,7 @@ ${FIELD_ERROR_DECLARATIONS}
 
 /* Columns fill the available width; a narrow panel collapses to one. */
 .snui-checkbox-group__options--grid {
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--snui-grid-track-min)), 1fr));
 }
 
 .snui-checkbox-group__options--stack {
@@ -198,7 +214,28 @@ ${FIELD_ERROR_DECLARATIONS}
 ${visuallyHiddenDeclarations()}
 }
 
-@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
+/*
+ * Forced colors grays a disabled widget for itself, but a legend and a
+ * description are ordinary text inside the fieldset rather than widgets, so
+ * both would return to the system text color and the group would read as
+ * available. GrayText restores the distinction the theme token carries
+ * everywhere else.
+ */
+@media (forced-colors: active) {
+  .snui-field-group:disabled > .snui-field-group__legend,
+  .snui-field-group:disabled > .snui-field-group__description {
+    forced-color-adjust: none;
+    color: GrayText;
+  }
+
+  .snui-field:has(> .snui-field__control :is(:disabled, [aria-disabled="true"]))
+    > .snui-field__label {
+    forced-color-adjust: none;
+    color: GrayText;
+  }
+}
+
+${NARROW_PANEL_QUERY} {
   .snui-field--inline {
     grid-template-columns: minmax(0, 1fr);
     column-gap: 0;

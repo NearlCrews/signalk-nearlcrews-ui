@@ -1,9 +1,11 @@
 export { Accordion, type AccordionProps } from "./components/Accordion.js";
 export {
+  applyCheckboxGroupValue,
   CheckboxGroup,
   type CheckboxGroupLayout,
   type CheckboxGroupOption,
   type CheckboxGroupProps,
+  toCheckboxGroupValue,
 } from "./components/CheckboxGroup.js";
 export {
   Disclosure,
@@ -26,6 +28,7 @@ export {
 export {
   resolveSaveActionBarState,
   SaveActionBar,
+  type SaveActionBarFocus,
   type SaveActionBarLabels,
   type SaveActionBarProps,
   type SaveActionBarState,

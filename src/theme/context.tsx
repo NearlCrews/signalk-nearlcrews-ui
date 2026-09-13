@@ -6,6 +6,7 @@ import {
   useSyncExternalStore,
 } from "react";
 
+import { createEmitter } from "../utils/emitter.js";
 import {
   isThemeChoice,
   THEME_STORAGE_KEY,
@@ -40,10 +41,10 @@ function withStorage<T>(operation: (storage: Storage) => T): T | undefined {
 
 function readStorage(key: string): StoredTheme {
   const value = withStorage((storage) => storage.getItem(key));
-  // An absent key is a genuine clear, so the panel returns to "auto". A
+  // An absent key is a genuine clear, so the panel returns to its fallback. A
   // present but unrecognized value comes from a different library version
-  // sharing the key and is ignored: resetting to "auto" here would fight the
-  // theme the other panel just wrote. Unreadable storage is also ignored.
+  // sharing the key and is ignored: resetting here would fight the theme the
+  // other panel just wrote. Unreadable storage is also ignored.
   if (value === null) return null;
   return isThemeChoice(value) ? value : undefined;
 }
@@ -65,24 +66,42 @@ function isLocalStorageEvent(event: StorageEvent): boolean {
  * same snapshot, and other copies stay in step through the storage event and
  * the same-document change event below.
  */
-const listeners = new Set<() => void>();
+const themeListeners = createEmitter();
 let currentTheme: ThemeChoice = "auto";
+let seededTheme: ThemeChoice | undefined;
 
-function emit(): void {
-  for (const listener of listeners) listener();
+/**
+ * The theme a panel shows when shared storage holds none: the seed a consumer
+ * gave through `defaultTheme`, else Auto, which follows a host theme marker.
+ */
+function fallbackTheme(): ThemeChoice {
+  return seededTheme ?? "auto";
+}
+
+/**
+ * Records a consumer's starting theme for a document that has stored none.
+ *
+ * The first seed wins, and a panel already showing a theme keeps it, because
+ * the preference is one document-wide value: two panels seeding different
+ * themes would otherwise trade the theme back and forth as each one mounts. A
+ * stored preference always wins over a seed, and seeding writes nothing, so
+ * the operator's own choice is never manufactured for them.
+ */
+function seedTheme(theme: ThemeChoice): void {
+  seededTheme ??= theme;
 }
 
 function updateTheme(next: ThemeChoice): void {
   if (next === currentTheme) return;
   currentTheme = next;
-  emit();
+  themeListeners.emit();
 }
 
 /** Adopts the shared value when it is readable and recognized. */
 function adoptSharedTheme(): void {
   const shared = readStorage(THEME_STORAGE_KEY);
   if (shared === undefined) return;
-  updateTheme(shared ?? "auto");
+  updateTheme(shared ?? fallbackTheme());
 }
 
 function handleThemeChange(event: Event): void {
@@ -103,8 +122,8 @@ function handleStorage(event: StorageEvent): void {
 }
 
 function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  if (listeners.size === 1 && typeof window !== "undefined") {
+  const unsubscribe = themeListeners.subscribe(listener);
+  if (themeListeners.size() === 1 && typeof window !== "undefined") {
     window.addEventListener("storage", handleStorage);
     window.addEventListener(THEME_CHANGE_EVENT, handleThemeChange);
   }
@@ -115,27 +134,31 @@ function subscribe(listener: () => void): () => void {
   adoptSharedTheme();
 
   return () => {
-    listeners.delete(listener);
-    if (listeners.size === 0 && typeof window !== "undefined") {
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
-    }
+    unsubscribe();
+    if (themeListeners.size() > 0) return;
+    // The seed belongs to the panels that gave it, so the next panel to mount
+    // seeds the store again rather than inheriting a choice from a frame that
+    // is gone.
+    seededTheme = undefined;
+    if (typeof window === "undefined") return;
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(THEME_CHANGE_EVENT, handleThemeChange);
   };
 }
 
 function getSnapshot(): ThemeChoice {
   // With no subscriber the store hears no events, so a first render reads the
   // shared value directly instead of trusting a snapshot from an earlier mount.
-  // Unreadable or unrecognized storage starts at "auto" here, exactly as a
-  // fresh panel always has; only a live panel keeps its theme through those.
-  if (listeners.size === 0) {
-    currentTheme = readStorage(THEME_STORAGE_KEY) ?? "auto";
+  // Unreadable or unrecognized storage starts at the fallback here, exactly as
+  // a fresh panel always has; only a live panel keeps its theme through those.
+  if (themeListeners.size() === 0) {
+    currentTheme = readStorage(THEME_STORAGE_KEY) ?? fallbackTheme();
   }
   return currentTheme;
 }
 
 function getServerSnapshot(): ThemeChoice {
-  return "auto";
+  return fallbackTheme();
 }
 
 function setTheme(nextTheme: ThemeChoice): void {
@@ -145,6 +168,16 @@ function setTheme(nextTheme: ThemeChoice): void {
   // store, and the storage event never fires in the document that wrote the
   // value, so they learn the choice from this event. This copy's own listener
   // receives it too and finds nothing to change.
+  //
+  // The method is tested rather than the object, because a static render
+  // sandbox can supply a window that carries no event target at all, and a
+  // theme set there is simply not shared any further.
+  if (
+    typeof window === "undefined" ||
+    typeof window.dispatchEvent !== "function"
+  ) {
+    return;
+  }
   window.dispatchEvent(
     new CustomEvent<ThemeChoice>(THEME_CHANGE_EVENT, { detail: nextTheme }),
   );
@@ -152,11 +185,23 @@ function setTheme(nextTheme: ThemeChoice): void {
 
 export interface ThemeProviderProps {
   readonly children: ReactNode;
+  /**
+   * The theme to start at when the document has no stored preference, for a
+   * host that already knows how its operator works, such as a nav station
+   * that opens at night. The stored preference and any panel already showing
+   * a theme both win over it, and it writes nothing, so the operator's own
+   * choice is never overwritten. Default `"auto"`.
+   */
+  readonly defaultTheme?: ThemeChoice | undefined;
 }
 
 export function ThemeProvider({
   children,
+  defaultTheme,
 }: ThemeProviderProps): React.JSX.Element {
+  // Latched before the first snapshot is read, so the panel paints the seeded
+  // theme rather than flashing the fallback and correcting itself.
+  if (defaultTheme !== undefined) seedTheme(defaultTheme);
   // An unresolved preference stays "auto" so the panel follows an explicit
   // host theme and otherwise uses the library's light fallback. Operating-system
   // preferences are reserved for the explicit "system" choice.

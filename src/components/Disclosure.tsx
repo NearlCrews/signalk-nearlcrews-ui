@@ -5,15 +5,20 @@ import {
   type RefAttributes,
   useCallback,
   useContext,
-  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
 import { useControllableState } from "../hooks/use-controllable-state.js";
+import {
+  useFocusReturnOnClose,
+  useOpenIntentLatch,
+} from "../hooks/use-focus-return.js";
+import { useNodeRef } from "../hooks/use-node-ref.js";
 import { hasAccessibleName, requireIdToken } from "../utils/aria.js";
-import { composeRef } from "../utils/ref.js";
+import { isDevelopment } from "../utils/environment.js";
+import type { MountStrategy } from "../utils/mount-strategy.js";
 import { Button, type ButtonAsButtonProps } from "./Button.js";
 
 export interface UseDisclosureOptions {
@@ -71,6 +76,10 @@ export interface UseDisclosureResult {
  * setter is the ordinary way to hit that, and it is safe by construction. A
  * close while focus sits outside the panel still moves nothing.
  *
+ * The trigger is the only destination for that handoff, so keep it mounted
+ * for the lifetime of the disclosure. A pair that unmounts both at once has
+ * nowhere to put focus, which development builds report.
+ *
  * Both ids are generated unless `id` names the trigger or `idPrefix` names the
  * pair. `aria-labelledby` and `aria-controls` are written from whatever those
  * two ids resolve to, so naming one end cannot leave the wiring dangling.
@@ -99,67 +108,39 @@ export function useDisclosure({
   );
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
-  const pendingFocus = useRef<boolean | null>(null);
-  const panelHoldsFocus = useRef(false);
+  const openIntent = useOpenIntentLatch();
 
   const setOpen = useCallback(
     (next: boolean): void => {
       if (next === effectiveOpen) return;
-      pendingFocus.current = next;
+      openIntent.arm(next);
       commitOpen(next);
-      // A controlling owner may decline the change, which commits nothing and
-      // would leave the latch armed to steal focus at the owner's next open.
-      // The commit this call causes lands before the microtask runs, so an
-      // accepted change has already moved focus by the time the latch drops.
-      queueMicrotask(() => {
-        pendingFocus.current = null;
-      });
     },
-    [commitOpen, effectiveOpen],
+    [commitOpen, effectiveOpen, openIntent],
   );
 
   const toggle = useCallback((): void => {
     setOpen(!effectiveOpen);
   }, [effectiveOpen, setOpen]);
 
+  // The trigger takes focus back whenever the panel held it as it closed.
+  useFocusReturnOnClose(panelRef, effectiveOpen, {
+    returnFocusRef: triggerRef,
+  });
+
   /*
-   * Whether the panel holds focus, sampled as focus moves rather than read
-   * when the panel closes. Hiding or unmounting the panel blurs what it held
-   * first, so by the time any effect could look, the answer is already gone.
+   * The panel takes focus for a press, in the commit phase, so the latch is
+   * consumed before the microtask that drops it. Declared after the handoff
+   * above so that one has already had its turn on a close.
    */
-  useEffect(() => {
-    if (!effectiveOpen) return undefined;
-
-    const panelNode = panelRef.current;
-    const ownerDocument = panelNode?.ownerDocument;
-    if (panelNode === null || ownerDocument === undefined) return undefined;
-
-    panelHoldsFocus.current = panelNode.contains(ownerDocument.activeElement);
-    const trackFocus = (event: FocusEvent): void => {
-      panelHoldsFocus.current = event.composedPath().includes(panelNode);
-    };
-    ownerDocument.addEventListener("focusin", trackFocus);
-    return () => {
-      ownerDocument.removeEventListener("focusin", trackFocus);
-    };
-  }, [effectiveOpen]);
-
-  // Focus moves in the commit phase so the latch is consumed before the
-  // microtask above drops it. This layout effect also runs ahead of the
-  // tracker's cleanup, so the sample above is still readable here.
   useLayoutEffect(() => {
-    const pressed = pendingFocus.current === effectiveOpen;
-    if (pressed) pendingFocus.current = null;
-    if (effectiveOpen) {
-      if (pressed) panelRef.current?.focus();
+    const pressed = openIntent.consume(effectiveOpen);
+    if (!effectiveOpen) {
+      if (triggerRef.current === null) warnLostTrigger(panelRef.current);
       return;
     }
-    // The trigger takes focus back for a press, and for any other close that
-    // would otherwise leave the reader on the body.
-    const held = panelHoldsFocus.current;
-    panelHoldsFocus.current = false;
-    if (pressed || held) triggerRef.current?.focus();
-  }, [effectiveOpen]);
+    if (pressed) panelRef.current?.focus();
+  }, [effectiveOpen, openIntent]);
 
   const setTriggerNode = useCallback((node: HTMLButtonElement | null) => {
     triggerRef.current = node;
@@ -198,6 +179,22 @@ export function useDisclosure({
       toggle,
       triggerId,
     ],
+  );
+}
+
+/**
+ * Reports a close that had nowhere to hand focus back to. The trigger is the
+ * documented destination, so a pair that unmounts it along with the panel
+ * drops the reader on the body with no keyboard route back. Reported only
+ * when focus actually landed there, because a trigger that has simply not
+ * mounted yet takes nothing away from anyone.
+ */
+function warnLostTrigger(panelNode: HTMLElement | null): void {
+  if (!isDevelopment() || panelNode === null) return;
+  const ownerDocument = panelNode.ownerDocument;
+  if (ownerDocument.activeElement !== ownerDocument.body) return;
+  console.warn(
+    "useDisclosure closed a panel whose trigger is no longer mounted, so focus stayed on the document body. Keep the trigger mounted for the lifetime of the disclosure.",
   );
 }
 
@@ -271,15 +268,19 @@ export function DisclosureTrigger({
 }
 
 export interface DisclosurePanelProps
-  extends Omit<HTMLAttributes<HTMLElement>, "hidden" | "id" | "role">,
+  extends Omit<
+      HTMLAttributes<HTMLElement>,
+      "hidden" | "id" | "role" | "tabIndex"
+    >,
     RefAttributes<HTMLElement>,
     DisclosurePartProps {
   /**
    * Under `"unmount"` the children leave the tree while closed; the container
    * stays so `aria-controls` still resolves. `"retain"`, the default, keeps
-   * them mounted and hidden, and their effects keep running.
+   * them mounted and hidden, and their effects keep running, unlike a
+   * retaining `CollapsibleSection`, which pauses them.
    */
-  readonly mountStrategy?: "retain" | "unmount" | undefined;
+  readonly mountStrategy?: MountStrategy | undefined;
 }
 
 /**
@@ -303,6 +304,20 @@ export function DisclosurePanel({
   );
   const { ref: setPanelNode, role, ...regionProps } = panelProps;
   const named = hasAccessibleName(ariaLabel, ariaLabelledBy);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const publishPanelNode = useCallback(
+    (node: HTMLElement) => {
+      setPanelNode(node);
+      return () => {
+        setPanelNode(null);
+      };
+    },
+    [setPanelNode],
+  );
+  // One callback for the whole mount: an inline arrow would be a new identity
+  // every commit, which detaches and reattaches the consumer's ref, and its
+  // returned cleanup would keep React from ever handing the hook a null.
+  const attachPanel = useNodeRef(panelRef, ref, publishPanelNode);
 
   // A named section is a region; the explicit role keeps it one even when a
   // consumer's aria-label replaces the trigger-derived name.
@@ -314,10 +329,7 @@ export function DisclosurePanel({
       aria-label={ariaLabel}
       aria-labelledby={named ? ariaLabelledBy : regionProps["aria-labelledby"]}
       className={className}
-      ref={(node) => {
-        setPanelNode(node);
-        return composeRef(ref, node);
-      }}
+      ref={attachPanel}
     >
       {mountStrategy === "unmount" && !open ? null : children}
     </section>

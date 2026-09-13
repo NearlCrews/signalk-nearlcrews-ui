@@ -19,8 +19,53 @@ import {
 import {
   flushAnimationFrames,
   installVisualViewport,
+  panel,
   renderInPanel,
 } from "../helpers.js";
+
+/** A rectangle a spec pins on an element, read fresh at every measurement. */
+type ElementRect = () => DOMRect;
+
+/** No safe-area inset: the probe sits well outside the measured viewport. */
+const OUTSIDE_THE_VIEWPORT: ElementRect = () => new DOMRect(800, 600, 0, 0);
+
+/** The elements an ActionBar renders for its own viewport docking. */
+interface ActionBarParts {
+  readonly anchor: HTMLElement;
+  readonly safeAreaProbe: HTMLElement;
+}
+
+/**
+ * Reads the two elements the docking logic measures for itself, named once so
+ * a change to what ActionBar renders is one edit rather than one per spec.
+ */
+function actionBarParts(container: HTMLElement): ActionBarParts {
+  const anchor = container.querySelector<HTMLElement>(
+    ".snui-action-bar__viewport-anchor",
+  );
+  const safeAreaProbe = container.querySelector<HTMLElement>(
+    ".snui-action-bar__safe-area-probe",
+  );
+  if (anchor === null || safeAreaProbe === null) {
+    throw new Error(
+      "The action bar rendered no viewport anchor or safe-area probe.",
+    );
+  }
+  return { anchor, safeAreaProbe };
+}
+
+/**
+ * Pins a rectangle on every element a docking spec measures, because jsdom
+ * lays nothing out. Each rectangle is a function, so a spec can move an
+ * element between measurements by changing what it returns.
+ */
+function mockActionBarGeometry(
+  geometry: readonly (readonly [HTMLElement, ElementRect])[],
+): void {
+  for (const [element, rect] of geometry) {
+    vi.spyOn(element, "getBoundingClientRect").mockImplementation(rect);
+  }
+}
 
 describe("chrome primitives", () => {
   it("renders a neutral banner without a tone glyph or label", () => {
@@ -66,6 +111,27 @@ describe("chrome primitives", () => {
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
+  it("renders the banner title as a heading only when asked", () => {
+    const { container } = renderInPanel(
+      <>
+        <Banner title="Provider unavailable">Retry in a moment.</Banner>
+        <Banner headingLevel={3} title="Chart cache full">
+          Free some space.
+        </Banner>
+      </>,
+    );
+
+    // A banner beside content that still carries its own headings must not add
+    // an entry to the outline, so a heading is opt-in.
+    expect(
+      screen.queryByRole("heading", { name: "Provider unavailable" }),
+    ).toBeNull();
+    expect(container.querySelector(".snui-banner__title")?.tagName).toBe("DIV");
+    expect(
+      screen.getByRole("heading", { level: 3, name: "Chart cache full" }),
+    ).toHaveClass("snui-banner__title");
+  });
+
   it("turns a status indicator into a polite live region on request", () => {
     renderInPanel(
       <StatusIndicator tone="success" live="polite">
@@ -104,14 +170,16 @@ describe("chrome primitives", () => {
     expect(indicators[1]).toHaveAttribute("aria-live", "off");
   });
 
-  it("keeps a caller-supplied role on a status indicator", () => {
+  it("keeps a requested mode beside a role that announces nothing itself", () => {
     renderInPanel(
       <StatusIndicator role="note" live="polite">
         Connected
       </StatusIndicator>,
     );
 
-    expect(screen.getByRole("note")).not.toHaveAttribute("aria-live");
+    // Only alert, log, and status announce on their own, so any other role
+    // has to carry the requested aria-live or the update is silent.
+    expect(screen.getByRole("note")).toHaveAttribute("aria-live", "polite");
   });
 
   it("renders layout primitives on semantic elements with list items wrapped", () => {
@@ -210,7 +278,7 @@ describe("chrome primitives", () => {
     );
 
     const card = container.querySelector(".snui-card");
-    expect(card).toHaveClass("snui-card--default");
+    expect(card?.className).not.toMatch(/snui-card--/);
     expect(card?.querySelector(".snui-card__header")).toBeNull();
     expect(card?.querySelector(".snui-card__footer")).toBeNull();
   });
@@ -259,8 +327,36 @@ describe("chrome primitives", () => {
 
     expect(screen.getByRole("radio", { name: "Light" })).toBeVisible();
     expect(screen.getByRole("radio", { name: "Dark" })).toBeVisible();
-    expect(screen.queryByRole("radio", { name: "Auto" })).toBeNull();
     expect(screen.queryByRole("radio", { name: "Night" })).toBeNull();
+  });
+
+  it("offers the active theme even when the choices leave it out", async () => {
+    const user = userEvent.setup();
+    renderInPanel(<ThemeToggle choices={["light", "dark"]} />);
+
+    // The panel renders in Auto until someone picks otherwise, so a narrowed
+    // list that omits it would report nothing selected while the panel is
+    // plainly in that theme.
+    expect(screen.getByRole("radio", { name: "Match Admin" })).toBeChecked();
+
+    await user.click(screen.getByRole("radio", { name: "Dark" }));
+    expect(screen.getByRole("radio", { name: "Dark" })).toBeChecked();
+    expect(screen.queryByRole("radio", { name: "Match Admin" })).toBeNull();
+  });
+
+  it("shows the theme group's own label unless it is hidden", () => {
+    const { container, rerender } = renderInPanel(<ThemeToggle />);
+
+    // Five bare words at the foot of a panel say nothing about what they do.
+    expect(
+      container.querySelector(".snui-segmented__legend"),
+    ).toHaveTextContent("Panel theme");
+
+    rerender(panel(<ThemeToggle labelVisibility="hidden" />));
+    expect(container.querySelector(".snui-segmented__legend")).toBeNull();
+    expect(
+      screen.getByRole("radiogroup", { name: "Panel theme" }),
+    ).toBeVisible();
   });
 
   it("reports theme changes after applying them internally", async () => {
@@ -337,28 +433,14 @@ describe("chrome primitives", () => {
     );
     const panel = screen.getByTestId("viewport-panel");
     const bar = screen.getByTestId("viewport-bar");
-    const anchor = container.querySelector<HTMLElement>(
-      ".snui-action-bar__viewport-anchor",
-    );
-    const safeAreaProbe = container.querySelector<HTMLElement>(
-      ".snui-action-bar__safe-area-probe",
-    );
-    expect(anchor).not.toBeNull();
-    expect(safeAreaProbe).not.toBeNull();
-    if (anchor === null || safeAreaProbe === null) return;
+    const { anchor, safeAreaProbe } = actionBarParts(container);
 
-    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(100, panelTop, 600, 1_200),
-    );
-    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(120, anchorTop, 560, 60),
-    );
-    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(120, anchorTop, 560, 60),
-    );
-    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(800, 600, 0, 0),
-    );
+    mockActionBarGeometry([
+      [panel, () => new DOMRect(100, panelTop, 600, 1_200)],
+      [anchor, () => new DOMRect(120, anchorTop, 560, 60)],
+      [bar, () => new DOMRect(120, anchorTop, 560, 60)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
 
     visualViewport.dispatchEvent(new Event("resize"));
     await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
@@ -393,12 +475,14 @@ describe("chrome primitives", () => {
     );
 
     const styles = document.head.querySelector("style[data-snui-styles]");
+    // The panel root is `:scope` here: the sheet is scoped to it, so the bare
+    // class would name a descendant root and the rule would reach nothing.
     expect(styles?.textContent).toContain(
-      ".snui-root:has(.snui-action-bar--sticky-bottom) .snui-root__content",
+      ":scope:has(.snui-action-bar--sticky-bottom) .snui-root__content",
     );
     expect(styles?.textContent).toContain("scroll-margin-block-end");
     expect(styles?.textContent).toContain(
-      ".snui-root:has(.snui-action-bar--sticky-top) .snui-root__content",
+      ":scope:has(.snui-action-bar--sticky-top) .snui-root__content",
     );
     expect(styles?.textContent).toContain(".snui-action-bar__viewport-anchor");
     expect(styles?.textContent).toContain(".snui-action-bar--viewport-docked");
@@ -425,39 +509,26 @@ describe("chrome primitives", () => {
     const panel = screen.getByTestId("resize-panel");
     const target = screen.getByTestId("resize-focus-target");
     const bar = screen.getByTestId("resize-bar");
-    const anchor = container.querySelector<HTMLElement>(
-      ".snui-action-bar__viewport-anchor",
-    );
-    const safeAreaProbe = container.querySelector<HTMLElement>(
-      ".snui-action-bar__safe-area-probe",
-    );
-    expect(anchor).not.toBeNull();
-    expect(safeAreaProbe).not.toBeNull();
-    if (anchor === null || safeAreaProbe === null) return;
+    const { anchor, safeAreaProbe } = actionBarParts(container);
 
-    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(100, 0, 600, 1_200),
-    );
-    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(120, 500, 560, 60),
-    );
-    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
-      () =>
-        new DOMRect(
-          120,
-          bar.classList.contains("snui-action-bar--viewport-docked")
-            ? 340
-            : 500,
-          560,
-          60,
-        ),
-    );
-    vi.spyOn(target, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(140, 350, 200, 40),
-    );
-    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(800, 600, 0, 0),
-    );
+    mockActionBarGeometry([
+      [panel, () => new DOMRect(100, 0, 600, 1_200)],
+      [anchor, () => new DOMRect(120, 500, 560, 60)],
+      [
+        bar,
+        () =>
+          new DOMRect(
+            120,
+            bar.classList.contains("snui-action-bar--viewport-docked")
+              ? 340
+              : 500,
+            560,
+            60,
+          ),
+      ],
+      [target, () => new DOMRect(140, 350, 200, 40)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
 
     visualViewport.dispatchEvent(new Event("resize"));
     await waitFor(() => expect(anchor).not.toHaveAttribute("data-snui-docked"));
@@ -500,36 +571,26 @@ describe("chrome primitives", () => {
     const nestedScroller = screen.getByTestId("nested-scroll");
     const target = screen.getByTestId("covered-target");
     const bar = screen.getByTestId("focus-bar");
-    const anchor = container.querySelector<HTMLElement>(
-      ".snui-action-bar__viewport-anchor",
-    );
-    const safeAreaProbe = container.querySelector<HTMLElement>(
-      ".snui-action-bar__safe-area-probe",
-    );
-    expect(anchor).not.toBeNull();
-    expect(safeAreaProbe).not.toBeNull();
-    if (anchor === null || safeAreaProbe === null) return;
+    const { anchor, safeAreaProbe } = actionBarParts(container);
 
-    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(100, 0, 600, 1_200),
-    );
-    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(120, 900, 560, 60),
-    );
-    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
-      () =>
-        new DOMRect(
-          120,
-          bar.classList.contains("snui-action-bar--viewport-docked")
-            ? 440
-            : 900,
-          560,
-          60,
-        ),
-    );
-    vi.spyOn(target, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(140, 450, 200, 40),
-    );
+    mockActionBarGeometry([
+      [panel, () => new DOMRect(100, 0, 600, 1_200)],
+      [anchor, () => new DOMRect(120, 900, 560, 60)],
+      [
+        bar,
+        () =>
+          new DOMRect(
+            120,
+            bar.classList.contains("snui-action-bar--viewport-docked")
+              ? 440
+              : 900,
+            560,
+            60,
+          ),
+      ],
+      [target, () => new DOMRect(140, 450, 200, 40)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
     Object.defineProperties(nestedScroller, {
       clientHeight: { configurable: true, value: 100 },
       scrollHeight: { configurable: true, value: 200 },
@@ -542,9 +603,6 @@ describe("chrome primitives", () => {
       configurable: true,
       value: nestedScrollBy,
     });
-    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(800, 600, 0, 0),
-    );
 
     visualViewport.dispatchEvent(new Event("resize"));
     await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
@@ -595,40 +653,36 @@ describe("chrome primitives", () => {
     const nestedScroller = screen.getByTestId("clipping-scroll");
     const target = screen.getByTestId("clipping-target");
     const bar = screen.getByTestId("clipping-bar");
-    const anchor = container.querySelector<HTMLElement>(
-      ".snui-action-bar__viewport-anchor",
-    );
-    const safeAreaProbe = container.querySelector<HTMLElement>(
-      ".snui-action-bar__safe-area-probe",
-    );
-    expect(anchor).not.toBeNull();
-    expect(safeAreaProbe).not.toBeNull();
-    if (anchor === null || safeAreaProbe === null) return;
+    const { anchor, safeAreaProbe } = actionBarParts(container);
 
-    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(100, -outerScroll, 600, 1_200),
-    );
-    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(120, 900 - outerScroll, 560, 60),
-    );
-    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
-      () =>
-        new DOMRect(
-          120,
-          bar.classList.contains("snui-action-bar--viewport-docked")
-            ? 500
-            : 900 - outerScroll,
-          560,
-          60,
-        ),
-    );
-    vi.spyOn(nestedScroller, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(120, 500 - outerScroll, 560, 100),
-    );
-    vi.spyOn(target, "getBoundingClientRect").mockImplementation(
-      () =>
-        new DOMRect(140, 510 - nestedScroller.scrollTop - outerScroll, 200, 40),
-    );
+    mockActionBarGeometry([
+      [panel, () => new DOMRect(100, -outerScroll, 600, 1_200)],
+      [anchor, () => new DOMRect(120, 900 - outerScroll, 560, 60)],
+      [
+        bar,
+        () =>
+          new DOMRect(
+            120,
+            bar.classList.contains("snui-action-bar--viewport-docked")
+              ? 500
+              : 900 - outerScroll,
+            560,
+            60,
+          ),
+      ],
+      [nestedScroller, () => new DOMRect(120, 500 - outerScroll, 560, 100)],
+      [
+        target,
+        () =>
+          new DOMRect(
+            140,
+            510 - nestedScroller.scrollTop - outerScroll,
+            200,
+            40,
+          ),
+      ],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
     Object.defineProperties(nestedScroller, {
       clientHeight: { configurable: true, value: 100 },
       clientTop: { configurable: true, value: 0 },
@@ -642,9 +696,6 @@ describe("chrome primitives", () => {
       configurable: true,
       value: nestedScrollBy,
     });
-    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(800, 600, 0, 0),
-    );
 
     visualViewport.dispatchEvent(new Event("resize"));
     await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
@@ -682,39 +733,26 @@ describe("chrome primitives", () => {
     const panel = screen.getByTestId("press-panel");
     const target = screen.getByTestId("press-target");
     const bar = screen.getByTestId("press-bar");
-    const anchor = container.querySelector<HTMLElement>(
-      ".snui-action-bar__viewport-anchor",
-    );
-    const safeAreaProbe = container.querySelector<HTMLElement>(
-      ".snui-action-bar__safe-area-probe",
-    );
-    expect(anchor).not.toBeNull();
-    expect(safeAreaProbe).not.toBeNull();
-    if (anchor === null || safeAreaProbe === null) return;
+    const { anchor, safeAreaProbe } = actionBarParts(container);
 
-    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(100, 0, 600, 1_200),
-    );
-    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(120, 900, 560, 60),
-    );
-    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
-      () =>
-        new DOMRect(
-          120,
-          bar.classList.contains("snui-action-bar--viewport-docked")
-            ? 440
-            : 900,
-          560,
-          60,
-        ),
-    );
-    vi.spyOn(target, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(140, 450, 200, 40),
-    );
-    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(800, 600, 0, 0),
-    );
+    mockActionBarGeometry([
+      [panel, () => new DOMRect(100, 0, 600, 1_200)],
+      [anchor, () => new DOMRect(120, 900, 560, 60)],
+      [
+        bar,
+        () =>
+          new DOMRect(
+            120,
+            bar.classList.contains("snui-action-bar--viewport-docked")
+              ? 440
+              : 900,
+            560,
+            60,
+          ),
+      ],
+      [target, () => new DOMRect(140, 450, 200, 40)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
 
     visualViewport.dispatchEvent(new Event("resize"));
     await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
@@ -767,37 +805,30 @@ describe("chrome primitives", () => {
     );
     const panel = screen.getByTestId("settle-panel");
     const bar = screen.getByTestId("settle-bar");
-    const anchor = container.querySelector<HTMLElement>(
-      ".snui-action-bar__viewport-anchor",
-    );
-    const safeAreaProbe = container.querySelector<HTMLElement>(
-      ".snui-action-bar__safe-area-probe",
-    );
-    expect(anchor).not.toBeNull();
-    expect(safeAreaProbe).not.toBeNull();
-    if (anchor === null || safeAreaProbe === null) return;
+    const { anchor, safeAreaProbe } = actionBarParts(container);
 
-    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(100, 0, 600, 1_200),
-    );
-    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(120, 500, 560, 60),
-    );
+    mockActionBarGeometry([
+      [panel, () => new DOMRect(100, 0, 600, 1_200)],
+      [anchor, () => new DOMRect(120, 500, 560, 60)],
+    ]);
     // Docking changes the bar's wrapping, and the shorter docked bar undocks
     // itself again. The measurement chain has to stop inside the frame it
     // started in, even though no geometry ever holds still.
-    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
-      () =>
-        new DOMRect(
-          120,
-          500,
-          560,
-          bar.classList.contains("snui-action-bar--viewport-docked") ? 60 : 120,
-        ),
-    );
-    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(800, 600, 0, 0),
-    );
+    mockActionBarGeometry([
+      [
+        bar,
+        () =>
+          new DOMRect(
+            120,
+            500,
+            560,
+            bar.classList.contains("snui-action-bar--viewport-docked")
+              ? 60
+              : 120,
+          ),
+      ],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
 
     const frameBudget = 12;
     let flushed = 0;
@@ -831,39 +862,28 @@ describe("chrome primitives", () => {
     );
     const panel = screen.getByTestId("threshold-panel");
     const bar = screen.getByTestId("threshold-bar");
-    const anchor = container.querySelector<HTMLElement>(
-      ".snui-action-bar__viewport-anchor",
-    );
-    const safeAreaProbe = container.querySelector<HTMLElement>(
-      ".snui-action-bar__safe-area-probe",
-    );
-    expect(anchor).not.toBeNull();
-    expect(safeAreaProbe).not.toBeNull();
-    if (anchor === null || safeAreaProbe === null) return;
+    const { anchor, safeAreaProbe } = actionBarParts(container);
 
-    vi.spyOn(panel, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(100, 0, 600, 1_200),
-    );
+    mockActionBarGeometry([[panel, () => new DOMRect(100, 0, 600, 1_200)]]);
     // Reserving the bar's height moves the anchor across the dock line by less
     // than the hysteresis band, so the raw predicate answers differently on
     // each side of the change.
-    vi.spyOn(anchor, "getBoundingClientRect").mockImplementation(
-      () =>
-        new DOMRect(
-          120,
-          bar.classList.contains("snui-action-bar--viewport-docked")
-            ? 439.6
-            : 441.6,
-          560,
-          60,
-        ),
-    );
-    vi.spyOn(bar, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(120, 440, 560, 60),
-    );
-    vi.spyOn(safeAreaProbe, "getBoundingClientRect").mockImplementation(
-      () => new DOMRect(800, 600, 0, 0),
-    );
+    mockActionBarGeometry([
+      [
+        anchor,
+        () =>
+          new DOMRect(
+            120,
+            bar.classList.contains("snui-action-bar--viewport-docked")
+              ? 439.6
+              : 441.6,
+            560,
+            60,
+          ),
+      ],
+      [bar, () => new DOMRect(120, 440, 560, 60)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
 
     visualViewport.dispatchEvent(new Event("resize"));
     await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));

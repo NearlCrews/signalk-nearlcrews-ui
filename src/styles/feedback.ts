@@ -1,11 +1,22 @@
-import { visuallyHiddenDeclarations } from "./fragments.js";
+import {
+  bodyEdgeMarginRules,
+  NARROW_PANEL_QUERY,
+  PROSE_MEASURE_DECLARATION,
+  visuallyHiddenDeclarations,
+} from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 import {
   TONE_ACCENT_BAR_DECLARATIONS,
   toneAccentBarRules,
   toneColorRules,
 } from "./tone-rules.js";
+
+/*
+ * The banner glyph is drawn larger than the inline mark it refines. Internal
+ * geometry rather than a token: it is the size this one mark needs beside a
+ * heavier border, not a value a consumer themes.
+ */
+const BANNER_TONE_ICON_SIZE = "1.25rem";
 
 export const FEEDBACK_STYLES = scopeStyles(`
 .snui-banner {
@@ -35,32 +46,37 @@ ${visuallyHiddenDeclarations()}
 }
 
 .snui-banner__title {
+  text-wrap: balance;
   margin: 0;
   margin-block-end: var(--snui-space-1);
   font-weight: var(--snui-font-weight-bold);
 }
 
-/* The banner glyph is larger and heavier than the inline mark it refines. */
+/* Heavier than the inline mark it refines, and no glyph margin: the flex row
+   above owns the gap between the mark and the text. */
 .snui-banner__tone-icon {
   display: inline-grid;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: ${BANNER_TONE_ICON_SIZE};
+  height: ${BANNER_TONE_ICON_SIZE};
   place-items: center;
   border-width: 2px;
-  margin-inline-end: 0;
   font-weight: var(--snui-font-weight-heavy);
 }
 
 ${toneColorRules((tone) => `.snui-banner--${tone} .snui-banner__tone-icon`, "color")}
 
-.snui-banner__body > :first-child { margin-block-start: 0; }
-.snui-banner__body > :last-child { margin-block-end: 0; }
+${bodyEdgeMarginRules("snui-banner__body")}
 
 .snui-banner__content,
 .snui-banner__text,
 .snui-banner__body {
   min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.snui-banner__body {
+${PROSE_MEASURE_DECLARATION}
+  text-wrap: pretty;
 }
 
 .snui-banner__content {
@@ -82,7 +98,7 @@ ${toneColorRules((tone) => `.snui-banner--${tone} .snui-banner__tone-icon`, "col
   gap: var(--snui-space-2);
 }
 
-@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
+${NARROW_PANEL_QUERY} {
   .snui-banner {
     align-items: stretch;
     flex-direction: column;

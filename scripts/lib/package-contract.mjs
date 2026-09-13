@@ -1,3 +1,5 @@
+import { localDestinations } from "./docs-links.mjs";
+
 export const PACKAGE_NAME = "signalk-nearlcrews-ui";
 
 const PACKAGE_DESCRIPTION =
@@ -25,12 +27,17 @@ const EXPECTED_KEYWORDS = Object.freeze([
   "design-system",
 ]);
 
+/**
+ * The documents a consumer of the published package can act on.
+ * docs/repository-setup.md is not one of them: it is a checklist of this
+ * repository's own GitHub and npm settings, so the manifest excludes it from
+ * the tarball rather than pinning it on the package CDN forever.
+ */
 export const MAINTAINED_PACKAGE_DOCS = Object.freeze([
   "docs/api-reference.md",
   "docs/design-contract.md",
   "docs/migration.md",
   "docs/release-policy.md",
-  "docs/repository-setup.md",
   "docs/screenshots/showcase-dark.png",
   "docs/screenshots/showcase-light.png",
   "docs/screenshots/showcase-night.png",
@@ -40,6 +47,7 @@ const EXPECTED_PACKAGE_FILES = Object.freeze([
   "bin",
   "dist",
   "docs",
+  "!docs/repository-setup.md",
   "CHANGELOG.md",
   "LICENSE",
   "README.md",
@@ -71,18 +79,23 @@ const FORBIDDEN_SIGNAL_K_FIELDS = Object.freeze([
   "wasmManifest",
 ]);
 
+/**
+ * The node badge states the same floors DEV_NODE_RANGE does, URL encoded. It
+ * is labeled as the development range because the published engines.node floor
+ * is the wider `>=22`.
+ */
+const NODE_BADGE_VERSIONS = DEV_NODE_RANGE.split("||")
+  .map((range) => range.trim().replace(/^\^/, ""))
+  .join("%20%7C%20");
+
 const README_BADGES = Object.freeze([
   "[![npm version](https://img.shields.io/npm/v/signalk-nearlcrews-ui.svg)](https://www.npmjs.com/package/signalk-nearlcrews-ui)",
   "[![npm downloads](https://img.shields.io/npm/dm/signalk-nearlcrews-ui.svg)](https://www.npmjs.com/package/signalk-nearlcrews-ui)",
   "[![CI](https://github.com/NearlCrews/signalk-nearlcrews-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/NearlCrews/signalk-nearlcrews-ui/actions/workflows/ci.yml)",
   "[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/LICENSE)",
-  "[![node](https://img.shields.io/badge/node-22.22.2%20%7C%2024.15.0%20%7C%2026.0.0-brightgreen.svg)](https://nodejs.org)",
+  `[![node (dev)](https://img.shields.io/badge/node%20%28dev%29-${NODE_BADGE_VERSIONS}-brightgreen.svg)](https://nodejs.org)`,
   "[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/nearlcrews)",
 ]);
-
-/** Markdown link destinations that are relative repository paths to Markdown. */
-const RELATIVE_MARKDOWN_LINK =
-  /\]\(\s*<?([^)\s>]+)>?(?:\s+["'][^"']*["'])?\s*\)/g;
 
 function requireSameMembers(actual, expected, label) {
   if (
@@ -95,28 +108,16 @@ function requireSameMembers(actual, expected, label) {
 }
 
 /**
- * The Signal K App Store README view rewrites only image targets, so a relative
- * link to a Markdown file is dead there. Every document link in the README is
- * an absolute repository URL.
+ * The Signal K App Store README view rewrites image targets and nothing else,
+ * so every other relative destination is dead there, whether it points at a
+ * Markdown file, at LICENSE, or at a policy file under .github. Every
+ * non-image link in the README is an absolute repository URL. A bare fragment
+ * stays in the page it is read on, so it is not a relative path.
  */
-export function findRelativeMarkdownLinks(readme) {
-  const found = [];
-  let fenced = false;
-  for (const line of readme.split(/\r?\n/)) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
-      continue;
-    }
-    if (fenced) continue;
-    for (const match of line
-      .replace(/`[^`]*`/g, "")
-      .matchAll(RELATIVE_MARKDOWN_LINK)) {
-      const destination = match[1];
-      if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(destination)) continue;
-      if (/\.md(?:#|$)/i.test(destination)) found.push(destination);
-    }
-  }
-  return found;
+export function findRelativeLinks(readme) {
+  return localDestinations(readme)
+    .filter(({ destination, image }) => !image && !destination.startsWith("#"))
+    .map(({ destination }) => destination);
 }
 
 function validateExportsMap(exportsMap) {
@@ -161,7 +162,9 @@ function validateIdentity(packageJson) {
     throw new Error(`Unexpected package name: ${packageJson.name}`);
   }
 
-  if (packageJson.private === true) {
+  // Absent or exactly false, not "not the boolean true": npm treats any truthy
+  // value here as private, a JSON string included.
+  if (packageJson.private !== undefined && packageJson.private !== false) {
     throw new Error(
       "The package must remain publishable as a public npm dependency.",
     );
@@ -228,7 +231,14 @@ function validateRuntimeContract(packageJson) {
   );
 }
 
-/** The lockfile root and the install-script allowlist, which tracks the locked esbuild. */
+/**
+ * The lockfile root and the install-script allowlist. The allowlist must name
+ * exactly the locked packages that declare an install script, each at its
+ * locked version, so strict-allow-scripts admits those scripts and nothing
+ * else. Optional platform packages count too: fsevents installs on macOS only,
+ * and an allowlist that omits it fails npm ci there while passing everywhere
+ * else.
+ */
 function validateLockAgreement(packageJson, packageLock) {
   if (
     packageLock.name !== packageJson.name ||
@@ -241,15 +251,28 @@ function validateLockAgreement(packageJson, packageLock) {
     );
   }
 
-  const lockedEsbuild = packageLock.packages?.["node_modules/esbuild"]?.version;
-  const expectedAllowScripts = { [`esbuild@${String(lockedEsbuild)}`]: true };
+  const expectedAllowScripts = Object.fromEntries(
+    Object.entries(packageLock.packages ?? {})
+      .filter(
+        ([path, entry]) => path !== "" && entry?.hasInstallScript === true,
+      )
+      .map(([path, entry]) => [
+        `${path.slice(path.lastIndexOf("node_modules/") + "node_modules/".length)}@${String(entry.version)}`,
+        true,
+      ])
+      .sort(([a], [b]) => a.localeCompare(b)),
+  );
+  const actualAllowScripts = Object.fromEntries(
+    Object.entries(packageJson.allowScripts ?? {}).sort(([a], [b]) =>
+      a.localeCompare(b),
+    ),
+  );
   if (
-    typeof lockedEsbuild !== "string" ||
-    JSON.stringify(packageJson.allowScripts) !==
-      JSON.stringify(expectedAllowScripts)
+    Object.keys(expectedAllowScripts).length === 0 ||
+    JSON.stringify(actualAllowScripts) !== JSON.stringify(expectedAllowScripts)
   ) {
     throw new Error(
-      `package.json allowScripts must equal ${JSON.stringify(expectedAllowScripts)} so strict-allow-scripts admits exactly the locked esbuild install script; update the key when esbuild is bumped.`,
+      `package.json allowScripts must equal ${JSON.stringify(expectedAllowScripts)} so strict-allow-scripts admits exactly the locked install scripts; update the keys when one of those packages is bumped.`,
     );
   }
 }
@@ -385,11 +408,21 @@ function validateVersionAgreement({
     }
   }
 
-  const expectedScope = `@scope (.snui-root[data-snui-version="${packageJson.version}"])`;
-  if (!designContract.includes(expectedScope)) {
-    throw new Error(
-      `docs/design-contract.md must use package version ${packageJson.version} in its scope example.`,
-    );
+  const hyphenatedVersion = packageJson.version.replaceAll(".", "-");
+  // Both versioned strings are checked, because either one left at the
+  // previous version teaches a reader the wrong isolation rule.
+  for (const [exampleName, expectedText] of [
+    [
+      "scope",
+      `@scope (.snui-root[data-snui-version="${packageJson.version}"])`,
+    ],
+    ["keyframe name", `snui-v${hyphenatedVersion}-spin`],
+  ]) {
+    if (!designContract.includes(expectedText)) {
+      throw new Error(
+        `docs/design-contract.md must use package version ${packageJson.version} in its ${exampleName} example.`,
+      );
+    }
   }
 }
 
@@ -414,10 +447,10 @@ function validateReadmeShape(packageJson, readme) {
     }
   }
 
-  const relativeLinks = findRelativeMarkdownLinks(readme);
+  const relativeLinks = findRelativeLinks(readme);
   if (relativeLinks.length > 0) {
     throw new Error(
-      `README.md must not link to Markdown files by relative path (the Signal K App Store rewrites only image targets): ${relativeLinks.join(", ")}. Use absolute https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/ URLs.`,
+      `README.md must not link by relative path (the Signal K App Store rewrites only image targets): ${relativeLinks.join(", ")}. Use absolute https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/ URLs.`,
     );
   }
 

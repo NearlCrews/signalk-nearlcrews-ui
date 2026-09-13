@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { Activity, createRef } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   formatRelativeAge,
@@ -15,19 +15,31 @@ const NARROW_EN = { ...RELATIVE_AGE_NARROW, ...EN } as const;
 const DAY_MS = 86_400_000;
 
 describe("formatRelativeAge defaults", () => {
-  it("reads as words with the auto numeric form", () => {
+  it("reads as words below a day and counts in numbers above one", () => {
     expect(formatRelativeAge(0, EN)).toBe("now");
     expect(formatRelativeAge(1_000, EN)).toBe("1 second ago");
     expect(formatRelativeAge(120_000, EN)).toBe("2 minutes ago");
-    expect(formatRelativeAge(DAY_MS, EN)).toBe("yesterday");
-    expect(formatRelativeAge(7 * DAY_MS, EN)).toBe("last week");
+    // "Yesterday" is a calendar claim, and nothing here reads a calendar: a
+    // sample thirty-four hours old rounds to one day.
+    expect(formatRelativeAge(DAY_MS, EN)).toBe("1 day ago");
+    expect(formatRelativeAge(34 * 3_600_000, EN)).toBe("1 day ago");
+    expect(formatRelativeAge(7 * DAY_MS, EN)).toBe("1 week ago");
+  });
+
+  it("gives the calendar wording to a caller that asks for it", () => {
+    expect(formatRelativeAge(DAY_MS, { ...EN, numeric: "auto" })).toBe(
+      "yesterday",
+    );
+    expect(formatRelativeAge(7 * DAY_MS, { ...EN, numeric: "auto" })).toBe(
+      "last week",
+    );
   });
 
   it("keeps the fallback for missing and non-finite ages", () => {
     expect(formatRelativeAge(null, { fallback: "never" })).toBe("never");
-    expect(formatRelativeAge(undefined)).toBe("unknown");
-    expect(formatRelativeAge(Number.NaN)).toBe("unknown");
-    expect(formatRelativeAge(Number.POSITIVE_INFINITY)).toBe("unknown");
+    expect(formatRelativeAge(undefined)).toBe("Unknown");
+    expect(formatRelativeAge(Number.NaN)).toBe("Unknown");
+    expect(formatRelativeAge(Number.POSITIVE_INFINITY)).toBe("Unknown");
   });
 });
 
@@ -55,7 +67,7 @@ describe("formatRelativeAge rounding", () => {
   it("promotes a value that rounds up to the next unit", () => {
     // Twelve rounded months become one year rather than "12 months ago".
     expect(formatRelativeAge(352 * DAY_MS, { ...EN, style: "long" })).toBe(
-      "last year",
+      "1 year ago",
     );
     expect(
       formatRelativeAge(59_500, { ...EN, numeric: "always", style: "long" }),
@@ -71,9 +83,9 @@ describe("formatRelativeAge negative ages", () => {
   });
 
   it("falls back beyond the tolerance or when asked to", () => {
-    expect(formatRelativeAge(-60_001, EN)).toBe("unknown");
+    expect(formatRelativeAge(-60_001, EN)).toBe("Unknown");
     expect(formatRelativeAge(-1, { ...EN, negative: "fallback" })).toBe(
-      "unknown",
+      "Unknown",
     );
   });
 });
@@ -127,27 +139,23 @@ describe("formatRelativeAgeSince", () => {
       formatRelativeAgeSince(new Date(now - 3_600_000).toISOString(), now, EN),
     ).toBe("1 hour ago");
     expect(formatRelativeAgeSince(new Date(now - DAY_MS), now, EN)).toBe(
-      "yesterday",
+      "1 day ago",
     );
   });
 
   it("falls back for missing or unreadable timestamps", () => {
-    expect(formatRelativeAgeSince(null, now)).toBe("unknown");
-    expect(formatRelativeAgeSince(undefined, now)).toBe("unknown");
-    expect(formatRelativeAgeSince("not a timestamp", now)).toBe("unknown");
+    expect(formatRelativeAgeSince(null, now)).toBe("Unknown");
+    expect(formatRelativeAgeSince(undefined, now)).toBe("Unknown");
+    expect(formatRelativeAgeSince("not a timestamp", now)).toBe("Unknown");
   });
 
   it("treats a timestamp slightly ahead of now as now", () => {
     expect(formatRelativeAgeSince(now + 30_000, now, EN)).toBe("now");
-    expect(formatRelativeAgeSince(now + 120_000, now, EN)).toBe("unknown");
+    expect(formatRelativeAgeSince(now + 120_000, now, EN)).toBe("Unknown");
   });
 });
 
 describe("RelativeAge", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("renders a precomputed age in a span without a machine timestamp", () => {
     const ref = createRef<HTMLElement>();
     render(
@@ -298,17 +306,65 @@ describe("RelativeAge", () => {
   it("falls back for an unreadable timestamp", () => {
     render(<RelativeAge since="garbage" options={{ fallback: "never" }} />);
 
-    const time = screen.getByText("never");
-    expect(time.tagName).toBe("TIME");
-    expect(time).not.toHaveAttribute("datetime");
+    // No moment to stamp, so no time element: a time with neither a datetime
+    // attribute nor machine-readable text is not a time at all.
+    const stamp = screen.getByText("never");
+    expect(stamp.tagName).toBe("SPAN");
+    expect(stamp).not.toHaveAttribute("datetime");
+  });
+
+  it("declines an explicit time element it cannot stamp", () => {
+    render(
+      <RelativeAge as="time" ageMs={180_000} options={EN} data-testid="age" />,
+    );
+
+    const age = screen.getByTestId("age");
+    expect(age.tagName).toBe("SPAN");
+    expect(age).toHaveTextContent("3 minutes ago");
+  });
+
+  it("re-renders only when the words change", () => {
+    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
+    vi.useFakeTimers({ now });
+    let renders = 0;
+
+    function Counted(): React.JSX.Element {
+      renders += 1;
+      return (
+        <RelativeAge since={now - 3 * 3_600_000} tickMs={1_000} options={EN} />
+      );
+    }
+
+    render(<Counted />);
+    expect(screen.getByText("3 hours ago")).toBeInTheDocument();
+    const initial = renders;
+
+    // A settled age formats the same tick after tick, so the stamp stays put
+    // rather than committing a render that changes no text.
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(renders).toBe(initial);
+    expect(screen.getByText("3 hours ago")).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(3_600_000);
+    });
+    expect(screen.getByText("4 hours ago")).toBeInTheDocument();
+  });
+
+  it("runs no timer for a cadence that is not a number", () => {
+    vi.useFakeTimers();
+    render(<RelativeAge since={Date.now()} tickMs={Number.NaN} options={EN} />);
+
+    // setInterval treats NaN as zero and clamps it to about four
+    // milliseconds, which would re-render every age hundreds of times a
+    // second.
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 
 describe("shared clock", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("tells a new subscriber the current instant", () => {
     const now = Date.UTC(2026, 8, 5, 12, 0, 0);
     vi.useFakeTimers({ now });
@@ -319,6 +375,45 @@ describe("shared clock", () => {
     expect(onTick).toHaveBeenCalledWith(now);
     stop();
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops while the document is hidden and catches up on the way back", () => {
+    vi.useFakeTimers();
+    const onTick = vi.fn();
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+
+    const stop = subscribeToClock(1_000, onTick);
+    onTick.mockClear();
+
+    hidden.mockReturnValue(true);
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(vi.getTimerCount()).toBe(0);
+    act(() => {
+      vi.advanceTimersByTime(10_000);
+    });
+    expect(onTick).not.toHaveBeenCalled();
+
+    // Back on screen, the reader is told the instant at once rather than
+    // showing the age from before the pause until the cadence next fires.
+    hidden.mockReturnValue(false);
+    document.dispatchEvent(new Event("visibilitychange"));
+    expect(onTick).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);
+
+    stop();
+    hidden.mockRestore();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("runs no timer for a cadence that is not a positive number", () => {
+    vi.useFakeTimers();
+    const onTick = vi.fn();
+
+    const stop = subscribeToClock(Number.NaN, onTick);
+
+    expect(onTick).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+    stop();
   });
 
   it("tolerates a listener unsubscribing another during a tick", () => {

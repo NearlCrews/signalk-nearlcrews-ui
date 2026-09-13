@@ -6,6 +6,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { createRef } from "react";
 import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Button, PanelRoot } from "../../src/index.js";
@@ -21,7 +22,7 @@ import {
 import { visuallyHiddenDeclarations } from "../../src/styles/fragments.js";
 import { TOAST_STYLES } from "../../src/styles/toast.js";
 import { TRANSITION_FAST_MS } from "../../src/styles/tokens.js";
-import { renderInPanel } from "../helpers.js";
+import { installVisualViewport, renderInPanel } from "../helpers.js";
 
 function at<T>(items: readonly T[], index: number): T {
   const item = items[index];
@@ -180,6 +181,7 @@ describe("ToastRegion", () => {
       .map((element) => element.textContent)
       .join("\n");
 
+    expect(styles).toContain("env(safe-area-inset-top, 0px)");
     expect(styles).toContain("env(safe-area-inset-bottom, 0px)");
     expect(styles).toContain("env(safe-area-inset-right, 0px)");
     expect(styles).toContain("env(safe-area-inset-left, 0px)");
@@ -838,6 +840,339 @@ describe("ToastRegion", () => {
 
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  it("measures the host only while a toast shows, and only when it moved", () => {
+    const { restore, visualViewport } = installVisualViewport({
+      height: 600,
+      innerHeight: 600,
+    });
+    const queue = createToastQueue();
+    const { container, unmount } = renderToastRegion(queue);
+    const panel = container.querySelector(".snui-root");
+    const host = container.querySelector(".snui-toast-region-host");
+    if (!(panel instanceof HTMLElement) || !(host instanceof HTMLElement)) {
+      throw new Error("expected a panel and a host");
+    }
+    const panelRect = vi
+      .spyOn(panel, "getBoundingClientRect")
+      .mockImplementation(() => new DOMRect(0, 0, 800, 1_200));
+
+    // An empty host paints nothing, so scroll frames cost no measurement.
+    document.dispatchEvent(new Event("scroll"));
+    advance(50);
+    expect(panelRect).not.toHaveBeenCalled();
+
+    enqueue(queue, { title: "Depth stale", tone: "warning" });
+    expect(host).toHaveAttribute("data-snui-toast-host-visible");
+    expect(host.style.getPropertyValue("--snui-toast-host-top")).toBe("0px");
+    expect(host.style.getPropertyValue("--snui-toast-host-bottom")).toBe("0px");
+    expect(host.style.getPropertyValue("--snui-toast-host-left")).toBe("0px");
+    expect(host.style.getPropertyValue("--snui-toast-host-width")).toBe(
+      "800px",
+    );
+
+    // An on-screen keyboard shrinks the visual viewport, and the notification
+    // stays above it instead of under it.
+    Object.assign(visualViewport, { height: 300 });
+    act(() => {
+      visualViewport.dispatchEvent(new Event("resize"));
+    });
+    advance(50);
+    expect(host.style.getPropertyValue("--snui-toast-host-bottom")).toBe(
+      "300px",
+    );
+    expect(host).toHaveAttribute("data-snui-toast-host-visible");
+
+    // A frame that moved nothing writes nothing.
+    const setProperty = vi.spyOn(host.style, "setProperty");
+    document.dispatchEvent(new Event("scroll"));
+    advance(50);
+    expect(setProperty).not.toHaveBeenCalled();
+
+    // A panel scrolled past the viewport keeps its host in the tree.
+    panelRect.mockImplementation(() => new DOMRect(0, 700, 800, 1_200));
+    document.dispatchEvent(new Event("scroll"));
+    advance(50);
+    expect(host).not.toHaveAttribute("data-snui-toast-host-visible");
+
+    unmount();
+    restore();
+  });
+
+  it("lengthens the untimed toasts of one region at once", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue, { defaultDuration: 12_000 });
+    enqueue(queue, { title: "Synced" });
+    enqueue(queue, { title: "Timed", duration: 500 });
+    enqueue(queue, { title: "Save failed", tone: "danger" });
+
+    advance(500);
+    expect(cardOf("Timed")).toHaveAttribute("data-exiting", "true");
+    advance(11_499);
+    expect(cardOf("Synced")).not.toHaveAttribute("data-exiting");
+    advance(1);
+    expect(cardOf("Synced")).toHaveAttribute("data-exiting", "true");
+    // A sticky tone is still sticky: the region default times nothing out.
+    expect(cardOf("Save failed")).not.toHaveAttribute("data-exiting");
+  });
+
+  it("names each dismiss button with the notification it closes", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    enqueue(queue, { title: "Provider unavailable", tone: "danger" });
+    enqueue(queue, { title: "Waypoints synced" });
+
+    for (const title of ["Provider unavailable", "Waypoints synced"]) {
+      const card = cardOf(title);
+      const describedBy = within(card)
+        .getByRole("button", { name: "Dismiss" })
+        .getAttribute("aria-describedby");
+      const heading = card.querySelector(".snui-toast__title");
+      expect(describedBy).not.toBeNull();
+      expect(heading?.id).toBe(describedBy);
+      expect(heading).toHaveTextContent(title);
+    }
+  });
+
+  it("renders a silent toast without the empty first commit", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+
+    act(() => {
+      queue.enqueue({ title: "Quiet", duration: 0, live: "off" });
+    });
+    expect(screen.getByText("Quiet")).toBeInTheDocument();
+
+    // An announcing toast still mounts its region before its text.
+    act(() => {
+      queue.enqueue({ title: "Spoken", duration: 0 });
+    });
+    expect(screen.queryByText("Spoken")).toBeNull();
+    flush();
+    expect(screen.getByText("Spoken")).toBeInTheDocument();
+  });
+
+  it("keeps a deliberately sticky notice ahead of timed ones", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    enqueue(queue, { title: "Held", duration: 0 });
+    for (const title of ["Two", "Three", "Four", "Five"]) {
+      enqueue(queue, { title });
+    }
+    enqueue(queue, { title: "Six" });
+
+    expect(screen.getByText("Held")).toBeInTheDocument();
+    expect(screen.queryByText("Two")).toBeNull();
+  });
+
+  it("refuses a routine toast rather than dropping an unread failure", () => {
+    const evictions: string[] = [];
+    const queue = createToastQueue({
+      onEvict: ({ reason, toast: dropped }) => {
+        // Every toast in this spec carries a plain string title, and a title
+        // built from elements has no single word to record here.
+        const { title } = dropped.content;
+        evictions.push(`${reason}:${typeof title === "string" ? title : ""}`);
+      },
+    });
+    renderToastRegion(queue);
+    for (const title of ["One", "Two", "Three", "Four", "Five"]) {
+      enqueue(queue, { title, tone: "danger" });
+    }
+
+    const refused = enqueue(queue, { title: "Routine" });
+    expect(screen.getByText("One")).toBeInTheDocument();
+    expect(screen.queryByText("Routine")).toBeNull();
+    expect(evictions).toEqual(["rejected:Routine"]);
+    // The key of a refused toast stays safe to hand back.
+    act(() => {
+      queue.dismiss(refused);
+    });
+    expect(screen.getAllByRole("alert")).toHaveLength(5);
+
+    // Another failure still makes room, and the one that went is reported.
+    enqueue(queue, { title: "Six", tone: "danger" });
+    expect(screen.queryByText("One")).toBeNull();
+    expect(screen.getByText("Six")).toBeInTheDocument();
+    expect(evictions).toEqual(["rejected:Routine", "overflow:One"]);
+  });
+
+  it("derives the exit fallback timer from the transition token", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+
+    const dismissWithToken = (title: string, token: string): void => {
+      enqueue(queue, { title, duration: 0 });
+      const dismiss = within(cardOf(title)).getByRole("button", {
+        name: "Dismiss",
+      });
+      const computed = vi.spyOn(window, "getComputedStyle").mockReturnValue({
+        getPropertyValue: () => token,
+      } as unknown as CSSStyleDeclaration);
+      fireEvent.click(dismiss);
+      computed.mockRestore();
+    };
+
+    // A token in seconds resolves to milliseconds.
+    dismissWithToken("Seconds", "0.2s");
+    advance(209);
+    expect(screen.queryByText("Seconds")).not.toBeNull();
+    advance(1);
+    expect(screen.queryByText("Seconds")).toBeNull();
+
+    // A missing or unparseable token falls back to the package transition.
+    dismissWithToken("Missing", "");
+    dismissWithToken("Unparseable", "..ms");
+    advance(EXIT_MS - 1);
+    expect(screen.queryByText("Missing")).not.toBeNull();
+    expect(screen.queryByText("Unparseable")).not.toBeNull();
+    advance(1);
+    expect(screen.queryByText("Missing")).toBeNull();
+    expect(screen.queryByText("Unparseable")).toBeNull();
+  });
+
+  it("exposes the notifications landmark through the ref", () => {
+    const queue = createToastQueue();
+    const ref = createRef<HTMLElement>();
+    renderInPanel(<ToastRegion queue={queue} ref={ref} label="Avisos" />);
+    flush();
+    expect(ref.current).toBeNull();
+
+    enqueue(queue, { title: "Hecho" });
+    expect(ref.current).toBe(screen.getByRole("region", { name: "Avisos" }));
+    expect(ref.current).toHaveClass("snui-toast-region");
+
+    act(() => {
+      queue.clear();
+    });
+    expect(ref.current).toBeNull();
+  });
+
+  it("moves focus to the newest remaining toast when the oldest is dismissed", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    enqueue(queue, { title: "Oldest", duration: 0 });
+    enqueue(queue, { title: "Middle", duration: 0 });
+    enqueue(queue, { title: "Newest", duration: 0 });
+
+    const newest = cardOf("Newest");
+    const dismiss = within(cardOf("Oldest")).getByRole("button", {
+      name: "Dismiss",
+    });
+    dismiss.focus();
+    fireEvent.click(dismiss);
+    advance(EXIT_MS);
+
+    expect(screen.queryByText("Oldest")).toBeNull();
+    expect(
+      within(newest).getByRole("button", { name: "Dismiss" }),
+    ).toHaveFocus();
+  });
+
+  it("counts the focused card among the toasts that are not leaving", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    for (const title of ["One", "Two", "Three", "Four", "Five"]) {
+      enqueue(queue, { title, duration: 0 });
+    }
+
+    // The newest card is already on its way out, so it is no focus target.
+    fireEvent.click(
+      within(cardOf("Five")).getByRole("button", { name: "Dismiss" }),
+    );
+    const survivor = cardOf("Two");
+    const dismiss = within(cardOf("Three")).getByRole("button", {
+      name: "Dismiss",
+    });
+    dismiss.focus();
+    fireEvent.click(dismiss);
+    advance(EXIT_MS);
+
+    expect(screen.queryByText("Three")).toBeNull();
+    expect(
+      within(survivor).getByRole("button", { name: "Dismiss" }),
+    ).toHaveFocus();
+  });
+
+  it("returns the borrowed tabindex when the panel root refuses focus", () => {
+    const queue = createToastQueue();
+    const { container } = renderToastRegion(queue);
+    const root = container.querySelector(".snui-root");
+    if (!(root instanceof HTMLElement)) throw new Error("expected a root");
+    vi.spyOn(root, "focus").mockImplementation(() => undefined);
+
+    enqueue(queue, { title: "Saved", tone: "success" });
+    const dismiss = screen.getByRole("button", { name: "Dismiss" });
+    dismiss.focus();
+    fireEvent.click(dismiss);
+    advance(EXIT_MS);
+
+    expect(root).not.toHaveFocus();
+    expect(root).not.toHaveAttribute("tabindex");
+  });
+
+  it("leaves a modified or already handled F6 to the host page", () => {
+    const queue = createToastQueue();
+    renderInPanel(
+      <>
+        <Button>Save</Button>
+        <ToastRegion queue={queue} />
+      </>,
+    );
+    flush();
+    const save = screen.getByRole("button", { name: "Save" });
+    save.focus();
+    enqueue(queue, { title: "Older", duration: 0 });
+
+    for (const modifiers of [
+      { altKey: true },
+      { ctrlKey: true },
+      { metaKey: true },
+    ]) {
+      fireEvent.keyDown(save, { key: "F6", ...modifiers });
+      expect(save).toHaveFocus();
+    }
+
+    // A capture-phase handler answered the key first.
+    const answerFirst = (event: KeyboardEvent): void => {
+      event.preventDefault();
+    };
+    document.addEventListener("keydown", answerFirst, true);
+    fireEvent.keyDown(save, { key: "F6" });
+    document.removeEventListener("keydown", answerFirst, true);
+    expect(save).toHaveFocus();
+  });
+
+  it("renders to static markup, the way a consumer check does", async () => {
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const queue = createToastQueue();
+    queue.enqueue({ title: "Saved" });
+
+    // The queue's store has to answer a server render, like every other store
+    // a panel subscribes to.
+    expect(() =>
+      renderToStaticMarkup(
+        <PanelRoot>
+          <ToastRegion queue={queue} />
+        </PanelRoot>,
+      ),
+    ).not.toThrow();
+  });
+
+  it("leaves F6 to the host page while focus stands outside the panel", () => {
+    const queue = createToastQueue();
+    const outside = document.createElement("button");
+    outside.textContent = "Admin";
+    document.body.append(outside);
+    renderToastRegion(queue);
+    enqueue(queue, { title: "Older", duration: 0 });
+
+    outside.focus();
+    fireEvent.keyDown(outside, { key: "F6" });
+    expect(outside).toHaveFocus();
+
+    outside.remove();
+  });
 });
 
 describe("toast host stylesheet", () => {
@@ -852,5 +1187,28 @@ describe("toast host stylesheet", () => {
     // the user reach Dismiss, so the host loses its paint and keeps its node.
     expect(declarations).not.toMatch(/visibility:/);
     expect(declarations).toContain(visuallyHiddenDeclarations());
+  });
+
+  it("reconstructs the tone dot under forced colors", () => {
+    const rule =
+      /@media \(forced-colors: active\) \{[^}]*\.snui-toast__tone-dot \{([^}]*)\}/.exec(
+        TOAST_STYLES.styles,
+      );
+    expect(rule).not.toBeNull();
+    const declarations = rule?.[1] ?? "";
+    // High contrast drops the tone hue, so the shaped dot is painted again
+    // with a system color rather than disappearing.
+    expect(declarations).toContain("background: CanvasText;");
+    expect(declarations).toContain("forced-color-adjust: none;");
+  });
+
+  it("paints every tone from the shared tone rules", () => {
+    for (const tone of ["info", "success", "warning", "danger"]) {
+      expect(TOAST_STYLES.styles).toContain(
+        `.snui-toast--${tone} :is(.snui-toast__tone, .snui-toast__tone-glyph) { color: var(--snui-color-${tone}); }`,
+      );
+    }
+    // The dot reads at the size the status indicator already proved legible.
+    expect(TOAST_STYLES.styles).toContain("width: 0.75rem;");
   });
 });

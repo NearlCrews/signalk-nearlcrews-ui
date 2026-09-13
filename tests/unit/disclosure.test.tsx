@@ -159,6 +159,35 @@ describe("Disclosure", () => {
     expect(section).toHaveFocus();
   });
 
+  it("attaches and releases the panel ref exactly once per mount", async () => {
+    const user = userEvent.setup();
+    const attached: (HTMLElement | null)[] = [];
+    const panelRef = (node: HTMLElement | null): void => {
+      attached.push(node);
+    };
+    const { unmount } = renderInPanel(
+      <Disclosure>
+        <DisclosureTrigger>Show reports</DisclosureTrigger>
+        <DisclosurePanel ref={panelRef} data-testid="attach-panel">
+          <p>Report body</p>
+        </DisclosurePanel>
+      </Disclosure>,
+    );
+
+    expect(attached).toHaveLength(1);
+    expect(attached[0]).toBe(screen.getByTestId("attach-panel"));
+
+    // Opening and closing commits the panel twice more, and a ref rebuilt on
+    // every render would detach and reattach on each of them.
+    const trigger = screen.getByRole("button", { name: "Show reports" });
+    await user.click(trigger);
+    await user.click(trigger);
+    expect(attached).toHaveLength(1);
+
+    unmount();
+    expect(attached).toEqual([expect.any(HTMLElement), null]);
+  });
+
   it("takes the trigger id and the panel stem from the consumer", async () => {
     const user = userEvent.setup();
     renderInPanel(

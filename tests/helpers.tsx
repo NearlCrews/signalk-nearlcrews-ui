@@ -1,10 +1,29 @@
 /** Shared helpers for the unit specs. */
 
 import { act, type RenderResult, render } from "@testing-library/react";
+import axe from "axe-core";
 import type { ReactNode } from "react";
-import { vi } from "vitest";
+import { expect, vi } from "vitest";
 
 import { PanelRoot, type PanelRootProps } from "../src/index.js";
+
+/**
+ * Runs axe over a rendered container and fails on any violation.
+ *
+ * One rule set for every jsdom fixture: axe's full default set, best-practice
+ * rules included, minus color-contrast. Two fixtures with two configurations
+ * meant a component was audited more or less strictly depending on which file
+ * it was added to. Contrast is the one exclusion because jsdom computes no
+ * rendered colors; the browser suite grades contrast against real layout and
+ * the token pairs are audited directly in the contrast spec.
+ */
+export async function expectNoAxeViolations(container: Element): Promise<void> {
+  const result = await axe.run(container, {
+    rules: { "color-contrast": { enabled: false } },
+  });
+
+  expect(result.violations).toEqual([]);
+}
 
 /**
  * Awaits two animation frames, which is longer than any frame a component

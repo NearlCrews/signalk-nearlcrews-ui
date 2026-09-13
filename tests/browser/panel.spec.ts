@@ -1,8 +1,10 @@
 import { existsSync } from "node:fs";
 
 import {
+  controlTargetFloor,
   expect,
   expectNoAxeViolations,
+  expectTargetFloor,
   type Locator,
   type Page,
   type TestInfo,
@@ -45,13 +47,6 @@ interface StabilityProbe {
   readonly measure: string;
 }
 
-/**
- * Counts the frames an element's box takes to hold still, or reports null when
- * it never does. Playwright dispatches a click only after two consecutive
- * frames report the same box, so that pair is what settling means here, and the
- * count is the frame the pair completed on. The optional focus runs in the same
- * task as the count so the frames after it are the ones measured.
- */
 /** Resolves a color token inside the panel root, in the theme it currently shows. */
 async function readTokenColor(page: Page, token: string): Promise<string> {
   return page.evaluate((name) => {
@@ -64,6 +59,13 @@ async function readTokenColor(page: Page, token: string): Promise<string> {
   }, token);
 }
 
+/**
+ * Counts the frames an element's box takes to hold still, or reports null when
+ * it never does. Playwright dispatches a click only after two consecutive
+ * frames report the same box, so that pair is what settling means here, and the
+ * count is the frame the pair completed on. The optional focus runs in the same
+ * task as the count so the frames after it are the ones measured.
+ */
 async function framesUntilStable(
   page: Page,
   probe: StabilityProbe,
@@ -162,6 +164,20 @@ async function actionClearsBar({
   return actionBox.y + actionBox.height <= barBox.y;
 }
 
+/**
+ * Skips a screenshot spec when the current project, platform, and snapshot
+ * variant have no committed baseline. Baselines are generated on x64/ubuntu24
+ * through the manual refresh workflow, so other machines skip with a clear
+ * reason instead of failing on a missing snapshot.
+ */
+function skipWithoutBaseline(testInfo: TestInfo, snapshot: string): void {
+  const updatingBaselines = process.env.SNUI_UPDATE_BASELINES === "true";
+  test.skip(
+    !updatingBaselines && !existsSync(testInfo.snapshotPath(snapshot)),
+    `No committed ${snapshot} baseline for this project, platform, and snapshot variant; refresh baselines through the manual CI workflow.`,
+  );
+}
+
 test.beforeEach(async ({ page }) => {
   await page.goto("/");
   await expect(
@@ -232,7 +248,7 @@ test("follows the host theme for a fresh Auto profile", async ({ page }) => {
   const root = page.locator("[data-snui-version]");
   await expect(root).not.toHaveAttribute("data-snui-theme");
   await expect(root).toHaveCSS("background-color", "rgb(16, 19, 28)");
-  await expect(page.getByRole("radio", { name: "Auto" })).toBeChecked();
+  await expect(page.getByRole("radio", { name: "Match Admin" })).toBeChecked();
   expect(
     await page.evaluate(() =>
       window.localStorage.getItem("signalk-nearlcrews-ui.theme.v1"),
@@ -257,7 +273,7 @@ test("persists explicit themes across reloads", async ({ page }) => {
 test("persists an explicit Auto preference across reloads", async ({
   page,
 }) => {
-  await page.getByRole("radio", { name: "Auto" }).click();
+  await page.getByRole("radio", { name: "Match Admin" }).click();
   await expect(page.locator("[data-snui-version]")).not.toHaveAttribute(
     "data-snui-theme",
   );
@@ -268,14 +284,14 @@ test("persists an explicit Auto preference across reloads", async ({
   ).toBe("auto");
 
   await page.reload();
-  await expect(page.getByRole("radio", { name: "Auto" })).toBeChecked();
+  await expect(page.getByRole("radio", { name: "Match Admin" })).toBeChecked();
   await expect(page.locator("[data-snui-version]")).not.toHaveAttribute(
     "data-snui-theme",
   );
 });
 
 test("uses the host theme while Auto is selected", async ({ page }) => {
-  await page.getByRole("radio", { name: "Auto" }).click();
+  await page.getByRole("radio", { name: "Match Admin" }).click();
   await page.evaluate(() => {
     document.documentElement.dataset.bsTheme = "dark";
   });
@@ -294,7 +310,7 @@ test("uses the light fallback while Auto is selected without a host theme", asyn
     document.documentElement.removeAttribute("data-coreui-theme");
     document.documentElement.classList.remove("dark-mode");
   });
-  await page.getByRole("radio", { name: "Auto" }).click();
+  await page.getByRole("radio", { name: "Match Admin" }).click();
   const root = page.locator("[data-snui-version]");
 
   await expect(root).not.toHaveAttribute("data-snui-theme");
@@ -343,7 +359,7 @@ test("uses the operating-system theme while System is selected", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "dark" });
-  await page.getByRole("radio", { name: "System" }).click();
+  await page.getByRole("radio", { name: "Match device" }).click();
   const root = page.locator("[data-snui-version]");
 
   await expect(root).toHaveAttribute("data-snui-theme", "system");
@@ -491,11 +507,11 @@ test("reflows from panel width rather than viewport width", async ({
 test("applies the control target floor to every interactive primitive", async ({
   page,
 }, testInfo) => {
-  const minimumHeight = testInfo.project.name === "mobile-chromium" ? 44 : 40;
+  const minimumHeight = controlTargetFloor(testInfo);
   await page.getByRole("button", { name: "Advanced settings" }).click();
 
   const targets = [
-    page.getByRole("radio", { name: "Auto" }),
+    page.getByRole("radio", { name: "Match Admin" }),
     page.getByRole("textbox", { name: /Server URL/ }),
     page.getByLabel("API token"),
     page.getByRole("combobox", { name: "Provider mode" }),
@@ -512,18 +528,18 @@ test("applies the control target floor to every interactive primitive", async ({
   ];
 
   for (const target of targets) {
-    const box = await target.boundingBox();
-    expect(box?.height).toBeGreaterThanOrEqual(minimumHeight - 0.01);
+    await expectTargetFloor(target, minimumHeight);
   }
 
   // A checkbox with a hidden label has only its box to hit, so the control
   // must hold the floor in both axes.
-  const hiddenLabelBox = await page
-    .getByRole("checkbox", { name: "Include provider in exports" })
-    .locator("..")
-    .boundingBox();
-  expect(hiddenLabelBox?.height).toBeGreaterThanOrEqual(minimumHeight - 0.01);
-  expect(hiddenLabelBox?.width).toBeGreaterThanOrEqual(minimumHeight - 0.01);
+  await expectTargetFloor(
+    page
+      .getByRole("checkbox", { name: "Include provider in exports" })
+      .locator(".."),
+    minimumHeight,
+    "both",
+  );
 
   // A button holding a single glyph has no text to widen it, so the floor has
   // to come from the control itself in both axes.
@@ -547,9 +563,7 @@ test("applies the control target floor to every interactive primitive", async ({
     });
 
   for (const id of ["#compact-glyph-button", "#compact-icon-button"]) {
-    const box = await page.locator(id).boundingBox();
-    expect(box?.height).toBeGreaterThanOrEqual(minimumHeight - 0.01);
-    expect(box?.width).toBeGreaterThanOrEqual(minimumHeight - 0.01);
+    await expectTargetFloor(page.locator(id), minimumHeight, "both");
   }
 });
 
@@ -674,9 +688,15 @@ test("provides segmented hover and active feedback", async ({
   await page.mouse.up();
 });
 
-test("keeps aria-disabled focus indicators fully opaque", async ({ page }) => {
+test("keeps aria-disabled focus indicators fully opaque", async ({
+  page,
+}, testInfo) => {
   await page.goto("/?states=1");
   const button = page.getByRole("button", { name: "Unavailable here" });
+  // A coarse pointer raises the second spacing step, and the gap between a
+  // button's glyph and its label rides on that step.
+  const expectedGap =
+    testInfo.project.name === "mobile-chromium" ? "12px" : "8px";
 
   const disabledText = await readTokenColor(page, "--snui-color-text-disabled");
   await expect(button).toHaveCSS("opacity", "1");
@@ -691,7 +711,7 @@ test("keeps aria-disabled focus indicators fully opaque", async ({ page }) => {
   );
   await expect(button.locator(".snui-button__content")).toHaveCSS(
     "column-gap",
-    "8px",
+    expectedGap,
   );
   await button.focus();
   expect(
@@ -842,13 +862,18 @@ test("styles checkbox and range validation consistently", async ({ page }) => {
   await expect(checkbox).toHaveAttribute("aria-invalid", "true");
   await expect(checkbox).toHaveCSS("border-color", dangerColor);
   await expect(range).toHaveAttribute("aria-invalid", "true");
-  expect(
-    await range.evaluate((element) =>
-      getComputedStyle(element)
-        .getPropertyValue("--snui-range-track-color")
-        .trim(),
-    ),
-  ).toBe("#b42318");
+  const rangeColors = await range.evaluate((element) => {
+    const styles = getComputedStyle(element);
+    return {
+      progress: styles.getPropertyValue("--snui-range-progress-color").trim(),
+      track: styles.getPropertyValue("--snui-range-track-color").trim(),
+    };
+  });
+  // Only the filled portion takes the danger color: recoloring the remainder
+  // too would flatten the two halves into one bar, and the boundary between
+  // them is where the value reads.
+  expect(rangeColors.progress).toBe("#b42318");
+  expect(rangeColors.track).not.toBe("#b42318");
 });
 
 test("uses inline confirmation with Escape, confirm, and managed focus", async ({
@@ -1046,6 +1071,26 @@ test("reflows state-heavy content at a 320 pixel viewport", async ({
   }));
 
   expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.clientWidth);
+
+  // The theme options wrap rather than scroll here: a sideways scroller inside
+  // the group carries no affordance, so a hidden last option would be a theme
+  // the operator cannot find.
+  const themeOptions = await page
+    .locator(".snui-segmented__group")
+    .last()
+    .evaluate((group) => {
+      const groupBox = group.getBoundingClientRect();
+      return [...group.querySelectorAll('[role="radio"]')].map((option) => {
+        const box = option.getBoundingClientRect();
+        return {
+          inside:
+            box.left >= groupBox.left - 1 && box.right <= groupBox.right + 1,
+          label: option.textContent || "",
+        };
+      });
+    });
+  expect(themeOptions.length).toBeGreaterThan(1);
+  expect(themeOptions.filter((option) => !option.inside)).toEqual([]);
 });
 
 test("docks the viewport action bar inside an unconstrained Admin host", async ({
@@ -1229,9 +1274,20 @@ test("delivers the first click to a control the docked bar overlaps", async ({
 
   await expect.poll(() => actionClearsBar(overlap)).toBe(false);
   await expect(overlap.action).toHaveAttribute("data-activation-count", "0");
+  const actionBox = await overlap.action.boundingBox();
+  expect(actionBox).not.toBeNull();
   const scrollBeforeClick = await page.evaluate(() => window.scrollY);
 
-  await overlap.action.click();
+  // Pressed once at the control's own coordinates. Driving the press through
+  // the locator would scroll the panel first, because the driver brings the
+  // whole scroll-margin box of the target into view and the panel publishes a
+  // sticky-bar clearance there, and the press itself is what is under test.
+  if (actionBox !== null) {
+    await page.mouse.click(
+      actionBox.x + actionBox.width / 2,
+      actionBox.y + actionBox.height / 2,
+    );
+  }
 
   await expect(overlap.action).toHaveAttribute("data-activation-count", "1");
   // A pointer user can see the control they pressed, so the press keeps the
@@ -1293,7 +1349,16 @@ test("clears a keyboard-focused control from the docked bar", async ({
 
 test("settles the docked action bar after a focus change", async ({ page }) => {
   await overlapDockedActionBar(page, 320);
-  await framesUntilStable(page, { limit: 30, measure: ACTION_BAR_SELECTOR });
+  // The measured window has to start from a settled box, or it counts the
+  // frames of the scroll that docked the bar rather than the focus change.
+  const framesToWarmUp = await framesUntilStable(page, {
+    limit: 30,
+    measure: ACTION_BAR_SELECTOR,
+  });
+  expect(
+    framesToWarmUp,
+    "The docked action bar never held still before the focus change.",
+  ).not.toBeNull();
 
   const framesToSettle = await framesUntilStable(page, {
     focus: PANEL_ACTION_SELECTOR,
@@ -1400,6 +1465,7 @@ test("keeps native controls and focus visible in forced colors", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
+  skipWithoutBaseline(testInfo, "panel-forced-colors-controls.png");
   await page.goto("/?states=1&forced-color-actions=1");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.getByRole("radio", { name: "Dark" }).click();
@@ -1530,6 +1596,7 @@ test("keeps native controls and focus visible in forced colors", async ({
 
 test("matches the light-theme visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
+  skipWithoutBaseline(testInfo, "panel-light.png");
   await page.getByRole("radio", { name: "Light" }).click();
   await expect(page).toHaveScreenshot("panel-light.png", {
     fullPage: true,
@@ -1539,6 +1606,7 @@ test("matches the light-theme visual baseline", async ({ page }, testInfo) => {
 
 test("matches the night-theme visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
+  skipWithoutBaseline(testInfo, "panel-night.png");
   await page.getByRole("radio", { name: "Night" }).click();
   await expect(page).toHaveScreenshot("panel-night.png", {
     fullPage: true,
@@ -1548,6 +1616,7 @@ test("matches the night-theme visual baseline", async ({ page }, testInfo) => {
 
 test("matches the dark-theme visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
+  skipWithoutBaseline(testInfo, "panel-dark.png");
   await page.getByRole("radio", { name: "Dark" }).click();
   await expect(page).toHaveScreenshot("panel-dark.png", {
     fullPage: true,
@@ -1559,6 +1628,7 @@ test("matches the Night interaction-state visual baseline", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
+  skipWithoutBaseline(testInfo, "panel-night-states.png");
   await page.goto("/?states=1");
   await page.getByRole("radio", { name: "Night" }).click();
   await page.getByRole("button", { name: "Advanced settings" }).click();
@@ -1572,6 +1642,7 @@ test("matches the Night interaction-state visual baseline", async ({
 
 test("matches the mobile visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium");
+  skipWithoutBaseline(testInfo, "panel-mobile-light.png");
   await page.getByRole("radio", { name: "Light" }).click();
   await expect(page).toHaveScreenshot("panel-mobile-light.png", {
     fullPage: true,
@@ -1583,6 +1654,7 @@ test("matches the WebKit native-control baseline", async ({
   page,
 }, testInfo) => {
   test.skip(testInfo.project.name !== "webkit");
+  skipWithoutBaseline(testInfo, "panel-native-controls-webkit.png");
   await page.goto("/?states=1");
   await page.getByRole("radio", { name: "Night" }).click();
   await page
@@ -1594,20 +1666,6 @@ test("matches the WebKit native-control baseline", async ({
     timeout: 15_000,
   });
 });
-
-/**
- * Skips a screenshot spec when the current project, platform, and snapshot
- * variant have no committed baseline. Baselines are generated on x64/ubuntu24
- * through the manual refresh workflow, so other machines skip with a clear
- * reason instead of failing on a missing snapshot.
- */
-function skipWithoutBaseline(testInfo: TestInfo, snapshot: string): void {
-  const updatingBaselines = process.env.SNUI_UPDATE_BASELINES === "true";
-  test.skip(
-    !updatingBaselines && !existsSync(testInfo.snapshotPath(snapshot)),
-    `No committed ${snapshot} baseline for this project, platform, and snapshot variant; refresh baselines through the manual CI workflow.`,
-  );
-}
 
 /** Holds the primary action in its pressed state for one screenshot. */
 async function withActiveSave(page: Page, snapshot: string): Promise<void> {

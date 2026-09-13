@@ -20,6 +20,18 @@ const SEMANTIC_TONES = [
 ] as const satisfies readonly SemanticTone[];
 
 /**
+ * The comma-joined selector group for one block, so a rule shared by every
+ * tone lists them from the same source the per-tone rules come from.
+ * `modifierPrefix` matches {@link toneAccentBarRules}, so a block can name its
+ * decorative variant.
+ */
+export function toneSelectorList(block: string, modifierPrefix = ""): string {
+  return SEMANTIC_TONES.map(
+    (tone) => `.${block}--${modifierPrefix}${tone}`,
+  ).join(",\n");
+}
+
+/**
  * One rule per semantic tone setting `property` to that tone's color token.
  * `selector` builds the full selector for a tone, so a block can paint itself
  * or a descendant.
@@ -75,5 +87,18 @@ const TONE_DOT_SHAPES: Readonly<Record<SemanticTone, string>> = {
 export function toneDotShapeRules(block: string, dotClass: string): string {
   return SEMANTIC_TONES.map(
     (tone) => `.${block}--${tone} .${dotClass} {\n${TONE_DOT_SHAPES[tone]}\n}`,
-  ).join("\n\n");
+  ).join("\n");
+}
+
+/**
+ * One rule per semantic tone painting a descendant of a toned block, the shape
+ * a surface uses when the tone colors a glyph or a mark inside it rather than
+ * the block itself.
+ */
+export function toneDescendantColorRules(
+  block: string,
+  descendant: string,
+  property = "color",
+): string {
+  return toneColorRules((tone) => `.${block}--${tone} ${descendant}`, property);
 }

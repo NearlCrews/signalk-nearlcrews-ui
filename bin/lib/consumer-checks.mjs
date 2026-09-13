@@ -5,14 +5,27 @@
  */
 import { gzipSync } from "node:zlib";
 
-/** A bare version: three numeric parts, no range operator or suffix. */
-const EXACT_VERSION = /^\d+\.\d+\.\d+$/;
+/**
+ * A bare version: three numeric parts, at most one prerelease suffix, and at
+ * most one build suffix, with no range operator. The release policy publishes
+ * prereleases under the `next` dist-tag, so a consumer trying one still pins
+ * exactly. The two suffixes are matched once each so the pattern cannot
+ * backtrack across a run of hyphens.
+ */
+const EXACT_VERSION =
+  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
-/** Substrings that appear only when a React runtime was bundled. */
+/**
+ * Substrings that appear only when a React runtime was bundled. The internals
+ * marker is the load-bearing one: it survives minification and comment
+ * extraction, so it is what catches a bundled React 19. The two filenames come
+ * from React's own license banners, which a build that keeps comments inline
+ * still carries, and they are the React 19 spellings.
+ */
 export const REACT_RUNTIME_MARKERS = Object.freeze([
   "__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE",
-  "react.production.min",
-  "react-dom.production.min",
+  "react.production.js",
+  "react-dom-client.production.js",
 ]);
 
 /** The attribute every PanelRoot stamps with the package version it renders. */
@@ -20,17 +33,19 @@ const VERSION_STAMP_ATTRIBUTE = "data-snui-version";
 
 const VERSION_STAMP_PATTERNS = [
   // JSX prop literal after minification: "data-snui-version":"0.9.0"
-  /"data-snui-version"\s*:\s*"(\d+\.\d+\.\d+)"/g,
+  /"data-snui-version"\s*:\s*"(?<version>\d+\.\d+\.\d+[\w.+-]*)"/g,
   // Attribute comparison: "0.9.0"===node.getAttribute("data-snui-version")
-  /"(\d+\.\d+\.\d+)"\s*===?\s*\w+\.getAttribute\("data-snui-version"\)/g,
-  // Attribute selector in a style string: [data-snui-version="0.9.0"]
-  /\[data-snui-version=\\?"(\d+\.\d+\.\d+)\\?"\]/g,
+  /"(?<version>\d+\.\d+\.\d+[\w.+-]*)"\s*===?\s*\w+\.getAttribute\("data-snui-version"\)/g,
+  // Attribute selector in a style string: [data-snui-version="0.9.0"]. The
+  // quote is captured and backreferenced because a minifier may rewrite the
+  // style string with single quotes, escaped or not.
+  /\[data-snui-version=(?<quote>\\?["'])(?<version>\d+\.\d+\.\d+[\w.+-]*)\k<quote>\]/g,
 ];
 
 function assertExactVersion(version, source) {
   if (typeof version !== "string" || !EXACT_VERSION.test(version)) {
     throw new Error(
-      `signalk-nearlcrews-ui in ${source} must be pinned to an exact version such as 0.9.0, got ${String(version)}. The package ships breaking changes in minor releases, so a range would let an unreviewed upgrade reach the panel.`,
+      `signalk-nearlcrews-ui in ${source} must be pinned to an exact version such as 0.9.0, got ${String(version)}. A prerelease such as 0.11.0-rc.1 is exact too; a range is not. The package ships breaking changes in minor releases, so a range would let an unreviewed upgrade reach the panel.`,
     );
   }
   return version;
@@ -63,7 +78,9 @@ export function assertExactPin(consumerManifest, installedManifest) {
 export function findVersionStamps(source) {
   const versions = new Set();
   for (const pattern of VERSION_STAMP_PATTERNS) {
-    for (const match of source.matchAll(pattern)) versions.add(match[1]);
+    for (const match of source.matchAll(pattern)) {
+      versions.add(match.groups.version);
+    }
   }
   return versions;
 }
@@ -87,7 +104,8 @@ export function assertVersionStamp(sources, expectedVersion) {
     const stamped = sources.some(
       (source) =>
         source.includes(VERSION_STAMP_ATTRIBUTE) &&
-        source.includes(`"${expectedVersion}"`),
+        (source.includes(`"${expectedVersion}"`) ||
+          source.includes(`'${expectedVersion}'`)),
     );
     if (!stamped) {
       throw new Error(
@@ -198,6 +216,13 @@ export function assertConfiguredShares(configuredShared, shared) {
       "The Webpack configuration has no ModuleFederationPlugin shared option.",
     );
   }
+  // Webpack also accepts an array of module names. Object.keys would read that
+  // as the shares 0 and 1, so the mismatch below would blame the names.
+  if (Array.isArray(configuredShared)) {
+    throw new Error(
+      "The Webpack configuration gives ModuleFederationPlugin an array shared option, which cannot carry the singleton and requiredVersion settings this package needs. Spread `shared` from signalk-nearlcrews-ui/federation instead.",
+    );
+  }
   const expectedNames = Object.keys(shared).sort();
   const configuredNames = Object.keys(configuredShared).sort();
   if (configuredNames.join() !== expectedNames.join()) {
@@ -228,6 +253,27 @@ export function gzipBytesOf(buffers) {
   );
 }
 
+/** A byte count with the word the count needs. */
+function byteCount(bytes) {
+  return `${bytes} ${bytes === 1 ? "byte" : "bytes"}`;
+}
+
+/**
+ * The growth over the baseline as a percentage, at the shortest precision that
+ * still reads as more than the allowance. A build one byte over a 5% limit is
+ * 5.01% above the baseline, and rounding that to 5.0% would print a sentence
+ * that contradicts the limit it just failed.
+ */
+function growthPercent(gzipBytes, baseline) {
+  const increase =
+    ((gzipBytes - baseline.gzipBytes) / baseline.gzipBytes) * 100;
+  for (const digits of [1, 2, 3]) {
+    const text = increase.toFixed(digits);
+    if (Number(text) > baseline.maximumIncreasePercent) return text;
+  }
+  return increase.toFixed(4);
+}
+
 /**
  * Applies a size baseline: the remote may grow by `maximumIncreasePercent`
  * over the recorded `gzipBytes`, and beyond that only up to an explicitly
@@ -246,16 +292,22 @@ export function assertSizeBaseline(gzipBytes, baseline) {
     baseline.gzipBytes * (1 + baseline.maximumIncreasePercent / 100),
   );
   if (gzipBytes <= limit) {
-    return `${gzipBytes} gzip bytes, within ${baseline.maximumIncreasePercent}% of the ${baseline.gzipBytes}-byte baseline`;
+    // A remote that shrank keeps the old, larger allowance, which would let a
+    // later regression back up to it pass as within the baseline.
+    const floor = Math.ceil(
+      baseline.gzipBytes * (1 - baseline.maximumIncreasePercent / 100),
+    );
+    const stale =
+      gzipBytes < floor
+        ? `, and ${byteCount(baseline.gzipBytes - gzipBytes)} below it: record ${gzipBytes} so the allowance is measured from the current build`
+        : "";
+    return `${gzipBytes} gzip bytes, within ${baseline.maximumIncreasePercent}% of the ${baseline.gzipBytes}-byte baseline${stale}`;
   }
-  const increase = (
-    ((gzipBytes - baseline.gzipBytes) / baseline.gzipBytes) *
-    100
-  ).toFixed(1);
+  const increase = growthPercent(gzipBytes, baseline);
   const ceiling = baseline.approvedCeilingGzipBytes;
   if (!Number.isInteger(ceiling)) {
     throw new Error(
-      `The remote is ${gzipBytes} gzip bytes, ${increase}% above the ${baseline.gzipBytes}-byte baseline and over the ${baseline.maximumIncreasePercent}% limit, with no approved ceiling.`,
+      `The remote is ${gzipBytes} gzip bytes, ${increase}% above the ${baseline.gzipBytes}-byte baseline and over the ${baseline.maximumIncreasePercent}% limit, with no approved ceiling. The limit is ${byteCount(limit)}, so the remote is ${byteCount(gzipBytes - limit)} over it.`,
     );
   }
   if (gzipBytes > ceiling) {

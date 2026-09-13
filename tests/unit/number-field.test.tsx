@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, type ReactElement, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-
+import { useFieldValidity } from "../../src/hooks/use-field-validity.js";
 import {
   CollapsibleSection,
   NumberField,
@@ -155,6 +155,69 @@ describe("resolveNumberDraft", () => {
     expect(
       resolveNumberDraft("0", { exclusiveMin: true, fallback: 5, min: 0 }),
     ).toEqual({ status: "valid", value: 5 });
+    expect(
+      resolveNumberDraft("10", { exclusiveMax: true, fallback: 5, max: 10 }),
+    ).toEqual({ status: "valid", value: 5 });
+  });
+
+  it("steps back inside a maximum the step does not land on", () => {
+    // 12 snaps to 12 and then clamps to 10, which is no multiple of 3, so the
+    // field would commit a value its own input reports as a step mismatch.
+    expect(
+      resolveNumberDraft("12", { fallback: 0, max: 10, min: 0, step: 3 }),
+    ).toEqual({ status: "valid", value: 9 });
+  });
+
+  it("falls back when the bounds are closer together than one step", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    // Nothing above an exclusive 2 and at or below 4 is a multiple of 5 from
+    // the step base, so stepping back inside the range crosses the bound.
+    expect(
+      resolveNumberDraft("9", {
+        exclusiveMin: true,
+        fallback: 3,
+        max: 4,
+        min: 2,
+        step: 5,
+      }),
+    ).toEqual({ status: "valid", value: 3 });
+    // The rules admit no legal value at all, which development reports.
+    expect(warn).toHaveBeenCalledOnce();
+  });
+
+  it("reads only the notation a numeric input can produce", () => {
+    for (const raw of ["0x10", "0o17", "0b101", "1_000", "+5", "5."]) {
+      expect(resolveNumberDraft(raw)).toEqual({
+        status: "invalid",
+        reason: "notANumber",
+      });
+    }
+    // A bare fraction is part of the grammar the input accepts.
+    expect(resolveNumberDraft(".5")).toEqual({ status: "valid", value: 0.5 });
+  });
+
+  it("commits a positive zero for a typed negative zero", () => {
+    const resolved = resolveNumberDraft("-0");
+    // String(-0) is "0", so a committed -0 would disagree with the value the
+    // field shows again as soon as the draft clears.
+    expect(
+      Object.is(resolved.status === "valid" ? resolved.value : Number.NaN, 0),
+    ).toBe(true);
+  });
+
+  it("reports rules that cannot do what they say", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    resolveNumberDraft("41", { exclusiveMin: true });
+    resolveNumberDraft("41", { fallback: 41, max: 40 });
+    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+      "resolveNumberDraft: exclusiveMin does nothing without a min.",
+      "resolveNumberDraft: the fallback 41 does not satisfy the same rules, so a draft that falls back commits a value the field itself rejects.",
+    ]);
+
+    // Once per mistake, however many keystrokes reach it.
+    resolveNumberDraft("42", { exclusiveMin: true });
+    expect(warn).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -163,7 +226,12 @@ function Harness({
   onValidityChange,
   onValueChange,
   ...props
-}: Partial<Omit<NumberFieldProps, "value" | "onValueChange" | "allowEmpty">> & {
+}: Partial<
+  Omit<
+    NumberFieldProps,
+    "allowEmpty" | "defaultValue" | "onValueChange" | "value"
+  >
+> & {
   readonly initial?: number;
   readonly onValueChange?: (value: number) => void;
 }): ReactElement {
@@ -201,7 +269,7 @@ describe("NumberField editing", () => {
     // An empty draft stays on screen instead of snapping back to 10.
     expect(input).toHaveValue(null);
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(input).toHaveAccessibleDescription("Enter a whole number.");
+    expect(input).toHaveAccessibleDescription("Error.Enter a whole number.");
     expect(onValueChange).not.toHaveBeenCalled();
     expect(screen.getByTestId("committed")).toHaveTextContent("10");
 
@@ -228,7 +296,7 @@ describe("NumberField editing", () => {
     await user.clear(input);
     await user.type(input, "99");
     expect(input).toHaveAccessibleDescription(
-      "Enter a whole number from 1 to 60.",
+      "Error.Enter a whole number from 1 to 60.",
     );
     expect(screen.getByTestId("committed")).toHaveTextContent("9");
     expect(onValidityChange.mock.calls).toEqual([[false], [true], [false]]);
@@ -256,7 +324,7 @@ describe("NumberField editing", () => {
       "a draft under a lone minimum",
       { integer: false, max: undefined, min: 5 },
       "1",
-      "Enter a number of at least 5.",
+      "Enter a number of 5 or more.",
     ],
     [
       "a draft on an exclusive minimum",
@@ -268,7 +336,7 @@ describe("NumberField editing", () => {
       "a draft over a lone maximum",
       { initial: 5, integer: false, max: 9, min: undefined },
       "12",
-      "Enter a number of at most 9.",
+      "Enter a number of 9 or less.",
     ],
     [
       "a draft on an exclusive maximum",
@@ -295,7 +363,9 @@ describe("NumberField editing", () => {
     const input = screen.getByRole("spinbutton", { name: "Refresh interval" });
     await user.clear(input);
     await user.type(input, draft);
-    expect(input).toHaveAccessibleDescription(message);
+    // The danger mark leads every field error, so it leads the description
+    // the message is read as part of.
+    expect(input).toHaveAccessibleDescription(`Error.${message}`);
   });
 
   it("keeps an invalid draft on blur so the user can see what to fix", async () => {
@@ -328,6 +398,57 @@ describe("NumberField editing", () => {
     expect(input).toHaveFocus();
     fireEvent.wheel(input, { deltaY: 120 });
     expect(input).not.toHaveFocus();
+  });
+
+  it("leaves an unfocused input alone on wheel", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <>
+        <button type="button">Elsewhere</button>
+        <Harness />
+      </>,
+    );
+
+    const input = screen.getByRole("spinbutton", { name: "Refresh interval" });
+    const elsewhere = screen.getByRole("button", { name: "Elsewhere" });
+    await user.click(elsewhere);
+    // Scrolling a long panel sends the wheel across every field on the way.
+    fireEvent.wheel(input, { deltaY: 120 });
+
+    expect(elsewhere).toHaveFocus();
+    expect(input).toHaveValue(10);
+    expect(screen.getByTestId("committed")).toHaveTextContent("10");
+  });
+
+  it("prints a bound with no grouping and no exponent form", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <Harness initial={5} integer={false} min={0.0000001} max={100000} />,
+    );
+
+    const input = screen.getByRole("spinbutton", { name: "Refresh interval" });
+    await user.clear(input);
+    await user.type(input, "0");
+    // Both bounds have to be typeable back into the field, which reads
+    // neither "100,000" nor "1e-7".
+    expect(input).toHaveAccessibleDescription(
+      "Error.Enter a number from 0.0000001 to 100000.",
+    );
+  });
+
+  it("owns the value when a defaultValue is given, and needs no callback", async () => {
+    const user = userEvent.setup();
+    renderInPanel(<NumberField label="Damping" defaultValue={4} integer />);
+
+    const input = screen.getByRole<HTMLInputElement>("spinbutton", {
+      name: "Damping",
+    });
+    expect(input).toHaveValue(4);
+
+    await user.clear(input);
+    await user.type(input, "9");
+    await user.tab();
+    expect(input).toHaveValue(9);
   });
 
   it("replaces the draft when the committed value changes from outside", async () => {
@@ -477,10 +598,10 @@ describe("NumberField editing", () => {
     );
 
     const input = screen.getByRole("spinbutton", { name: "Port" });
-    expect(input).toHaveAccessibleDescription("Port is already in use.");
+    expect(input).toHaveAccessibleDescription("Error.Port is already in use.");
     await user.clear(input);
     await user.type(input, "30.5");
-    expect(input).toHaveAccessibleDescription("Ports are whole numbers.");
+    expect(input).toHaveAccessibleDescription("Error.Ports are whole numbers.");
   });
 
   it("describes the value with its unit and offers the unit slot width", () => {
@@ -489,7 +610,7 @@ describe("NumberField editing", () => {
         label="Depth offset"
         description="Below the transducer"
         unit="m"
-        width="fixed"
+        controlWidth="fixed"
         value={1.5}
         onValueChange={() => undefined}
       />,
@@ -526,6 +647,55 @@ describe("NumberField editing", () => {
     expect(input).toHaveAttribute("placeholder", "3000");
     expect(input).toHaveAttribute("inputmode", "numeric");
     expect(input).toHaveAttribute("step", "1");
+    // The key that commits the draft is labeled on an on-screen keyboard.
+    expect(input).toHaveAttribute("enterkeyhint", "done");
+  });
+
+  it("asks for the decimal keypad on a non-negative fractional field", () => {
+    renderInPanel(
+      <NumberField
+        label="Depth offset"
+        min={0}
+        value={1.5}
+        onValueChange={() => undefined}
+      />,
+    );
+
+    expect(
+      screen.getByRole("spinbutton", { name: "Depth offset" }),
+    ).toHaveAttribute("inputmode", "decimal");
+  });
+
+  it("lets the caller replace the keyboard hints", () => {
+    renderInPanel(
+      <NumberField
+        label="Depth offset"
+        min={0}
+        value={1.5}
+        onValueChange={() => undefined}
+        inputProps={{ enterKeyHint: "next", inputMode: "text" }}
+      />,
+    );
+
+    const input = screen.getByRole("spinbutton", { name: "Depth offset" });
+    expect(input).toHaveAttribute("inputmode", "text");
+    expect(input).toHaveAttribute("enterkeyhint", "next");
+  });
+
+  it("leaves the keypad alone where the rules allow a negative value", () => {
+    renderInPanel(
+      <NumberField
+        label="Trim"
+        value={-2}
+        onValueChange={() => undefined}
+        min={-10}
+      />,
+    );
+
+    // Both keypads omit the minus key on some platforms.
+    expect(
+      screen.getByRole("spinbutton", { name: "Trim" }),
+    ).not.toHaveAttribute("inputmode");
   });
 });
 
@@ -589,6 +759,51 @@ describe("NumberField validity reporting on unmount", () => {
   });
 });
 
+describe("useFieldValidity", () => {
+  function Panel(): ReactElement {
+    const validity = useFieldValidity();
+    const [mounted, setMounted] = useState(true);
+    return (
+      <>
+        {mounted ? (
+          <NumberField
+            {...validity.register("interval")}
+            label="Refresh interval"
+            min={1}
+            max={60}
+            integer
+            defaultValue={10}
+          />
+        ) : null}
+        <button type="button" onClick={() => setMounted(false)}>
+          Remove
+        </button>
+        <output data-testid="invalid">
+          {[...validity.invalidFields].join(",")}
+        </output>
+        <output data-testid="valid">{String(validity.valid)}</output>
+      </>
+    );
+  }
+
+  it("collects invalid fields and releases one that leaves the tree", async () => {
+    const user = userEvent.setup();
+    renderInPanel(<Panel />);
+
+    const input = screen.getByRole("spinbutton", { name: "Refresh interval" });
+    expect(screen.getByTestId("valid")).toHaveTextContent("true");
+
+    await user.clear(input);
+    expect(screen.getByTestId("invalid")).toHaveTextContent("interval");
+    expect(screen.getByTestId("valid")).toHaveTextContent("false");
+
+    // A field nobody can see must not go on blocking a save.
+    await user.click(screen.getByRole("button", { name: "Remove" }));
+    expect(screen.getByTestId("invalid")).toBeEmptyDOMElement();
+    expect(screen.getByTestId("valid")).toHaveTextContent("true");
+  });
+});
+
 describe("useNumberDraft standalone", () => {
   it("drives a bare NumberInput through inputProps", async () => {
     const user = userEvent.setup();
@@ -646,5 +861,34 @@ describe("useNumberDraft standalone", () => {
     expect(input.value).toBe("0042");
     await user.tab();
     expect(input.value).toBe("42");
+  });
+
+  it("refuses free text a numeric input could never hold", async () => {
+    const user = userEvent.setup();
+    function Raw(): ReactElement {
+      const [value, setValue] = useState<number | undefined>(10);
+      const draft = useNumberDraft(value, setValue);
+      return (
+        <>
+          <input aria-label="Raw" type="text" {...draft.inputProps} />
+          <output data-testid="value">{String(value)}</output>
+          <output data-testid="reason">{draft.invalidReason ?? "valid"}</output>
+        </>
+      );
+    }
+    render(
+      <PanelRoot>
+        <Raw />
+      </PanelRoot>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Raw" });
+    await user.clear(input);
+    await user.type(input, "0x10");
+
+    expect(screen.getByTestId("reason")).toHaveTextContent("notANumber");
+    // The leading zero committed on its own keystroke; the hex notation that
+    // followed commits nothing, rather than the 16 `Number` would read.
+    expect(screen.getByTestId("value")).toHaveTextContent("0");
   });
 });

@@ -9,8 +9,6 @@ import type {
 } from "../../src/composites.js";
 import type { Column, DataGridProps } from "../../src/data-grid.js";
 import type {
-  RadioGroupErrorLive,
-  RadioGroupOrientation,
   RadioGroupProps,
   RadioProps,
   SecretInputProps,
@@ -23,24 +21,19 @@ import type {
   BannerTone,
   ButtonAsAnchorProps,
   ButtonAsButtonProps,
-  CheckboxErrorLive,
   CheckboxLabelVisibility,
   CheckboxProps,
   FieldControlProps,
-  FieldErrorLive,
   FormatRelativeAgeOptions,
   InlineConfirmProps,
   LabeledFieldChild,
   LabeledFieldControlProps,
-  LabeledFieldDensity,
   LabeledFieldProps,
   NumberDraftResolution,
   NumberFieldProps,
   PanelShellProps,
   SegmentedControlLabelVisibility,
-  SegmentedControlLegendVisibility,
   SegmentedControlOption,
-  SegmentedControlOrientation,
   SegmentedControlProps,
   SplitLabeledFieldControlProps,
   StackProps,
@@ -87,16 +80,11 @@ describe("controls that accept two naming props", () => {
       label: "View",
       options: [{ label: "A", value: "a" }],
     };
-    const legendGroup: SegmentedControlProps<"a"> = {
-      legend: "View",
-      options: [{ label: "A", value: "a" }],
-    };
     expectTypeOf(labelled).not.toBeNever();
     expectTypeOf(withChildren).not.toBeNever();
     expectTypeOf(labelledRadio).not.toBeNever();
     expectTypeOf(radioChildren).not.toBeNever();
     expectTypeOf(labelledGroup).not.toBeNever();
-    expectTypeOf(legendGroup).not.toBeNever();
   });
 
   it("rejects a control that carries neither", () => {
@@ -104,7 +92,7 @@ describe("controls that accept two naming props", () => {
     const unnamedSwitch: SwitchProps = { checked: true };
     // @ts-expect-error a Radio with no label and no children has no name
     const unnamedRadio: RadioProps = { value: "one" };
-    // @ts-expect-error a SegmentedControl needs `label` or the deprecated `legend`
+    // @ts-expect-error a SegmentedControl is named by `label`
     const unnamedGroup: SegmentedControlProps<"a"> = {
       options: [{ label: "A", value: "a" }],
     };
@@ -117,8 +105,8 @@ describe("controls that accept two naming props", () => {
 describe("segmented control generics", () => {
   type Mode = "minimal" | "normal" | "verbose";
 
-  it("flows the value type into onChange and options", () => {
-    expectTypeOf<SegmentedControlProps<Mode>["onChange"]>().toEqualTypeOf<
+  it("flows the value type into onValueChange and options", () => {
+    expectTypeOf<SegmentedControlProps<Mode>["onValueChange"]>().toEqualTypeOf<
       ((value: Mode) => void) | undefined
     >();
     expectTypeOf<SegmentedControlProps<Mode>["options"]>().toEqualTypeOf<
@@ -145,19 +133,17 @@ describe("segmented control generics", () => {
     expectTypeOf(element).toEqualTypeOf<React.JSX.Element>();
   });
 
-  it("keeps the deprecated legend and onChange spellings usable", () => {
-    expectTypeOf<SegmentedControlProps<Mode>["legend"]>().toEqualTypeOf<
-      ReactNode | undefined
-    >();
-    expectTypeOf<SegmentedControlProps<Mode>["label"]>().toEqualTypeOf<
-      ReactNode | undefined
-    >();
-    expectTypeOf<SegmentedControlProps<Mode>["onValueChange"]>().toEqualTypeOf<
-      SegmentedControlProps<Mode>["onChange"]
-    >();
+  it("names the group with a required label", () => {
+    expectTypeOf<
+      SegmentedControlProps<Mode>["label"]
+    >().toEqualTypeOf<ReactNode>();
     expectTypeOf<
       SegmentedControlProps<Mode>["labelVisibility"]
-    >().toEqualTypeOf<SegmentedControlProps<Mode>["legendVisibility"]>();
+    >().toEqualTypeOf<SegmentedControlLabelVisibility | undefined>();
+    expectTypeOf<"legend">().not.toExtend<keyof SegmentedControlProps<Mode>>();
+    expectTypeOf<"onChange">().not.toExtend<
+      keyof SegmentedControlProps<Mode>
+    >();
   });
 
   it("rejects options outside the value type", () => {
@@ -166,7 +152,7 @@ describe("segmented control generics", () => {
     >();
     // A handler narrowed to a foreign literal cannot receive Mode values.
     expectTypeOf<(value: "fast") => void>().not.toExtend<
-      SegmentedControlProps<Mode>["onChange"]
+      SegmentedControlProps<Mode>["onValueChange"]
     >();
   });
 });
@@ -213,15 +199,11 @@ describe("text input types", () => {
   });
 });
 
-describe("shared vocabularies and their deprecated aliases", () => {
-  it("types density with the shared Density plus the deprecated comfortable", () => {
+describe("shared vocabularies", () => {
+  it("types density with the shared Density", () => {
     expectTypeOf<Density>().toEqualTypeOf<"default" | "compact">();
     expectTypeOf<LabeledFieldProps["density"]>().toEqualTypeOf<
-      Density | "comfortable" | undefined
-    >();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-    expectTypeOf<LabeledFieldDensity>().toEqualTypeOf<
-      Density | "comfortable"
+      Density | undefined
     >();
   });
 
@@ -233,14 +215,6 @@ describe("shared vocabularies and their deprecated aliases", () => {
     expectTypeOf<SegmentedControlProps<string>["orientation"]>().toEqualTypeOf<
       Orientation | undefined
     >();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-    expectTypeOf<RadioGroupOrientation>().toEqualTypeOf<Orientation>();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-    expectTypeOf<SegmentedControlOrientation>().toEqualTypeOf<Orientation>();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-    expectTypeOf<SegmentedControlLegendVisibility>().toEqualTypeOf<
-      "hidden" | "visible"
-    >();
   });
 
   it("types every label and caption visibility with the shared Visibility", () => {
@@ -250,7 +224,7 @@ describe("shared vocabularies and their deprecated aliases", () => {
     expectTypeOf<TableCaptionVisibility>().toEqualTypeOf<Visibility>();
   });
 
-  it("types announcement props with AnnouncementMode and keeps the aliases", () => {
+  it("types announcement props with AnnouncementMode", () => {
     expectTypeOf<LabeledFieldProps["errorLive"]>().toEqualTypeOf<
       AnnouncementMode | undefined
     >();
@@ -260,12 +234,6 @@ describe("shared vocabularies and their deprecated aliases", () => {
     expectTypeOf<RadioGroupProps["errorLive"]>().toEqualTypeOf<
       AnnouncementMode | undefined
     >();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-    expectTypeOf<FieldErrorLive>().toEqualTypeOf<AnnouncementMode>();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-    expectTypeOf<CheckboxErrorLive>().toEqualTypeOf<AnnouncementMode>();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-    expectTypeOf<RadioGroupErrorLive>().toEqualTypeOf<AnnouncementMode>();
   });
 });
 
@@ -283,9 +251,6 @@ describe("selection control labels and value callbacks", () => {
   it("names value callbacks by their payload", () => {
     expectTypeOf<SwitchProps["onCheckedChange"]>().toEqualTypeOf<
       ((checked: boolean) => void) | undefined
-    >();
-    expectTypeOf<SwitchProps["onChange"]>().toEqualTypeOf<
-      SwitchProps["onCheckedChange"]
     >();
     expectTypeOf<RadioGroupProps["onValueChange"]>().toEqualTypeOf<
       ((value: string) => void) | undefined
@@ -352,6 +317,21 @@ describe("number field value contract", () => {
     expectTypeOf<"onChange">().not.toExtend<
       keyof NonNullable<NumberFieldProps["inputProps"]>
     >();
+  });
+
+  it("keeps the controlled and uncontrolled arms apart", () => {
+    expectTypeOf<{
+      label: string;
+      defaultValue: number;
+    }>().toExtend<NumberFieldProps>();
+    // A field is controlled by `value` or uncontrolled by `defaultValue`, and
+    // taking both leaves no answer for which one the draft commits to.
+    expectTypeOf<{
+      label: string;
+      defaultValue: number;
+      value: number;
+      onValueChange: (value: number) => void;
+    }>().not.toExtend<NumberFieldProps>();
   });
 
   it("resolves a draft to a valid value or an invalid reason", () => {
@@ -559,7 +539,6 @@ describe("save action bar rules as data", () => {
         | "dirty"
         | "invalidMessage"
         | "labels"
-        | "savedMessage"
         | "saveRequestedAt"
         | "saving"
         | "unconfigured"

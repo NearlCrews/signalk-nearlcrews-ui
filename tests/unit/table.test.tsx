@@ -10,6 +10,7 @@ import {
   TableScrollRegion,
 } from "../../src/composites.js";
 import { SIMPLE_TABLE_STYLES } from "../../src/styles/simple-table.js";
+import { TABLE_STYLES } from "../../src/styles/table.js";
 import { TABS_STYLES } from "../../src/styles/tabs.js";
 import { ROOT_SELECTOR } from "../../src/version.js";
 import { renderInPanel } from "../helpers.js";
@@ -120,6 +121,18 @@ describe("TableScrollRegion", () => {
     expect(screen.getByRole("table", { name: "Cached charts" })).toBeVisible();
   });
 
+  it("lets a consumer that manages focus itself drop the tab stop", () => {
+    renderInPanel(
+      <TableScrollRegion aria-label="Cached charts, scrollable" tabIndex={-1}>
+        <div />
+      </TableScrollRegion>,
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Cached charts, scrollable" }),
+    ).toHaveAttribute("tabindex", "-1");
+  });
+
   it("rejects a region without a name", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     expect(() =>
@@ -134,7 +147,8 @@ describe("TableScrollRegion", () => {
 
 describe("table and tabs style modules", () => {
   it.each([
-    ["simple table", SIMPLE_TABLE_STYLES],
+    ["data grid", TABLE_STYLES.styles],
+    ["simple table", SIMPLE_TABLE_STYLES.styles],
     ["tabs", TABS_STYLES.styles],
   ])("scopes the %s module and parses it without warnings", (_name, css) => {
     expect(
@@ -151,14 +165,41 @@ describe("table and tabs style modules", () => {
   it("paints zebra rows with the stripe token and numeric cells with tabular digits", () => {
     // Each declaration is tied to its own rule and matched on its own, so
     // reordering a block that renders identically does not fail the test.
-    expect(SIMPLE_TABLE_STYLES).toMatch(
+    expect(SIMPLE_TABLE_STYLES.styles).toMatch(
       /\.snui-table--zebra[^{}]*\{[^}]*background: var\(--snui-color-surface-stripe\);/,
     );
-    expect(SIMPLE_TABLE_STYLES).toMatch(
+    expect(SIMPLE_TABLE_STYLES.styles).toMatch(
       /\.snui-table__cell--numeric \{[^}]*font-variant-numeric: tabular-nums;/,
     );
-    expect(SIMPLE_TABLE_STYLES).toMatch(
+    expect(SIMPLE_TABLE_STYLES.styles).toMatch(
       /\.snui-table__cell--numeric \{[^}]*text-align: end;/,
+    );
+  });
+
+  it("floors cell width inside the scroll region so a wide table scrolls", () => {
+    expect(SIMPLE_TABLE_STYLES.styles).toMatch(
+      /\.snui-table-scroll \.snui-table th,\n\.snui-table-scroll \.snui-table td \{[^}]*min-width: var\(--snui-table-cell-min, 6rem\);/,
+    );
+    // A table outside the region keeps squeezing, because nothing there
+    // scrolls and the panel must not.
+    expect(SIMPLE_TABLE_STYLES.styles).not.toMatch(
+      /^\.snui-table th,\n\.snui-table td \{[^}]*min-width:/m,
+    );
+  });
+
+  it("stripes rows with the same pseudo-class the data grid uses", () => {
+    expect(SIMPLE_TABLE_STYLES.styles).toMatch(
+      /\.snui-table--zebra tbody > tr:nth-of-type\(even\) > td,/,
+    );
+    expect(SIMPLE_TABLE_STYLES.styles).not.toMatch(/nth-child\(even\)/);
+  });
+
+  it("declares cell text alignment once, on the table", () => {
+    expect(SIMPLE_TABLE_STYLES.styles).toMatch(
+      /\.snui-table \{[^}]*text-align: start;/,
+    );
+    expect(SIMPLE_TABLE_STYLES.styles).not.toMatch(
+      /\.snui-table th,\n\.snui-table td \{[^}]*text-align: start;/,
     );
   });
 });

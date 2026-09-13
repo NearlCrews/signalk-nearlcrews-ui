@@ -8,28 +8,16 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 
+import { readValues } from "../bin/lib/cli-arguments.mjs";
 import { repositoryPath } from "./lib/paths.mjs";
 import {
   hostedSnapshotVariants,
   missingSnapshotFiles,
+  orphanSnapshotFiles,
 } from "./lib/snapshot-families.mjs";
 
 const SPEC_PATH = repositoryPath("tests", "browser", "panel.spec.ts");
 const SNAPSHOT_DIRECTORY = `${SPEC_PATH}-snapshots`;
-
-function requestedVariants(argv) {
-  const variants = [];
-  for (let index = 0; index < argv.length; index += 1) {
-    if (argv[index] !== "--variant") continue;
-    const variant = argv[index + 1];
-    if (variant === undefined || variant.startsWith("--")) {
-      throw new Error("--variant requires a family name such as ubuntu24-x64.");
-    }
-    variants.push(variant);
-    index += 1;
-  }
-  return variants;
-}
 
 const [specSource, presentFiles, ciWorkflow] = await Promise.all([
   readFile(SPEC_PATH, "utf8"),
@@ -37,26 +25,33 @@ const [specSource, presentFiles, ciWorkflow] = await Promise.all([
   readFile(repositoryPath(".github", "workflows", "ci.yml"), "utf8"),
 ]);
 
-const explicitVariants = requestedVariants(process.argv.slice(2));
+const explicitVariants = readValues(
+  process.argv.slice(2),
+  "--variant",
+  "a family name such as ubuntu24-x64",
+);
 const variants =
   explicitVariants.length > 0
     ? explicitVariants
     : hostedSnapshotVariants(ciWorkflow);
 
-const failures = variants.flatMap((variant) =>
-  missingSnapshotFiles(specSource, variant, presentFiles).map(
-    (file) => `${variant}: ${file}`,
+const failures = variants.flatMap((variant) => [
+  ...missingSnapshotFiles(specSource, variant, presentFiles).map(
+    (file) => `${variant}: ${file} is missing`,
   ),
-);
+  ...orphanSnapshotFiles(specSource, variant, presentFiles).map(
+    (file) => `${variant}: ${file} is committed but no screenshot asks for it`,
+  ),
+]);
 
 if (failures.length > 0) {
   throw new Error(
-    `Visual baseline families are incomplete:\n${failures
+    `Visual baseline families do not match the browser spec:\n${failures
       .map((failure) => `- ${failure}`)
       .join("\n")}`,
   );
 }
 
-console.log(
-  `Visual baseline families complete: ${variants.join(", ")} (${presentFiles.length} files).`,
+process.stdout.write(
+  `Visual baseline families complete: ${variants.join(", ")} (${String(presentFiles.length)} files).\n`,
 );

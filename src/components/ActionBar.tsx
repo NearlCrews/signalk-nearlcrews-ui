@@ -11,7 +11,9 @@ import {
 import { flushSync } from "react-dom";
 
 import { classNames } from "../utils/class-names.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { isDevelopment } from "../utils/environment.js";
+import { focusedElement } from "../utils/focus.js";
+import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { composeRef } from "../utils/ref.js";
 import {
   observePanelViewport,
@@ -21,13 +23,29 @@ import {
 
 export type ActionBarSticky = "bottom" | "top" | "viewport-bottom";
 
+/**
+ * `"card"` is the raised bar a panel footer uses. `"toolbar"` is the
+ * full-width band a panel header uses: no radius and no shadow, a single
+ * bottom border, and the same control sizing, so a panel-wide toolbar does not
+ * have to be rebuilt outside the package.
+ */
+export type ActionBarVariant = "card" | "toolbar";
+
 export interface ActionBarProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children">,
     RefAttributes<HTMLDivElement> {
   readonly actions: ReactNode;
+  /**
+   * Free content between the status and the actions, such as a search field or
+   * a view switch. It takes whatever width the two fixed slots leave. A
+   * toolbar that should be reachable as a landmark carries `role="region"` and
+   * an `aria-label` of its own, which pass through to the bar element.
+   */
+  readonly children?: ReactNode | undefined;
   readonly status?: ReactNode | undefined;
   readonly statusRef?: Ref<HTMLDivElement> | undefined;
   readonly sticky?: ActionBarSticky | undefined;
+  readonly variant?: ActionBarVariant | undefined;
 }
 
 interface ViewportPlacement {
@@ -80,21 +98,22 @@ function placementsMatch(
   );
 }
 
-const SCROLLABLE_OVERFLOW = /^(auto|overlay|scroll)$/;
+const SCROLLABLE_OVERFLOW: ReadonlySet<string> = new Set([
+  "auto",
+  "overlay",
+  "scroll",
+]);
 
-function isScrollable(element: HTMLElement): boolean {
-  const ownerWindow = element.ownerDocument.defaultView;
-  if (ownerWindow === null) return false;
+function isScrollable(element: HTMLElement, ownerWindow: Window): boolean {
   const overflow = ownerWindow.getComputedStyle(element).overflowY;
   return (
-    SCROLLABLE_OVERFLOW.test(overflow) &&
+    SCROLLABLE_OVERFLOW.has(overflow) &&
     element.scrollHeight > element.clientHeight
   );
 }
 
 function scrollFocusedTarget(
   target: HTMLElement,
-  panelRoot: HTMLElement,
   ownerWindow: Window,
   delta: number,
   clearance: number,
@@ -104,12 +123,14 @@ function scrollFocusedTarget(
   let targetTop = targetRect.top;
   let targetBottom = targetRect.bottom;
   let ancestor = target.parentElement;
+  // The walk climbs past the panel root: clearance the panel cannot absorb is
+  // the page's to scroll, and the body is where that hand-off happens.
   while (
     remaining !== 0 &&
     ancestor !== null &&
-    ancestor !== panelRoot.ownerDocument.body
+    ancestor !== ownerWindow.document.body
   ) {
-    if (isScrollable(ancestor)) {
+    if (isScrollable(ancestor, ownerWindow)) {
       const maximumScrollTop = Math.max(
         0,
         ancestor.scrollHeight - ancestor.clientHeight,
@@ -173,7 +194,6 @@ function keepFocusedTargetVisible(
 
   scrollFocusedTarget(
     target,
-    panelRoot,
     ownerWindow,
     targetRect.bottom - visibleBottom,
     clearance,
@@ -199,52 +219,75 @@ function requestFocusClearance(
   keepFocusedTargetVisible(target, bar, panelRoot, ownerWindow);
 }
 
-/** The focused element, when the owning document has focused one at all. */
-function focusedElement(
-  ownerDocument: Document,
-  ownerWindow: Window & typeof globalThis,
-): HTMLElement | null {
-  const target = ownerDocument.activeElement;
-  return target instanceof ownerWindow.HTMLElement ? target : null;
-}
-
 interface ActionBarContentProps {
   readonly actions: ReactNode;
+  readonly children: ReactNode;
   readonly status: ReactNode;
   readonly statusRef: Ref<HTMLDivElement> | undefined;
 }
 
 function ActionBarContent({
   actions,
+  children,
   status,
   statusRef,
 }: ActionBarContentProps): React.JSX.Element {
   return (
     <>
       {hasReactContent(status) ? (
-        <div ref={statusRef} className="snui-action-bar__status" tabIndex={-1}>
+        <div
+          ref={statusRef}
+          className="snui-action-bar__status"
+          data-snui-action-bar-status=""
+          tabIndex={-1}
+        >
           {status}
         </div>
+      ) : null}
+      {hasReactContent(children) ? (
+        <div className="snui-action-bar__content">{children}</div>
       ) : null}
       <div className="snui-action-bar__actions">{actions}</div>
     </>
   );
 }
 
+/**
+ * Misuses already reported, so a panel warns once for each rather than once
+ * per mount or once per frame.
+ */
+const REPORTED_DOCKING_FAULTS = new Set<string>();
+
+function warnDockingFault(fault: string, message: string): void {
+  if (!isDevelopment() || REPORTED_DOCKING_FAULTS.has(fault)) return;
+  REPORTED_DOCKING_FAULTS.add(fault);
+  console.warn(message);
+}
+
+// The variant arrives resolved from the caller below rather than defaulted a
+// second time here, so the class name this builds always names one.
 function ViewportBottomActionBar({
   actions,
+  children,
   className,
   ref,
   status,
   statusRef,
   style,
+  variant,
   ...props
-}: Omit<ActionBarProps, "sticky">): React.JSX.Element {
+}: Omit<ActionBarProps, "sticky"> & {
+  readonly variant: ActionBarVariant;
+}): React.JSX.Element {
   const anchorRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const safeAreaProbeRef = useRef<HTMLSpanElement>(null);
   const placementRef = useRef<ViewportPlacement>(NATURAL_VIEWPORT_PLACEMENT);
   const pointerPressRef = useRef(false);
+  // Resolved once by the measuring effect below and read by the placement
+  // effect, so locating the panel root is written and walked in one place.
+  const ownerWindowRef = useRef<Window | null>(null);
+  const panelRootRef = useRef<HTMLElement | null>(null);
   const [placement, setPlacement] = useState<ViewportPlacement>(
     NATURAL_VIEWPORT_PLACEMENT,
   );
@@ -260,7 +303,15 @@ function ViewportBottomActionBar({
     const ownerDocument = anchor.ownerDocument;
     const ownerWindow = ownerDocument.defaultView;
     const panelRoot = anchor.closest<HTMLElement>("[data-snui-root]");
-    if (ownerWindow === null || panelRoot === null) return undefined;
+    if (ownerWindow === null || panelRoot === null) {
+      warnDockingFault(
+        "root",
+        'ActionBar sticky="viewport-bottom" found no PanelRoot ancestor, so it renders as ordinary flow content and never docks. Render it inside a PanelRoot.',
+      );
+      return undefined;
+    }
+    ownerWindowRef.current = ownerWindow;
+    panelRootRef.current = panelRoot;
 
     /**
      * Reads the current geometry and adopts it. Returns the placement React
@@ -334,6 +385,13 @@ function ViewportBottomActionBar({
           setPlacement(nextPlacement);
         });
       }
+      // Reaching the bound is not the same as settling, and the difference is
+      // invisible on screen: the bar simply stays one measurement short of
+      // correct on every frame.
+      warnDockingFault(
+        "settle",
+        "ActionBar could not settle its docked geometry within its measurement bound, so the bar may sit one measurement behind the layout. A layout whose height depends on the docked bar is the usual cause.",
+      );
     };
 
     const keepFocusedContentVisible = (event: FocusEvent): void => {
@@ -371,6 +429,11 @@ function ViewportBottomActionBar({
     ownerDocument.addEventListener("pointerup", endPointerPress, true);
     ownerDocument.addEventListener("pointercancel", endPointerPress, true);
     ownerDocument.addEventListener("keydown", endPointerPress, true);
+    // A press whose release lands somewhere this document never hears about,
+    // an inner frame or another window, would otherwise leave the latch set
+    // and suppress clearance for an unrelated later focus.
+    ownerWindow.addEventListener("blur", endPointerPress);
+    ownerDocument.addEventListener("visibilitychange", endPointerPress);
     // React is already committing here, so this first placement lands through
     // an ordinary state update and the frame the observer schedules settles
     // the rest.
@@ -382,12 +445,16 @@ function ViewportBottomActionBar({
 
     return () => {
       pointerPressRef.current = false;
+      ownerWindowRef.current = null;
+      panelRootRef.current = null;
       stopObserving();
       ownerDocument.removeEventListener("focusin", keepFocusedContentVisible);
       ownerDocument.removeEventListener("pointerdown", beginPointerPress, true);
       ownerDocument.removeEventListener("pointerup", endPointerPress, true);
       ownerDocument.removeEventListener("pointercancel", endPointerPress, true);
       ownerDocument.removeEventListener("keydown", endPointerPress, true);
+      ownerWindow.removeEventListener("blur", endPointerPress);
+      ownerDocument.removeEventListener("visibilitychange", endPointerPress);
     };
   }, []);
 
@@ -402,15 +469,15 @@ function ViewportBottomActionBar({
   }, [ref]);
 
   useLayoutEffect(() => {
-    if (!placement.docked) return;
-    const anchor = anchorRef.current;
+    if (!placement.docked) return undefined;
     const bar = barRef.current;
-    if (anchor === null || bar === null) return;
-    const ownerWindow = anchor.ownerDocument.defaultView;
-    const panelRoot = anchor.closest<HTMLElement>("[data-snui-root]");
-    if (ownerWindow === null || panelRoot === null) return;
-    const target = focusedElement(anchor.ownerDocument, ownerWindow);
-    if (target === null) return;
+    const ownerWindow = ownerWindowRef.current;
+    const panelRoot = panelRootRef.current;
+    if (bar === null || ownerWindow === null || panelRoot === null) {
+      return undefined;
+    }
+    const target = focusedElement(ownerWindow.document);
+    if (target === null) return undefined;
     requestFocusClearance(
       target,
       bar,
@@ -418,6 +485,7 @@ function ViewportBottomActionBar({
       ownerWindow,
       pointerPressRef.current,
     );
+    return undefined;
   }, [placement]);
 
   const anchorStyle = {
@@ -446,8 +514,10 @@ function ViewportBottomActionBar({
         {...props}
         ref={barRef}
         style={style}
+        data-snui-action-bar=""
         className={classNames(
           "snui-action-bar",
+          `snui-action-bar--${variant}`,
           "snui-action-bar--sticky-viewport-bottom",
           placement.docked && "snui-action-bar--viewport-docked",
           className,
@@ -457,7 +527,9 @@ function ViewportBottomActionBar({
           actions={actions}
           status={status}
           statusRef={statusRef}
-        />
+        >
+          {children}
+        </ActionBarContent>
       </div>
     </div>
   );
@@ -465,13 +537,17 @@ function ViewportBottomActionBar({
 
 export function ActionBar({
   actions,
+  children,
   className,
   ref,
   status,
   statusRef,
   sticky,
+  variant = "card",
   ...props
 }: ActionBarProps): React.JSX.Element {
+  requireContent(actions, "ActionBar requires at least one action.");
+
   if (sticky === "viewport-bottom") {
     return (
       <ViewportBottomActionBar
@@ -481,7 +557,10 @@ export function ActionBar({
         ref={ref}
         status={status}
         statusRef={statusRef}
-      />
+        variant={variant}
+      >
+        {children}
+      </ViewportBottomActionBar>
     );
   }
 
@@ -489,17 +568,17 @@ export function ActionBar({
     <div
       {...props}
       ref={ref}
+      data-snui-action-bar=""
       className={classNames(
         "snui-action-bar",
+        `snui-action-bar--${variant}`,
         sticky !== undefined && `snui-action-bar--sticky-${sticky}`,
         className,
       )}
     >
-      <ActionBarContent
-        actions={actions}
-        status={status}
-        statusRef={statusRef}
-      />
+      <ActionBarContent actions={actions} status={status} statusRef={statusRef}>
+        {children}
+      </ActionBarContent>
     </div>
   );
 }

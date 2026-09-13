@@ -1,9 +1,10 @@
 import {
   focusRingDeclarations,
+  NARROW_PANEL_QUERY,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { CONTAINER_BREAKPOINT_NARROW, PANEL_CONTAINER_NAME } from "./tokens.js";
+import { PANEL_CONTAINER_NAME } from "./tokens.js";
 
 export const FOUNDATION_STYLES = scopeStyles(`
 :scope,
@@ -13,9 +14,28 @@ export const FOUNDATION_STYLES = scopeStyles(`
   box-sizing: border-box;
 }
 
+/*
+ * The user-agent rule for [hidden] is a bare element selector, so any class
+ * rule in this package that sets a display wins over it and an element toggled
+ * through the hidden attribute keeps rendering. Restated here at class weight
+ * with !important so the attribute means the same thing everywhere inside a
+ * panel.
+ */
+[hidden] {
+  display: none !important;
+}
+
 :scope {
-  /* The containing block for portaled overlays (toasts, menus, dialogs). */
-  position: relative;
+  /*
+   * Deliberately not a containing block. Toasts, dialogs, and the docked
+   * action bar are position: fixed against the viewport, so none of them ever
+   * needed one, while react-aria positions an anchored menu or popover
+   * absolutely and measures the room it may grow into against the viewport. A
+   * positioned panel root mixes those two frames: in a panel taller than the
+   * viewport, every overlay opened after the page scrolls reports no room
+   * below its trigger and renders clipped to an empty sliver.
+   */
+  position: static;
   width: 100%;
   max-width: none;
   margin-inline: auto;
@@ -24,19 +44,36 @@ export const FOUNDATION_STYLES = scopeStyles(`
   font-family: var(--snui-font-family);
   font-size: var(--snui-font-size);
   line-height: var(--snui-line-height);
+  /*
+   * The scoped subtree carries its own antialiasing rather than inheriting
+   * whatever the host set, so the semibold weights the package leans on render
+   * at the intended thickness on macOS.
+   */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   container-name: ${PANEL_CONTAINER_NAME};
+  /*
+   * Size containment only. The scrim, the toast host, and the docked action
+   * bar are position: fixed against the viewport from inside this box, so this
+   * declaration must never grow into layout containment, which would make the
+   * panel their containing block and offset every viewport coordinate the
+   * measuring code writes into their custom properties.
+   */
   container-type: inline-size;
 }
 
 /*
  * Horizontal safe-area insets belong to the content padding, so a panel in a
  * notched or rounded viewport keeps its text clear of the hardware edge. The
- * overlays read the same insets for their own geometry.
+ * overlays read the same insets for their own geometry. The insets name
+ * physical edges, so the padding stays physical too: routed through
+ * padding-inline the left inset would land on the right edge of an RTL panel.
  */
 .snui-root__content {
   min-width: 0;
   padding-block: var(--snui-space-4);
-  padding-inline: max(var(--snui-space-4), env(safe-area-inset-left, 0px)) max(var(--snui-space-4), env(safe-area-inset-right, 0px));
+  padding-left: max(var(--snui-space-4), env(safe-area-inset-left, 0px));
+  padding-right: max(var(--snui-space-4), env(safe-area-inset-right, 0px));
 }
 
 :scope.snui-root--standard {
@@ -81,6 +118,10 @@ h4,
 h5,
 h6 { font-size: var(--snui-font-size); }
 
+/* The display steps set their own leading: 1.3 reads loose at 24 and 20 px. */
+h1,
+h2 { line-height: 1.2; }
+
 p,
 ul,
 ol,
@@ -91,6 +132,16 @@ blockquote,
 address,
 pre {
   margin: 0;
+}
+
+/*
+ * The user agent indents a list with a magic number that differs between the
+ * Admin host and a bare fixture, so the indent lands on the package space
+ * scale instead. Package list primitives clear it with their own padding.
+ */
+ul,
+ol {
+  padding-inline-start: var(--snui-space-5);
 }
 
 b,
@@ -118,10 +169,15 @@ pre {
   overflow: auto;
 }
 
+/*
+ * The host highlight is replaced rather than erased: a consumer marking a
+ * matched Signal K path needs the emphasis the element exists for, and the
+ * package tokens keep it readable in every theme.
+ */
 mark {
   padding: 0;
-  background: transparent;
-  color: inherit;
+  background: var(--snui-color-accent-subtle);
+  color: var(--snui-color-text);
 }
 
 label {
@@ -207,9 +263,16 @@ ${focusRingDeclarations("2px", true)}
 }
 
 @media (prefers-contrast: more) {
-  /* Stronger contrast request: boundaries and focus take the text color. */
+  /*
+   * Stronger contrast request: boundaries and focus take the text color, and
+   * the two dimmed text tokens climb toward it. Disabled text keeps a step
+   * below the rest, because losing that step would leave a blocked control
+   * looking exactly like an available one.
+   */
   :scope {
     --snui-color-border: var(--snui-color-text);
+    --snui-color-text-muted: var(--snui-color-text);
+    --snui-color-text-disabled: color-mix(in srgb, var(--snui-color-text) 80%, var(--snui-color-surface));
   }
 
   :focus-visible {
@@ -221,10 +284,11 @@ ${focusRingDeclarations("2px", true)}
 ${visuallyHiddenDeclarations(true)}
 }
 
-@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
+${NARROW_PANEL_QUERY} {
   .snui-root__content {
     padding-block: var(--snui-space-3);
-    padding-inline: max(var(--snui-space-3), env(safe-area-inset-left, 0px)) max(var(--snui-space-3), env(safe-area-inset-right, 0px));
+    padding-left: max(var(--snui-space-3), env(safe-area-inset-left, 0px));
+    padding-right: max(var(--snui-space-3), env(safe-area-inset-right, 0px));
   }
 }
 

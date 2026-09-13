@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 
 import {
-  findRelativeMarkdownLinks,
+  findRelativeLinks,
   MAINTAINED_PACKAGE_DOCS,
   validatePackageMetadata,
   validatePackedFiles,
@@ -39,7 +39,15 @@ const packageJson = {
     "Accessible, theme-aware React primitives for Signal K administration panels.",
   type: "module",
   sideEffects: ["*.css"],
-  files: ["bin", "dist", "docs", "CHANGELOG.md", "LICENSE", "README.md"],
+  files: [
+    "bin",
+    "dist",
+    "docs",
+    "!docs/repository-setup.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "README.md",
+  ],
   bin: { "snui-check-consumer": "bin/snui-check-consumer.mjs" },
   exports: exportsMap,
   keywords: [
@@ -77,7 +85,7 @@ const packageJson = {
     prepublishOnly:
       "node scripts/check-release-approval.mjs && npm run test:browser",
   },
-  allowScripts: { "esbuild@0.28.2": true },
+  allowScripts: { "esbuild@0.28.2": true, "fsevents@2.3.3": true },
   author: {
     name: "Nearl Crews",
     email: "NearlCrews@users.noreply.github.com",
@@ -98,7 +106,12 @@ const packageLock = {
   version,
   packages: {
     "": { name: packageJson.name, version },
-    "node_modules/esbuild": { version: "0.28.2" },
+    "node_modules/esbuild": { version: "0.28.2", hasInstallScript: true },
+    "node_modules/vite/node_modules/fsevents": {
+      version: "2.3.3",
+      hasInstallScript: true,
+      optional: true,
+    },
   },
 };
 const changelog = `## [${version}] - 2026-08-12\n\n[${version}]: https://example.test/v0.7.0...v${version}`;
@@ -107,7 +120,7 @@ const badges = [
   "[![npm downloads](https://img.shields.io/npm/dm/signalk-nearlcrews-ui.svg)](https://www.npmjs.com/package/signalk-nearlcrews-ui)",
   "[![CI](https://github.com/NearlCrews/signalk-nearlcrews-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/NearlCrews/signalk-nearlcrews-ui/actions/workflows/ci.yml)",
   "[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/LICENSE)",
-  "[![node](https://img.shields.io/badge/node-22.22.2%20%7C%2024.15.0%20%7C%2026.0.0-brightgreen.svg)](https://nodejs.org)",
+  "[![node (dev)](https://img.shields.io/badge/node%20%28dev%29-22.22.2%20%7C%2024.15.0%20%7C%2026.0.0-brightgreen.svg)](https://nodejs.org)",
   "[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/nearlcrews)",
 ].join("\n");
 const readme = `# Signal K NearlCrews UI
@@ -125,7 +138,7 @@ Install signalk-nearlcrews-ui@${version} or signalk-nearlcrews-ui-${version}.tgz
 const validMetadata = {
   apiReference: "This reference covers `0.8.x`.",
   changelog,
-  designContract: `@scope (.snui-root[data-snui-version="${version}"]) {}`,
+  designContract: `@scope (.snui-root[data-snui-version="${version}"]) {}\n@keyframes snui-v${version.replaceAll(".", "-")}-spin {}`,
   packageJson,
   packageLock,
   readme,
@@ -170,7 +183,7 @@ describe("package release metadata", () => {
     ).toThrow("must not define a prepare script");
   });
 
-  it("keeps the allowScripts key equal to the locked esbuild version", () => {
+  it("keeps allowScripts equal to every locked package with an install script", () => {
     expect(() =>
       validatePackageMetadata({
         ...validMetadata,
@@ -178,16 +191,38 @@ describe("package release metadata", () => {
           ...packageLock,
           packages: {
             ...packageLock.packages,
-            "node_modules/esbuild": { version: "0.28.3" },
+            "node_modules/esbuild": {
+              version: "0.28.3",
+              hasInstallScript: true,
+            },
           },
         },
       }),
-    ).toThrow('allowScripts must equal {"esbuild@0.28.3":true}');
+    ).toThrow(
+      'allowScripts must equal {"esbuild@0.28.3":true,"fsevents@2.3.3":true}',
+    );
+    expect(() =>
+      validatePackageMetadata(
+        withPackageJson({ allowScripts: { "esbuild@0.28.2": true } }),
+      ),
+    ).toThrow("allowScripts must equal");
     expect(() =>
       validatePackageMetadata(
         withPackageJson({ allowScripts: { esbuild: true } }),
       ),
     ).toThrow("allowScripts must equal");
+  });
+
+  it("rejects any private value, not only the boolean", () => {
+    expect(() =>
+      validatePackageMetadata(withPackageJson({ private: "true" })),
+    ).toThrow("must remain publishable");
+    expect(() =>
+      validatePackageMetadata(withPackageJson({ private: true })),
+    ).toThrow("must remain publishable");
+    expect(() =>
+      validatePackageMetadata(withPackageJson({ private: false })),
+    ).not.toThrow();
   });
 
   it("rejects a packageManager field beside devEngines", () => {
@@ -343,14 +378,14 @@ describe("package release metadata", () => {
     ).toThrow(`pin the night screenshot to signalk-nearlcrews-ui@${version}`);
   });
 
-  it("rejects relative Markdown links in the README", () => {
+  it("rejects relative links in the README, Markdown or not", () => {
     expect(() =>
       validatePackageMetadata({
         ...validMetadata,
-        readme: `${readme}\nSee the [changelog](CHANGELOG.md#081) and [guide](docs/migration.md).\n`,
+        readme: `${readme}\nSee the [changelog](CHANGELOG.md#081) and [license](LICENSE).\n`,
       }),
     ).toThrow(
-      "README.md must not link to Markdown files by relative path (the Signal K App Store rewrites only image targets): CHANGELOG.md#081, docs/migration.md.",
+      "README.md must not link by relative path (the Signal K App Store rewrites only image targets): CHANGELOG.md#081, LICENSE.",
     );
   });
 
@@ -361,6 +396,17 @@ describe("package release metadata", () => {
         designContract: '@scope (.snui-root[data-snui-version="0.7.0"]) {}',
       }),
     ).toThrow(`must use package version ${version} in its scope example`);
+  });
+
+  it("rejects a stale design-contract keyframe name", () => {
+    expect(() =>
+      validatePackageMetadata({
+        ...validMetadata,
+        designContract: `@scope (.snui-root[data-snui-version="${version}"]) {}\n@keyframes snui-v0-7-0-spin {}`,
+      }),
+    ).toThrow(
+      `must use package version ${version} in its keyframe name example`,
+    );
   });
 
   it("rejects reordered or dynamic license badges", () => {
@@ -384,8 +430,8 @@ describe("package release metadata", () => {
   });
 });
 
-describe("relative Markdown link detection", () => {
-  it("finds relative Markdown targets and ignores absolute, anchor, image, and code links", () => {
+describe("relative link detection", () => {
+  it("finds every relative target and ignores absolute, anchor, image, and code links", () => {
     const markdown = [
       "See [the guide](docs/migration.md#changes-in-082) and [notes](CHANGELOG.md).",
       "Absolute [reference](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md).",
@@ -396,9 +442,21 @@ describe("relative Markdown link detection", () => {
       "[fenced](docs/fenced.md)",
       "```",
     ].join("\n");
-    expect(findRelativeMarkdownLinks(markdown)).toEqual([
+    expect(findRelativeLinks(markdown)).toEqual([
       "docs/migration.md#changes-in-082",
       "CHANGELOG.md",
+    ]);
+  });
+
+  it("finds relative targets that are not Markdown, which the App Store also leaves dead", () => {
+    const markdown = [
+      "Read the [license](LICENSE) and the [security policy](.github/SECURITY.md).",
+      "The [screenshots](docs/screenshots) directory holds the images.",
+    ].join("\n");
+    expect(findRelativeLinks(markdown)).toEqual([
+      "LICENSE",
+      ".github/SECURITY.md",
+      "docs/screenshots",
     ]);
   });
 });

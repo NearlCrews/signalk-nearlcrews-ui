@@ -1,6 +1,15 @@
 import { createElement, Fragment } from "react";
 import { describe, expect, it } from "vitest";
 
+import {
+  NARROW_PANEL_QUERY,
+  PROSE_MEASURE_DECLARATION,
+} from "../../src/styles/fragments.js";
+import { PANEL_STYLES } from "../../src/styles/root-sheet.js";
+import {
+  CONTAINER_BREAKPOINT_NARROW,
+  PANEL_CONTAINER_NAME,
+} from "../../src/styles/tokens.js";
 import { announcementRole } from "../../src/utils/announcement.js";
 import {
   joinIdReferences,
@@ -145,5 +154,21 @@ describe("hasReactContent", () => {
   it("accepts plain text and elements", () => {
     expect(hasReactContent("Ready")).toBe(true);
     expect(hasReactContent(createElement("span", null, "Ready"))).toBe(true);
+  });
+});
+
+describe("shared style fragments", () => {
+  it("caps prose at a measure the shipped rules use", () => {
+    expect(PROSE_MEASURE_DECLARATION.trim()).toMatch(/^max-width: \d+ch;$/);
+    expect(PANEL_STYLES).toContain(PROSE_MEASURE_DECLARATION);
+  });
+
+  it("states the narrow-panel condition from the published constants", () => {
+    // A container condition cannot read a custom property, so both halves are
+    // constants and the query is the one place they meet.
+    expect(NARROW_PANEL_QUERY).toBe(
+      `@container ${PANEL_CONTAINER_NAME} (max-width: ${CONTAINER_BREAKPOINT_NARROW})`,
+    );
+    expect(PANEL_STYLES).toContain(NARROW_PANEL_QUERY);
   });
 });

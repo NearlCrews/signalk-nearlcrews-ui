@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertPerFileCoverage,
   COVERAGE_FLOORS,
+  TOOLING_COVERAGE_FLOORS,
 } from "../../scripts/lib/coverage-contract.mjs";
 
 const repositoryRoot = "/workspace/project";
@@ -48,6 +49,61 @@ describe("per-file coverage contract", () => {
     };
 
     expect(assertPerFileCoverage(summary, { repositoryRoot })).toBe(3);
+  });
+
+  it("holds the CLI and the release gates to the tooling floors", () => {
+    const summary = {
+      total: record(),
+      "src/utils/ref.ts": record(),
+      "bin/lib/panel-runtime.mjs": record({
+        branches: TOOLING_COVERAGE_FLOORS.branches,
+        functions: TOOLING_COVERAGE_FLOORS.functions,
+        lines: TOOLING_COVERAGE_FLOORS.lines,
+        statements: TOOLING_COVERAGE_FLOORS.statements,
+      }),
+      [resolve(repositoryRoot, "scripts/lib/paths.mjs")]: record(),
+    };
+
+    expect(assertPerFileCoverage(summary, { repositoryRoot })).toBe(3);
+  });
+
+  it("reports a tooling file below the tooling floors", () => {
+    const summary = {
+      total: record(),
+      "src/utils/ref.ts": record(),
+      "scripts/lib/host-contract.mjs": record({
+        branches: TOOLING_COVERAGE_FLOORS.branches - 1,
+      }),
+    };
+
+    expect(() => assertPerFileCoverage(summary, { repositoryRoot })).toThrow(
+      `- scripts/lib/host-contract.mjs branches ${String(
+        TOOLING_COVERAGE_FLOORS.branches - 1,
+      )}% is below ${String(TOOLING_COVERAGE_FLOORS.branches)}%`,
+    );
+  });
+
+  it("rejects a tooling entry that is not a module file", () => {
+    expect(() =>
+      assertPerFileCoverage(
+        { total: record(), "bin/lib/consumer-checks.cjs": record() },
+        { repositoryRoot },
+      ),
+    ).toThrow(
+      "Coverage summary contains an invalid bin/lib file: bin/lib/consumer-checks.cjs.",
+    );
+  });
+
+  it("measures neither an entry script nor a test helper", () => {
+    const summary = {
+      total: record(),
+      "src/utils/ref.ts": record(),
+      "bin/snui-check-consumer.mjs": record({ lines: 0 }),
+      "scripts/check-coverage.mjs": record({ lines: 0 }),
+      "tests/helpers.tsx": record({ branches: 50 }),
+    };
+
+    expect(assertPerFileCoverage(summary, { repositoryRoot })).toBe(1);
   });
 
   it("reports every metric below its per-file floor", () => {
@@ -96,5 +152,54 @@ describe("per-file coverage contract", () => {
     ).toThrow(
       "Coverage for src/example.ts lines has an invalid coverage metric.",
     );
+  });
+
+  it("rejects a summary that is not an object", () => {
+    expect(() => assertPerFileCoverage(null, { repositoryRoot })).toThrow(
+      "Coverage summary must be an object.",
+    );
+    expect(() => assertPerFileCoverage([record()], { repositoryRoot })).toThrow(
+      "Coverage summary must be an object.",
+    );
+  });
+
+  it("rejects a repository root that is not absolute", () => {
+    expect(() =>
+      assertPerFileCoverage(
+        { total: record(), "src/utils/ref.ts": record() },
+        { repositoryRoot: "project" },
+      ),
+    ).toThrow("Coverage repository root must be an absolute path.");
+  });
+
+  it("rejects a floor that is not a percentage or not a known metric", () => {
+    const summary = { total: record(), "src/utils/ref.ts": record() };
+    expect(() =>
+      assertPerFileCoverage(summary, {
+        repositoryRoot,
+        floors: { branches: 120 },
+      }),
+    ).toThrow("Invalid per-file branches coverage floor.");
+    expect(() =>
+      assertPerFileCoverage(summary, {
+        repositoryRoot,
+        floors: { coverage: 80 },
+      }),
+    ).toThrow("Invalid per-file coverage coverage floor.");
+    expect(() =>
+      assertPerFileCoverage(summary, {
+        repositoryRoot,
+        toolingFloors: { lines: -1 },
+      }),
+    ).toThrow("Invalid per-file tooling lines coverage floor.");
+  });
+
+  it("rejects a src entry that is not a TypeScript source file", () => {
+    expect(() =>
+      assertPerFileCoverage(
+        { total: record(), "src/panel.css": record() },
+        { repositoryRoot },
+      ),
+    ).toThrow("Coverage summary contains an invalid src file: src/panel.css.");
   });
 });

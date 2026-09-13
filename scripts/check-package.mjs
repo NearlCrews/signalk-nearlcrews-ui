@@ -47,42 +47,45 @@ validatePackageMetadata({
   versionSource,
 });
 
-const output = runNpmPack(["--dry-run", "--json", "--ignore-scripts"]);
-const packResult = parseNpmPackResult(output, packageJson.name);
-const files = new Set(packResult.files.map((file) => file.path));
-validatePackedFiles(files, packageJson.exports, packageJson.bin);
-
-for (const file of files) {
-  if (!file.endsWith(".map")) continue;
-
-  const sourceMap = JSON.parse(await readRepositoryFile(file));
-  if (
-    !Array.isArray(sourceMap.sources) ||
-    !Array.isArray(sourceMap.sourcesContent) ||
-    sourceMap.sources.length !== sourceMap.sourcesContent.length ||
-    sourceMap.sourcesContent.some((source) => typeof source !== "string")
-  ) {
-    throw new Error(`Packed source map does not embed its sources: ${file}.`);
-  }
-}
-
-console.log(
-  `Packed artifact contains ${files.size} files and ${packResult.size} bytes.`,
-);
-
 const temporaryDirectory = await mkdtemp(
   join(tmpdir(), "signalk-nearlcrews-ui-attw-"),
 );
 
 try {
+  // One pack, not two: `npm pack --json` reports the same file list and size
+  // for a real pack as for a dry run, and packing is the slowest step here.
   const packedOutput = runNpmPack([
     "--ignore-scripts",
     "--json",
     "--pack-destination",
     temporaryDirectory,
   ]);
-  const packedArtifact = parseNpmPackResult(packedOutput, PACKAGE_NAME);
-  const tarballPath = join(temporaryDirectory, packedArtifact.filename);
+  const packResult = parseNpmPackResult(packedOutput, PACKAGE_NAME);
+  const tarballPath = join(temporaryDirectory, packResult.filename);
+  const files = new Set(packResult.files.map((file) => file.path));
+  validatePackedFiles(files, packageJson.exports, packageJson.bin);
+
+  for (const file of files) {
+    if (!file.endsWith(".map")) continue;
+
+    // The emitted file on disk, which npm copies into the tarball unchanged.
+    const sourceMap = JSON.parse(await readRepositoryFile(file));
+    if (
+      !Array.isArray(sourceMap.sources) ||
+      !Array.isArray(sourceMap.sourcesContent) ||
+      sourceMap.sources.length !== sourceMap.sourcesContent.length ||
+      sourceMap.sourcesContent.some((source) => typeof source !== "string")
+    ) {
+      throw new Error(
+        `Emitted source map does not embed its sources: ${file}.`,
+      );
+    }
+  }
+
+  process.stdout.write(
+    `Packed artifact contains ${String(files.size)} files and ${String(packResult.size)} bytes.\n`,
+  );
+
   const attwPackageJsonPath = require.resolve(
     "@arethetypeswrong/cli/package.json",
   );

@@ -1,9 +1,9 @@
 import {
-  Children,
+  type AriaAttributes,
   type HTMLAttributes,
-  isValidElement,
   type ReactNode,
   type RefAttributes,
+  useCallback,
 } from "react";
 import {
   MenuTrigger,
@@ -15,24 +15,33 @@ import {
   type MenuProps as RACMenuProps,
   MenuSection as RACMenuSection,
   type MenuSectionProps as RACMenuSectionProps,
-  Popover as RACPopover,
   Separator as RACSeparator,
   type SeparatorProps as RACSeparatorProps,
 } from "react-aria-components";
 import { MENU_STYLES } from "../styles/menu.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
-import { overlayZIndex, useOverlayLayer } from "../utils/overlay-layer.js";
+import { resolveBundledLabel } from "../utils/labels.js";
+import { usePanelLabels } from "../utils/panel-labels.js";
 import { usePanelPortalContainerReady } from "../utils/portal.js";
-import { requireContent } from "../utils/react-node.js";
+import { definedProps } from "../utils/props.js";
+import { racDomProps } from "../utils/react-aria.js";
+import {
+  hasReactContent,
+  reactNodeText,
+  requireContent,
+} from "../utils/react-node.js";
 import type { StatusTone } from "../utils/tone.js";
 import { Button, type ButtonSize, type ButtonVariant } from "./Button.js";
 import {
-  OVERLAY_PLACEMENTS,
   type OverlayOpenState,
   type OverlayPlacement,
   overlayOpenProps,
 } from "./overlay-placement.js";
+import { OverlayPopover } from "./overlay-popover.js";
+
+/** Default accessible name added to a destructive menu item. */
+const DEFAULT_MENU_ITEM_TONE_LABEL = "Destructive action";
 
 /**
  * The global events React Aria forwards to a collection element. `onClick`
@@ -72,11 +81,12 @@ type MenuElementEventName =
 
 /**
  * The HTML attributes React Aria forwards to a menu element: `style`,
- * `data-*`, the global attributes, and the global pointer, mouse, touch,
- * wheel, scroll, animation, and transition events. React Aria drops every
- * other attribute, so only what reaches the DOM is offered here. `id` is
- * the collection key on items, sections, and separators (React Aria consumes
- * it) and a DOM id on the list, so each component declares it separately.
+ * `data-*`, the naming attributes, the global attributes, and the global
+ * pointer, mouse, touch, wheel, scroll, animation, and transition events.
+ * React Aria drops every other attribute, so only what reaches the DOM is
+ * offered here. `id` is the collection key on items, sections, and separators
+ * (React Aria consumes it) and a DOM id on the list, so each component
+ * declares it separately.
  */
 export type MenuElementAttributes<E extends HTMLElement> = Pick<
   HTMLAttributes<E>,
@@ -88,6 +98,7 @@ export type MenuElementAttributes<E extends HTMLElement> = Pick<
   | "translate"
   | MenuElementEventName
 > &
+  Pick<AriaAttributes, "aria-label" | "aria-labelledby"> &
   Readonly<Record<`data-${string}`, string | number | boolean | undefined>>;
 
 export interface MenuProps
@@ -102,6 +113,12 @@ export interface MenuProps
   readonly label: ReactNode;
   readonly onAction?: ((id: string) => void) | undefined;
   readonly placement?: OverlayPlacement | undefined;
+  /**
+   * Accessible name for the trigger button. Required when `label` renders no
+   * text of its own, an icon-only trigger being the case that needs it, and
+   * otherwise left unset so the visible words are the name.
+   */
+  readonly triggerLabel?: string | undefined;
   readonly triggerSize?: ButtonSize | undefined;
   readonly triggerVariant?: ButtonVariant | undefined;
 }
@@ -122,6 +139,7 @@ export function Menu({
   open,
   placement = "bottom",
   ref,
+  triggerLabel,
   triggerSize,
   triggerVariant,
   ...props
@@ -130,79 +148,55 @@ export function Menu({
     label,
     "Menu requires a non-empty label to name its trigger button.",
   );
+  if (triggerLabel === undefined && reactNodeText(label).trim() === "") {
+    throw new Error(
+      "Menu requires a triggerLabel when its label renders no text, so the trigger button is not left unnamed.",
+    );
+  }
 
   useModuleStyles(MENU_STYLES, "Menu");
   const portalReady = usePanelPortalContainerReady("Menu");
-  const overlayLayer = useOverlayLayer();
-  // react-aria's optional DOM props are not declared with `| undefined`,
-  // which makes the target unexpressible for a React HTMLAttributes spread
-  // under exactOptionalPropertyTypes. The rest props are plain DOM
-  // attributes, so this boundary assertion is sound; the same holds for the
-  // item, separator, and section below.
-  const domProps = props as RACMenuProps<object>;
+  const domProps = racDomProps<RACMenuProps<object>>(props);
+
+  // React Aria's collection keys are strings or numbers; the library reports
+  // the string it was given. Memoized so the collection is not handed a new
+  // callback on every render of the panel around it.
+  const handleAction = useCallback(
+    (key: string | number) => {
+      onAction?.(String(key));
+    },
+    [onAction],
+  );
 
   return (
     <MenuTrigger {...overlayOpenProps({ open, defaultOpen, onOpenChange })}>
       <Pressable>
         <Button
-          {...(triggerSize === undefined ? {} : { size: triggerSize })}
-          {...(triggerVariant === undefined ? {} : { variant: triggerVariant })}
+          {...definedProps({
+            "aria-label": triggerLabel,
+            size: triggerSize,
+            variant: triggerVariant,
+          })}
         >
           {label}
         </Button>
       </Pressable>
-      {portalReady ? (
-        <RACPopover
-          className="snui-menu-popover"
-          placement={OVERLAY_PLACEMENTS[placement]}
-          style={{ zIndex: overlayZIndex(overlayLayer) }}
+      <OverlayPopover
+        className="snui-menu-popover"
+        placement={placement}
+        ready={portalReady}
+      >
+        <RACMenu
+          {...domProps}
+          ref={ref}
+          className={classNames("snui-menu", className)}
+          {...(onAction === undefined ? {} : { onAction: handleAction })}
         >
-          <RACMenu
-            {...domProps}
-            ref={ref}
-            className={classNames("snui-menu", className)}
-            {...(onAction === undefined
-              ? {}
-              : {
-                  onAction: (key: string | number) => {
-                    onAction(String(key));
-                  },
-                })}
-          >
-            {children}
-          </RACMenu>
-        </RACPopover>
-      ) : null}
+          {children}
+        </RACMenu>
+      </OverlayPopover>
     </MenuTrigger>
   );
-}
-
-interface TextBearingProps {
-  readonly "aria-hidden"?: boolean | "true" | "false" | undefined;
-  readonly children?: ReactNode;
-  readonly hidden?: boolean | undefined;
-}
-
-/**
- * Concatenates the text a node renders, descending into element children and
- * skipping hidden and aria-hidden elements, as an accessible name would.
- * Components that render text internally contribute nothing, so an item made
- * of such components needs an explicit textValue.
- */
-function reactNodeText(node: ReactNode): string {
-  let text = "";
-  for (const child of Children.toArray(node)) {
-    if (typeof child === "string" || typeof child === "number") {
-      text += String(child);
-    } else if (isValidElement<TextBearingProps>(child)) {
-      const { "aria-hidden": ariaHidden, hidden } = child.props;
-      if (ariaHidden === true || ariaHidden === "true" || hidden === true) {
-        continue;
-      }
-      text += reactNodeText(child.props.children);
-    }
-  }
-  return text;
 }
 
 /**
@@ -216,40 +210,48 @@ export interface MenuItemProps
     RefAttributes<HTMLDivElement> {
   readonly children: ReactNode;
   readonly className?: string | undefined;
-  /** @deprecated Use `tone="danger"`. */
-  readonly destructive?: boolean | undefined;
   readonly disabled?: boolean | undefined;
   /** Collection key reported to `onAction`; not a DOM id. */
   readonly id: string;
   /**
    * Text used for typeahead. Derived from the text inside the children when
    * omitted, including text nested in elements; children whose text comes
-   * from a component's own rendering, or an icon-only item, need it set.
+   * from a component's own rendering need it set. An icon-only item needs it
+   * as well as `aria-label`, because typeahead and the accessible name are
+   * separate values.
    */
   readonly textValue?: string | undefined;
-  /**
-   * `"danger"` marks an irreversible or destructive action. When set it
-   * decides on its own, so the deprecated `destructive` counts only while
-   * this prop is omitted.
-   */
+  /** `"danger"` marks an irreversible or destructive action. */
   readonly tone?: MenuItemTone | undefined;
+  /**
+   * Accessible name of the danger tone, announced after the item's own words
+   * so the destruction is not a sighted-only cue. Defaults to "Destructive
+   * action"; set it to localize.
+   */
+  readonly toneLabel?: string | undefined;
 }
 
 export function MenuItem({
   children,
   className,
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-  destructive = false,
   disabled = false,
   id,
   ref,
   textValue,
   tone,
+  toneLabel,
   ...props
 }: MenuItemProps): React.JSX.Element {
+  // Derived from the children alone, so the tone name below never joins the
+  // string keystrokes are matched against.
   const resolvedTextValue = textValue ?? reactNodeText(children).trim();
-  const danger = tone === undefined ? destructive : tone === "danger";
-  const domProps = props as RACMenuItemProps;
+  const danger = tone === "danger";
+  const menuItemToneLabel = resolveBundledLabel(
+    toneLabel,
+    usePanelLabels()?.menuItem?.tone,
+    DEFAULT_MENU_ITEM_TONE_LABEL,
+  );
+  const domProps = racDomProps<RACMenuItemProps>(props);
   return (
     <RACMenuItem
       {...domProps}
@@ -264,6 +266,13 @@ export function MenuItem({
       {...(resolvedTextValue === "" ? {} : { textValue: resolvedTextValue })}
     >
       {children}
+      {danger ? (
+        // Trailing, because the accessible name reads in document order and a
+        // leading qualifier would announce the tone before the action. The
+        // leading space keeps the two apart in engines that concatenate the
+        // name without one.
+        <span className="snui-visually-hidden"> {menuItemToneLabel}.</span>
+      ) : null}
     </RACMenuItem>
   );
 }
@@ -279,7 +288,7 @@ export function MenuSeparator({
   ref,
   ...props
 }: MenuSeparatorProps): React.JSX.Element {
-  const domProps = props as RACSeparatorProps;
+  const domProps = racDomProps<RACSeparatorProps>(props);
   return (
     <RACSeparator
       {...domProps}
@@ -304,16 +313,16 @@ export function MenuSection({
   title,
   ...props
 }: MenuSectionProps): React.JSX.Element {
-  const domProps = props as RACMenuSectionProps<object>;
+  const domProps = racDomProps<RACMenuSectionProps<object>>(props);
   return (
     <RACMenuSection
       {...domProps}
       ref={ref}
       className={classNames("snui-menu__section", className)}
     >
-      {title === undefined ? null : (
+      {hasReactContent(title) ? (
         <RACHeader className="snui-menu__section-header">{title}</RACHeader>
-      )}
+      ) : null}
       {children}
     </RACMenuSection>
   );

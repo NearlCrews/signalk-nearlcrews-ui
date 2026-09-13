@@ -6,6 +6,8 @@
  * is unchanged. Only the declarations are written once.
  */
 
+import { CONTAINER_BREAKPOINT_NARROW, PANEL_CONTAINER_NAME } from "./tokens.js";
+
 const VISUALLY_HIDDEN_PROPERTIES: readonly (readonly [string, string])[] = [
   ["position", "absolute"],
   ["width", "1px"],
@@ -13,7 +15,8 @@ const VISUALLY_HIDDEN_PROPERTIES: readonly (readonly [string, string])[] = [
   ["padding", "0"],
   ["margin", "-1px"],
   ["overflow", "hidden"],
-  ["clip", "rect(0, 0, 0, 0)"],
+  // No deprecated `clip` fallback beside it: every engine at the package's
+  // support floor honours `clip-path`, and both contain a fixed descendant.
   ["clip-path", "inset(50%)"],
   ["white-space", "nowrap"],
   ["border", "0"],
@@ -71,8 +74,9 @@ export const FORCED_COLORS_OUTLINE_DECLARATIONS = [
 /**
  * The focus ring every interactive element paints. Inset rings (offset -2px)
  * suit rows and menu items; outset rings with the two-tone shadow suit
- * controls, where `--snui-focus-ring` fills the offset gap with the surface
- * color so the ring keeps its own boundary next to a danger or accent edge.
+ * controls, where `--snui-focus-ring` fills the offset gap with
+ * `--snui-color-focus-ring-band`, the fill behind the control, so the ring
+ * keeps its own boundary next to a danger or accent edge.
  */
 export function focusRingDeclarations(
   offset: "-2px" | "2px",
@@ -102,3 +106,129 @@ export const DISABLED_DECLARATIONS = [
 /** Pressed-state tint painted over the interactive hover fill. */
 export const PRESSED_FILL_DECLARATION =
   "  background: var(--snui-color-accent-subtle);";
+
+/**
+ * The stacked body of a field: its label, its control, and its messages.
+ * Shared by the field, the radio group, and the progress bar.
+ */
+export const FIELD_STACK_DECLARATIONS = [
+  "  display: grid;",
+  "  min-width: 0;",
+  "  gap: var(--snui-space-1);",
+].join("\n");
+
+/** Shared presentation for the label a control names itself with. */
+export const CONTROL_LABEL_DECLARATIONS = [
+  "  min-width: 0;",
+  "  color: var(--snui-color-text);",
+  "  font-weight: var(--snui-font-weight-semibold);",
+  "  overflow-wrap: anywhere;",
+].join("\n");
+
+/** Shared presentation for the muted description under a label. */
+export const FIELD_DESCRIPTION_DECLARATIONS = [
+  "  min-width: 0;",
+  "  color: var(--snui-color-text-muted);",
+  "  font-size: var(--snui-font-size-sm);",
+  "  overflow-wrap: anywhere;",
+].join("\n");
+
+/** The plain bordered surface a container paints on the panel background. */
+export const SURFACE_DECLARATIONS = [
+  "  border: 1px solid var(--snui-color-border);",
+  "  border-radius: var(--snui-radius-md);",
+  "  background: var(--snui-color-surface);",
+].join("\n");
+
+/**
+ * The row a checkbox or a radio is pressed by: the box, the text beside it,
+ * and the target height the whole row carries, because the element the user
+ * presses is the label rather than the box inside it.
+ */
+export const CONTROL_ROW_DECLARATIONS = [
+  "  display: grid;",
+  "  grid-template-columns: auto minmax(0, 1fr);",
+  "  gap: var(--snui-space-1) var(--snui-space-3);",
+  "  align-items: start;",
+  "  min-height: var(--snui-control-min-height);",
+  "  padding-block: var(--snui-space-2);",
+  "  cursor: pointer;",
+].join("\n");
+
+/**
+ * The optical nudge a square glyph takes to sit on a line of text beside it,
+ * for the checkbox box and the card tone glyph. Stated once so the two cannot
+ * drift apart.
+ */
+export const GLYPH_BASELINE_NUDGE = "0.125rem";
+
+/**
+ * Forced colors flattens a control that opts out of automatic adjustment to
+ * preserve a selected or danger state, which takes the focus ring with it.
+ * Rebuild it with system colors so the author theme token cannot blend into
+ * Highlight. Indented for use inside a forced-colors media block.
+ */
+export const FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS = [
+  "    outline: 2px solid CanvasText;",
+  "    outline-offset: 2px;",
+  "    box-shadow: none;",
+].join("\n");
+
+/**
+ * The invalid outline every field reconstructs under forced colors, which
+ * flattens the danger border to a system color and would otherwise erase the
+ * valid versus invalid distinction. Indented for a forced-colors media block.
+ */
+export const FORCED_COLORS_INVALID_DECLARATIONS = [
+  "    outline: 2px dashed CanvasText;",
+  "    outline-offset: 1px;",
+].join("\n");
+
+/**
+ * The size of the glyph a selection control paints: the checkbox box and the
+ * radio dial. The two read as one size next to each other in a form, so the
+ * measurement is stated once rather than resized in one module alone.
+ */
+export const SELECTION_GLYPH_SIZE = "1.25rem";
+
+/**
+ * The thickness of a horizontal track: the range slider's and the progress
+ * bar's. The slider centers its thumb against this, so a change made in one
+ * module alone would leave the thumb off center.
+ */
+export const TRACK_THICKNESS = "0.375rem";
+
+/**
+ * The same track under a coarse pointer, where a helm, a glove, or a moving
+ * cabin means the track has to read as a length at a glance. The control
+ * height and the range thumb already scale there, so the track follows.
+ */
+export const TRACK_THICKNESS_COARSE = "0.5rem";
+
+/**
+ * Takes the outer margins off the prose a consumer renders inside a body slot,
+ * so the surface owns its own padding whatever the first and last blocks are.
+ */
+export function bodyEdgeMarginRules(block: string): string {
+  return [
+    `.${block} > :first-child { margin-block-start: 0; }`,
+    `.${block} > :last-child { margin-block-end: 0; }`,
+  ].join("\n");
+}
+
+/**
+ * Caps a prose block at a comfortable measure. A description, a body, or a
+ * footnote runs the full width of its container otherwise, and on a wide nav
+ * station monitor a `width="full"` panel gives it far more than the sixty to
+ * seventy-five characters a reader can track from line to line. Blocks that
+ * hold a value, a control, or tabular content are not prose and keep the
+ * width they are given.
+ */
+export const PROSE_MEASURE_DECLARATION = "  max-width: 70ch;";
+
+/**
+ * The narrow-panel condition, written once. Both halves are constants, the
+ * name because `PanelRoot` declares it and the width because a container
+ * condition cannot read a custom property.
+ */
+export const NARROW_PANEL_QUERY = `@container ${PANEL_CONTAINER_NAME} (max-width: ${CONTAINER_BREAKPOINT_NARROW})`;

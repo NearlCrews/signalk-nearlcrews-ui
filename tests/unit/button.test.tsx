@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { type ComponentProps, createRef } from "react";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
+import type { IconOnlyButtonProps } from "../../src/components/Button.js";
 import { Button, PanelRoot } from "../../src/index.js";
 
 describe("Button anchors", () => {
@@ -136,6 +137,41 @@ describe("Button anchors", () => {
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+
+  it("defaults rel on a new browsing context and honors a caller's own", () => {
+    render(
+      <PanelRoot>
+        <Button as="a" href="https://example.com/docs" target="_blank">
+          Docs
+        </Button>
+        <Button
+          as="a"
+          href="https://example.com/guide"
+          target="_blank"
+          rel="noopener"
+        >
+          Guide
+        </Button>
+        <Button as="a" href="https://example.com/help">
+          Help
+        </Button>
+      </PanelRoot>,
+    );
+
+    // Without it the destination is handed the panel's own origin, which
+    // aboard a vessel is the local server address and port.
+    expect(screen.getByRole("link", { name: "Docs" })).toHaveAttribute(
+      "rel",
+      "noopener noreferrer",
+    );
+    expect(screen.getByRole("link", { name: "Guide" })).toHaveAttribute(
+      "rel",
+      "noopener",
+    );
+    expect(screen.getByRole("link", { name: "Help" })).not.toHaveAttribute(
+      "rel",
+    );
   });
 
   it("forwards the ref to the anchor element", () => {
@@ -448,6 +484,89 @@ describe("Button disabled states", () => {
     const reset = screen.getByRole("button", { name: "Reset" });
     expect(reset).toBeDisabled();
     expect(reset).not.toHaveAttribute("aria-disabled");
+  });
+});
+
+describe("Button blocked reason", () => {
+  it("describes a blocked button and drops the reason once it is live", () => {
+    const { rerender } = render(
+      <PanelRoot>
+        <Button ariaDisabled disabledReason="Nothing has changed yet.">
+          Save
+        </Button>
+      </PanelRoot>,
+    );
+
+    // The point of ariaDisabled over native disabled is that the control
+    // stays reachable, so its reason has to be reachable with it.
+    const blocked = screen.getByRole("button", { name: "Save" });
+    expect(blocked).toHaveAttribute("aria-disabled", "true");
+    expect(blocked).toHaveAccessibleDescription("Nothing has changed yet.");
+
+    rerender(
+      <PanelRoot>
+        <Button disabledReason="Nothing has changed yet.">Save</Button>
+      </PanelRoot>,
+    );
+
+    const live = screen.getByRole("button", { name: "Save" });
+    expect(live).not.toHaveAttribute("aria-disabled");
+    expect(live).not.toHaveAccessibleDescription();
+  });
+
+  it("keeps the accessible name the button had before it was blocked", () => {
+    render(
+      <PanelRoot>
+        <Button ariaDisabled disabledReason="Choose a source first.">
+          Apply
+        </Button>
+      </PanelRoot>,
+    );
+
+    // The reason is a description; rewriting the name would announce the
+    // control as a different one mid-interaction.
+    expect(screen.getByRole("button", { name: "Apply" })).toBeTruthy();
+  });
+});
+
+describe("Button list-line variant", () => {
+  it("renders the text variant with the shared button behavior", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    render(
+      <PanelRoot>
+        <Button variant="text" ariaDisabled onClick={onClick}>
+          Depth to keel
+        </Button>
+      </PanelRoot>,
+    );
+
+    // A dense row keeps the focus ring, the target height, and the blocked
+    // behavior rather than hand-styling a bare native button.
+    const row = screen.getByRole("button", { name: "Depth to keel" });
+    expect(row).toHaveClass("snui-button", "snui-button--text");
+    expect(row).toHaveAttribute("aria-disabled", "true");
+    await user.click(row);
+    expect(onClick).not.toHaveBeenCalled();
+  });
+});
+
+describe("Button icon-only props", () => {
+  it("requires an accessible name at the type level", () => {
+    expectTypeOf<IconOnlyButtonProps>().toExtend<{ readonly iconOnly: true }>();
+    expectTypeOf({
+      "aria-label": "Add source",
+      children: null,
+      iconOnly: true,
+    } as const).toExtend<IconOnlyButtonProps>();
+    expectTypeOf({
+      "aria-labelledby": "add-source-label",
+      children: null,
+      iconOnly: true,
+    } as const).toExtend<IconOnlyButtonProps>();
+    // @ts-expect-error an icon-only button needs one of the two naming props
+    const unnamed: IconOnlyButtonProps = { children: null, iconOnly: true };
+    expect(unnamed.iconOnly).toBe(true);
   });
 });
 

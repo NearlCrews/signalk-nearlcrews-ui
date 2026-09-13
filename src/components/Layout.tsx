@@ -8,40 +8,59 @@ import {
 
 import {
   type AnnouncementMode,
-  announcesUpdates,
-  liveRegionProps,
+  resolveAnnouncingRegion,
 } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { hasText, trimmedText } from "../utils/labels.js";
 import {
   createPolymorphicElement,
   type PolymorphicProps,
 } from "../utils/polymorphic.js";
+import { definedProps } from "../utils/props.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import {
   isSemanticTone,
   type SemanticTone,
   type StatusTone,
 } from "../utils/tone.js";
-import { type Density, resolveDensity } from "../utils/variants.js";
+import {
+  type Density,
+  resolveDensity,
+  type SpaceScale,
+} from "../utils/variants.js";
 import { ToneMark } from "./ToneMark.js";
 
-export type SpaceScale = 1 | 2 | 3 | 4 | 5 | 6;
+export type { SpaceScale };
 export type LayoutAlignment = "start" | "center" | "end" | "stretch";
+/** How a `Cluster` distributes its items along the inline axis. */
+export type LayoutJustification =
+  | "start"
+  | "center"
+  | "end"
+  | "between"
+  | "around"
+  | "evenly";
 
-const GAP_CLASSES = {
-  1: "gap-1",
-  2: "gap-2",
-  3: "gap-3",
-  4: "gap-4",
-  5: "gap-5",
-  6: "gap-6",
-} as const satisfies Readonly<Record<SpaceScale, string>>;
-
-/** List elements need real list items; wrap each child so ul and ol stay valid. */
-function renderListItems(as: string, children: ReactNode): ReactNode {
+/**
+ * List elements need real list items; wrap each child so ul and ol stay valid.
+ * A child that renders nothing is dropped rather than wrapped: `Children.map`
+ * calls back for the null, undefined, and boolean a `{ready && <Row/>}` leaves
+ * behind, and each of those would otherwise become an empty list item that a
+ * screen reader counts and the grid gap paints a blank row for.
+ */
+function renderListItems(
+  as: StackElement | ClusterElement | MetricGridElement,
+  children: ReactNode,
+): ReactNode {
   if (as !== "ul" && as !== "ol") return children;
-  return Children.map(children, (child) => <li>{child}</li>);
+  return Children.map(children, (child) =>
+    child === null ||
+    child === undefined ||
+    typeof child === "boolean" ? null : (
+      <li>{child}</li>
+    ),
+  );
 }
 
 export type StackElement = "div" | "ul" | "ol" | "form" | "section" | "nav";
@@ -73,7 +92,7 @@ export function Stack({
       ...props,
       className: classNames(
         "snui-stack",
-        `snui-stack--${GAP_CLASSES[gap]}`,
+        `snui-stack--gap-${String(gap)}`,
         `snui-layout--align-${align}`,
         className,
       ),
@@ -85,14 +104,7 @@ export function Stack({
 export type ClusterElement = "div" | "ul" | "ol" | "section" | "nav";
 
 interface ClusterOwnProps extends StackOwnProps {
-  readonly justify?:
-    | "start"
-    | "center"
-    | "end"
-    | "between"
-    | "around"
-    | "evenly"
-    | undefined;
+  readonly justify?: LayoutJustification | undefined;
 }
 
 export type ClusterProps = PolymorphicProps<
@@ -116,7 +128,7 @@ export function Cluster({
       ...props,
       className: classNames(
         "snui-cluster",
-        `snui-cluster--${GAP_CLASSES[gap]}`,
+        `snui-cluster--gap-${String(gap)}`,
         `snui-layout--align-${align}`,
         `snui-layout--justify-${justify}`,
         className,
@@ -126,14 +138,10 @@ export function Cluster({
   );
 }
 
-/** @deprecated Use `Density`; `"comfortable"` maps to `"default"`. */
-export type InputGroupDensity = Density | "comfortable";
-
 export interface InputGroupProps
   extends HTMLAttributes<HTMLDivElement>,
     RefAttributes<HTMLDivElement> {
-  /** `"comfortable"` is a deprecated alias of `"default"`. */
-  readonly density?: Density | "comfortable" | undefined;
+  readonly density?: Density | undefined;
 }
 
 export function InputGroup({
@@ -149,7 +157,12 @@ export function InputGroup({
       ref={ref}
       className={classNames(
         "snui-input-group",
-        `snui-input-group--${effectiveDensity}`,
+        // Only the non-default step names itself: the default is what the
+        // block class already paints, and a modifier no rule answers is a
+        // hook the package never promised.
+        effectiveDensity === "default"
+          ? undefined
+          : `snui-input-group--${effectiveDensity}`,
         className,
       )}
     />
@@ -161,13 +174,19 @@ export type InputGroupControlWidth = "fixed" | "grow";
 export interface InputGroupControlProps
   extends HTMLAttributes<HTMLDivElement>,
     RefAttributes<HTMLDivElement> {
-  readonly width?: InputGroupControlWidth | undefined;
+  /**
+   * How the slot shares the row: `"grow"` takes the remaining space and
+   * `"fixed"` keeps its content's width. It is not a length, which is why it
+   * is not spelled `width`: on `PanelRoot` and `Dialog` that name means a size
+   * token and on `Popover` a CSS length.
+   */
+  readonly controlWidth?: InputGroupControlWidth | undefined;
 }
 
 export function InputGroupControl({
   className,
+  controlWidth = "grow",
   ref,
-  width = "grow",
   ...props
 }: InputGroupControlProps): React.JSX.Element {
   return (
@@ -176,7 +195,7 @@ export function InputGroupControl({
       ref={ref}
       className={classNames(
         "snui-input-group__control",
-        `snui-input-group__control--${width}`,
+        `snui-input-group__control--${controlWidth}`,
         className,
       )}
     />
@@ -217,6 +236,15 @@ interface CardOwnProps {
   readonly density?: CardDensity | undefined;
   readonly footer?: ReactNode | undefined;
   readonly header?: ReactNode | undefined;
+  /**
+   * Names the card and groups what it holds, for a repeated row a reader
+   * should be able to tell from its neighbours. Plain text, because it becomes
+   * the accessible name; `labelledBy` names it by something already on screen
+   * instead. A card that supplies its own `role` keeps it.
+   */
+  readonly label?: string | undefined;
+  /** Id of the element whose text names the card. See {@link CardOwnProps.label}. */
+  readonly labelledBy?: string | undefined;
   /** Paints a leading accent bar and marks the card with the tone glyph. */
   readonly tone?: StatusTone | undefined;
   readonly toneLabel?: string | undefined;
@@ -232,6 +260,8 @@ export function Card({
   density = "default",
   footer,
   header,
+  label,
+  labelledBy,
   tone = "neutral",
   toneLabel,
   ...props
@@ -239,21 +269,44 @@ export function Card({
   const hasHeader = hasReactContent(header);
   // A semantic tone owns the accent bar and the glyph, so it wins over `accent`.
   const semantic = isSemanticTone(tone);
-  const mark = (
-    <ToneMark
-      className="snui-card__tone-glyph"
-      tone={tone}
-      toneLabel={toneLabel}
-    />
-  );
+  // Built only where it is rendered: a neutral card with no header discards it,
+  // and a neutral tone renders nothing anyway.
+  const mark =
+    hasHeader || semantic ? (
+      <ToneMark
+        className="snui-card__tone-glyph"
+        tone={tone}
+        toneLabel={toneLabel}
+      />
+    ) : null;
+  /*
+   * A named card is a group: the name would otherwise sit on a plain div and
+   * reach nobody, and a repeated row is exactly where a reader needs to be
+   * told which one it is in. A caller-supplied role wins, so a card rendered
+   * as a landmark stays one.
+   */
+  const groupProps =
+    hasText(label) || hasText(labelledBy)
+      ? {
+          role: "group",
+          ...definedProps({
+            "aria-label": trimmedText(label) || undefined,
+            "aria-labelledby": trimmedText(labelledBy) || undefined,
+          }),
+        }
+      : {};
 
   return createPolymorphicElement(
     as,
     {
+      ...groupProps,
       ...props,
       className: classNames(
         "snui-card",
-        `snui-card--${density}`,
+        // Only the steps that change something: the default carries no rule,
+        // so emitting it puts a class in the DOM that styles nothing and
+        // invites an override that will never win anything.
+        density !== "default" && `snui-card--${density}`,
         semantic && `snui-card--${tone}`,
         !semantic && accent !== undefined && `snui-card--accent-${accent}`,
         className,
@@ -322,6 +375,11 @@ export interface MetricProps
   readonly live?: AnnouncementMode | undefined;
   readonly tone?: StatusTone | undefined;
   readonly toneLabel?: string | undefined;
+  /**
+   * Unit shown after the value. Source the string, and any conversion behind
+   * it, from the consumer's own resolution of the server's unit preferences:
+   * this package neither fetches nor selects units.
+   */
   readonly unit?: ReactNode | undefined;
   readonly value: ReactNode;
 }
@@ -342,12 +400,16 @@ export function Metric({
   requireContent(label, "Metric requires a non-empty label.");
 
   const labelId = useId();
-  const valueRegion = liveRegionProps(live);
-  // An announcing value keeps its region mounted so a screen reader observes
-  // it before the first reading arrives. With no reading the region renders
-  // empty, and the stylesheet takes it out of the flow, so the label stands
-  // alone rather than over a tone glyph or a bare unit.
-  const silent = announcesUpdates(valueRegion) && !hasReactContent(value);
+  /*
+   * An announcing value keeps its region mounted so a screen reader observes
+   * it before the first reading arrives. With no reading the region renders
+   * empty, and the stylesheet takes it out of the flow, so the label stands
+   * alone rather than over a tone glyph or a bare unit. A metric that does not
+   * announce holds its region empty for the same reason: a warning glyph and a
+   * unit with no number read as a measured state rather than a missing one.
+   */
+  const hasValue = hasReactContent(value);
+  const { attributes } = resolveAnnouncingRegion(live, undefined, hasValue);
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: Metrics may render outside MetricGrid, and fieldset would imply form controls.
@@ -363,10 +425,10 @@ export function Metric({
       </div>
       <div
         className="snui-metric__value"
-        role={valueRegion.role}
-        aria-live={valueRegion["aria-live"]}
+        role={attributes.role}
+        aria-live={attributes["aria-live"]}
       >
-        {silent ? null : (
+        {hasValue ? (
           <>
             <ToneMark
               className="snui-metric__tone-glyph"
@@ -381,7 +443,7 @@ export function Metric({
               </>
             ) : null}
           </>
-        )}
+        ) : null}
       </div>
       {hasReactContent(detail) ? (
         <div className="snui-metric__detail">{detail}</div>
@@ -397,6 +459,13 @@ export interface BadgeProps
   readonly toneLabel?: string | undefined;
 }
 
+/**
+ * A count or a short state, as a pill. It is not interactive and does not
+ * become interactive: a chip that jumps to the thing it counts is a control,
+ * and a control has to carry the package's target-size floor, which a badge
+ * does not. Render a compact `Button` for that, beside the badges reporting
+ * the same count.
+ */
 export function Badge({
   children,
   className,

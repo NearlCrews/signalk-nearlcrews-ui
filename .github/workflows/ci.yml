@@ -4,8 +4,8 @@ name: CI
 #
 # - Jobs that prove a supported floor pin the exact patch version: the validate
 #   matrix pins the Node 22 and Node 24 floors from devEngines.runtime and the
-#   Windows job pins the Node 24 floor. Node 26 floats until it has an LTS
-#   release to pin.
+#   Windows and macOS package jobs pin the Node 24 floor. Node 26 floats until
+#   it has an LTS release to pin.
 # - Jobs that only need a supported Node (browser tests, the full audit, the
 #   publish path, the host-contract drift check, and the baseline refresh)
 #   float on the active LTS line, `24`, so they track security releases without
@@ -14,6 +14,11 @@ name: CI
 #   newest npm that satisfies devEngines.packageManager.version in
 #   package.json, so that field is the one place the supported npm range lives
 #   and a new npm 12.x is exercised here before a contributor meets it.
+# - The third-party tools this repository downloads instead of running as
+#   actions (actionlint, zizmor, and lychee) are pinned in
+#   .github/pinned-tools.json, because no dependency updater can see a version
+#   written into a run step. Bump a version and its checksum there, in one
+#   place, and every workflow that installs the tool follows.
 
 on:
   push:
@@ -27,7 +32,10 @@ permissions:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A push to main shares one group key per branch, and the release gate needs
+  # the run at the release commit to finish: a later merge must not cancel it.
+  # Superseded pull-request runs carry no such claim, so those still cancel.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   workflows:
@@ -40,26 +48,24 @@ jobs:
         with:
           persist-credentials: false
       - name: Install actionlint
-        env:
-          ACTIONLINT_VERSION: 1.7.12
-          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |
-          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          url="https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          version="$(jq -er '.actionlint.version' .github/pinned-tools.json)"
+          checksum="$(jq -er '.actionlint.sha256' .github/pinned-tools.json)"
+          archive="actionlint_${version}_linux_amd64.tar.gz"
+          url="https://github.com/rhysd/actionlint/releases/download/v${version}/${archive}"
           curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "$url"
-          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum --check --strict
+          echo "${checksum}  ${archive}" | sha256sum --check --strict
           tar --extract --gzip --file "$archive" actionlint
       - name: Validate workflows
         run: ./actionlint -color
       - name: Install zizmor
-        env:
-          ZIZMOR_VERSION: 1.29.0
-          ZIZMOR_SHA256: dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839
         run: |
+          version="$(jq -er '.zizmor.version' .github/pinned-tools.json)"
+          checksum="$(jq -er '.zizmor.sha256' .github/pinned-tools.json)"
           archive="zizmor-x86_64-unknown-linux-gnu.tar.gz"
-          url="https://github.com/zizmorcore/zizmor/releases/download/v${ZIZMOR_VERSION}/${archive}"
+          url="https://github.com/zizmorcore/zizmor/releases/download/v${version}/${archive}"
           curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "$url"
-          echo "${ZIZMOR_SHA256}  ${archive}" | sha256sum --check --strict
+          echo "${checksum}  ${archive}" | sha256sum --check --strict
           tar --extract --gzip --file "$archive" zizmor
       - name: Audit workflow security
         run: ./zizmor --min-severity medium --offline .
@@ -177,6 +183,45 @@ jobs:
           restore-keys: |
             windows-npm-24.15.0-
             windows-npm-
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate package
+        run: npm run test:package
+
+  macos-package:
+    # The package scripts shell out to tar and create symlinks, and macOS is
+    # the third platform contributors build this package on. The job reports
+    # without blocking: it is not a required check for main, so a macOS-only
+    # break is visible here rather than found alone on a laptop.
+    name: macOS package validation
+    runs-on: macos-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Pinned to the Node 24 floor from devEngines.runtime.
+          node-version: 24.15.0
+          package-manager-cache: false
+      - name: Set up npm
+        env:
+          NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
+        run: |
+          npm install --global "npm@$(node -p "require('./package.json').devEngines.packageManager.version")"
+          echo "${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
+          "${NPM_CONFIG_PREFIX}/bin/npm" --version
+      - name: Cache npm downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.npm
+          key: macos-npm-24.15.0-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            macos-npm-24.15.0-
+            macos-npm-
       - name: Install dependencies
         run: npm ci
       - name: Validate package

@@ -72,28 +72,6 @@ describe("RadioGroup", () => {
     expect(screen.getByRole("radio", { name: "Sail" })).toBeChecked();
   });
 
-  it("reports the value through onValueChange beside the deprecated onChange", async () => {
-    const user = userEvent.setup();
-    const onValueChange = vi.fn();
-    const onChange = vi.fn();
-    renderInPanel(
-      <RadioGroup
-        label="Mode"
-        defaultValue="sail"
-        onValueChange={onValueChange}
-        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
-        onChange={onChange}
-      >
-        <Radio value="sail" label="Sail" />
-        <Radio value="motor" label="Motor" />
-      </RadioGroup>,
-    );
-
-    await user.click(screen.getByRole("radio", { name: "Motor" }));
-    expect(onValueChange).toHaveBeenCalledWith("motor");
-    expect(onChange).toHaveBeenCalledWith("motor");
-  });
-
   it("names a Radio from the label prop and prefers it over children", () => {
     renderInPanel(
       <RadioGroup label="Mode">
@@ -200,7 +178,9 @@ describe("RadioGroup", () => {
         </RadioGroup>,
       ),
     );
-    expect(region?.textContent).toBe("Pick a mode");
+    // The danger mark leads every field error, so the tone is carried by the
+    // shape and the announced word as well as by the color.
+    expect(region?.textContent).toBe("×Error. Pick a mode");
     expect(
       screen
         .getByRole("radiogroup", { name: "Mode" })
@@ -339,24 +319,6 @@ describe("Switch", () => {
     renderInPanel(<Switch label="Autopilot" />);
 
     expect(screen.getByRole("switch", { name: "Autopilot" })).toBeVisible();
-  });
-
-  it("reports the checked state through onCheckedChange beside the deprecated onChange", async () => {
-    const user = userEvent.setup();
-    const onCheckedChange = vi.fn();
-    const onChange = vi.fn();
-    renderInPanel(
-      <Switch
-        label="Autopilot"
-        onCheckedChange={onCheckedChange}
-        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
-        onChange={onChange}
-      />,
-    );
-
-    await user.click(screen.getByRole("switch", { name: "Autopilot" }));
-    expect(onCheckedChange).toHaveBeenCalledWith(true);
-    expect(onChange).toHaveBeenCalledWith(true);
   });
 
   it("toggles uncontrolled from defaultChecked", async () => {
@@ -716,41 +678,51 @@ describe("ThemeToggle root", () => {
     expect(group).toHaveAttribute("id", "theme");
   });
 
-  it("names the group from label and falls back through the deprecated legend", () => {
+  it("says what the host-following choice resolves to, and drops it on null", () => {
+    renderInPanel(
+      <>
+        <ThemeToggle label="Offered" />
+        <ThemeToggle label="Quiet" description={null} />
+        <ThemeToggle label="Device only" choices={["system", "light"]} />
+      </>,
+      { defaultTheme: "light" },
+    );
+
+    expect(
+      screen.getByRole("radiogroup", { name: "Offered" }),
+    ).toHaveAccessibleDescription(
+      /Match Admin follows the host's theme marker/,
+    );
+    expect(
+      screen.getByRole("radiogroup", { name: "Quiet" }),
+    ).toHaveAccessibleDescription("");
+    // Nothing to explain where the host-following choice is not offered.
+    expect(
+      screen.getByRole("radiogroup", { name: "Device only" }),
+    ).toHaveAccessibleDescription("");
+  });
+
+  it("names the group from label and falls back when it is blank", () => {
     renderInPanel(
       <>
         <ThemeToggle label="Display" />
-        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep naming the group */}
-        <ThemeToggle legend="Legacy display" />
-        {/* eslint-disable-next-line @typescript-eslint/no-deprecated -- blank label and blank alias fall back together */}
-        <ThemeToggle label="  " legend="  " />
+        <ThemeToggle label="  " />
       </>,
     );
 
     expect(screen.getByRole("radiogroup", { name: "Display" })).toBeVisible();
     expect(
-      screen.getByRole("radiogroup", { name: "Legacy display" }),
-    ).toBeVisible();
-    expect(
       screen.getByRole("radiogroup", { name: "Panel theme" }),
     ).toBeVisible();
   });
 
-  it("reports the theme through onValueChange and the deprecated onChange", async () => {
+  it("reports the theme through onValueChange", async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();
-    const onChange = vi.fn();
-    renderInPanel(
-      <ThemeToggle
-        onValueChange={onValueChange}
-        // eslint-disable-next-line @typescript-eslint/no-deprecated -- the alias must keep firing
-        onChange={onChange}
-      />,
-    );
+    renderInPanel(<ThemeToggle onValueChange={onValueChange} />);
 
     await user.click(screen.getByRole("radio", { name: "Night" }));
     expect(onValueChange).toHaveBeenCalledWith("night");
-    expect(onChange).toHaveBeenCalledWith("night");
   });
 });
 

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
-
-import { PANEL_STYLES } from "../../src/styles/index.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
+import { PANEL_STYLES } from "../../src/styles/root-sheet.js";
 import {
   CONTAINER_BREAKPOINT_NARROW,
   PANEL_CONTAINER_NAME,
@@ -142,6 +141,113 @@ function declarationsFor(css: string, selector: string): string {
   const close = css.indexOf("}", open);
   return css.slice(open + 1, close);
 }
+
+/**
+ * The controls a finger presses. `touch-action: manipulation` drops the
+ * double-tap zoom delay and the ghost click behind it, which is what a gloved
+ * hand at a helm feels as a control that ignored the first press.
+ */
+const PRESSABLE_SELECTORS = [
+  "button",
+  "summary",
+  'input[type="checkbox"]',
+  'input[type="range"]',
+] as const;
+
+describe("touch presses", () => {
+  it("takes the double-tap delay off every pressable control", () => {
+    const declarations = declarationsFor(
+      PANEL_STYLES,
+      PRESSABLE_SELECTORS.join(",\n"),
+    );
+    expect(declarations).toContain("touch-action: manipulation");
+  });
+});
+
+describe("host element reset", () => {
+  it("repaints the highlight in package tokens rather than erasing it", () => {
+    // Newline anchored, so the search cannot land on .snui-required-mark.
+    const declarations = declarationsFor(PANEL_STYLES, "\nmark {");
+    expect(declarations).toContain(
+      "background: var(--snui-color-accent-subtle);",
+    );
+    expect(declarations).toContain("color: var(--snui-color-text);");
+  });
+
+  it("puts the list indent on the space scale", () => {
+    const declarations = declarationsFor(PANEL_STYLES, "ul,\nol {");
+    expect(declarations).toContain("padding-inline-start: var(--snui-space-5)");
+  });
+
+  it("keeps the safe-area padding on physical sides", () => {
+    // env() insets name physical edges, so an RTL panel would pad the wrong
+    // hardware edge if these went through the logical shorthand.
+    const declarations = declarationsFor(PANEL_STYLES, ".snui-root__content {");
+    expect(declarations).toContain("padding-left: max(");
+    expect(declarations).toContain("padding-right: max(");
+    expect(declarations).not.toContain("padding-inline:");
+  });
+});
+
+/**
+ * A rule inside the scoped sheet reaches the panel root through `:scope`. The
+ * bare class matches a descendant root instead, and the scope boundary ends at
+ * the next versioned root, so such a rule matches nothing at all. The pattern
+ * spares `.snui-root__content` and the `.snui-root--*` width modifiers, which
+ * are a descendant and a compound on `:scope`, and the version-qualified root,
+ * which is the scope root itself and the one selector allowed outside it.
+ */
+const BARE_ROOT_CLASS = /\.snui-root(?![\w\-[])/;
+
+describe("panel root selectors", () => {
+  it("reaches the panel root through :scope rather than its class", () => {
+    const sheets: readonly (readonly [string, string])[] = [
+      ["root", PANEL_STYLES],
+      ...STYLE_MODULES.map((module) => [module.id, module.styles] as const),
+    ];
+    for (const [id, css] of sheets) {
+      for (const line of css.split("\n")) {
+        // Declarations and prose mention the class; only a selector applies it.
+        const trimmed = line.trim();
+        if (trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;
+        if (!trimmed.endsWith("{") && !trimmed.endsWith(",")) continue;
+        expect(
+          BARE_ROOT_CLASS.test(line),
+          `${id} selects the panel root by class in "${line.trim()}"`,
+        ).toBe(false);
+      }
+    }
+  });
+});
+
+describe("panel root box", () => {
+  it("keeps the panel root out of the containing-block chain", () => {
+    // react-aria lays an anchored menu or popover out absolutely and measures
+    // the room it may grow into against the viewport. A positioned panel root
+    // becomes the containing block for that overlay and mixes the two frames,
+    // which collapses every overlay opened once a tall panel has scrolled.
+    const declarations = declarationsFor(PANEL_STYLES, ":scope {");
+    expect(declarations).toContain("position: static");
+  });
+});
+
+describe("increased contrast request", () => {
+  it("raises the boundary and both dimmed text tokens", () => {
+    const declarations = declarationsFor(
+      PANEL_STYLES,
+      "@media (prefers-contrast: more)",
+    );
+    expect(declarations).toContain(
+      "--snui-color-border: var(--snui-color-text)",
+    );
+    expect(declarations).toContain(
+      "--snui-color-text-muted: var(--snui-color-text)",
+    );
+    // Disabled text climbs toward the text color but keeps a step below it, so
+    // a blocked control still reads as blocked.
+    expect(declarations).toContain("--snui-color-text-disabled: color-mix(");
+  });
+});
 
 describe("mounted regions with nothing to announce", () => {
   it("costs no box, border, padding, or margin while a region waits", () => {

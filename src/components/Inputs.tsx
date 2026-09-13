@@ -2,29 +2,36 @@ import {
   type InputHTMLAttributes,
   type MouseEventHandler,
   type ReactNode,
+  type Ref,
   type RefAttributes,
+  type RefObject,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
-  useCallback,
   useId,
   useLayoutEffect,
   useRef,
 } from "react";
+import { useComposedRef, useNodeRef } from "../hooks/use-node-ref.js";
 import { RANGE_STYLES } from "../styles/range.js";
 import { TEXTAREA_STYLES } from "../styles/textarea.js";
 import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import {
-  blockActivationKeys,
   blockChange,
-  blockClick,
+  blockedActivationProps,
+  CHECKBOX_ACTIVATION_KEYS,
+  resolveAriaDisabled,
 } from "../utils/activation.js";
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
+import { joinIdReferences, requireIdToken } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { resolveFieldError } from "../utils/field-error.js";
+import { resolveFieldRegions } from "../utils/field-error.js";
+import { markForwardsFieldControlProps } from "../utils/field-forwarding.js";
+import { observeFormReset } from "../utils/form-reset.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
-import { composeRef } from "../utils/ref.js";
+import type { Visibility } from "../utils/variants.js";
+import { warnOnce } from "../utils/warn-once.js";
 import { FieldError } from "./FieldError.js";
+import { FieldMarker } from "./FieldMarker.js";
 
 export type TextInputType =
   | "date"
@@ -39,10 +46,66 @@ export type TextInputType =
   | "url"
   | "week";
 
-/** Props shared by the text-like controls that can show identifiers. */
+/** Props shared by the controls that can show identifiers. */
 export interface MonospaceControlProps {
   /** Renders the value in the panel's monospace stack, for keys, paths, and identifiers. */
   readonly monospace?: boolean | undefined;
+}
+
+/**
+ * Owns a control for a whole mount and puts it back after its own form has
+ * been reset.
+ *
+ * A native reset restores a control from its `value` and `checked` content
+ * attributes, which a React-controlled control does not carry, and React
+ * neither re-renders nor fires a change afterwards, so each control says here
+ * how to restore itself. The resync reads current props, so it is held in a
+ * ref: rebuilding the callback ref every render would detach the node on
+ * every commit, which an ordinary inline consumer ref would otherwise cause,
+ * and the caller's own ref is composed separately for the same reason. The
+ * registration is keyed on the `form` attribute, because a control moved to
+ * another form has to listen to the form it now belongs to.
+ */
+function useResettableControl<Control extends HTMLInputElement>(
+  nodeRef: RefObject<Control | null>,
+  ref: Ref<Control> | undefined,
+  formId: string | undefined,
+  onReset: (node: Control) => void,
+): (node: Control) => () => void {
+  const setNode = useNodeRef(nodeRef, undefined);
+  useComposedRef(nodeRef, ref);
+
+  const resync = useRef(onReset);
+  useLayoutEffect(() => {
+    resync.current = onReset;
+  });
+
+  // The form id is a change signal rather than a value read here: the
+  // registration resolves the control's own form, so a control moved to
+  // another form has to register again on that one.
+  useLayoutEffect(() => {
+    const node = nodeRef.current;
+    if (node === null) return undefined;
+
+    return observeFormReset(node, (target) => {
+      resync.current(target);
+    });
+  }, [formId, nodeRef]);
+
+  return setNode;
+}
+
+/** Puts a controlled text or numeric value back after a native form reset. */
+function restoreControlledValue(
+  value: InputHTMLAttributes<HTMLInputElement>["value"],
+): (node: HTMLInputElement) => void {
+  return (node) => {
+    // An uncontrolled control has no value to restore: the native reset,
+    // which reads the value attribute, already did the right thing.
+    if (typeof value !== "string" && typeof value !== "number") return;
+    const restored = String(value);
+    if (node.value !== restored) node.value = restored;
+  };
 }
 
 export type TextInputProps = Omit<
@@ -54,47 +117,93 @@ export type TextInputProps = Omit<
     readonly type?: TextInputType | undefined;
   };
 
-export function TextInput({
-  className,
-  monospace = false,
-  ref,
-  type = "text",
-  ...props
-}: TextInputProps): React.JSX.Element {
-  return (
-    <input
-      {...props}
-      ref={ref}
-      type={type}
-      className={classNames(
-        "snui-input",
-        monospace && "snui-input--monospace",
-        className,
-      )}
-    />
-  );
-}
+// Marked as forwarding the props a LabeledField injects, so the field takes
+// this control as an element child without a development warning. The mark
+// is annotated pure so an unused control is still dropped from a bundle.
+export const TextInput = /* @__PURE__ */ markForwardsFieldControlProps(
+  function TextInput({
+    className,
+    monospace = false,
+    ref,
+    type = "text",
+    value,
+    ...props
+  }: TextInputProps): React.JSX.Element {
+    const inputElement = useRef<HTMLInputElement | null>(null);
+    const attachInput = useResettableControl(
+      inputElement,
+      ref,
+      props.form,
+      restoreControlledValue(value),
+    );
+
+    return (
+      <input
+        {...props}
+        ref={attachInput}
+        type={type}
+        value={value}
+        className={classNames(
+          "snui-input",
+          monospace && "snui-input--monospace",
+          className,
+        )}
+      />
+    );
+  },
+);
 
 export type NumberInputProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
   "type"
 > &
-  RefAttributes<HTMLInputElement>;
+  RefAttributes<HTMLInputElement> &
+  MonospaceControlProps;
 
-export function NumberInput({
-  className,
-  ref,
-  ...props
-}: NumberInputProps): React.JSX.Element {
-  return (
-    <input
-      {...props}
-      ref={ref}
-      type="number"
-      className={classNames("snui-input", className)}
-    />
-  );
-}
+// Marked as forwarding the props a LabeledField injects, so the field takes
+// this control as an element child without a development warning. The mark
+// is annotated pure so an unused control is still dropped from a bundle.
+export const NumberInput = /* @__PURE__ */ markForwardsFieldControlProps(
+  function NumberInput({
+    className,
+    monospace = false,
+    onWheel,
+    ref,
+    value,
+    ...props
+  }: NumberInputProps): React.JSX.Element {
+    const inputElement = useRef<HTMLInputElement | null>(null);
+    const attachInput = useResettableControl(
+      inputElement,
+      ref,
+      props.form,
+      restoreControlledValue(value),
+    );
+
+    return (
+      <input
+        {...props}
+        ref={attachInput}
+        type="number"
+        value={value}
+        className={classNames(
+          "snui-input",
+          monospace && "snui-input--monospace",
+          className,
+        )}
+        onWheel={(event) => {
+          // A focused number input spins on a wheel or a trackpad, so scrolling
+          // past a field at a nav station would silently rewrite a configured
+          // threshold. An unfocused input never spins, so focus is dropped
+          // before the wheel applies.
+          const input = event.currentTarget;
+          if (input.ownerDocument.activeElement === input) input.blur();
+          onWheel?.(event);
+        }}
+      />
+    );
+  },
+);
 
 export type RangeInputProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
@@ -112,80 +221,82 @@ function setRangeProgress(element: HTMLInputElement): void {
   element.style.setProperty("--snui-range-progress", `${String(safePercent)}%`);
 }
 
-export function RangeInput({
-  className,
-  onInput,
-  ref,
-  ...props
-}: RangeInputProps): React.JSX.Element {
-  useOptionalModuleStyles(RANGE_STYLES);
+// Marked as forwarding the props a LabeledField injects, so the field takes
+// this control as an element child without a development warning. The mark
+// is annotated pure so an unused control is still dropped from a bundle.
+export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
+  function RangeInput({
+    className,
+    onInput,
+    ref,
+    ...props
+  }: RangeInputProps): React.JSX.Element {
+    useOptionalModuleStyles(RANGE_STYLES);
 
-  const inputElement = useRef<HTMLInputElement | null>(null);
+    const inputElement = useRef<HTMLInputElement | null>(null);
+    const attachInput = useResettableControl(
+      inputElement,
+      ref,
+      props.form,
+      setRangeProgress,
+    );
 
-  // One callback ref owns the node so the caller ref and the form reset
-  // listener attach and release exactly once per mount.
-  const attachInput = useCallback(
-    (node: HTMLInputElement): (() => void) => {
-      inputElement.current = node;
-      setRangeProgress(node);
-      const releaseRef = composeRef(ref, node);
-      const form = node.form;
-      const handleReset = (): void => {
-        // The native reset restores defaultValue only after the reset event
-        // finishes dispatching, so resync the fill once the value lands.
-        queueMicrotask(() => {
-          if (node.isConnected) setRangeProgress(node);
-        });
-      };
-      form?.addEventListener("reset", handleReset);
-      return () => {
-        form?.removeEventListener("reset", handleReset);
-        inputElement.current = null;
-        releaseRef();
-      };
-    },
-    [ref],
-  );
+    // The fill is a style property rather than an attribute, so nothing repaints
+    // it on its own. This runs after every render, including the first, because
+    // min, max, and value can each move the fill and any of them can change
+    // without an input event.
+    useLayoutEffect(() => {
+      if (inputElement.current !== null) setRangeProgress(inputElement.current);
+    });
 
-  useLayoutEffect(() => {
-    if (inputElement.current !== null) setRangeProgress(inputElement.current);
-  });
-
-  return (
-    <input
-      {...props}
-      ref={attachInput}
-      type="range"
-      className={classNames("snui-range", className)}
-      onInput={(event) => {
-        const element = event.currentTarget;
-        setRangeProgress(element);
-        onInput?.(event);
-        // Re-sync after React restores a rejected controlled value.
-        queueMicrotask(() => {
-          if (element.isConnected) setRangeProgress(element);
-        });
-      }}
-    />
-  );
-}
+    return (
+      <input
+        {...props}
+        ref={attachInput}
+        type="range"
+        className={classNames("snui-range", className)}
+        onInput={(event) => {
+          const element = event.currentTarget;
+          setRangeProgress(element);
+          onInput?.(event);
+          // Re-sync after React restores a rejected controlled value.
+          queueMicrotask(() => {
+            if (element.isConnected) setRangeProgress(element);
+          });
+        }}
+      />
+    );
+  },
+);
 
 export type SelectProps = SelectHTMLAttributes<HTMLSelectElement> &
-  RefAttributes<HTMLSelectElement>;
+  RefAttributes<HTMLSelectElement> &
+  MonospaceControlProps;
 
-export function Select({
-  className,
-  ref,
-  ...props
-}: SelectProps): React.JSX.Element {
-  return (
-    <select
-      {...props}
-      ref={ref}
-      className={classNames("snui-input", "snui-select", className)}
-    />
-  );
-}
+// Marked as forwarding the props a LabeledField injects, so the field takes
+// this control as an element child without a development warning. The mark
+// is annotated pure so an unused control is still dropped from a bundle.
+export const Select = /* @__PURE__ */ markForwardsFieldControlProps(
+  function Select({
+    className,
+    monospace = false,
+    ref,
+    ...props
+  }: SelectProps): React.JSX.Element {
+    return (
+      <select
+        {...props}
+        ref={ref}
+        className={classNames(
+          "snui-input",
+          "snui-select",
+          monospace && "snui-input--monospace",
+          className,
+        )}
+      />
+    );
+  },
+);
 
 export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> &
   RefAttributes<HTMLTextAreaElement> &
@@ -193,38 +304,50 @@ export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> &
     /**
      * Rows the control shows before any content wraps. Replaces the default
      * minimum height, and where the browser supports content sizing the
-     * control grows with its text from this floor.
+     * control grows with its text from this floor. The native `rows`
+     * attribute alone does the same, because either prop releases the
+     * module's own minimum height.
      */
     readonly minRows?: number | undefined;
   };
 
-export function Textarea({
-  className,
-  minRows,
-  monospace = false,
-  ref,
-  rows,
-  ...props
-}: TextareaProps): React.JSX.Element {
-  useOptionalModuleStyles(TEXTAREA_STYLES);
+// Marked as forwarding the props a LabeledField injects, so the field takes
+// this control as an element child without a development warning. The mark
+// is annotated pure so an unused control is still dropped from a bundle.
+export const Textarea = /* @__PURE__ */ markForwardsFieldControlProps(
+  function Textarea({
+    className,
+    minRows,
+    monospace = false,
+    ref,
+    rows,
+    ...props
+  }: TextareaProps): React.JSX.Element {
+    useOptionalModuleStyles(TEXTAREA_STYLES);
 
-  return (
-    <textarea
-      {...props}
-      ref={ref}
-      rows={rows ?? minRows}
-      className={classNames(
-        "snui-input",
-        "snui-textarea",
-        minRows === undefined ? undefined : "snui-textarea--rows",
-        monospace && "snui-input--monospace",
-        className,
-      )}
-    />
-  );
-}
+    return (
+      <textarea
+        {...props}
+        ref={ref}
+        rows={rows ?? minRows}
+        className={classNames(
+          "snui-input",
+          "snui-textarea",
+          // Either prop states a row count, so either has to release the fixed
+          // minimum height; otherwise a small count renders no smaller.
+          rows === undefined && minRows === undefined
+            ? undefined
+            : "snui-textarea--rows",
+          monospace && "snui-input--monospace",
+          className,
+        )}
+      />
+    );
+  },
+);
 
-export type CheckboxLabelVisibility = "hidden" | "visible";
+/** Alias of the shared {@link Visibility} vocabulary. */
+export type CheckboxLabelVisibility = Visibility;
 
 export interface CheckboxProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "children" | "type">,
@@ -243,35 +366,40 @@ export interface CheckboxProps
   readonly error?: ReactNode | undefined;
   readonly errorLive?: AnnouncementMode | undefined;
   /**
-   * Re-asserted after every render and after a native form reset. A reset
-   * restores checkedness from defaultChecked (or the controlled checked
-   * prop) but never touches the indeterminate IDL property, so the
-   * component re-applies this prop once the reset lands.
+   * Re-applied whenever `checked` or `indeterminate` changes, and after a
+   * native form reset. A reset restores checkedness from defaultChecked (or
+   * the controlled checked prop) but never touches the indeterminate IDL
+   * property, so the component re-applies this prop once the reset lands. A
+   * blocked press restores it through its own microtask, because no render
+   * follows one.
    */
   readonly indeterminate?: boolean | undefined;
-  /** Always names the control; `labelVisibility` decides whether it is drawn. */
+  /**
+   * Always names the control; `labelVisibility` decides whether it is drawn.
+   * This is the naming prop: the box is labelled by the text rendered here,
+   * so a bare `aria-label` beside it never speaks.
+   */
   readonly label: ReactNode;
   /**
    * "hidden" keeps the label in the accessible name but takes it out of the
    * layout, for a checkbox in a table header, a card header, or a dense row.
    */
   readonly labelVisibility?: CheckboxLabelVisibility | undefined;
+  /** Marker drawn after the label when the box is not required. */
+  readonly optionalLabel?: ReactNode | undefined;
+  /**
+   * Marker drawn after the label when the box is required, so a panel can
+   * localize it or key it to a legend of its own. Blank content draws none.
+   */
+  readonly requiredLabel?: ReactNode | undefined;
 }
-
-/** @deprecated Use {@link AnnouncementMode}. */
-export type CheckboxErrorLive = AnnouncementMode;
-
-/*
- * Space toggles a checkbox. Enter belongs to the surrounding form, not to
- * the box, so a blocked box still submits with the Enter key.
- */
-const CHECKBOX_ACTIVATION_KEYS = new Set([" ", "Spacebar"]);
 
 export function Checkbox({
   "aria-describedby": ariaDescribedBy,
   "aria-disabled": nativeAriaDisabled,
   "aria-errormessage": ariaErrorMessage,
   "aria-invalid": ariaInvalid,
+  "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
   ariaDisabled,
   checked,
@@ -287,64 +415,57 @@ export function Checkbox({
   onChange,
   onClick,
   onKeyDown,
+  optionalLabel,
   ref,
-  required,
+  required = false,
+  requiredLabel = "*",
   ...props
 }: CheckboxProps): React.JSX.Element {
   requireContent(label, "Checkbox requires a non-empty label.");
 
   const inputElement = useRef<HTMLInputElement | null>(null);
-  const checkedRef = useRef(checked);
-  const indeterminateRef = useRef(indeterminate);
 
-  // One callback ref owns the node so the caller ref and the form reset
-  // listener attach and release exactly once per mount.
-  const attachInput = useCallback(
-    (node: HTMLInputElement): (() => void) => {
-      inputElement.current = node;
-      const releaseRef = composeRef(ref, node);
-      const form = node.form;
-      const handleReset = (): void => {
-        // A native reset restores checkedness from defaultChecked but never
-        // touches the indeterminate IDL property, so re-assert the
-        // prop-driven state once the reset lands.
-        queueMicrotask(() => {
-          if (!node.isConnected) return;
-          if (checkedRef.current !== undefined) {
-            node.checked = checkedRef.current;
-          }
-          node.indeterminate = indeterminateRef.current ?? false;
-        });
-      };
-      form?.addEventListener("reset", handleReset);
-      return () => {
-        form?.removeEventListener("reset", handleReset);
-        inputElement.current = null;
-        releaseRef();
-      };
+  const generatedId = useId();
+  // The id seeds the label, description, and error ids, so an id carrying a
+  // space would point aria-describedby at ids that exist nowhere.
+  const controlId =
+    id === undefined ? generatedId : requireIdToken(id, "Checkbox id");
+  const labelId = `${controlId}-label`;
+
+  const attachInput = useResettableControl(
+    inputElement,
+    ref,
+    props.form,
+    (node) => {
+      // A native reset restores checkedness from defaultChecked but never
+      // touches the indeterminate IDL property, so re-assert the prop-driven
+      // state once the reset lands.
+      if (checked !== undefined) node.checked = checked;
+      node.indeterminate = indeterminate ?? false;
     },
-    [ref],
   );
 
+  // Checkedness is a change signal rather than a value read here: a platform
+  // toggle clears the mixed state and reports the new checkedness, and
+  // re-asserting the prop on that render is what puts a controlled mixed box
+  // back.
   useLayoutEffect(() => {
-    checkedRef.current = checked;
-    indeterminateRef.current = indeterminate;
     if (inputElement.current !== null) {
       inputElement.current.indeterminate = indeterminate ?? false;
     }
   }, [checked, indeterminate]);
 
-  const generatedId = useId();
-  const controlId = id ?? generatedId;
-  const labelId = `${controlId}-label`;
+  if (ariaLabel !== undefined) {
+    warnOnce(
+      `checkbox-aria-label:${ariaLabel}`,
+      `Checkbox received aria-label ${JSON.stringify(ariaLabel)} beside its label. The rendered label names the box, so the aria-label is ignored; pass the shorter text as label and set labelVisibility="hidden" to keep it off screen.`,
+    );
+  }
+
   const hasDescription = hasReactContent(description);
   const hasError = hasReactContent(error);
-  const descriptionId = resolveDescriptionId(controlId, hasDescription);
-  const { errorId, referencedErrorId, rendersError } = resolveFieldError(
-    controlId,
-    hasError,
-    errorLive,
-  );
+  const { descriptionId, errorId, referencedErrorId, rendersError } =
+    resolveFieldRegions(controlId, hasDescription, hasError, errorLive);
   const describedBy = joinIdReferences(
     ariaDescribedBy,
     descriptionId,
@@ -353,13 +474,20 @@ export function Checkbox({
   const errorMessage = joinIdReferences(ariaErrorMessage, referencedErrorId);
 
   const labelHidden = labelVisibility === "hidden";
-  // The camelCase prop is the documented spelling, so when it is set it
-  // decides; the native attribute only counts while the prop is absent.
-  const blocksActivation =
-    ariaDisabled ??
-    (nativeAriaDisabled === true || nativeAriaDisabled === "true");
+  const blocksActivation = resolveAriaDisabled(
+    ariaDisabled,
+    nativeAriaDisabled,
+  );
 
-  const guardedClick = blockClick(blocksActivation, onClick);
+  // The blocked state and both activation guards travel together, and a
+  // natively disabled box is left to expose its own state.
+  const refusal = blockedActivationProps<HTMLInputElement>({
+    activationKeys: CHECKBOX_ACTIVATION_KEYS,
+    blocked: blocksActivation,
+    disabled,
+    onClick,
+    onKeyDown,
+  });
   const handleClick: MouseEventHandler<HTMLInputElement> = (event) => {
     if (blocksActivation) {
       /*
@@ -380,7 +508,7 @@ export function Checkbox({
         input.indeterminate = restoredIndeterminate;
       });
     }
-    guardedClick(event);
+    refusal.onClick(event);
   };
 
   return (
@@ -413,21 +541,13 @@ export function Checkbox({
           aria-describedby={describedBy}
           aria-errormessage={errorMessage}
           aria-invalid={hasError ? true : ariaInvalid}
-          // A natively disabled box already exposes its state; aria-disabled
-          // beside it would describe the same control twice.
-          aria-disabled={
-            disabled === true ? undefined : blocksActivation || undefined
-          }
+          aria-disabled={refusal["aria-disabled"]}
           // Canceling the click reverts the checkedness the browser applied
           // before dispatching it, which is the one route every pointer press
           // and the Space key all arrive through, the label included.
           onChange={blockChange(blocksActivation, onChange)}
           onClick={handleClick}
-          onKeyDown={blockActivationKeys(
-            blocksActivation,
-            CHECKBOX_ACTIVATION_KEYS,
-            onKeyDown,
-          )}
+          onKeyDown={refusal.onKeyDown}
         />
         <span
           id={labelId}
@@ -436,12 +556,12 @@ export function Checkbox({
             labelHidden && "snui-visually-hidden",
           )}
         >
-          {label}{" "}
-          {required ? (
-            <span className="snui-required-mark" aria-hidden="true">
-              *
-            </span>
-          ) : null}
+          {label}
+          <FieldMarker
+            optionalLabel={optionalLabel}
+            required={required}
+            requiredLabel={requiredLabel}
+          />
         </span>
       </label>
       {hasDescription ? (

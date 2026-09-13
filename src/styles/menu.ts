@@ -33,6 +33,9 @@ ${OVERLAY_TRANSITION_DECLARATIONS}
   max-height: inherit;
   padding: var(--snui-space-1);
   overflow-y: auto;
+  /* A flick that overshoots the end of a long menu must not scroll the page
+     behind it, the same rule the popover and toast scrollers keep. */
+  overscroll-behavior: contain;
 }
 
 .snui-menu__item {
@@ -66,6 +69,9 @@ ${PRESSED_FILL_DECLARATION}
 ${DISABLED_DECLARATIONS}
 }
 
+/* Color plus weight, because Night flattens the color difference to almost
+   nothing. What assistive technology hears is the item's own tone name, which
+   MenuItem renders as hidden text rather than as a rule here. */
 .snui-menu__item--destructive {
   color: var(--snui-color-danger);
   font-weight: var(--snui-font-weight-bold);

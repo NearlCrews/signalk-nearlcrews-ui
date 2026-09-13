@@ -60,6 +60,31 @@ describe("readViewportEdges", () => {
     }
   });
 
+  it("falls back to the layout viewport for a document that is not fully active", () => {
+    const original = Object.getOwnPropertyDescriptor(window, "visualViewport");
+    // lib.dom declares visualViewport as nullable, and a document that is not
+    // fully active is where the null comes from.
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: null,
+    });
+    vi.spyOn(window, "innerWidth", "get").mockReturnValue(320);
+    vi.spyOn(window, "innerHeight", "get").mockReturnValue(240);
+
+    expect(readViewportEdges(window)).toEqual({
+      top: 0,
+      right: 320,
+      bottom: 240,
+      left: 0,
+    });
+
+    if (original === undefined) {
+      Reflect.deleteProperty(window, "visualViewport");
+    } else {
+      Object.defineProperty(window, "visualViewport", original);
+    }
+  });
+
   it("reads the visual viewport offsets and size when present", () => {
     const { restore, visualViewport } = installVisualViewport({
       height: 300,
@@ -107,11 +132,71 @@ describe("observePanelViewport", () => {
     runAll();
     expect(onChange).toHaveBeenCalledTimes(1);
 
-    // A nested scroller's scroll reaches the capturing document listener.
-    const scroller = document.createElement("div");
-    root.append(scroller);
-    scroller.dispatchEvent(new Event("scroll"));
+    stop();
+    restore();
+    root.remove();
+  });
+
+  it("measures for a scroller the panel sits inside and ignores one inside it", () => {
+    const { frames, runAll } = stubAnimationFrames();
+    const { restore } = installVisualViewport({ height: 500 });
+    const outerScroller = document.createElement("div");
+    const root = document.createElement("div");
+    const innerScroller = document.createElement("div");
+    outerScroller.append(root);
+    root.append(innerScroller);
+    document.body.append(outerScroller);
+    const onChange = vi.fn();
+
+    const stop = observePanelViewport(root, onChange);
+    runAll();
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    // A grid scrolling inside the panel cannot move the panel, so the frame
+    // it would have cost is never scheduled.
+    innerScroller.dispatchEvent(new Event("scroll", { bubbles: true }));
+    expect(frames).toHaveLength(0);
+
+    // An ancestor scroller does move it, and so does the panel itself.
+    outerScroller.dispatchEvent(new Event("scroll", { bubbles: true }));
     expect(frames).toHaveLength(1);
+    runAll();
+    expect(onChange).toHaveBeenCalledTimes(2);
+
+    root.dispatchEvent(new Event("scroll", { bubbles: true }));
+    runAll();
+    expect(onChange).toHaveBeenCalledTimes(3);
+
+    // A document-level scroll carries no element target and always counts.
+    document.dispatchEvent(new Event("scroll"));
+    runAll();
+    expect(onChange).toHaveBeenCalledTimes(4);
+
+    stop();
+    restore();
+    outerScroller.remove();
+  });
+
+  it("measures for a scroller that holds an extra resize target", () => {
+    const { runAll } = stubAnimationFrames();
+    const { restore } = installVisualViewport({ height: 500 });
+    const root = document.createElement("div");
+    const scroller = document.createElement("div");
+    const anchor = document.createElement("div");
+    root.append(scroller);
+    scroller.append(anchor);
+    document.body.append(root);
+    const onChange = vi.fn();
+
+    const stop = observePanelViewport(root, onChange, {
+      resizeTargets: [anchor],
+    });
+    runAll();
+    expect(onChange).toHaveBeenCalledTimes(1);
+
+    // The bar's anchor moves with this scroller even though the panel does
+    // not, so its placement still has to be re-measured.
+    scroller.dispatchEvent(new Event("scroll", { bubbles: true }));
     runAll();
     expect(onChange).toHaveBeenCalledTimes(2);
 

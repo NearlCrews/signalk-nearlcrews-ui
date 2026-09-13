@@ -17,7 +17,9 @@ import {
   THEME_STORAGE_KEY,
   type ThemeChoice,
   ThemeToggle,
+  usePanelTheme,
 } from "../../src/index.js";
+import { usePanelLocale } from "../../src/utils/locale.js";
 import { PACKAGE_VERSION } from "../../src/version.js";
 
 describe("PanelRoot themes", () => {
@@ -270,7 +272,7 @@ describe("PanelRoot themes", () => {
     // Auto leaves data-snui-theme off the root, which lets explicit host theme
     // rules apply while the base token block remains the light fallback.
     expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
-    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Match Admin" })).toBeChecked();
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
   });
 
@@ -284,7 +286,7 @@ describe("PanelRoot themes", () => {
     );
 
     expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
-    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Match Admin" })).toBeChecked();
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("auto");
   });
 
@@ -330,7 +332,7 @@ describe("PanelRoot themes", () => {
     );
 
     expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
-    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Match Admin" })).toBeChecked();
     expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("blue");
   });
 
@@ -432,7 +434,7 @@ describe("PanelRoot themes", () => {
     );
 
     expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
-    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Match Admin" })).toBeChecked();
 
     secondRoot.unmount();
     vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
@@ -445,7 +447,7 @@ describe("PanelRoot themes", () => {
     );
 
     expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
-    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Match Admin" })).toBeChecked();
   });
 
   it("retains an explicit theme in the mounted panel when a storage write fails", async () => {
@@ -479,7 +481,7 @@ describe("PanelRoot themes", () => {
       </PanelRoot>,
     );
 
-    await user.click(screen.getByRole("radio", { name: "System" }));
+    await user.click(screen.getByRole("radio", { name: "Match device" }));
 
     expect(screen.getByTestId("panel")).toHaveAttribute(
       "data-snui-theme",
@@ -557,7 +559,7 @@ describe("PanelRoot themes", () => {
     });
 
     expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
-    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Match Admin" })).toBeChecked();
   });
 
   it("re-reads the shared theme when a retained section reveals a panel", async () => {
@@ -599,7 +601,7 @@ describe("PanelRoot themes", () => {
     );
 
     expect(screen.getByTestId("panel")).not.toHaveAttribute("data-snui-theme");
-    expect(screen.getByRole("radio", { name: "Auto" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Match Admin" })).toBeChecked();
     expect(setItem).not.toHaveBeenCalled();
   });
 
@@ -627,6 +629,131 @@ describe("PanelRoot themes", () => {
     ).toBeVisible();
     expect(within(group).getByRole("radio", { name: "Light" })).toBeVisible();
     expect(within(group).getByRole("radio", { name: "Sombre" })).toBeVisible();
+  });
+
+  it("starts at the theme a consumer seeds and writes nothing", () => {
+    render(
+      <PanelRoot data-testid="panel" defaultTheme="night">
+        <ThemeToggle />
+      </PanelRoot>,
+    );
+
+    // A nav station that opens after dark can start dark-adapted instead of
+    // painting a white panel until someone reaches the selector.
+    expect(screen.getByTestId("panel")).toHaveAttribute(
+      "data-snui-theme",
+      "night",
+    );
+    expect(screen.getByRole("radio", { name: "Night" })).toBeChecked();
+    // A seed is a starting point, not a choice the operator made, so the
+    // shared key stays clear until someone picks a theme.
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
+  });
+
+  it("keeps a stored preference, and the first seed, ahead of a later one", () => {
+    window.localStorage.setItem(THEME_STORAGE_KEY, "light");
+    const stored = render(
+      <PanelRoot data-testid="stored" defaultTheme="night">
+        Body
+      </PanelRoot>,
+    );
+
+    expect(screen.getByTestId("stored")).toHaveAttribute(
+      "data-snui-theme",
+      "light",
+    );
+    stored.unmount();
+    window.localStorage.clear();
+
+    render(
+      <>
+        <PanelRoot data-testid="first" defaultTheme="night">
+          Body
+        </PanelRoot>
+        <PanelRoot data-testid="second" defaultTheme="dark">
+          Body
+        </PanelRoot>
+      </>,
+    );
+
+    // The preference is one document-wide value, so a second panel seeding
+    // another theme would otherwise trade the theme back and forth.
+    expect(screen.getByTestId("first")).toHaveAttribute(
+      "data-snui-theme",
+      "night",
+    );
+    expect(screen.getByTestId("second")).toHaveAttribute(
+      "data-snui-theme",
+      "night",
+    );
+  });
+
+  it("tolerates a theme set with no window and with no event target", () => {
+    let setTheme: ((theme: ThemeChoice) => void) | undefined;
+    function Capture(): null {
+      setTheme = usePanelTheme().setTheme;
+      return null;
+    }
+    render(
+      <PanelRoot>
+        <Capture />
+      </PanelRoot>,
+    );
+    // Setting the theme the panel already has leaves nothing to re-render, so
+    // this exercises the storage and event guards on their own.
+    const sandbox = { localStorage: window.localStorage };
+
+    let withoutWindow: unknown;
+    vi.stubGlobal("window", undefined);
+    try {
+      setTheme?.("auto");
+    } catch (error) {
+      withoutWindow = error;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(withoutWindow).toBeUndefined();
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
+
+    // A static render sandbox supplies a window carrying storage but no event
+    // target: the choice is stored and simply not shared any further.
+    let withoutEvents: unknown;
+    vi.stubGlobal("window", sandbox);
+    try {
+      setTheme?.("auto");
+    } catch (error) {
+      withoutEvents = error;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(withoutEvents).toBeUndefined();
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBe("auto");
+  });
+
+  it("publishes the panel's locale to everything it formats", () => {
+    function Locale(): React.JSX.Element {
+      const locale = usePanelLocale();
+      return <p>{typeof locale === "string" ? locale : "runtime default"}</p>;
+    }
+
+    render(
+      <>
+        <PanelRoot locale="en-GB">
+          <Locale />
+        </PanelRoot>
+        <PanelRoot>
+          <Locale />
+        </PanelRoot>
+      </>,
+    );
+
+    // One pinned locale for the package's own formatters and for the numbers
+    // a panel formats itself, so a grouping separator cannot disagree with
+    // the sentence around it.
+    expect(screen.getByText("en-GB")).toBeVisible();
+    expect(screen.getByText("runtime default")).toBeVisible();
   });
 });
 

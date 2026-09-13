@@ -5,6 +5,8 @@
  * of change signals, so the arithmetic and the listener wiring live here once.
  */
 
+import { windowGlobal } from "./window-global.js";
+
 /** Edges of the visible viewport in CSS pixels, relative to the layout viewport. */
 export interface ViewportEdges {
   readonly top: number;
@@ -13,18 +15,21 @@ export interface ViewportEdges {
   readonly left: number;
 }
 
-function getVisualViewport(ownerWindow: Window): VisualViewport | undefined {
-  return Reflect.get(ownerWindow, "visualViewport") as
-    | VisualViewport
-    | undefined;
+/**
+ * The visual viewport, which is null while the document is not fully active
+ * and absent on an engine or a test environment that implements none, so both
+ * spellings of "there is none" are answered the same way.
+ */
+function getVisualViewport(
+  ownerWindow: Window,
+): VisualViewport | null | undefined {
+  return windowGlobal<VisualViewport | null>(ownerWindow, "visualViewport");
 }
 
 function getResizeObserver(
   ownerWindow: Window,
 ): typeof ResizeObserver | undefined {
-  return Reflect.get(ownerWindow, "ResizeObserver") as
-    | typeof ResizeObserver
-    | undefined;
+  return windowGlobal<typeof ResizeObserver>(ownerWindow, "ResizeObserver");
 }
 
 /**
@@ -34,7 +39,7 @@ function getResizeObserver(
  */
 export function readViewportEdges(ownerWindow: Window): ViewportEdges {
   const viewport = getVisualViewport(ownerWindow);
-  if (viewport === undefined) {
+  if (viewport == null) {
     return {
       top: 0,
       right: ownerWindow.innerWidth,
@@ -65,14 +70,18 @@ export interface ObservePanelViewportOptions {
 
 /**
  * Calls `onChange` once per animation frame whenever the visible part of the
- * panel may have moved: any scroll in the document (captured, so nested
- * scrollers count), a window resize, a visual viewport resize or scroll, or a
- * resize of the panel root or another observed element. The first call is
- * scheduled for the next frame; callers that need a synchronous first
- * measurement take it themselves before observing.
+ * panel may have moved: a scroll of anything the panel sits inside, a window
+ * resize, a visual viewport resize or scroll, or a resize of the panel root or
+ * another observed element. The first call is scheduled for the next frame;
+ * callers that need a synchronous first measurement take it themselves before
+ * observing.
  *
  * The capture-phase document scroll listener already sees every scroll that
- * reaches the window, so no separate window scroll listener is registered.
+ * reaches the window, so no separate window scroll listener is registered. It
+ * also sees scrolls that cannot move the panel, a several hundred row grid
+ * inside it being the heaviest of them, so a scroll whose target is an element
+ * containing neither the panel root nor an observed target is skipped rather
+ * than measured on every frame of the gesture.
  *
  * Returns a disposer that cancels the pending frame and removes every
  * listener. Calling `onChange` after disposal never happens.
@@ -101,17 +110,35 @@ export function observePanelViewport(
     animationFrame = ownerWindow.requestAnimationFrame(measure);
   };
 
+  const { resizeTargets } = options;
+
+  // Document and window scrolls carry no element target and always count; an
+  // element's scroll only counts when the panel or a measured target moves
+  // with it, which is what an ancestor scroller does and an inner one cannot.
+  const scheduleForScroll = (event: Event): void => {
+    const { target } = event;
+    if (target instanceof ownerWindow.Element) {
+      const moves =
+        target.contains(panelRoot) ||
+        (resizeTargets?.some((observed) => target.contains(observed)) ?? false);
+      if (!moves) return;
+    }
+    scheduleMeasure();
+  };
+
   const ResizeObserverConstructor = getResizeObserver(ownerWindow);
   const resizeObserver =
     ResizeObserverConstructor === undefined
       ? undefined
       : new ResizeObserverConstructor(scheduleMeasure);
   resizeObserver?.observe(panelRoot);
-  for (const target of options.resizeTargets ?? []) {
-    resizeObserver?.observe(target);
+  if (resizeTargets !== undefined) {
+    for (const target of resizeTargets) {
+      resizeObserver?.observe(target);
+    }
   }
 
-  ownerDocument.addEventListener("scroll", scheduleMeasure, true);
+  ownerDocument.addEventListener("scroll", scheduleForScroll, true);
   ownerWindow.addEventListener("resize", scheduleMeasure);
   visualViewport?.addEventListener("resize", scheduleMeasure);
   visualViewport?.addEventListener("scroll", scheduleMeasure);
@@ -124,7 +151,7 @@ export function observePanelViewport(
       animationFrame = 0;
     }
     resizeObserver?.disconnect();
-    ownerDocument.removeEventListener("scroll", scheduleMeasure, true);
+    ownerDocument.removeEventListener("scroll", scheduleForScroll, true);
     ownerWindow.removeEventListener("resize", scheduleMeasure);
     visualViewport?.removeEventListener("resize", scheduleMeasure);
     visualViewport?.removeEventListener("scroll", scheduleMeasure);

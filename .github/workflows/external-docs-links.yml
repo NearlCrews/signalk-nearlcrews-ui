@@ -2,9 +2,21 @@ name: External documentation links
 
 # The repository allows GitHub-owned actions only, so lychee is downloaded as a
 # pinned release archive and verified by checksum, the same way ci.yml installs
-# actionlint and zizmor.
+# actionlint and zizmor. Its version and checksum live in
+# .github/pinned-tools.json with the other two.
+#
+# The pull-request trigger puts link rot in front of whoever changed the
+# Markdown, rather than only in the Actions run list a week later. It reports
+# without blocking: this is not a required check for main, because a remote
+# service that is briefly unreachable is not a defect in the change.
 
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - .github/pinned-tools.json
+      - .github/workflows/external-docs-links.yml
   schedule:
     - cron: "41 7 * * 1"
   workflow_dispatch:
@@ -13,8 +25,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: external-docs-links
-  cancel-in-progress: true
+  group: external-docs-links-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   links:
@@ -27,22 +39,37 @@ jobs:
         with:
           persist-credentials: false
       - name: Install lychee
-        env:
-          LYCHEE_VERSION: 0.24.2
-          LYCHEE_SHA256: 1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
         run: |
+          version="$(jq -er '.lychee.version' .github/pinned-tools.json)"
+          checksum="$(jq -er '.lychee.sha256' .github/pinned-tools.json)"
           archive="lychee-x86_64-unknown-linux-gnu.tar.gz"
-          url="https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/${archive}"
+          url="https://github.com/lycheeverse/lychee/releases/download/lychee-v${version}/${archive}"
           curl --fail --location --proto '=https' --tlsv1.2 --output "$archive" "$url"
-          echo "${LYCHEE_SHA256}  ${archive}" | sha256sum --check --strict
+          echo "${checksum}  ${archive}" | sha256sum --check --strict
           tar --extract --gzip --file "$archive" --strip-components=1 "lychee-x86_64-unknown-linux-gnu/lychee"
       - name: Check external documentation links
         env:
           # Read-only token so GitHub links are checked through the API rather
           # than rate-limited anonymous requests.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+        # A release pull request names URLs that exist only once the release is
+        # tagged and published: the changelog compare links for the new tag and
+        # the unpkg screenshot URLs for the new version. Those are excluded on
+        # pull requests only; the weekly run still checks them after release.
         run: |
+          version="$(node -p "require('./package.json').version")"
+          excludes=()
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            escaped="${version//./\\.}"
+            excludes=(
+              --exclude "compare/v${escaped}\\.\\.\\.HEAD"
+              --exclude "compare/v[0-9.]+\\.\\.\\.v${escaped}"
+              --exclude "unpkg\\.com/signalk-nearlcrews-ui@${escaped}/"
+            )
+          fi
           ./lychee \
+            "${excludes[@]}" \
             --no-progress \
             --max-retries 2 \
             --retry-wait-time 2 \

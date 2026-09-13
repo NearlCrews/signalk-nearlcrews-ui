@@ -1,0 +1,14 @@
+{
+  "actionlint": {
+    "version": "1.7.12",
+    "sha256": "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+  },
+  "lychee": {
+    "version": "0.24.2",
+    "sha256": "1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a"
+  },
+  "zizmor": {
+    "version": "1.29.0",
+    "sha256": "dd96df044a6e8538d5f423790f453bdd03d49e5b2bcc38214acc41a2f1297839"
+  }
+}

@@ -6,34 +6,75 @@ import {
   useCallback,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
 } from "react";
 
 import { useControllableState } from "../hooks/use-controllable-state.js";
+import { useNodeRef } from "../hooks/use-node-ref.js";
+import { blockedActivationProps } from "../utils/activation.js";
+import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { isRightToLeft } from "../utils/direction.js";
+import { resolveFieldRegions } from "../utils/field-error.js";
+import { observeFormReset } from "../utils/form-reset.js";
+import { requireNonEmptyUniqueOptions } from "../utils/options.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { nextRovingIndex } from "../utils/roving.js";
 import type { Orientation, Visibility } from "../utils/variants.js";
+import { FieldError } from "./FieldError.js";
 
 /** Alias of the shared {@link Visibility} vocabulary. */
 export type SegmentedControlLabelVisibility = Visibility;
-/** @deprecated Use {@link SegmentedControlLabelVisibility}. */
-export type SegmentedControlLegendVisibility = SegmentedControlLabelVisibility;
-/** @deprecated Use {@link Orientation}. */
-export type SegmentedControlOrientation = Orientation;
 
 /**
- * The APG radio-group pattern optionally moves focus without changing the
- * selection when the platform's focus modifier is held: Cmd on macOS, Ctrl
- * elsewhere. Resolve the modifier once at module scope.
+ * Holding the platform's focus modifier moves focus without changing the
+ * selection: Cmd on macOS, Ctrl elsewhere. The affordance is borrowed from
+ * the listbox and grid patterns, where a modifier decouples focus from
+ * selection; the APG radio group pattern itself defines no such key, so this
+ * is an addition rather than a rule from it.
+ *
+ * The platform is read from the user agent string alone. `navigator.platform`
+ * answers the same question, and adds nothing: engines freeze it to a
+ * generic value, so the user agent is the fallback either way, and
+ * `navigator.userAgentData` is absent in two engines and undefined outside a
+ * secure context, which is how a panel is normally reached over a boat LAN.
  */
 const platformHint =
-  typeof navigator === "undefined"
-    ? ""
-    : `${navigator.platform} ${navigator.userAgent}`;
+  typeof navigator === "undefined" ? "" : navigator.userAgent;
 const FOCUS_MOVE_MODIFIER: "ctrlKey" | "metaKey" = /Mac/i.test(platformHint)
   ? "metaKey"
   : "ctrlKey";
+
+/**
+ * The axis a key travels along, whatever the group's own orientation.
+ *
+ * The radio pattern binds both axes, so Down moves to the next option in a
+ * horizontal group too. Only the horizontal pair mirrors in a right-to-left
+ * panel, which is exactly what asking the shared step for a vertical group
+ * expresses.
+ */
+const KEY_AXIS: Readonly<Record<string, Orientation>> = {
+  ArrowDown: "vertical",
+  ArrowLeft: "horizontal",
+  ArrowRight: "horizontal",
+  ArrowUp: "vertical",
+};
+
+const OPTION_SELECTOR = '[role="radio"]';
+
+/**
+ * Moves focus to the option at a position in the group the pressed option
+ * belongs to. Reading the buttons from the DOM keeps their order authoritative
+ * without registering each one, and the positions match the option list
+ * because the group renders one button per option in that order.
+ */
+function focusOption(pressed: HTMLButtonElement, index: number): void {
+  const group = pressed.parentElement;
+  if (group === null) return;
+  group.querySelectorAll<HTMLButtonElement>(OPTION_SELECTOR)[index]?.focus();
+}
 
 export interface SegmentedControlOption<Value extends string> {
   readonly disabled?: boolean | undefined;
@@ -41,14 +82,28 @@ export interface SegmentedControlOption<Value extends string> {
   readonly value: Value;
 }
 
-interface SegmentedControlBaseProps<Value extends string>
+export interface SegmentedControlProps<Value extends string>
   extends Omit<HTMLAttributes<HTMLDivElement>, "children" | "onChange">,
     RefAttributes<HTMLDivElement> {
   readonly defaultValue?: Value | undefined;
+  /** Guidance under the group name, read as part of the group's description. */
+  readonly description?: ReactNode | undefined;
+  /**
+   * Takes every option out of the tab order. Reach for `readOnly` instead
+   * where the choice is real but cannot be changed right now.
+   */
   readonly disabled?: boolean | undefined;
+  /** Validation message under the options. Marks the group invalid while set. */
+  readonly error?: ReactNode | undefined;
+  /** How the error is announced. Defaults to `"off"`. */
+  readonly errorLive?: AnnouncementMode | undefined;
+  /**
+   * Accessible name of the group. The group is a `role="radiogroup"` div, not
+   * a fieldset, so the name is not a `<legend>` element.
+   */
+  readonly label: ReactNode;
+  /** Whether the group name is drawn. Defaults to `"hidden"`. */
   readonly labelVisibility?: SegmentedControlLabelVisibility | undefined;
-  /** @deprecated Use `labelVisibility`. */
-  readonly legendVisibility?: SegmentedControlLabelVisibility | undefined;
   /** Carries the selection into native form submission and form reset. */
   readonly name?: string | undefined;
   /**
@@ -56,83 +111,73 @@ interface SegmentedControlBaseProps<Value extends string>
    * change events; the native inputs keep the event form.
    */
   readonly onValueChange?: ((value: Value) => void) | undefined;
-  /** @deprecated Use `onValueChange`. */
-  readonly onChange?: ((value: Value) => void) | undefined;
   readonly options: readonly SegmentedControlOption<Value>[];
   readonly orientation?: Orientation | undefined;
+  /**
+   * Blocks the selection from changing while every option keeps its tab stop
+   * and refuses activation. Reach for it where the choice is real but cannot
+   * be changed right now, such as while a save is in flight; `disabled` takes
+   * the group out of the tab order instead, which destroys focus if it lands
+   * on the option the user is standing on.
+   */
+  readonly readOnly?: boolean | undefined;
   readonly value?: Value | undefined;
 }
 
-/**
- * Accessible name of the group through `label`, or through the deprecated
- * `legend`. One of the two is required. The group is a `role="radiogroup"`
- * div, not a fieldset, so the name is not a `<legend>` element.
- *
- * Written out rather than composed from `WithLabel`, because `legend` has to
- * keep its own `@deprecated` tag and a mapped type cannot carry one per key.
- */
-export type SegmentedControlProps<Value extends string> =
-  SegmentedControlBaseProps<Value> &
-    (
-      | {
-          readonly label: ReactNode;
-          /** @deprecated Use `label`. */
-          readonly legend?: ReactNode | undefined;
-        }
-      | {
-          readonly label?: ReactNode | undefined;
-          /** @deprecated Use `label`. */
-          readonly legend: ReactNode;
-        }
-    );
-
 export function SegmentedControl<Value extends string>({
+  "aria-describedby": ariaDescribedBy,
+  "aria-labelledby": ariaLabelledBy,
   className,
   defaultValue,
+  description,
   disabled = false,
+  error,
+  errorLive = "off",
   label,
-  labelVisibility,
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-  legend,
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-  legendVisibility,
+  labelVisibility = "hidden",
   name,
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-  onChange,
   onValueChange,
   options,
   orientation = "horizontal",
+  readOnly = false,
   ref,
   value,
-  "aria-labelledby": ariaLabelledBy,
   ...props
 }: SegmentedControlProps<Value>): React.JSX.Element {
-  const groupLabel = hasReactContent(label) ? label : legend;
-  requireContent(groupLabel, "SegmentedControl requires a non-empty label.");
-  const groupLabelVisibility = labelVisibility ?? legendVisibility ?? "hidden";
-  if (options.length === 0) {
-    throw new Error("SegmentedControl requires at least one option.");
-  }
-  const optionValues = new Set<Value>();
-  for (const option of options) {
-    requireContent(
-      option.label,
-      "SegmentedControl options require non-empty labels.",
-    );
-    if (optionValues.has(option.value)) {
-      throw new Error(
-        `SegmentedControl option values must be unique; received duplicate value "${option.value}".`,
+  requireContent(label, "SegmentedControl requires a non-empty label.");
+  // One pass per option list rather than one per render: the checks can only
+  // fail on a caller mistake, and the keyboard walk needs the same pass.
+  const enabledOptions = useMemo(() => {
+    requireNonEmptyUniqueOptions(options, "SegmentedControl");
+    for (const option of options) {
+      requireContent(
+        option.label,
+        "SegmentedControl options require non-empty labels.",
       );
     }
-    optionValues.add(option.value);
-  }
+    return options.filter((option) => option.disabled !== true);
+  }, [options]);
 
-  const labelId = useId();
-  const buttons = useRef(new Map<Value, HTMLButtonElement>());
-  const [effectiveValue, commitValue, setInternalValue] = useControllableState<
+  const groupId = useId();
+  const labelId = `${groupId}-label`;
+  const hasDescription = hasReactContent(description);
+  const hasError = hasReactContent(error);
+  const { descriptionId, errorId, referencedErrorId, rendersError } =
+    resolveFieldRegions(groupId, hasDescription, hasError, errorLive);
+  const describedBy = joinIdReferences(
+    ariaDescribedBy,
+    descriptionId,
+    referencedErrorId,
+  );
+  const [effectiveValue, select, setInternalValue] = useControllableState<
     Value | undefined
-  >(value, defaultValue);
-  const enabledOptions = options.filter((option) => option.disabled !== true);
+  >(
+    value,
+    defaultValue,
+    // The control only ever commits one of its own option values; the wider
+    // signature is what the shared hook states for a value that may be unset.
+    onValueChange as ((next: Value | undefined) => void) | undefined,
+  );
   const selectedEnabled = enabledOptions.some(
     (option) => option.value === effectiveValue,
   );
@@ -143,27 +188,20 @@ export function SegmentedControl<Value extends string>({
   // detach and reattach the hidden input on every render.
   const valueRef = useRef(value);
   const defaultValueRef = useRef(defaultValue);
+  const hiddenInput = useRef<HTMLInputElement | null>(null);
   useLayoutEffect(() => {
     valueRef.current = value;
     defaultValueRef.current = defaultValue;
+    // The input's own default follows the prop, so a default changed after
+    // mount cannot leave a native reset restoring the one captured then.
+    const node = hiddenInput.current;
+    if (node !== null) node.defaultValue = defaultValue ?? "";
   }, [defaultValue, value]);
 
-  // Keep the hidden input's default value aligned so a native form reset
-  // restores the defaultValue selection even before React re-renders, and
-  // mirror platform radio groups by restoring the selection on reset.
-  const hiddenInput = useRef<HTMLInputElement | null>(null);
-  const setHiddenInputRef = useCallback(
-    (node: HTMLInputElement | null): (() => void) | undefined => {
-      hiddenInput.current = node;
-      if (node === null) return undefined;
-      node.defaultValue = defaultValueRef.current ?? "";
-      const form = node.form;
-      if (form === null) {
-        return () => {
-          hiddenInput.current = null;
-        };
-      }
-      const onReset = (): void => {
+  // Mirror platform radio groups by restoring the selection on a form reset.
+  const restoreOnReset = useCallback(
+    (node: HTMLInputElement) =>
+      observeFormReset(node, (input) => {
         const controlledValue = valueRef.current;
         if (controlledValue === undefined) {
           setInternalValue(defaultValueRef.current);
@@ -171,22 +209,14 @@ export function SegmentedControl<Value extends string>({
         }
         // A controlled selection belongs to the parent, so the reset leaves it
         // alone. The native reset still rewrites the input, and no rerender
-        // follows to correct it, so restore the submitted value once the reset
-        // has finished dispatching.
-        queueMicrotask(() => {
-          if (node.isConnected) node.value = controlledValue;
-        });
-      };
-      form.addEventListener("reset", onReset);
-      return () => {
-        form.removeEventListener("reset", onReset);
-        hiddenInput.current = null;
-      };
-    },
+        // follows to correct it, so the submitted value is restored here.
+        input.value = controlledValue;
+      }),
     // The setter is the stable useState one the hook hands back, so the ref
     // callback keeps its identity and never detaches the hidden input.
     [setInternalValue],
   );
+  const attachHiddenInput = useNodeRef(hiddenInput, undefined, restoreOnReset);
 
   // A reset that lands while this control sits in a paused subtree, inside a
   // collapsed CollapsibleSection for example, restores the input's default in
@@ -199,60 +229,33 @@ export function SegmentedControl<Value extends string>({
     if (node !== null && node.value !== selected) node.value = selected;
   });
 
-  const select = (nextValue: Value): void => {
-    commitValue(nextValue);
-    onValueChange?.(nextValue);
-    onChange?.(nextValue);
-  };
-
   const moveSelection = (
     event: KeyboardEvent<HTMLButtonElement>,
     currentValue: Value,
   ): void => {
-    let nextIndex: number | null = null;
-    const currentIndex = enabledOptions.findIndex(
-      (option) => option.value === currentValue,
-    );
-    const stepForward =
-      currentIndex < 0 ? 0 : (currentIndex + 1) % enabledOptions.length;
-    const stepBackward =
-      currentIndex < 0
-        ? enabledOptions.length - 1
-        : (currentIndex - 1 + enabledOptions.length) % enabledOptions.length;
-
-    if (orientation === "horizontal") {
-      const isRtl = event.currentTarget.matches(":dir(rtl)");
-      if (
-        (event.key === "ArrowRight" && !isRtl) ||
-        (event.key === "ArrowLeft" && isRtl)
-      ) {
-        nextIndex = stepForward;
-      } else if (
-        (event.key === "ArrowLeft" && !isRtl) ||
-        (event.key === "ArrowRight" && isRtl)
-      ) {
-        nextIndex = stepBackward;
-      }
-    } else if (event.key === "ArrowDown") {
-      nextIndex = stepForward;
-    } else if (event.key === "ArrowUp") {
-      nextIndex = stepBackward;
-    }
-
-    if (event.key === "Home") {
-      nextIndex = 0;
-    } else if (event.key === "End") {
-      nextIndex = enabledOptions.length - 1;
-    }
-
+    const axis = KEY_AXIS[event.key] ?? orientation;
+    const nextIndex = nextRovingIndex({
+      count: enabledOptions.length,
+      currentIndex: enabledOptions.findIndex(
+        (option) => option.value === currentValue,
+      ),
+      key: event.key,
+      orientation: axis,
+      // Resolved for the mirroring pair alone, so an unrelated key press does
+      // not read a computed style.
+      rtl:
+        KEY_AXIS[event.key] === "horizontal" &&
+        isRightToLeft(event.currentTarget),
+    });
     if (nextIndex === null) return;
     const nextOption = enabledOptions[nextIndex];
     if (nextOption === undefined) return;
 
     event.preventDefault();
-    // The focus modifier moves focus without changing the selection.
-    if (!event[FOCUS_MOVE_MODIFIER]) select(nextOption.value);
-    buttons.current.get(nextOption.value)?.focus();
+    // The focus modifier moves focus without changing the selection, and a
+    // read-only group never changes it at all.
+    if (!readOnly && !event[FOCUS_MOVE_MODIFIER]) select(nextOption.value);
+    focusOption(event.currentTarget, options.indexOf(nextOption));
   };
 
   return (
@@ -262,19 +265,31 @@ export function SegmentedControl<Value extends string>({
       className={classNames("snui-segmented", className)}
       role="radiogroup"
       aria-disabled={disabled || undefined}
+      aria-invalid={hasError || undefined}
       aria-orientation={orientation}
       aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
+      {...(describedBy === undefined
+        ? {}
+        : { "aria-describedby": describedBy })}
+      {...(referencedErrorId === undefined
+        ? {}
+        : { "aria-errormessage": referencedErrorId })}
     >
       <span
         id={labelId}
         className={
-          groupLabelVisibility === "visible"
+          labelVisibility === "visible"
             ? "snui-segmented__legend"
             : "snui-visually-hidden"
         }
       >
-        {groupLabel}
+        {label}
       </span>
+      {hasDescription ? (
+        <span id={descriptionId} className="snui-segmented__description">
+          {description}
+        </span>
+      ) : null}
       <div
         className={classNames(
           "snui-segmented__group",
@@ -291,29 +306,40 @@ export function SegmentedControl<Value extends string>({
             // biome-ignore lint/a11y/useSemanticElements: Button-backed ARIA radios provide roving focus and immediate keyboard selection.
             <button
               key={option.value}
-              ref={(node: HTMLButtonElement) => {
-                buttons.current.set(option.value, node);
-                return () => {
-                  buttons.current.delete(option.value);
-                };
-              }}
               type="button"
               role="radio"
               className="snui-segmented__option"
               aria-checked={checked}
               disabled={optionDisabled}
               tabIndex={!optionDisabled && (checked || firstEnabled) ? 0 : -1}
-              onClick={() => select(option.value)}
-              onKeyDown={(event) => moveSelection(event, option.value)}
+              {...blockedActivationProps<HTMLButtonElement>({
+                blocked: readOnly,
+                disabled: optionDisabled,
+                onClick: () => {
+                  select(option.value);
+                },
+                onKeyDown: (event) => {
+                  moveSelection(event, option.value);
+                },
+              })}
             >
               {option.label}
             </button>
           );
         })}
       </div>
+      {rendersError ? (
+        <FieldError
+          className="snui-segmented__error"
+          error={error}
+          hasError={hasError}
+          id={errorId}
+          live={errorLive}
+        />
+      ) : null}
       {name === undefined ? null : (
         <input
-          ref={setHiddenInputRef}
+          ref={attachHiddenInput}
           type="hidden"
           disabled={disabled}
           name={name}

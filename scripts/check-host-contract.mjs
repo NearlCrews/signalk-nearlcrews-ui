@@ -32,6 +32,7 @@ import {
   formatContractDiff,
 } from "./lib/host-contract.mjs";
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
+import { escapeRegExp } from "./lib/regexp.mjs";
 
 const baselinePath = repositoryPath("tests", "host-contract.baseline.json");
 const contractPackage = "@signalk/server-admin-ui-dependencies";
@@ -181,8 +182,14 @@ if (hostInventoryDependencies.length > 0) {
 // sections keep their original ranges as history, so this asserts the current
 // one is present rather than that no other appears.
 for (const name of sharedNames) {
-  const documented = `requiredVersion: "${peerDependencies[name]}"`;
-  if (!migrationGuide.includes(documented)) {
+  const range = peerDependencies[name];
+  const documented = `requiredVersion: "${range}"`;
+  // The module name has to sit in the same share entry as the range, or one
+  // documented entry would satisfy every module that shares its range.
+  const entry = new RegExp(
+    `(?:"${escapeRegExp(name)}"|${escapeRegExp(name)})\\s*:\\s*\\{[^{}]*${escapeRegExp(documented)}`,
+  );
+  if (!entry.test(migrationGuide)) {
     throw new Error(
       `docs/migration.md must share ${name} at the current peer range: ${documented}.`,
     );

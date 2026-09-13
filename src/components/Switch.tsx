@@ -7,11 +7,8 @@ import {
 import { SWITCH_STYLES } from "../styles/switch.js";
 import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
-import {
-  hasReactContent,
-  requireContent,
-  type WithLabel,
-} from "../utils/react-node.js";
+import { racDomProps } from "../utils/react-aria.js";
+import { resolveLabelContent, type WithLabel } from "../utils/react-node.js";
 
 interface SwitchBaseProps
   extends Omit<
@@ -35,8 +32,6 @@ interface SwitchBaseProps
    * React change events; the native Checkbox keeps the event form.
    */
   readonly onCheckedChange?: ((checked: boolean) => void) | undefined;
-  /** @deprecated Use `onCheckedChange`. */
-  readonly onChange?: ((checked: boolean) => void) | undefined;
   readonly readOnly?: boolean | undefined;
   readonly required?: boolean | undefined;
   /** Submitted value while selected. Defaults to the browser's "on" value. */
@@ -58,8 +53,6 @@ export function Switch({
   form,
   label,
   name,
-  // eslint-disable-next-line @typescript-eslint/no-deprecated -- the deprecated spelling is still honored
-  onChange,
   onCheckedChange,
   readOnly,
   ref,
@@ -69,18 +62,12 @@ export function Switch({
 }: SwitchProps): React.JSX.Element {
   useOptionalModuleStyles(SWITCH_STYLES);
 
-  const labelContent = hasReactContent(label) ? label : children;
-  requireContent(labelContent, "Switch requires a non-empty label.");
-
-  // See RadioGroup for why the DOM prop spread needs a boundary assertion.
-  const domProps = props as RACSwitchFieldProps;
-  const handleChange =
-    onCheckedChange === undefined && onChange === undefined
-      ? undefined
-      : (next: boolean): void => {
-          onCheckedChange?.(next);
-          onChange?.(next);
-        };
+  const labelContent = resolveLabelContent(
+    label,
+    children,
+    "Switch requires a non-empty label.",
+  );
+  const domProps = racDomProps<RACSwitchFieldProps>(props);
 
   return (
     <SwitchField
@@ -97,7 +84,7 @@ export function Switch({
       {...(defaultChecked === undefined
         ? {}
         : { defaultSelected: defaultChecked })}
-      {...(handleChange === undefined ? {} : { onChange: handleChange })}
+      {...(onCheckedChange === undefined ? {} : { onChange: onCheckedChange })}
     >
       <SwitchButton className="snui-switch__button">
         <span className="snui-switch__track" aria-hidden="true">

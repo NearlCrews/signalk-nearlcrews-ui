@@ -22,7 +22,7 @@ export const SIGNALK_HOST_SHARED_MODULES = Object.freeze([
 ]);
 
 export const HOST_NOTES =
-  "Signal K Admin releases up to at least 2.24.0 register their React share as 19.0.0 while shipping a newer React; current master registers React.version. A strictVersion check would therefore refuse to mount on a compatible host, so every share here is a non-strict singleton and requiredVersion documents the floor this package needs rather than enforcing it against the host's registration. import: false keeps a fallback React out of the remote, so a host that provides no share fails loudly instead of running two React copies.";
+  "Signal K Admin releases up to at least 2.24.0 register their React share as 19.0.0 while shipping a newer React; current master registers React.version. A strictVersion check would therefore refuse to mount on a compatible host, so every share here is a non-strict singleton and requiredVersion documents the floor this package needs rather than enforcing it against the host's registration. That non-strict singleton covers a host that under-reports its React version, not a host that supplies an older React than requiredVersion names: this package calls React 19.2 APIs, so on a host whose React really is older the share resolves and the panel then fails inside its error boundary. import: false keeps a fallback React out of the remote, so a host that provides no share fails loudly instead of running two React copies.";
 
 export function createFederationShared(peerDependencies) {
   return Object.freeze(
@@ -64,8 +64,16 @@ export function renderFederationEntry(peerDependencies, packageVersion) {
  *   new ModuleFederationPlugin({ shared, ... });
  */
 const SIGNALK_HOST_SHARED_MODULES = Object.freeze(${JSON.stringify([...SIGNALK_HOST_SHARED_MODULES])});
-const shared = Object.freeze(
+const shareEntries = Object.entries(
   ${serialized},
+);
+// Each entry is frozen as well as the map: a consumer that spreads this into
+// its own share block must not be able to rewrite what every other reader in
+// the process sees.
+const shared = Object.freeze(
+  Object.fromEntries(
+    shareEntries.map(([name, share]) => [name, Object.freeze(share)]),
+  ),
 );
 const hostNotes = ${JSON.stringify(HOST_NOTES)};
 

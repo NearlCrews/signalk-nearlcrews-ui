@@ -1,4 +1,19 @@
 {
+  // The globs live here rather than on the command line so an editor
+  // extension, a bare `markdownlint-cli2`, and `npm run lint:docs` all read the
+  // same corpus. The ignore list matches ignoredDirectories in
+  // scripts/check-docs-links.mjs, so the two Markdown gates cover one tree.
+  "globs": ["**/*.md"],
+  "ignores": [
+    ".claude",
+    ".git",
+    ".remember",
+    "coverage",
+    "dist",
+    "node_modules",
+    "playwright-report",
+    "test-results"
+  ],
   "config": {
     "default": true,
     "MD013": false,

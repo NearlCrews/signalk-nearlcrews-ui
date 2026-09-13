@@ -1,6 +1,6 @@
 import { act, render, screen, within } from "@testing-library/react";
 import { createRef, type ReactElement, type Ref } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { Accordion } from "../../src/composites.js";
 import {
@@ -79,6 +79,26 @@ describe("Text and Code", () => {
     expect(ref.current).toBe(paragraph);
   });
 
+  it("names only the wrapping behavior that changes something", () => {
+    renderInPanel(
+      <>
+        <Text data-testid="stamp" wrap="nowrap">
+          4 minutes ago
+        </Text>
+        <Text data-testid="report" wrap="preserve">
+          {"line one\nline two"}
+        </Text>
+        <Text data-testid="plain">Ordinary copy</Text>
+      </>,
+    );
+
+    expect(screen.getByTestId("stamp")).toHaveClass("snui-text--wrap-nowrap");
+    expect(screen.getByTestId("report")).toHaveClass(
+      "snui-text--wrap-preserve",
+    );
+    expect(screen.getByTestId("plain").className).not.toMatch(/wrap-/);
+  });
+
   it("renders inline code by default and a pre block when asked", () => {
     renderInPanel(
       <>
@@ -122,6 +142,55 @@ describe("Text and Code", () => {
     // A consumer that manages focus itself still wins.
     expect(screen.getByTestId("opted-out")).toHaveAttribute("tabindex", "-1");
   });
+
+  it("treats an explicit pre as the block it renders", () => {
+    // The element decides: a pre scrolls and keeps its line breaks whether the
+    // caller asked for it through `block` or through `as`.
+    renderInPanel(
+      <Code as="pre" data-testid="pre">
+        {"line one\nline two"}
+      </Code>,
+    );
+
+    const block = screen.getByTestId("pre");
+    expect(block).toHaveClass("snui-code--block");
+    expect(block).toHaveAttribute("tabindex", "0");
+  });
+
+  it("names a code block so its tab stop announces something", () => {
+    renderInPanel(
+      <>
+        <Code block data-testid="block">
+          {"line one"}
+        </Code>
+        <Code block aria-label="Delta payload" data-testid="named">
+          {"line one"}
+        </Code>
+      </>,
+    );
+
+    expect(screen.getByRole("region", { name: "Code" })).toBe(
+      screen.getByTestId("block"),
+    );
+    expect(screen.getByTestId("named")).toHaveAttribute(
+      "aria-label",
+      "Delta payload",
+    );
+  });
+
+  it("breaks a path at its segments when asked", () => {
+    const { container } = renderInPanel(
+      <Code break="segments" data-testid="path">
+        navigation.speedOverGround
+      </Code>,
+    );
+
+    const path = screen.getByTestId("path");
+    expect(path).toHaveTextContent("navigation.speedOverGround");
+    // One opportunity after the dot, none inside either segment.
+    expect(container.querySelectorAll("wbr")).toHaveLength(1);
+    expect(path.firstElementChild?.tagName).toBe("WBR");
+  });
 });
 
 describe("LiveRegion", () => {
@@ -164,10 +233,6 @@ describe("LiveRegion", () => {
 });
 
 describe("LiveRegion repeat announcements", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("empties and refills the region when the announce key changes", () => {
     vi.useFakeTimers();
     const { rerender } = renderInPanel(
@@ -193,7 +258,7 @@ describe("LiveRegion repeat announcements", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("restarts the beat for an announcement that lands mid-beat", () => {
+  it("finishes the beat it started for a key that lands mid-beat", () => {
     vi.useFakeTimers();
     const { rerender, unmount } = renderInPanel(
       <LiveRegion message="Two paths detected" announceKey="scan-1" />,
@@ -210,15 +275,14 @@ describe("LiveRegion repeat announcements", () => {
       panel(<LiveRegion message="Two paths detected" announceKey="scan-3" />),
     );
 
-    // The second announcement does not inherit what the first had left.
-    act(() => {
-      vi.advanceTimersByTime(60);
-    });
-    expect(region).toBeEmptyDOMElement();
+    // The beat is not restarted: it ends where the first key started it and
+    // adopts whichever key is current then, so a source changing the key
+    // faster than the beat is announced once instead of never.
     act(() => {
       vi.advanceTimersByTime(40);
     });
     expect(region).toHaveTextContent("Two paths detected");
+    expect(vi.getTimerCount()).toBe(0);
 
     unmount();
     expect(vi.getTimerCount()).toBe(0);
@@ -259,6 +323,105 @@ describe("LiveRegion repeat announcements", () => {
   });
 });
 
+describe("repeat announcements on visible regions", () => {
+  it("re-announces an unchanged status when the key changes", () => {
+    vi.useFakeTimers();
+    const { rerender } = renderInPanel(
+      <StatusIndicator live="polite" announceKey={1}>
+        Preset applied
+      </StatusIndicator>,
+    );
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("Preset applied");
+
+    rerender(
+      panel(
+        <StatusIndicator live="polite" announceKey={2}>
+          Preset applied
+        </StatusIndicator>,
+      ),
+    );
+    expect(status).toBeEmptyDOMElement();
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(status).toHaveTextContent("Preset applied");
+    // One region throughout: a remount would be observed by nobody.
+    expect(screen.getByRole("status")).toBe(status);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("keeps a banner's actions through the repeat beat", () => {
+    vi.useFakeTimers();
+    const { rerender } = renderInPanel(
+      <Banner
+        data-testid="banner"
+        live="polite"
+        announceKey={1}
+        onDismiss={() => undefined}
+      >
+        Retry failed
+      </Banner>,
+    );
+
+    rerender(
+      panel(
+        <Banner
+          data-testid="banner"
+          live="polite"
+          announceKey={2}
+          onDismiss={() => undefined}
+        >
+          Retry failed
+        </Banner>,
+      ),
+    );
+
+    const banner = screen.getByTestId("banner");
+    expect(banner).not.toHaveTextContent("Retry failed");
+    // Hiding a focusable control, even for a beat, would strand whoever was
+    // standing on it.
+    expect(screen.getByRole("button", { name: "Dismiss" })).toBeVisible();
+
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(banner).toHaveTextContent("Retry failed");
+  });
+
+  it("costs nothing while the region has nothing to announce", () => {
+    vi.useFakeTimers();
+    const { rerender } = renderInPanel(
+      <StatusIndicator live="polite" announceKey={1}>
+        {null}
+      </StatusIndicator>,
+    );
+
+    // A key that changes during a quiet spell is taken as read, so the first
+    // real status is not held back for a beat nobody needed.
+    rerender(
+      panel(
+        <StatusIndicator live="polite" announceKey={2}>
+          {null}
+        </StatusIndicator>,
+      ),
+    );
+    expect(vi.getTimerCount()).toBe(0);
+
+    rerender(
+      panel(
+        <StatusIndicator live="polite" announceKey={2}>
+          Provider reachable
+        </StatusIndicator>,
+      ),
+    );
+    expect(screen.getByRole("status")).toHaveTextContent("Provider reachable");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
 describe("tone marks", () => {
   it("renders the shared glyph and announcement for semantic badges", () => {
     const { container } = renderInPanel(<Badge tone="info">Beta</Badge>);
@@ -292,6 +455,23 @@ describe("tone marks", () => {
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("Success. Connected");
+  });
+
+  it("does not double the stop on a tone label that carries one", () => {
+    const { container } = renderInPanel(
+      <>
+        <Badge tone="warning" toneLabel="Caution!">
+          Drifting
+        </Badge>
+        <Badge tone="danger" toneLabel="Stop">
+          Lost
+        </Badge>
+      </>,
+    );
+
+    const [caution, stop] = container.querySelectorAll(".snui-badge");
+    expect(announcementOf(caution)).toBe("Caution! ");
+    expect(announcementOf(stop)).toBe("Stop. ");
   });
 
   it("shows the glyph beside the status dot so info and neutral differ", () => {
@@ -416,6 +596,20 @@ describe("announcing regions with nothing to say", () => {
     expect(value).toHaveTextContent("3.2 m");
   });
 
+  it("leaves a metric value region empty whether or not it announces", () => {
+    const { container } = renderInPanel(
+      <Metric label="Depth below keel" value="" tone="warning" unit="m" />,
+    );
+
+    // A warning glyph and a unit with no number read as a measured state
+    // rather than a missing one, so the region waits empty and the
+    // stylesheet's :empty rule takes it out of the flow.
+    const value = container.querySelector(".snui-metric__value");
+    expect(value?.childNodes).toHaveLength(0);
+    expect(container.querySelector(".snui-metric__unit")).toBeNull();
+    expect(container.querySelector(".snui-tone-glyph")).toBeNull();
+  });
+
   it("renders the usual chrome when the region does not announce", () => {
     const { container } = renderInPanel(
       <>
@@ -511,23 +705,20 @@ describe("Card variants", () => {
 });
 
 describe("InputGroup density", () => {
-  it("maps the deprecated comfortable value onto default", () => {
+  it("names the compact step only, since the default is the block itself", () => {
     const { container } = renderInPanel(
       <>
-        <InputGroup data-testid="legacy" density="comfortable" />
         <InputGroup data-testid="compact" density="compact" />
         <InputGroup data-testid="plain" />
       </>,
     );
 
-    expect(screen.getByTestId("legacy")).toHaveClass(
-      "snui-input-group--default",
-    );
     expect(screen.getByTestId("compact")).toHaveClass(
       "snui-input-group--compact",
     );
-    expect(screen.getByTestId("plain")).toHaveClass(
-      "snui-input-group--default",
+    expect(screen.getByTestId("plain")).toHaveClass("snui-input-group");
+    expect(screen.getByTestId("plain").className).not.toMatch(
+      /snui-input-group--/,
     );
     expect(
       container.querySelector(".snui-input-group--comfortable"),

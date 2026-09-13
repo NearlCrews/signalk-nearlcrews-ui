@@ -1,38 +1,46 @@
 import {
   type HTMLAttributes,
-  type MouseEvent,
   type ReactNode,
   type RefAttributes,
   type RefObject,
-  useCallback,
   useEffect,
   useEffectEvent,
   useId,
   useRef,
 } from "react";
 
+import { useFocusWithin } from "../hooks/use-focus-within.js";
+import { useNodeRef } from "../hooks/use-node-ref.js";
 import {
   type AnnouncementMode,
-  announcesUpdates,
-  liveRegionProps,
+  resolveAnnouncingRegion,
 } from "../utils/announcement.js";
 import { hasAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { DEFAULT_DISMISS_LABEL, resolveLabel } from "../utils/labels.js";
+import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
+import { DEFAULT_DISMISS_LABEL, resolveBundledLabel } from "../utils/labels.js";
+import { usePanelLabels } from "../utils/panel-labels.js";
 import { hasReactContent } from "../utils/react-node.js";
-import { composeRef } from "../utils/ref.js";
+import { useRepeatAnnouncement } from "../utils/repeat-announcement.js";
 import type { StatusTone } from "../utils/tone.js";
 import { Button } from "./Button.js";
 import { ToneMark } from "./ToneMark.js";
 
 export type BannerTone = StatusTone;
-/** @deprecated Use `AnnouncementMode`. */
-export type BannerLive = AnnouncementMode;
 
 export interface BannerProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "aria-live" | "title">,
     RefAttributes<HTMLDivElement> {
   readonly actions?: ReactNode | undefined;
+  /**
+   * Change it to announce the current message again, the same words twice in a
+   * row included: a screen reader compares a live region against the text it
+   * last read, so an unchanged message says nothing on its own. The banner
+   * withholds its message for a tenth of a second and restores it, which is
+   * visible as a brief blank, so pass a key only where a repeat matters.
+   * Meaningful only on an announcing banner.
+   */
+  readonly announceKey?: string | number | undefined;
   /**
    * Where focus goes when the banner takes it away: the Dismiss press, and any
    * other change that removes the banner, or the actions inside it, while the
@@ -40,7 +48,19 @@ export interface BannerProps
    * reports is the common one.
    */
   readonly dismissFocusRef?: RefObject<HTMLElement | null> | undefined;
+  /**
+   * Plain text, because it becomes the Dismiss button's accessible name. A
+   * blank label falls back to the default one.
+   */
   readonly dismissLabel?: string | undefined;
+  /**
+   * Renders the title as a heading at this level instead of as a plain div.
+   * Reach for it where the banner replaces content that carried headings, such
+   * as a crashed panel's fallback, so the document outline keeps an entry
+   * where its sections were. A banner beside content that still has its own
+   * headings should leave this unset.
+   */
+  readonly headingLevel?: HeadingLevel | undefined;
   /**
    * Announces the banner's own updates. Render the banner whenever the panel
    * can produce one and let its content go empty, rather than mounting it
@@ -48,9 +68,13 @@ export interface BannerProps
    * that occupies no space.
    */
   readonly live?: AnnouncementMode | undefined;
-  readonly onDismiss?:
-    | ((event: MouseEvent<HTMLButtonElement>) => void)
-    | undefined;
+  /**
+   * Dismissal, reported as a press rather than as an event, because the button
+   * belongs to the banner. Withhold it while an announcing banner has nothing
+   * to say: a Dismiss is a focusable control, and a banner carrying one renders
+   * in full rather than waiting as an empty shell.
+   */
+  readonly onDismiss?: (() => void) | undefined;
   readonly title?: ReactNode | undefined;
   readonly tone?: BannerTone | undefined;
   readonly toneLabel?: string | undefined;
@@ -58,10 +82,12 @@ export interface BannerProps
 
 export function Banner({
   actions,
+  announceKey,
   children,
   className,
   dismissFocusRef,
-  dismissLabel = DEFAULT_DISMISS_LABEL,
+  dismissLabel,
+  headingLevel,
   live,
   onDismiss,
   ref,
@@ -71,21 +97,31 @@ export function Banner({
   toneLabel,
   ...props
 }: BannerProps): React.JSX.Element {
-  const region = liveRegionProps(live, suppliedRole);
-  const announcing = announcesUpdates(region);
   const hasActions = hasReactContent(actions) || onDismiss !== undefined;
   const hasTitle = hasReactContent(title);
-  const effectiveDismissLabel = resolveLabel(
+  const effectiveDismissLabel = resolveBundledLabel(
     dismissLabel,
+    usePanelLabels()?.banner?.dismiss,
     DEFAULT_DISMISS_LABEL,
   );
+  // A div by default, because a banner normally sits beside content that
+  // carries its own headings and a second entry there would misread the page.
+  const TitleElement =
+    headingLevel === undefined ? "div" : HEADING_ELEMENTS[headingLevel];
   // An announcing banner keeps its region mounted so a screen reader observes
   // it before the first message arrives. With nothing to show it renders as an
   // empty shell, which the stylesheet takes out of the flow, so it paints no
   // box, border, padding, or margin while it waits. Tone chrome is part of a
   // message, so it waits with the rest.
-  const silent =
-    announcing && !hasActions && !hasTitle && !hasReactContent(children);
+  const { announcing, attributes, silent } = resolveAnnouncingRegion(
+    live,
+    suppliedRole,
+    hasActions || hasTitle || hasReactContent(children),
+  );
+  // The message alone goes for the repeat beat. Actions stay: hiding a
+  // focusable control, even for a tenth of a second, would strand whoever was
+  // standing on it.
+  const withholding = useRepeatAnnouncement(announceKey, announcing && !silent);
 
   const generatedTitleId = useId();
   /*
@@ -107,43 +143,24 @@ export function Banner({
   const nameProps = titleId === undefined ? {} : { "aria-labelledby": titleId };
 
   const bannerRef = useRef<HTMLDivElement | null>(null);
+  // One callback ref owns the node so a caller ref is attached and released
+  // exactly once per mount, instead of on every commit.
+  const attachBanner = useNodeRef(bannerRef, ref);
+  const tracksFocus = dismissFocusRef !== undefined && !silent;
   /*
    * Whether the banner holds focus, sampled as focus moves rather than read
    * when the banner goes away. Removing it, or the actions inside it, blurs
    * what it held first, so by the time any cleanup could look, the answer is
    * already gone.
    */
-  const holdsFocus = useRef(false);
-
-  // One callback ref owns the node so a caller ref is attached and released
-  // exactly once per mount, instead of on every commit.
-  const attachBanner = useCallback(
-    (node: HTMLDivElement): (() => void) => {
-      bannerRef.current = node;
-      const releaseRef = composeRef(ref, node);
-      return () => {
-        bannerRef.current = null;
-        releaseRef();
-      };
-    },
-    [ref],
-  );
-
-  const trackFocus = useEffectEvent((event: FocusEvent): void => {
-    const ownerWindow = bannerRef.current?.ownerDocument.defaultView;
-    holdsFocus.current =
-      ownerWindow !== null &&
-      ownerWindow !== undefined &&
-      event.target instanceof ownerWindow.Node &&
-      (bannerRef.current?.contains(event.target) ?? false);
-  });
+  const holdsFocusRef = useFocusWithin(bannerRef, tracksFocus);
 
   // The destination is read as the banner goes, not when the effect is set up,
   // because a panel may render it in the same commit that takes the banner
   // away.
   const handOffFocus = useEffectEvent((): void => {
-    if (!holdsFocus.current) return;
-    holdsFocus.current = false;
+    if (!holdsFocusRef.current) return;
+    holdsFocusRef.current = false;
     dismissFocusRef?.current?.focus();
   });
 
@@ -155,23 +172,19 @@ export function Banner({
    * content goes empty removes its actions the same way; both leave the reader
    * on the body with no route back. The move is synchronous, so a panel that
    * focuses the content it renders in place of the banner still wins.
+   *
+   * Whether a destination exists is what this watches, not which one: a caller
+   * passing a fresh `{ current: node }` object each render would otherwise
+   * hand focus over on every commit, pulling the caret out of whatever the
+   * user was doing inside the banner.
    */
   useEffect(() => {
-    const ownerDocument = bannerRef.current?.ownerDocument;
-    if (
-      ownerDocument === undefined ||
-      dismissFocusRef === undefined ||
-      silent
-    ) {
-      return undefined;
-    }
+    if (!tracksFocus) return undefined;
 
-    ownerDocument.addEventListener("focusin", trackFocus);
     return () => {
-      ownerDocument.removeEventListener("focusin", trackFocus);
       handOffFocus();
     };
-  }, [dismissFocusRef, silent]);
+  }, [tracksFocus]);
 
   return (
     <div
@@ -179,33 +192,35 @@ export function Banner({
       {...nameProps}
       ref={attachBanner}
       className={classNames("snui-banner", `snui-banner--${tone}`, className)}
-      role={region.role}
-      aria-live={region["aria-live"]}
+      role={attributes.role}
+      aria-live={attributes["aria-live"]}
     >
       {silent ? null : (
         <>
-          <div className="snui-banner__content">
-            <ToneMark
-              className="snui-banner__tone-icon"
-              tone={tone}
-              toneLabel={toneLabel}
-            />
-            <div className="snui-banner__text">
-              {hasTitle ? (
-                <>
-                  <div className="snui-banner__title" id={titleId}>
-                    {title}
-                  </div>
-                  {/* Stops the title and the body running together for a
-                      reader taking the banner in one pass. It sits beside the
-                      title rather than inside it, so a landmark named by the
-                      title is not named "Provider unavailable .". */}
-                  <span className="snui-visually-hidden">. </span>
-                </>
-              ) : null}
-              <div className="snui-banner__body">{children}</div>
+          {withholding ? null : (
+            <div className="snui-banner__content">
+              <ToneMark
+                className="snui-banner__tone-icon"
+                tone={tone}
+                toneLabel={toneLabel}
+              />
+              <div className="snui-banner__text">
+                {hasTitle ? (
+                  <>
+                    <TitleElement className="snui-banner__title" id={titleId}>
+                      {title}
+                    </TitleElement>
+                    {/* Stops the title and the body running together for a
+                        reader taking the banner in one pass. It sits beside
+                        the title rather than inside it, so a landmark named by
+                        the title is not named "Provider unavailable .". */}
+                    <span className="snui-visually-hidden">. </span>
+                  </>
+                ) : null}
+                <div className="snui-banner__body">{children}</div>
+              </div>
             </div>
-          </div>
+          )}
           {hasActions ? (
             <div className="snui-banner__actions">
               {actions}
@@ -213,14 +228,14 @@ export function Banner({
                 <Button
                   variant="ghost"
                   size="compact"
-                  onClick={(event) => {
-                    onDismiss(event);
+                  onClick={() => {
+                    onDismiss();
                     if (dismissFocusRef !== undefined) {
                       // The press moves focus whether or not the dismissal
                       // takes the banner away, so the sample is spent here and
                       // the teardown above does not move it a second time. The
                       // wait lets the commit the press causes land first.
-                      holdsFocus.current = false;
+                      holdsFocusRef.current = false;
                       queueMicrotask(() => dismissFocusRef.current?.focus());
                     }
                   }}

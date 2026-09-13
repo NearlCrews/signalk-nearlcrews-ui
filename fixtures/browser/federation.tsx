@@ -34,24 +34,35 @@ declare global {
   }
 }
 
-const shareScope: ShareScope = {
-  react: {
-    [React.version]: {
-      eager: true,
-      from: "fixture-host",
-      get: () => Promise.resolve(() => React),
-      loaded: true,
+/**
+ * The version Signal K Admin registers its React share as, up to at least
+ * 2.24.0, whatever React it actually ships. Under-reporting like this is the
+ * only reason the package's shares are non-strict singletons, so one of the
+ * two remotes here is loaded against it rather than against the installed
+ * version, and both have to mount against the host React either way.
+ */
+const HOST_REPORTED_REACT_VERSION = "19.0.0";
+
+function createShareScope(reactVersion: string): ShareScope {
+  return {
+    react: {
+      [reactVersion]: {
+        eager: true,
+        from: "fixture-host",
+        get: () => Promise.resolve(() => React),
+        loaded: true,
+      },
     },
-  },
-  "react-dom": {
-    [ReactDOM.version]: {
-      eager: true,
-      from: "fixture-host",
-      get: () => Promise.resolve(() => ReactDOM),
-      loaded: true,
+    "react-dom": {
+      [reactVersion]: {
+        eager: true,
+        from: "fixture-host",
+        get: () => Promise.resolve(() => ReactDOM),
+        loaded: true,
+      },
     },
-  },
-};
+  };
+}
 
 function loadClassicContainer(): Promise<RemoteContainer> {
   return new Promise((resolveContainer, reject) => {
@@ -81,6 +92,7 @@ async function loadEsmContainer(): Promise<RemoteContainer> {
 async function renderRemote(
   container: RemoteContainer,
   rootId: string,
+  shareScope: ShareScope,
 ): Promise<Root> {
   await container.init(shareScope);
   const factory = await container.get("./PluginConfigurationPanel");
@@ -100,7 +112,15 @@ async function renderRemote(
       <RemotePanel configuration={configuration} save={setConfiguration} />
     );
   }
-  reactRoot.render(<HostBoundary />);
+  // StrictMode, as the other two browser fixtures do: this is the fixture that
+  // mounts and unmounts remotes and then asserts the document is left with no
+  // style elements, so the double invocation that catches an effect whose
+  // cleanup does not undo its setup belongs here most of all.
+  reactRoot.render(
+    <React.StrictMode>
+      <HostBoundary />
+    </React.StrictMode>,
+  );
   return reactRoot;
 }
 
@@ -110,8 +130,16 @@ try {
     loadEsmContainer(),
   ]);
   const mountedRoots = await Promise.all([
-    renderRemote(classicContainer, "classic-root"),
-    renderRemote(esmContainer, "esm-root"),
+    renderRemote(
+      classicContainer,
+      "classic-root",
+      createShareScope(React.version),
+    ),
+    renderRemote(
+      esmContainer,
+      "esm-root",
+      createShareScope(HOST_REPORTED_REACT_VERSION),
+    ),
   ]);
   const rootsById = new Map([
     ["classic-root", mountedRoots[0]],

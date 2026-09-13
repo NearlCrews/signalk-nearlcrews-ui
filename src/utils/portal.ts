@@ -40,7 +40,7 @@ export function PanelPortalProvider({
   getContainer,
 }: PanelPortalProviderProps): React.JSX.Element {
   return createElement(
-    PanelPortalOwnerContext.Provider,
+    PanelPortalOwnerContext,
     { value: getContainer },
     createElement(UNSAFE_PortalProvider, { children, getContainer }),
   );
@@ -95,6 +95,17 @@ export function useOptionalPanelRoot(): HTMLElement | null {
   return ownerGetContainer();
 }
 
+/**
+ * The one wording for a portal that did not resolve to its owning root, with
+ * a second sentence naming which of the two ways it failed. The first sentence
+ * is what a consumer acts on, so it stays the same for both.
+ */
+function portalContainerError(componentName: string, reason: string): Error {
+  return new Error(
+    `${componentName} portal container must be its owning PanelRoot. ${reason}.`,
+  );
+}
+
 /** Resolves and verifies the exact PanelRoot that owns a portal consumer. */
 export function usePanelPortalContainer(
   componentName: string,
@@ -108,8 +119,9 @@ export function usePanelPortalContainer(
   }
 
   if (getContainer == null) {
-    throw new Error(
-      `${componentName} portal container must be its owning PanelRoot.`,
+    throw portalContainerError(
+      componentName,
+      "No portal container is installed",
     );
   }
 
@@ -124,8 +136,9 @@ export function usePanelPortalContainer(
     owner.hasAttribute("data-snui-root") &&
     owner.getAttribute("data-snui-version") === PACKAGE_VERSION;
   if (resolved !== owner || !isVersionedPanelRoot) {
-    throw new Error(
-      `${componentName} portal container must be its owning PanelRoot.`,
+    throw portalContainerError(
+      componentName,
+      "The resolved container is another element",
     );
   }
 

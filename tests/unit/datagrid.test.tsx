@@ -12,6 +12,7 @@ import {
   Cell,
   Column,
   DataGrid,
+  type DataGridColumnProps,
   type DataGridProps,
   Row,
   type RowProps,
@@ -19,6 +20,7 @@ import {
   type SortDescriptor,
 } from "../../src/data-grid.js";
 import { PanelRoot } from "../../src/index.js";
+import { TABLE_STYLES } from "../../src/styles/table.js";
 import { renderInPanel } from "../helpers.js";
 
 interface Boat {
@@ -127,12 +129,61 @@ describe("DataGrid", () => {
           </DataGrid>,
         ),
       ).toThrow(
-        "DataGrid requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
+        "DataGrid requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
       );
 
       expect(() => renderGrid({ "aria-label": "  " })).toThrow(
-        "DataGrid requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
+        "DataGrid requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
       );
+    });
+
+    it("names the grid by its caption, visible or hidden", () => {
+      const { container } = renderInPanel(
+        <DataGrid caption="Fleet" items={BOATS} renderRow={renderBoatRow}>
+          {boatColumns()}
+        </DataGrid>,
+      );
+
+      expect(screen.getByRole("grid", { name: "Fleet" })).toBeInTheDocument();
+      const caption = container.querySelector(".snui-data-grid__caption");
+      expect(caption).toHaveTextContent("Fleet");
+      expect(caption).not.toHaveClass("snui-data-grid__caption--hidden");
+
+      renderInPanel(
+        <DataGrid
+          caption="Sources"
+          captionVisibility="hidden"
+          items={BOATS}
+          renderRow={renderBoatRow}
+        >
+          {boatColumns()}
+        </DataGrid>,
+      );
+
+      expect(screen.getByRole("grid", { name: "Sources" })).toBeInTheDocument();
+      expect(screen.getByText("Sources")).toHaveClass(
+        "snui-data-grid__caption--hidden",
+      );
+    });
+
+    it("reads the caption after a consumer's own aria-labelledby", () => {
+      renderInPanel(
+        <>
+          <h2 id="grid-heading">Fleet</h2>
+          <DataGrid
+            aria-labelledby="grid-heading"
+            caption="at anchor"
+            items={BOATS}
+            renderRow={renderBoatRow}
+          >
+            {boatColumns()}
+          </DataGrid>
+        </>,
+      );
+
+      expect(
+        screen.getByRole("grid", { name: "Fleet at anchor" }),
+      ).toBeInTheDocument();
     });
 
     it("accepts aria-labelledby as the accessible name", () => {
@@ -320,6 +371,17 @@ describe("DataGrid", () => {
       expect(widthWarnings).toEqual([]);
     });
 
+    it("passes the props it does not own to the container", () => {
+      const { container } = renderGrid({
+        "aria-describedby": "grid-note",
+        "data-testid": "fleet-grid",
+      } as GridOverrides);
+
+      const region = container.querySelector(".snui-data-grid");
+      expect(region).toHaveAttribute("aria-describedby", "grid-note");
+      expect(region).toHaveAttribute("data-testid", "fleet-grid");
+    });
+
     it("forwards ref to the stable outer container", () => {
       const ref = createRef<HTMLDivElement>();
       renderGrid({ ref });
@@ -400,6 +462,91 @@ describe("DataGrid", () => {
       );
     });
 
+    it("decorates cells wrapped in a fragment and keeps the count", () => {
+      const { container } = renderInPanel(
+        <DataGrid
+          aria-label="Boats"
+          items={BOATS}
+          renderRow={(boat) => (
+            <Row>
+              <Cell>{boat.name}</Cell>
+              <>
+                <Cell>{boat.depth}</Cell>
+                <Cell>{boat.name} berth</Cell>
+              </>
+            </Row>
+          )}
+        >
+          <Column id="name">Name</Column>
+          <Column id="depth" numeric>
+            Depth
+          </Column>
+          <Column id="berth" wrap>
+            Berth
+          </Column>
+        </DataGrid>,
+      );
+
+      const firstRow = rowAt(container, 0);
+      expect(cellAt(firstRow, 1)).toHaveAttribute("data-snui-numeric", "");
+      expect(cellAt(firstRow, 2)).toHaveAttribute("data-snui-wrap", "");
+      expect(cellAt(firstRow, 2)).not.toHaveAttribute("data-snui-numeric");
+    });
+
+    it("keeps later columns aligned when a header child is not the package Column", () => {
+      function WrappedColumn(props: DataGridColumnProps): ReactElement {
+        return <Column {...props} />;
+      }
+
+      const { container } = renderInPanel(
+        <DataGrid
+          aria-label="Boats"
+          items={BOATS}
+          renderRow={(boat) => (
+            <Row>
+              <Cell>{boat.name}</Cell>
+              <Cell>{boat.depth}</Cell>
+              <Cell>{boat.name} berth</Cell>
+            </Row>
+          )}
+        >
+          <Column id="name">Name</Column>
+          <WrappedColumn id="depth" numeric>
+            Depth
+          </WrappedColumn>
+          <Column id="berth" wrap>
+            Berth
+          </Column>
+        </DataGrid>,
+      );
+
+      const firstRow = rowAt(container, 0);
+      expect(cellAt(firstRow, 1)).toHaveAttribute("data-snui-numeric", "");
+      expect(cellAt(firstRow, 2)).toHaveAttribute("data-snui-wrap", "");
+      expect(cellAt(firstRow, 2)).not.toHaveAttribute("data-snui-numeric");
+    });
+
+    it("lowers the cell width floor for a column pinned narrower", () => {
+      const { container } = renderInPanel(
+        <DataGrid aria-label="Boats" items={BOATS} renderRow={renderBoatRow}>
+          <Column id="name">Name</Column>
+          <Column id="depth" width={48}>
+            Depth
+          </Column>
+        </DataGrid>,
+      );
+
+      const depthCell = cellAt(rowAt(container, 0), 1);
+      expect(
+        depthCell.style.getPropertyValue("--snui-data-grid-column-min"),
+      ).toBe("48px");
+      expect(
+        cellAt(rowAt(container, 0), 0).style.getPropertyValue(
+          "--snui-data-grid-column-min",
+        ),
+      ).toBe("");
+    });
+
     it("applies column options to dynamic cells keyed by column", () => {
       const columns = [{ key: "name" }, { key: "depth" }] as const;
       const { container } = renderInPanel(
@@ -426,6 +573,56 @@ describe("DataGrid", () => {
       expect(cellAt(rowAt(container, 0), 1)).toHaveAttribute(
         "data-snui-numeric",
         "",
+      );
+      expect(cellAt(rowAt(container, 0), 0)).not.toHaveAttribute(
+        "data-snui-numeric",
+      );
+    });
+
+    it("keys dynamic column options to the entry each column was rendered from", () => {
+      // A column the render function draws through its own component still
+      // holds its slot, so the columns after it read their keys from the
+      // entries they were rendered from.
+      function WrappedColumn(props: DataGridColumnProps): ReactElement {
+        return <Column {...props} />;
+      }
+
+      const columns = [{ key: "name" }, { key: "note" }, { key: "depth" }];
+      const { container } = renderInPanel(
+        <DataGrid
+          aria-label="Boats"
+          columns={columns}
+          items={BOATS}
+          renderRow={(boat) => (
+            <Row columns={columns}>
+              {(column) => (
+                <Cell>
+                  {column.key === "name"
+                    ? boat.name
+                    : column.key === "note"
+                      ? "at anchor"
+                      : boat.depth}
+                </Cell>
+              )}
+            </Row>
+          )}
+        >
+          {(column) =>
+            column.key === "note" ? (
+              <WrappedColumn>{column.key}</WrappedColumn>
+            ) : (
+              <Column numeric={column.key === "depth"}>{column.key}</Column>
+            )
+          }
+        </DataGrid>,
+      );
+
+      expect(cellAt(rowAt(container, 0), 2)).toHaveAttribute(
+        "data-snui-numeric",
+        "",
+      );
+      expect(cellAt(rowAt(container, 0), 1)).not.toHaveAttribute(
+        "data-snui-numeric",
       );
       expect(cellAt(rowAt(container, 0), 0)).not.toHaveAttribute(
         "data-snui-numeric",
@@ -526,8 +723,19 @@ describe("DataGrid", () => {
     it("renders the default EmptyState with the default title", () => {
       const { container } = renderGrid({ items: [] });
 
-      expect(screen.getByText("No data")).toBeInTheDocument();
+      expect(screen.getByText("Nothing to show yet")).toBeInTheDocument();
       expect(container.querySelector(".snui-empty-state")).not.toBeNull();
+    });
+
+    it("renders an emptyDescription under the default title", () => {
+      renderGrid({
+        emptyDescription: "Add a source to see rows here.",
+        items: [],
+      });
+
+      expect(
+        screen.getByText("Add a source to see rows here."),
+      ).toBeInTheDocument();
     });
 
     it("uses a custom emptyTitle", () => {
@@ -676,6 +884,87 @@ describe("DataGrid", () => {
       expect(
         screen.getByRole("columnheader", { name: "Name" }),
       ).toBeInTheDocument();
+    });
+
+    it("pins the body implementation when virtualize is not auto", () => {
+      const { container } = renderGrid({
+        items: fleet.slice(0, 4),
+        virtualize: "always",
+        virtualizeThreshold: 10,
+      });
+
+      expect(
+        container.querySelector(".snui-data-grid--virtualized"),
+      ).not.toBeNull();
+
+      const { container: never } = renderGrid({
+        items: fleet,
+        virtualize: "never",
+        virtualizeThreshold: 10,
+      });
+
+      expect(never.querySelector(".snui-data-grid--virtualized")).toBeNull();
+    });
+
+    it("keeps selection and the table itself across a row-count change when the mode is pinned", async () => {
+      const user = userEvent.setup();
+      const view = renderGrid({
+        items: fleet.slice(0, 4),
+        selectionMode: "multiple",
+        virtualize: "never",
+        virtualizeThreshold: 2,
+      });
+      const grid = screen.getByRole("grid");
+
+      await user.click(rowAt(view.container, 1));
+      expect(rowAt(view.container, 1)).toHaveAttribute("aria-selected", "true");
+
+      view.rerender(
+        <PanelRoot>
+          <DataGrid
+            aria-label="Boats"
+            items={fleet}
+            renderRow={renderBoatRow}
+            selectionMode="multiple"
+            virtualize="never"
+            virtualizeThreshold={2}
+          >
+            {boatColumns()}
+          </DataGrid>
+        </PanelRoot>,
+      );
+
+      expect(screen.getByRole("grid")).toBe(grid);
+      expect(rowAt(view.container, 1)).toHaveAttribute("aria-selected", "true");
+    });
+
+    it("keeps the row wrappers a virtualized body renders from", () => {
+      // React Aria caches a rendered row against the wrapper it came from, so
+      // a render that leaves the rows alone must not rebuild the collection.
+      let rendered = 0;
+      const tree = (className: string): ReactElement => (
+        <PanelRoot>
+          <DataGrid
+            aria-label="Boats"
+            className={className}
+            items={fleet}
+            renderRow={(boat) => {
+              rendered += 1;
+              return renderBoatRow(boat);
+            }}
+            virtualizeThreshold={10}
+          >
+            {boatColumns()}
+          </DataGrid>
+        </PanelRoot>
+      );
+      const view = render(tree("first"));
+      const afterMount = rendered;
+
+      view.rerender(tree("second"));
+
+      expect(afterMount).toBeGreaterThan(0);
+      expect(rendered).toBe(afterMount);
     });
 
     it("keeps the public ref on the outer container across threshold modes", () => {
@@ -890,6 +1179,17 @@ describe("DataGrid", () => {
       expect(rowAt(container, 1)).toHaveAttribute("data-snui-zebra-odd");
       expect(rowAt(container, 2)).not.toHaveAttribute("data-snui-zebra-odd");
     });
+
+    it("leaves parity off every row when zebra is off", () => {
+      const { container } = renderGrid({
+        items: fleet,
+        virtualizeThreshold: 10,
+      });
+
+      for (const row of bodyRows(container)) {
+        expect(row).not.toHaveAttribute("data-snui-zebra-odd");
+      }
+    });
   });
 
   describe("grid semantics", () => {
@@ -931,5 +1231,30 @@ describe("DataGrid", () => {
         ),
       ).toHaveLength(2);
     });
+  });
+});
+
+describe("data grid style module", () => {
+  it("marks a selected row with a leading bar as well as a tint", () => {
+    expect(TABLE_STYLES.styles).toMatch(
+      /\[data-selected\][^{}]*:first-child \{\n {2}border-inline-start-color: var\(--snui-color-accent-fill\);/,
+    );
+    expect(TABLE_STYLES.styles).toMatch(
+      /border-inline-start: 0\.3rem solid transparent;/,
+    );
+  });
+
+  it("bounds the virtualized viewport through an overridable property", () => {
+    expect(TABLE_STYLES.styles).toMatch(
+      /\.snui-data-grid--virtualized \{[^}]*max-block-size: var\(--snui-data-grid-max-block-size, 60dvh\);/,
+    );
+  });
+
+  it("floors header and body cells from one column-width property", () => {
+    const floors = TABLE_STYLES.styles.match(
+      /min-width: var\(--snui-data-grid-column-min, 6rem\);/g,
+    );
+    expect(floors).toHaveLength(2);
+    expect(TABLE_STYLES.styles).not.toMatch(/min-width: 6rem;/);
   });
 });

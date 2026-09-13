@@ -3,9 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   collectSnapshotNames,
   expectedSnapshotFiles,
-  FAMILY_PROJECTS,
   hostedSnapshotVariants,
   missingSnapshotFiles,
+  orphanSnapshotFiles,
   snapshotProject,
 } from "../../scripts/lib/snapshot-families.mjs";
 
@@ -32,11 +32,12 @@ describe("visual baseline families", () => {
     expect(snapshotProject("panel-light.png")).toBe("chromium");
     expect(snapshotProject("panel-mobile-light.png")).toBe("mobile-chromium");
     expect(snapshotProject("panel-native-controls-webkit.png")).toBe("webkit");
-    expect([...FAMILY_PROJECTS]).toEqual([
-      "chromium",
-      "mobile-chromium",
-      "webkit",
-    ]);
+  });
+
+  it("refuses a spec it found no literal screenshot name in", () => {
+    expect(() =>
+      collectSnapshotNames("await expect(page).toHaveScreenshot(name);"),
+    ).toThrow("The browser spec declares no literal screenshot names.");
   });
 
   it("names every file one hosted family needs", () => {
@@ -64,6 +65,26 @@ describe("visual baseline families", () => {
         "panel-mobile-light-mobile-chromium-linux-ubuntu24-arm64.png",
         "panel-native-controls-webkit-webkit-linux-ubuntu24-arm64.png",
       ]),
+    ).toEqual([]);
+  });
+
+  it("reports committed images of the family that no screenshot asks for", () => {
+    const present = [
+      ...expectedSnapshotFiles(SPEC, "ubuntu24-arm64"),
+      "panel-renamed-chromium-linux-ubuntu24-arm64.png",
+      "panel-other-family-chromium-linux-ubuntu24-x64.png",
+      "panel-light-chromium-linux-local-arm64.png",
+    ];
+
+    expect(orphanSnapshotFiles(SPEC, "ubuntu24-arm64", present)).toEqual([
+      "panel-renamed-chromium-linux-ubuntu24-arm64.png",
+    ]);
+    expect(
+      orphanSnapshotFiles(
+        SPEC,
+        "ubuntu24-arm64",
+        expectedSnapshotFiles(SPEC, "ubuntu24-arm64"),
+      ),
     ).toEqual([]);
   });
 

@@ -2,10 +2,22 @@ import { versionedAnimationName } from "../version.js";
 import { visuallyHiddenDeclarations } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
-import { toneAccentBarRules, toneDotShapeRules } from "./tone-rules.js";
+import {
+  TONE_ACCENT_BAR_DECLARATIONS,
+  toneAccentBarRules,
+  toneDescendantColorRules,
+  toneDotShapeRules,
+} from "./tone-rules.js";
 
-/** A versioned global name prevents keyframe collisions between package copies. */
+/** The keyframe name the toast card animates in with. */
 const TOAST_ENTER_ANIMATION = versionedAnimationName("toast-enter");
+
+/*
+ * The tone dot's own diameter. Internal geometry rather than a token: it is
+ * the size this one mark needs beside the card's text, not a value a consumer
+ * themes.
+ */
+const TOAST_TONE_DOT_SIZE = "0.75rem";
 
 /**
  * Toast region and card styles. Installed by `ToastRegion` through
@@ -38,7 +50,7 @@ ${scopeStyles(`
   gap: var(--snui-space-2);
   /* Safe-area insets are physical edges, so this shorthand stays physical. */
   padding:
-    var(--snui-space-4)
+    max(var(--snui-space-4), env(safe-area-inset-top, 0px))
     max(var(--snui-space-4), env(safe-area-inset-right, 0px))
     max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))
     max(var(--snui-space-4), env(safe-area-inset-left, 0px));
@@ -83,13 +95,13 @@ ${visuallyHiddenDeclarations()}
    * visible in Dark, where the flat hover fill equals the raised surface.
    */
   --snui-color-interactive-hover: var(--snui-color-hover-raised);
+  --snui-color-focus-ring-band: var(--snui-color-surface-raised);
   display: flex;
   min-width: 0;
   align-items: flex-start;
   gap: var(--snui-space-2);
   padding: var(--snui-space-2) var(--snui-space-3);
-  border: 1px solid var(--snui-color-border);
-  border-inline-start-width: 0.3rem;
+${TONE_ACCENT_BAR_DECLARATIONS}
   border-radius: var(--snui-radius-md);
   background: var(--snui-color-surface-raised);
   box-shadow: var(--snui-shadow-overlay);
@@ -114,23 +126,23 @@ ${toneAccentBarRules("snui-toast")}
   flex: none;
   align-items: center;
   padding-block-start: 0.1875rem;
-  color: var(--snui-color-info);
   line-height: 1;
 }
 
 .snui-toast__tone-glyph {
   margin-inline-end: var(--snui-space-1);
-  color: var(--snui-color-info);
   vertical-align: 0.1em;
 }
 
-.snui-toast--success :is(.snui-toast__tone, .snui-toast__tone-glyph) { color: var(--snui-color-success); }
-.snui-toast--warning :is(.snui-toast__tone, .snui-toast__tone-glyph) { color: var(--snui-color-warning); }
-.snui-toast--danger :is(.snui-toast__tone, .snui-toast__tone-glyph) { color: var(--snui-color-danger); }
+${toneDescendantColorRules(
+  "snui-toast",
+  ":is(.snui-toast__tone, .snui-toast__tone-glyph)",
+)}
 
+/* The size StatusIndicator uses, so the per-tone shapes read at a glance. */
 .snui-toast__tone-dot {
-  width: 0.55rem;
-  height: 0.55rem;
+  width: ${TOAST_TONE_DOT_SIZE};
+  height: ${TOAST_TONE_DOT_SIZE};
   border: 2px solid currentColor;
   border-radius: 50%;
   background: currentColor;
@@ -150,12 +162,14 @@ ${toneDotShapeRules("snui-toast", "snui-toast__tone-dot")}
 }
 
 .snui-toast__title {
+  text-wrap: balance;
   font-weight: var(--snui-font-weight-bold);
 }
 
 .snui-toast__description {
   margin-block-start: var(--snui-space-1);
   color: var(--snui-color-text-muted);
+  text-wrap: pretty;
 }
 
 @media (forced-colors: active) {

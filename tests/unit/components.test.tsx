@@ -16,6 +16,7 @@ import {
 } from "react";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
+import { Progress } from "../../src/composites.js";
 import {
   ActionBar,
   Badge,
@@ -69,7 +70,7 @@ describe("form primitives", () => {
     expect(input).toBeRequired();
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input).toHaveAccessibleDescription(
-      "Use the Signal K server address. A server URL is required.",
+      "Use the Signal K server address. Error.A server URL is required.",
     );
   });
 
@@ -247,7 +248,7 @@ describe("form primitives", () => {
     expect(checkbox).toHaveAttribute("aria-invalid", "true");
     expect(checkbox).toHaveAttribute("aria-errormessage");
     expect(checkbox).toHaveAccessibleDescription(
-      "Starts the optional data provider. Accept the provider terms first.",
+      "Starts the optional data provider. Error.Accept the provider terms first.",
     );
     expect(
       screen.getByText("Accept the provider terms first."),
@@ -453,10 +454,10 @@ describe("form primitives", () => {
           const { descriptionId, errorId, ...rangeProps } = controlProps;
           return (
             <InputGroup>
-              <InputGroupControl width="grow">
+              <InputGroupControl controlWidth="grow">
                 <RangeInput {...rangeProps} min={4} max={32} />
               </InputGroupControl>
-              <InputGroupControl width="fixed">
+              <InputGroupControl controlWidth="fixed">
                 <NumberInput
                   aria-label="Cache limit exact value"
                   aria-describedby={[descriptionId, errorId].join(" ")}
@@ -472,11 +473,11 @@ describe("form primitives", () => {
     const slider = screen.getByRole("slider", { name: /Cache limit/ });
     expect(slider).toHaveAttribute("aria-invalid", "true");
     expect(slider).toHaveAccessibleDescription(
-      "Whole GiB Choose at least 4 GiB.",
+      "Whole GiB Error.Choose at least 4 GiB.",
     );
     expect(
       screen.getByRole("spinbutton", { name: "Cache limit exact value" }),
-    ).toHaveAccessibleDescription("Whole GiB Choose at least 4 GiB.");
+    ).toHaveAccessibleDescription("Whole GiB Error.Choose at least 4 GiB.");
     expect(container.querySelector(".snui-field--inline")).not.toBeNull();
     expect(container.querySelector(".snui-field--compact")).not.toBeNull();
     expect(
@@ -1114,6 +1115,84 @@ describe("feedback and layout primitives", () => {
     expect(within(actions as HTMLElement).getAllByRole("button")).toHaveLength(
       2,
     );
+  });
+
+  it("tightens a compact section and leaves the default step unmarked", () => {
+    const { container } = renderInPanel(
+      <>
+        <Section title="Compact" density="compact">
+          Ready
+        </Section>
+        <Section title="Default">Ready</Section>
+      </>,
+    );
+
+    const [compact, standard] = container.querySelectorAll(".snui-section");
+    expect(compact).toHaveClass("snui-section--compact");
+    expect(standard?.className).not.toMatch(/snui-section--/);
+  });
+});
+
+describe("Progress tone and description", () => {
+  it("gives a toned bar a glyph and a spoken tone without renaming it", () => {
+    const { container } = renderInPanel(
+      <Progress label="Chart sync" value={80} tone="danger" />,
+    );
+
+    // The name stays what the bar reports, so a panel can still find it.
+    const bar = screen.getByRole("progressbar", { name: "Chart sync" });
+    expect(bar).toHaveClass("snui-progress--tone-danger");
+    expect(container.querySelector(".snui-progress__tone-glyph")).toHaveClass(
+      "snui-tone-glyph",
+    );
+    expect(bar).toHaveAccessibleDescription("Error.");
+  });
+
+  it("localizes the tone word", () => {
+    renderInPanel(
+      <Progress
+        label="Chart sync"
+        value={80}
+        tone="warning"
+        toneLabel="Attention"
+      />,
+    );
+
+    expect(
+      screen.getByRole("progressbar", { name: "Chart sync" }),
+    ).toHaveAccessibleDescription("Attention.");
+  });
+
+  it("keeps the waiting text of an indeterminate bar reachable", () => {
+    renderInPanel(
+      <Progress label="Chart sync" valueText="Waiting for the server" />,
+    );
+
+    // React Aria emits aria-valuetext only beside a value, so the description
+    // is what is left to carry the words.
+    const bar = screen.getByRole("progressbar", { name: "Chart sync" });
+    expect(bar).not.toHaveAttribute("aria-valuetext");
+    expect(bar).toHaveAccessibleDescription("Waiting for the server");
+  });
+
+  it("treats a range it cannot measure as indeterminate", () => {
+    renderInPanel(
+      <>
+        <Progress label="Broken" value={30} max={Number.NaN} />
+        <Progress label="Inverted" value={7} min={10} max={5} />
+      </>,
+    );
+
+    for (const name of ["Broken", "Inverted"]) {
+      const bar = screen.getByRole("progressbar", { name });
+      expect(bar).toHaveClass("snui-progress--indeterminate");
+      expect(bar).not.toHaveAttribute("aria-valuenow");
+      expect(bar).toHaveAttribute("aria-valuemin", "0");
+      expect(bar).toHaveAttribute("aria-valuemax", "100");
+      expect(bar.querySelector(".snui-progress__fill")).not.toHaveAttribute(
+        "style",
+      );
+    }
   });
 });
 

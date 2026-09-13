@@ -16,7 +16,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
-  readFileSync,
+  realpathSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -26,7 +26,7 @@ import { join } from "node:path";
 
 import { createFederationShared } from "./lib/federation-share.mjs";
 import { parseNpmPackResult, runNpmPack } from "./lib/npm-pack.mjs";
-import { repositoryPath } from "./lib/paths.mjs";
+import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 import { typescriptCompilerEntry } from "./lib/typescript-compiler.mjs";
 
 const fixtureDirectory = repositoryPath("fixtures", "consumer");
@@ -47,9 +47,7 @@ try {
     "--pack-destination",
     workspace,
   ]);
-  const packageJson = JSON.parse(
-    readFileSync(repositoryPath("package.json"), "utf8"),
-  );
+  const packageJson = await readPackageJson();
   const packageName = packageJson.name;
   const tarball = parseNpmPackResult(output, packageName).filename;
 
@@ -113,8 +111,11 @@ try {
     if (typeof target !== "string" || !/\.[cm]?js$/.test(target)) continue;
     const specifier =
       subpath === "." ? packageName : `${packageName}/${subpath.slice(2)}`;
-    const resolved = consumerRequire.resolve(specifier);
-    const expected = join(packageDirectory, ...target.split("/"));
+    // Both sides pass through realpath: require.resolve returns the real
+    // path, and on macOS the temporary workspace lives under /var, which is a
+    // symlink to /private/var.
+    const resolved = realpathSync(consumerRequire.resolve(specifier));
+    const expected = realpathSync(join(packageDirectory, ...target.split("/")));
     if (resolved !== expected) {
       throw new Error(
         `require.resolve("${specifier}") gave ${resolved}; expected ${expected}.`,

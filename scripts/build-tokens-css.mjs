@@ -14,20 +14,27 @@
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { distDirectory } from "./lib/paths.mjs";
 
 const generatorPath = join(distDirectory, "styles", "tokens.js");
-if (!existsSync(generatorPath)) {
-  throw new Error("Run the build before emitting the token stylesheet.");
+const versionPath = join(distDirectory, "version.js");
+for (const required of [generatorPath, versionPath]) {
+  if (!existsSync(required)) {
+    throw new Error(
+      `Run the build before emitting the token stylesheet: ${required} is missing.`,
+    );
+  }
 }
 
+// pathToFileURL rather than a "file://" prefix: a checkout path containing a
+// character the URL parser claims, "#" or "?" most of all, would otherwise
+// truncate the specifier and fail as a missing module.
 const { renderTokenStyles, TOKENS_ROOT_CLASS } = await import(
-  `file://${generatorPath}`
+  pathToFileURL(generatorPath).href
 );
-const { PACKAGE_VERSION } = await import(
-  `file://${join(distDirectory, "version.js")}`
-);
+const { PACKAGE_VERSION } = await import(pathToFileURL(versionPath).href);
 
 const header = `/*
  * signalk-nearlcrews-ui ${PACKAGE_VERSION} design tokens.

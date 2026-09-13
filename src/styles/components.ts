@@ -1,10 +1,21 @@
 import {
+  CONTROL_LABEL_DECLARATIONS,
+  FIELD_DESCRIPTION_DECLARATIONS,
   FIELD_ERROR_DECLARATIONS,
+  FIELD_STACK_DECLARATIONS,
+  NARROW_PANEL_QUERY,
+  PROSE_MEASURE_DECLARATION,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 import { toneColorRules, toneDotShapeRules } from "./tone-rules.js";
+
+/**
+ * Diameter of the status dot. Internal geometry rather than a token: it is the
+ * size the per-tone shapes need to stay distinguishable, not a value a
+ * consumer themes.
+ */
+const STATUS_DOT_SIZE = "0.75rem";
 
 export const COMPONENT_STYLES = scopeStyles(`
 /*
@@ -53,6 +64,7 @@ export const COMPONENT_STYLES = scopeStyles(`
 
 .snui-panel-shell__description {
   min-width: 0;
+${PROSE_MEASURE_DECLARATION}
   color: var(--snui-color-text-muted);
   overflow-wrap: anywhere;
   text-wrap: pretty;
@@ -61,12 +73,18 @@ export const COMPONENT_STYLES = scopeStyles(`
 /* One grid gap owns the rhythm between header and content. */
 .snui-section {
   display: grid;
+  min-width: 0;
   gap: var(--snui-space-4);
   padding: var(--snui-space-4);
   border: 1px solid var(--snui-color-border);
   border-radius: var(--snui-radius-lg);
   background: var(--snui-color-surface);
   box-shadow: var(--snui-shadow-raised);
+}
+
+.snui-section--compact {
+  gap: var(--snui-space-3);
+  padding: var(--snui-space-2);
 }
 
 .snui-section__header {
@@ -97,18 +115,30 @@ export const COMPONENT_STYLES = scopeStyles(`
   max-width: 100%;
 }
 
+/*
+ * The heading takes the same type step a CollapsibleSection heading of that
+ * level takes, so sibling titles of one level match whether or not they
+ * collapse, and a section nested a level deeper reads as the smaller heading
+ * it is. The element carries the level, so the rules read it off the tag.
+ */
 .snui-section__title {
   min-width: 0;
   margin: 0;
   color: var(--snui-color-text);
-  font-size: var(--snui-font-size-lg);
+  font-size: var(--snui-font-size);
   line-height: 1.3;
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
 
+h1.snui-section__title,
+h2.snui-section__title {
+  font-size: var(--snui-font-size-lg);
+}
+
 .snui-section__description {
   min-width: 0;
+${PROSE_MEASURE_DECLARATION}
   margin: 0;
   margin-block-start: var(--snui-space-1);
   color: var(--snui-color-text-muted);
@@ -117,23 +147,19 @@ export const COMPONENT_STYLES = scopeStyles(`
 }
 
 .snui-field {
-  display: grid;
-  min-width: 0;
-  gap: var(--snui-space-1);
+${FIELD_STACK_DECLARATIONS}
 }
 
 .snui-field__label {
-  min-width: 0;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  overflow-wrap: anywhere;
+${CONTROL_LABEL_DECLARATIONS}
 }
 
+/* The most numerous prose in a panel, so it takes the balanced last line and
+   the measure cap the other body copy takes. */
 .snui-field__description {
-  min-width: 0;
-  color: var(--snui-color-text-muted);
-  font-size: var(--snui-font-size-sm);
-  overflow-wrap: anywhere;
+${FIELD_DESCRIPTION_DECLARATIONS}
+${PROSE_MEASURE_DECLARATION}
+  text-wrap: pretty;
 }
 
 .snui-field__error {
@@ -148,7 +174,8 @@ ${FIELD_ERROR_DECLARATIONS}
 .snui-field__error:empty,
 .snui-checkbox__error:empty,
 .snui-field-group__error:empty,
-.snui-radio-group__error:empty {
+.snui-radio-group__error:empty,
+.snui-segmented__error:empty {
 ${visuallyHiddenDeclarations()}
 }
 
@@ -184,8 +211,8 @@ ${visuallyHiddenDeclarations()}
 
 /* Large enough for the per-tone shapes to read at a glance. */
 .snui-status__dot {
-  width: 0.75rem;
-  height: 0.75rem;
+  width: ${STATUS_DOT_SIZE};
+  height: ${STATUS_DOT_SIZE};
   flex: none;
   border: 2px solid currentColor;
   border-radius: 50%;
@@ -211,10 +238,31 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
   padding: var(--snui-space-3);
   border: 1px solid var(--snui-color-border);
   border-radius: var(--snui-radius-md);
-  background: color-mix(in srgb, var(--snui-color-surface) 94%, transparent);
+  background: var(--snui-action-bar-surface);
   box-shadow: var(--snui-shadow-raised);
   -webkit-backdrop-filter: blur(0.4rem);
   backdrop-filter: blur(0.4rem);
+}
+
+.snui-action-bar__content {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 12rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--snui-space-2);
+}
+
+/*
+ * The toolbar variant is a band rather than a card: no radius, no shadow, and
+ * one bottom border, so a panel-wide toolbar reads as part of the panel
+ * instead of a surface floating over it. The card variant needs no rule of
+ * its own, because the base rule above is the card.
+ */
+.snui-action-bar--toolbar {
+  border-width: 0 0 1px;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .snui-action-bar--sticky-bottom,
@@ -280,18 +328,33 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
  * Keep focus-scroll targets clear of nested sticky bars. Scroll margin stays
  * with the target, so it works when the Signal K host or another ancestor,
  * rather than PanelRoot itself, owns scrolling.
+ *
+ * The panel root is reached through :scope, the one spelling that matches it:
+ * inside the scoped sheet a bare .snui-root class matches a descendant root,
+ * which the scope boundary has already excluded, so the rule would apply to
+ * nothing and every target would scroll flush under the bar.
+ *
+ * The height is published as a custom property on the panel that has a bar, so
+ * a consumer scrolling a container of its own, a row rather than a control,
+ * can write scroll-margin from the same value instead of deriving a second
+ * formula that drifts from this one. A panel with no sticky bar declares
+ * nothing, so the same consumer rule resolves to no clearance there.
  */
-.snui-root:has(.snui-action-bar--sticky-bottom) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]),
-.snui-root:has(.snui-action-bar__viewport-anchor) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]) {
-  scroll-margin-block-end: calc(
+:scope:has(.snui-action-bar--sticky-bottom),
+:scope:has(.snui-action-bar__viewport-anchor),
+:scope:has(.snui-action-bar--sticky-top) {
+  --snui-sticky-clearance: calc(
     var(--snui-control-min-height) + var(--snui-space-3) * 3
   );
 }
 
-.snui-root:has(.snui-action-bar--sticky-top) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]) {
-  scroll-margin-block-start: calc(
-    var(--snui-control-min-height) + var(--snui-space-3) * 3
-  );
+:scope:has(.snui-action-bar--sticky-bottom) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]),
+:scope:has(.snui-action-bar__viewport-anchor) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]) {
+  scroll-margin-block-end: var(--snui-sticky-clearance);
+}
+
+:scope:has(.snui-action-bar--sticky-top) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]) {
+  scroll-margin-block-start: var(--snui-sticky-clearance);
 }
 
 .snui-action-bar__status {
@@ -314,6 +377,7 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
 
 .snui-inline-confirm {
   display: grid;
+  min-width: 0;
   gap: var(--snui-space-3);
   padding: var(--snui-space-4);
   border: 1px solid var(--snui-color-warning);
@@ -324,6 +388,7 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
 /* Weight, not size, sets the confirmation apart from the copy beneath it. */
 .snui-inline-confirm__title {
   min-width: 0;
+  text-wrap: balance;
   margin: 0;
   font-size: var(--snui-font-size);
   font-weight: var(--snui-font-weight-bold);
@@ -332,9 +397,11 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
 
 .snui-inline-confirm__message {
   min-width: 0;
+${PROSE_MEASURE_DECLARATION}
   margin: 0;
   color: var(--snui-color-text-muted);
   overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .snui-inline-confirm__actions {
@@ -345,8 +412,9 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
   justify-content: flex-end;
 }
 
-@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
-  .snui-section {
+${NARROW_PANEL_QUERY} {
+  .snui-section,
+  .snui-inline-confirm {
     padding: var(--snui-space-3);
   }
 

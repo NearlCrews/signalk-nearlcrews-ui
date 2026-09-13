@@ -21,14 +21,12 @@ import type {
 import type {
   AnnouncementMode,
   Badge,
-  BannerLive,
   CardDensity,
   CollapsibleSection,
   Density,
   FormatRelativeAgeOptions,
   InputGroup,
   InputGroupAddon,
-  InputGroupDensity,
   LiveRegionProps,
   Metric,
   Orientation,
@@ -86,17 +84,13 @@ describe("shared vocabularies", () => {
     expectTypeOf<CardDensity>().toEqualTypeOf<
       "default" | "compact" | "flush"
     >();
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    expectTypeOf<InputGroupDensity>().toEqualTypeOf<Density | "comfortable">();
     expectTypeOf<ComponentProps<typeof InputGroup>["density"]>().toEqualTypeOf<
-      Density | "comfortable" | undefined
+      Density | undefined
     >();
     expectTypeOf<TableProps["density"]>().toEqualTypeOf<Density | undefined>();
   });
 
-  it("types live regions with AnnouncementMode and keeps the Banner alias", () => {
-    // eslint-disable-next-line @typescript-eslint/no-deprecated
-    expectTypeOf<BannerLive>().toEqualTypeOf<AnnouncementMode>();
+  it("types live regions with AnnouncementMode", () => {
     expectTypeOf<LiveRegionProps["live"]>().toEqualTypeOf<
       AnnouncementMode | undefined
     >();

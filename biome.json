@@ -7,17 +7,7 @@
     "defaultBranch": "main"
   },
   "files": {
-    "ignoreUnknown": true,
-    "includes": [
-      "**",
-      "!!coverage",
-      "!!dist",
-      "!!fixtures/federation/*/dist",
-      "!!node_modules",
-      "!!playwright-report",
-      "!!test-results",
-      "!!package-lock.json"
-    ]
+    "ignoreUnknown": true
   },
   "formatter": {
     "enabled": true,
@@ -27,7 +17,11 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended"
+      "preset": "recommended",
+      "correctness": {
+        "useExhaustiveDependencies": "off",
+        "useHookAtTopLevel": "off"
+      }
     }
   },
   "javascript": {

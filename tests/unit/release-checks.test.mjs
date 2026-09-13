@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertSuccessfulReleaseChecks,
-  hasMoreCheckRunPages,
+  fetchAllPages,
+  hasMorePages,
   parseCheckRunsPage,
   parseWorkflowRunsPage,
   REQUIRED_RELEASE_CHECKS,
@@ -207,6 +208,23 @@ describe("release check parser", () => {
     );
   });
 
+  it("accepts an unrelated check run with no details URL", () => {
+    const { checkRuns, workflowRuns } = successfulFixture();
+    const thirdPartyCheck = {
+      id: 9_000,
+      name: "Some other app",
+      head_sha: SHA,
+      status: "completed",
+      conclusion: "success",
+      app: { slug: "third-party-app" },
+      details_url: null,
+    };
+
+    expect(() =>
+      assertFixture([thirdPartyCheck, ...checkRuns], workflowRuns),
+    ).not.toThrow();
+  });
+
   it("validates paginated API response shapes", () => {
     const requirement = REQUIRED_RELEASE_CHECKS[0];
     expect(requirement).toBeDefined();
@@ -226,7 +244,7 @@ describe("release check parser", () => {
       "GitHub returned an invalid workflow-runs response.",
     );
     expect(
-      hasMoreCheckRunPages({
+      hasMorePages({
         collectedCount: 100,
         pageCount: 100,
         perPage: 100,
@@ -234,7 +252,7 @@ describe("release check parser", () => {
       }),
     ).toBe(true);
     expect(
-      hasMoreCheckRunPages({
+      hasMorePages({
         collectedCount: 101,
         pageCount: 1,
         perPage: 100,
@@ -244,10 +262,77 @@ describe("release check parser", () => {
   });
 });
 
+describe("paged GitHub collections", () => {
+  function pagedFetch(pages) {
+    return (url) => {
+      const page = Number(new URL(url).searchParams.get("page"));
+      const body = pages[page - 1];
+      return Promise.resolve({
+        ok: body !== undefined,
+        status: body === undefined ? 404 : 200,
+        json: () => Promise.resolve(body),
+      });
+    };
+  }
+
+  it("collects every page of a list endpoint", async () => {
+    const pages = [
+      { total_count: 3, check_runs: [{ id: 1 }, { id: 2 }] },
+      { total_count: 3, check_runs: [{ id: 3 }] },
+    ];
+
+    await expect(
+      fetchAllPages({
+        arrayKey: "check_runs",
+        fetchPage: pagedFetch(pages),
+        label: "check-runs",
+        parse: parseCheckRunsPage,
+        perPage: 2,
+        token: "test-token",
+        url: "https://api.github.com/repos/owner/name/commits/sha/check-runs",
+      }),
+    ).resolves.toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+  });
+
+  it("reports a failed request and refuses to page forever", async () => {
+    await expect(
+      fetchAllPages({
+        arrayKey: "check_runs",
+        fetchPage: pagedFetch([]),
+        label: "check-runs",
+        parse: parseCheckRunsPage,
+        token: "test-token",
+        url: "https://api.github.com/repos/owner/name/commits/sha/check-runs",
+      }),
+    ).rejects.toThrow("GitHub check-runs request failed with HTTP 404.");
+
+    const full = { total_count: 10, check_runs: [{ id: 1 }] };
+    await expect(
+      fetchAllPages({
+        arrayKey: "check_runs",
+        fetchPage: pagedFetch([full, full, full]),
+        label: "check-runs",
+        maximumPages: 2,
+        parse: parseCheckRunsPage,
+        perPage: 1,
+        token: "test-token",
+        url: "https://api.github.com/repos/owner/name/commits/sha/check-runs",
+      }),
+    ).rejects.toThrow(
+      "GitHub returned more than 2 check-runs records for the release commit.",
+    );
+  });
+});
+
 describe("registry ordering", () => {
   it("publishes prereleases under next without consulting latest", () => {
     expect(resolveDistTag("0.9.0-rc.1", "0.8.2")).toBe("next");
     expect(resolveDistTag("1.0.0-beta.2", "not-a-version")).toBe("next");
+  });
+
+  it("reads build metadata as part of a stable version, not as a prerelease", () => {
+    expect(resolveDistTag("0.9.0+2026-08-19", "0.8.2")).toBe("latest");
+    expect(resolveDistTag("0.9.0-rc.1+2026-08-19", "0.8.2")).toBe("next");
   });
 
   it("publishes a newer stable version under latest", () => {

@@ -4,19 +4,22 @@ import {
   type ReactNode,
   type RefAttributes,
   type RefObject,
-  useCallback,
   useEffect,
-  useEffectEvent,
   useId,
   useRef,
-  useState,
 } from "react";
-import { joinIdReferences } from "../utils/aria.js";
+import { useControllableState } from "../hooks/use-controllable-state.js";
+import { useFocusReturnOnClose } from "../hooks/use-focus-return.js";
+import { useNodeRef } from "../hooks/use-node-ref.js";
+import { joinIdReferences, landmarkLabel } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { isDevelopment } from "../utils/environment.js";
+import { revealElement } from "../utils/focus.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
-import { prefersReducedMotion } from "../utils/motion.js";
+import { resolveLabel } from "../utils/labels.js";
+import { usePanelLabels } from "../utils/panel-labels.js";
+import { definedProps } from "../utils/props.js";
 import { hasReactContent } from "../utils/react-node.js";
-import { composeRef } from "../utils/ref.js";
 import { Button, type ButtonVariant } from "./Button.js";
 
 export type InlineConfirmCancelReason = "cancel" | "escape";
@@ -25,14 +28,34 @@ const DEFAULT_CANCEL_LABEL = "Cancel";
 const DEFAULT_CONFIRM_LABEL = "Confirm";
 const DEFAULT_TITLE = "Confirm action";
 
+/**
+ * Whether the generic destructive confirmation has been reported, so a panel
+ * that ships the default label hears about it once rather than per render.
+ */
+let reportedGenericConfirm = false;
+
+function warnGenericDestructiveConfirm(): void {
+  if (!isDevelopment() || reportedGenericConfirm) return;
+  reportedGenericConfirm = true;
+  console.warn(
+    `InlineConfirm renders a destructive confirmation labeled "${DEFAULT_CONFIRM_LABEL}", which names no consequence. Pass confirmLabel, such as "Delete route", wherever the region reaches a user.`,
+  );
+}
+
 export interface InlineConfirmProps
-  extends Omit<HTMLAttributes<HTMLElement>, "children" | "onCancel" | "title">,
+  extends Omit<
+      HTMLAttributes<HTMLElement>,
+      "children" | "dangerouslySetInnerHTML" | "onCancel" | "title"
+    >,
     RefAttributes<HTMLElement> {
   /**
    * Blocks Confirm while the confirmed action runs. Cancel and Escape stay
    * live: declining is the user's route out of the region, and work already
    * under way is not in conflict with it. `onCancel` may therefore fire while
    * `busy` is true, and the consumer decides what that means.
+   *
+   * It takes effect only on a controlled region. An uncontrolled one closes
+   * itself on Confirm, so there is nothing left on screen to block.
    */
   readonly busy?: boolean | undefined;
   readonly cancelLabel?: ReactNode | undefined;
@@ -40,24 +63,42 @@ export interface InlineConfirmProps
   readonly cancelVariant?:
     | Extract<ButtonVariant, "secondary" | "ghost">
     | undefined;
+  /**
+   * Names the consequence the user is accepting, such as "Delete route".
+   * Required in practice for the default danger variant: the built-in
+   * "Confirm" names nothing, and development reports a region that ships it.
+   */
   readonly confirmLabel?: ReactNode | undefined;
   readonly confirmVariant?:
     | Extract<ButtonVariant, "primary" | "danger">
     | undefined;
   /** Sets the initial state only. Pass `open` to control the confirmation. */
   readonly defaultOpen?: boolean | undefined;
+  /**
+   * The title used when `title` is blank or absent. It exists so a localized
+   * panel can replace the built-in "Confirm action" once, in a shared prop
+   * bag, while each confirmation still passes the question it is asking as
+   * its own `title`.
+   */
   readonly fallbackTitle?: ReactNode | undefined;
   readonly headingLevel?: HeadingLevel | undefined;
   /** Focused on open instead of the region container. */
   readonly initialFocusRef?: RefObject<HTMLElement | null> | undefined;
-  /** Removes the region landmark and its naming when false. */
+  /**
+   * Removes the region landmark naming when false, including any
+   * `aria-labelledby` the consumer passed: the region is then named by its
+   * title in the ordinary way.
+   */
   readonly landmark?: boolean | undefined;
   readonly message: ReactNode;
   readonly onCancel: (reason: InlineConfirmCancelReason) => void;
   readonly onConfirm: () => void;
+  /** Reports every open-state change, including the region closing itself. */
+  readonly onOpenChange?: ((open: boolean) => void) | undefined;
   readonly open?: boolean | undefined;
   /** Receives focus after close instead of the previously focused element. */
   readonly returnFocusRef?: RefObject<HTMLElement | null> | undefined;
+  /** The question being asked. A blank title falls back to `fallbackTitle`. */
   readonly title?: ReactNode | undefined;
 }
 
@@ -79,6 +120,7 @@ export function InlineConfirm({
   onKeyDown,
   onCancel,
   onConfirm,
+  onOpenChange,
   open,
   ref,
   returnFocusRef,
@@ -88,83 +130,38 @@ export function InlineConfirm({
   const titleId = useId();
   const messageId = useId();
   const containerRef = useRef<HTMLElement | null>(null);
-  const previousFocus = useRef<HTMLElement | null>(null);
-  const focusIsInside = useRef(false);
-  const [internalOpen, setInternalOpen] = useState(defaultOpen);
-  const effectiveOpen = open ?? internalOpen;
-  // Each string falls back once: a blank prop reads the same as an absent one.
+  const [effectiveOpen, commitOpen] = useControllableState(
+    open,
+    defaultOpen,
+    onOpenChange,
+  );
+  // Each string falls back once: a blank prop reads the same as an absent one,
+  // and the panel's bundle stands between a missing prop and the default.
+  const bundledLabels = usePanelLabels()?.inlineConfirm;
   const effectiveTitle = hasReactContent(title)
     ? title
     : hasReactContent(fallbackTitle)
       ? fallbackTitle
-      : DEFAULT_TITLE;
+      : resolveLabel(bundledLabels?.fallbackTitle, DEFAULT_TITLE);
   const effectiveCancelLabel = hasReactContent(cancelLabel)
     ? cancelLabel
-    : DEFAULT_CANCEL_LABEL;
-  const effectiveConfirmLabel = hasReactContent(confirmLabel)
+    : resolveLabel(bundledLabels?.cancel, DEFAULT_CANCEL_LABEL);
+  const hasConfirmLabel = hasReactContent(confirmLabel);
+  const effectiveConfirmLabel = hasConfirmLabel
     ? confirmLabel
-    : DEFAULT_CONFIRM_LABEL;
+    : resolveLabel(bundledLabels?.confirm, DEFAULT_CONFIRM_LABEL);
   const Heading = HEADING_ELEMENTS[headingLevel];
 
-  // One callback ref owns the node so a caller ref is attached and released
-  // exactly once per mount, instead of on every commit.
-  const attachContainer = useCallback(
-    (node: HTMLElement): (() => void) => {
-      containerRef.current = node;
-      const releaseRef = composeRef(ref, node);
-      return () => {
-        containerRef.current = null;
-        releaseRef();
-      };
-    },
-    [ref],
-  );
+  if (confirmVariant === "danger" && !hasConfirmLabel) {
+    warnGenericDestructiveConfirm();
+  }
 
-  const capturePreviousFocus = useEffectEvent((): void => {
-    const activeElement = containerRef.current?.ownerDocument.activeElement;
-    previousFocus.current =
-      activeElement !== null &&
-      activeElement !== undefined &&
-      "focus" in activeElement
-        ? (activeElement as HTMLElement)
-        : null;
+  const attachContainer = useNodeRef(containerRef, ref);
+
+  useFocusReturnOnClose(containerRef, effectiveOpen, {
+    capturePreviousFocus: true,
+    returnFocusRef,
   });
-
-  const restorePreviousFocus = useEffectEvent((): void => {
-    const destination = returnFocusRef?.current ?? previousFocus.current;
-    if (focusIsInside.current && destination?.isConnected === true) {
-      destination.focus();
-    }
-    previousFocus.current = null;
-  });
-
-  useEffect(() => {
-    if (!effectiveOpen) return undefined;
-
-    capturePreviousFocus();
-    return restorePreviousFocus;
-  }, [effectiveOpen]);
-
-  const trackFocus = useEffectEvent((event: FocusEvent): void => {
-    const container = containerRef.current;
-    focusIsInside.current =
-      container !== null && event.composedPath().includes(container);
-  });
-
-  useEffect(() => {
-    if (!effectiveOpen) return undefined;
-
-    const container = containerRef.current;
-    const ownerDocument = container?.ownerDocument;
-    if (container === null || ownerDocument === undefined) return undefined;
-
-    focusIsInside.current = container.contains(ownerDocument.activeElement);
-    ownerDocument.addEventListener("focusin", trackFocus);
-    return () => {
-      ownerDocument.removeEventListener("focusin", trackFocus);
-      focusIsInside.current = false;
-    };
-  }, [effectiveOpen]);
 
   useEffect(() => {
     if (!effectiveOpen) return;
@@ -172,20 +169,8 @@ export function InlineConfirm({
     const container = containerRef.current;
     if (container === null) return;
 
-    // Keep the confirmation on screen before moving focus into it. Reduced
-    // motion users get an instant jump instead of a smooth scroll. jsdom does
-    // not implement scrollIntoView, so it is feature detected rather than
-    // assumed.
-    const reduceMotion = prefersReducedMotion(
-      container.ownerDocument.defaultView,
-    );
-    const scrollable = container as {
-      scrollIntoView?: (options: ScrollIntoViewOptions) => void;
-    };
-    scrollable.scrollIntoView?.({
-      block: "nearest",
-      behavior: reduceMotion ? "auto" : "smooth",
-    });
+    // Keep the confirmation on screen before moving focus into it.
+    revealElement(container);
 
     // Focus the labeled and described container so the message is conveyed on
     // open, unless the caller named a better first stop. Focusing Cancel first
@@ -198,12 +183,8 @@ export function InlineConfirm({
     (initialFocusRef?.current ?? container).focus();
   }, [effectiveOpen, initialFocusRef]);
 
-  const close = (): void => {
-    if (open === undefined) setInternalOpen(false);
-  };
-
   const cancel = (reason: InlineConfirmCancelReason): void => {
-    close();
+    commitOpen(false);
     onCancel(reason);
   };
 
@@ -227,9 +208,7 @@ export function InlineConfirm({
       {...props}
       ref={attachContainer}
       className={classNames("snui-inline-confirm", className)}
-      aria-labelledby={
-        landmark ? joinIdReferences(ariaLabelledBy, titleId) : undefined
-      }
+      aria-labelledby={landmarkLabel(landmark, ariaLabelledBy, titleId)}
       aria-describedby={joinIdReferences(ariaDescribedBy, messageId)}
       aria-busy={busy || undefined}
       tabIndex={-1}
@@ -242,14 +221,19 @@ export function InlineConfirm({
         {message}
       </div>
       <div className="snui-inline-confirm__actions">
-        <Button variant={cancelVariant} onClick={() => cancel("cancel")}>
+        <Button
+          {...definedProps({ variant: cancelVariant })}
+          onClick={() => {
+            cancel("cancel");
+          }}
+        >
           {effectiveCancelLabel}
         </Button>
         <Button
           variant={confirmVariant}
           loading={busy}
           onClick={() => {
-            close();
+            commitOpen(false);
             onConfirm();
           }}
         >

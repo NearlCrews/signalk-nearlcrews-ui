@@ -10,19 +10,16 @@
  * Usage: node scripts/check-registry-order.mjs --candidate 0.9.0 --latest 0.8.2
  * Prints `latest` or `next` on success.
  */
+import { readOption } from "../bin/lib/cli-arguments.mjs";
 import { resolveDistTag } from "./lib/release-checks.mjs";
 
-function readOption(argv, name) {
-  const index = argv.indexOf(name);
-  const value = index === -1 ? undefined : argv[index + 1];
-  if (value === undefined || value.startsWith("--")) {
-    throw new Error(`${name} requires a version.`);
-  }
-  return value;
-}
-
 const argv = process.argv.slice(2);
-const candidate = readOption(argv, "--candidate");
-const latest = readOption(argv, "--latest");
+// The shared reader answers undefined for an option nobody passed, so the
+// required half is stated here where the usage line is.
+const candidate = readOption(argv, "--candidate", "a version");
+const latest = readOption(argv, "--latest", "a version");
+if (candidate === undefined || latest === undefined) {
+  throw new Error("Pass --candidate <version> and --latest <version>.");
+}
 
 process.stdout.write(`${resolveDistTag(candidate, latest)}\n`);

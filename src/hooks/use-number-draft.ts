@@ -8,6 +8,7 @@ import {
   useState,
   type WheelEvent,
 } from "react";
+import { isDevelopment } from "../utils/environment.js";
 
 /** Why a draft cannot be committed. Keys the per-reason validation messages. */
 export type NumberDraftInvalidReason =
@@ -31,11 +32,16 @@ export type NumberDraftInvalidReason =
 export interface NumberDraftOptions {
   /** An empty draft commits `undefined` instead of being invalid or falling back. */
   readonly allowEmpty?: boolean | undefined;
-  /** Treats `max` itself as out of range. */
+  /** Treats `max` itself as out of range. Does nothing without `max`. */
   readonly exclusiveMax?: boolean | undefined;
-  /** Treats `min` itself as out of range. */
+  /** Treats `min` itself as out of range. Does nothing without `min`. */
   readonly exclusiveMin?: boolean | undefined;
-  /** Switches to clamp mode; the value committed for empty or unparsable input. */
+  /**
+   * Switches to clamp mode; the value committed for empty or unparsable
+   * input. It has to satisfy the field's own rules, since it is committed
+   * without being checked against them; in development a fallback that does
+   * not is reported once.
+   */
   readonly fallback?: number | undefined;
   /** Accepts whole numbers only. */
   readonly integer?: boolean | undefined;
@@ -45,6 +51,10 @@ export interface NumberDraftOptions {
    * Spinner increment passed to the input. In clamp mode committed values
    * also snap to a multiple of it, counted from `min` where there is one, as
    * the input's own step constraint counts.
+   *
+   * In validate mode it is not enforced: a half-typed value is never rejected
+   * mid-edit, there is no step reason among the invalid ones, and the
+   * browser's own spinner and validity state carry the constraint instead.
    */
   readonly step?: number | undefined;
 }
@@ -54,12 +64,23 @@ export type NumberDraftResolution =
   | { readonly status: "invalid"; readonly reason: NumberDraftInvalidReason };
 
 function valid(value: number | undefined): NumberDraftResolution {
-  return { status: "valid", value };
+  // Negative zero is collapsed here, where every committed value passes,
+  // because String(-0) is "0": the field would otherwise report a number its
+  // own display disagrees with as soon as the draft clears.
+  return { status: "valid", value: value === 0 ? 0 : value };
 }
 
 function invalid(reason: NumberDraftInvalidReason): NumberDraftResolution {
   return { status: "invalid", reason };
 }
+
+/**
+ * The HTML valid floating-point number grammar, which is exactly what an
+ * `<input type="number">` accepts. `Number` also reads hex, octal, and binary
+ * literals, and a field that took "0x10" for 16 would accept text no numeric
+ * input can produce and no message could explain.
+ */
+const FLOATING_POINT = /^-?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?$/;
 
 function decimalPlaces(value: number): number {
   const text = String(value);
@@ -75,12 +96,81 @@ function decimalPlaces(value: number): number {
   return Math.min(100, Math.max(0, fraction.length - exponent));
 }
 
-function snapToStep(value: number, step: number, base: number): number {
-  const snapped = base + Math.round((value - base) / step) * step;
+/** How many steps a value sits from the base, free of binary noise. */
+function stepsFromBase(value: number, step: number, base: number): number {
+  // (0.3 - 0) / 0.1 is 2.9999999999999996, which floors one whole step too
+  // low, so the quotient is rounded to a precision no real step reaches.
+  return Number(((value - base) / step).toFixed(10));
+}
+
+function roundToStepPrecision(
+  value: number,
+  step: number,
+  base: number,
+): number {
   // Rounding to the precision the base and the step carry between them
   // removes the binary noise a multiplication such as 0.1 * 3 leaves behind.
   const places = Math.max(decimalPlaces(step), decimalPlaces(base));
-  return Number(snapped.toFixed(places));
+  return Number(value.toFixed(places));
+}
+
+function snapToStep(value: number, step: number, base: number): number {
+  const snapped = base + Math.round(stepsFromBase(value, step, base)) * step;
+  return roundToStepPrecision(snapped, step, base);
+}
+
+/** The nearest multiple of the step at or below a value. */
+function snapDownToStep(value: number, step: number, base: number): number {
+  const snapped = base + Math.floor(stepsFromBase(value, step, base)) * step;
+  return roundToStepPrecision(snapped, step, base);
+}
+
+const REPORTED_RULE_WARNINGS = new Set<string>();
+
+/** Reports one rules mistake once, in development only. */
+function warnRules(message: string): void {
+  if (REPORTED_RULE_WARNINGS.has(message)) return;
+  REPORTED_RULE_WARNINGS.add(message);
+  console.warn(`resolveNumberDraft: ${message}`);
+}
+
+/**
+ * Reports rules that cannot do what they say: an exclusivity flag with no
+ * bound to apply to, and a fallback the same rules would reject. Both compile
+ * and both fail silently at runtime, so development says so once.
+ */
+function warnUnsoundRules(
+  options: NumberDraftOptions,
+  stepSize: number | undefined,
+  stepBase: number,
+): void {
+  const {
+    exclusiveMax = false,
+    exclusiveMin = false,
+    fallback,
+    integer = false,
+    max,
+    min,
+  } = options;
+  if (exclusiveMin && min === undefined) {
+    warnRules("exclusiveMin does nothing without a min.");
+  }
+  if (exclusiveMax && max === undefined) {
+    warnRules("exclusiveMax does nothing without a max.");
+  }
+  if (fallback === undefined) return;
+
+  const rejects =
+    (integer && !Number.isInteger(fallback)) ||
+    (min !== undefined && (exclusiveMin ? fallback <= min : fallback < min)) ||
+    (max !== undefined && (exclusiveMax ? fallback >= max : fallback > max)) ||
+    (stepSize !== undefined &&
+      snapToStep(fallback, stepSize, stepBase) !== fallback);
+  if (rejects) {
+    warnRules(
+      `the fallback ${String(fallback)} does not satisfy the same rules, so a draft that falls back commits a value the field itself rejects.`,
+    );
+  }
 }
 
 /**
@@ -102,6 +192,12 @@ export function resolveNumberDraft(
     step,
   } = options;
   const clamps = fallback !== undefined;
+  // HTML measures step validity from a step base, which is `min` when the
+  // input has one. Snapping from anywhere else commits values the input
+  // itself reports as a step mismatch.
+  const stepBase = min !== undefined && Number.isFinite(min) ? min : 0;
+  const stepSize = clamps && step !== undefined && step > 0 ? step : undefined;
+  if (isDevelopment()) warnUnsoundRules(options, stepSize, stepBase);
   const trimmed = raw.trim();
 
   if (trimmed === "") {
@@ -109,7 +205,7 @@ export function resolveNumberDraft(
     return clamps ? valid(fallback) : invalid("empty");
   }
 
-  const parsed = Number(trimmed);
+  const parsed = FLOATING_POINT.test(trimmed) ? Number(trimmed) : Number.NaN;
   if (!Number.isFinite(parsed)) {
     return clamps ? valid(fallback) : invalid("notANumber");
   }
@@ -119,27 +215,30 @@ export function resolveNumberDraft(
     if (!clamps) return invalid("notAnInteger");
     value = Math.trunc(value);
   }
-  if (clamps && step !== undefined && step > 0) {
-    // HTML measures step validity from a step base, which is `min` when the
-    // input has one. Snapping from anywhere else commits values the input
-    // itself reports as a step mismatch.
-    value = snapToStep(
-      value,
-      step,
-      min !== undefined && Number.isFinite(min) ? min : 0,
-    );
+  if (stepSize !== undefined) {
+    value = snapToStep(value, stepSize, stepBase);
   }
 
   if (min !== undefined && (exclusiveMin ? value <= min : value < min)) {
     if (!clamps) return invalid("belowMin");
     // An exclusive bound has no nearest legal value to clamp to.
     if (exclusiveMin) return valid(fallback);
+    // `min` is the step base, so clamping onto it is always step aligned.
     value = min;
   }
   if (max !== undefined && (exclusiveMax ? value >= max : value > max)) {
     if (!clamps) return invalid("aboveMax");
     if (exclusiveMax) return valid(fallback);
-    value = max;
+    // A max that is not itself a multiple of the step would reintroduce the
+    // mismatch the snap above avoided, so the value steps back inside the
+    // range rather than landing on the bound.
+    value =
+      stepSize === undefined ? max : snapDownToStep(max, stepSize, stepBase);
+    if (min !== undefined && (exclusiveMin ? value <= min : value < min)) {
+      // The bounds are closer together than one step, so nothing inside the
+      // range is step aligned and only the fallback is left.
+      return valid(fallback);
+    }
   }
   return valid(value);
 }
@@ -147,7 +246,9 @@ export function resolveNumberDraft(
 /** Attributes and handlers to spread onto a `NumberInput`. */
 export interface NumberDraftInputProps {
   readonly "aria-invalid": true | undefined;
-  readonly inputMode: "numeric" | undefined;
+  /** Labels the key that commits the draft on an on-screen keyboard. */
+  readonly enterKeyHint: "done";
+  readonly inputMode: "decimal" | "numeric" | undefined;
   readonly max: number | undefined;
   readonly min: number | undefined;
   readonly onBlur: (event: FocusEvent<HTMLInputElement>) => void;
@@ -156,6 +257,21 @@ export interface NumberDraftInputProps {
   readonly onWheel: (event: WheelEvent<HTMLInputElement>) => void;
   readonly step: number | "any";
   readonly value: string;
+}
+
+/**
+ * The on-screen keyboard the rules ask for.
+ *
+ * Both keypads omit the minus key on some platforms, so one is requested only
+ * where the rules rule negatives out. A field that accepts fractions then asks
+ * for the decimal pad, which puts the point under a wet or gloved finger
+ * instead of behind a switch to the punctuation layer.
+ */
+function resolveInputMode(
+  rules: NumberDraftOptions,
+): "decimal" | "numeric" | undefined {
+  if (rules.min === undefined || rules.min < 0) return undefined;
+  return rules.integer === true ? "numeric" : "decimal";
 }
 
 export interface NumberDraft {
@@ -172,7 +288,8 @@ export interface UseNumberDraftOptions extends NumberDraftOptions {
   /**
    * Called when the draft crosses between valid and invalid. Consumers gate a
    * save action on it. It is never called from an unmount, so a consumer that
-   * stops rendering the field clears its own entry.
+   * stops rendering the field clears its own entry, which the shared
+   * `useFieldValidity` bookkeeping does for a panel that would rather not.
    */
   readonly onValidityChange?: ((valid: boolean) => void) | undefined;
   /**
@@ -257,12 +374,8 @@ export function useNumberDraft(
     handleChange,
     inputProps: {
       "aria-invalid": isValid ? undefined : true,
-      // A numeric keypad omits the minus key on some platforms, so it is only
-      // requested where the rules rule negatives out.
-      inputMode:
-        rules.integer === true && rules.min !== undefined && rules.min >= 0
-          ? "numeric"
-          : undefined,
+      enterKeyHint: "done",
+      inputMode: resolveInputMode(rules),
       max: rules.max,
       min: rules.min,
       onBlur: finishEdit,

@@ -103,12 +103,13 @@ describe("snui-check-consumer --runtime", () => {
     const result = runRuntimeCli(root, "--expect", "Loading conversions");
 
     expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain(
-      "production JSX runtime, panel rendered from 2 bundles",
-    );
+    // Two separate clauses: the JSX runtime is reported on every invocation,
+    // so it no longer sits immediately before the runtime-only clause.
+    expect(result.stdout).toContain("production JSX runtime");
+    expect(result.stdout).toContain("panel rendered from 2 bundles");
   });
 
-  it("catches a development JSX runtime the static checks pass", () => {
+  it("catches a development JSX runtime without running the panel", () => {
     const root = createConsumer({
       assets: panelRemote({
         chunkPrelude:
@@ -117,10 +118,16 @@ describe("snui-check-consumer --runtime", () => {
       link: REACT_PACKAGES,
     });
 
-    expect(
-      runCli("--root", root, "--remote", "public/remoteEntry.js").status,
-      "the static mode passes the same build",
-    ).toBe(0);
+    const staticRun = runCli(
+      "--root",
+      root,
+      "--remote",
+      "public/remoteEntry.js",
+    );
+    expect(staticRun.status, "the static mode catches it too").not.toBe(0);
+    expect(staticRun.stderr).toContain(
+      "uses the React development JSX runtime: main.chunk.js contains jsxDEV",
+    );
 
     const result = runRuntimeCli(root);
 
@@ -256,7 +263,7 @@ describe("snui-check-consumer --runtime", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(
-      "The panel called save 2 times while it rendered",
+      "The panel called save 1 time in each render",
     );
   });
 

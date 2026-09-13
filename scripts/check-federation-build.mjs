@@ -13,7 +13,27 @@ import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 const require = createRequire(import.meta.url);
 const { peerDependencies, version } = await readPackageJson();
 const expectedShared = createFederationShared(peerDependencies);
-const { parseRange } = require("webpack/lib/util/semver.js");
+
+/**
+ * An ES module says so with an export statement. A substring test for the word
+ * would also pass on a CommonJS bundle that merely names an exports object.
+ */
+const ESM_EXPORT =
+  /(?:^|[\s;}])export\s*(?:[{*]|default\b|(?:async\s+)?(?:function|class|const|let|var)\b)/;
+
+// webpack does not export lib/util/semver.js, and this check requires it
+// anyway so the fixture assertions encode ranges exactly as the webpack that
+// built them does. Naming that when the internal moves beats a bare
+// module-not-found from the top of the script.
+let parseRange;
+try {
+  ({ parseRange } = require("webpack/lib/util/semver.js"));
+} catch (cause) {
+  throw new Error(
+    "webpack/lib/util/semver.js could not be loaded; the federation check needs webpack's own range encoder.",
+    { cause },
+  );
+}
 
 // The fixtures build against the generated entry, so the entry has to exist
 // and carry the map rendered from this package.json before the remotes are
@@ -73,7 +93,7 @@ if (!classicRemote?.source.includes("signalk_nearlcrews_ui")) {
   );
 }
 
-if (!esmRemote?.source.includes("export")) {
+if (esmRemote === undefined || !ESM_EXPORT.test(esmRemote.source)) {
   throw new Error("ESM remoteEntry.js does not contain module exports.");
 }
 
@@ -138,6 +158,6 @@ for (const [format, files, stats] of [
   }
 }
 
-console.log(
-  "Classic var and output-module ESM Module Federation fixtures passed with the published share map.",
+process.stdout.write(
+  "Classic var and output-module ESM Module Federation fixtures passed with the published share map.\n",
 );

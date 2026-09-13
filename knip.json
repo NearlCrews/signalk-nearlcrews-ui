@@ -1,9 +1,10 @@
 {
-  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "$schema": "https://unpkg.com/knip@6.35.1/schema.json",
   "entry": [
     "src/index.ts",
     "src/composites.ts",
     "src/data-grid.ts",
+    "src/format.ts",
     "src/forms.ts",
     "src/overlays.ts",
     "scripts/*.mjs",

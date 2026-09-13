@@ -18,8 +18,11 @@ export const EMPTY_STATE_STYLES: StyleModule = {
   text-align: center;
 }
 
+/* The illustration leads the block, so it is set above the title rather than
+   at the body size a text or emoji icon would otherwise inherit. */
 .snui-empty-state__icon {
   color: var(--snui-color-text-muted);
+  font-size: var(--snui-font-size-2xl);
   line-height: 1;
 }
 
@@ -40,6 +43,12 @@ export const EMPTY_STATE_STYLES: StyleModule = {
   text-wrap: pretty;
 }
 
+/*
+ * The one place a sibling margin is added on top of the grid gap: the action
+ * sits one step further from the copy than the copy does from the title, so a
+ * press is a deliberate move away from the text rather than the next line of
+ * it. Everything else in the package lets one gap own the rhythm.
+ */
 .snui-empty-state__action {
   margin-block-start: var(--snui-space-2);
 }

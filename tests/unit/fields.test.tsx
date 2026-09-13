@@ -1,9 +1,10 @@
 import { screen } from "@testing-library/react";
 import { createRef } from "react";
-import { describe, expect, it } from "vitest";
-
+import { describe, expect, it, vi } from "vitest";
+import { SecretInput } from "../../src/forms.js";
 import {
   Checkbox,
+  type FieldControlProps,
   FieldGroup,
   LabeledField,
   type LabeledFieldControlProps,
@@ -33,10 +34,10 @@ describe("LabeledField root", () => {
     expect(root).toHaveClass("snui-field", "snui-field--default");
   });
 
-  it("maps the deprecated comfortable density onto default", () => {
+  it("emits a class for each density step", () => {
     const { container } = renderInPanel(
       <>
-        <LabeledField label="Legacy" density="comfortable">
+        <LabeledField label="Default" density="default">
           <TextInput />
         </LabeledField>
         <LabeledField label="Compact" density="compact">
@@ -47,7 +48,6 @@ describe("LabeledField root", () => {
 
     const fields = container.querySelectorAll(".snui-field");
     expect(fields[0]).toHaveClass("snui-field--default");
-    expect(fields[0]).not.toHaveClass("snui-field--comfortable");
     expect(fields[1]).toHaveClass("snui-field--compact");
   });
 });
@@ -63,6 +63,41 @@ describe("LabeledField control injection", () => {
     ).toThrow(
       "LabeledField element children must render a labelable form control. Use the render-prop form for composite controls.",
     );
+  });
+
+  it("accepts a package control that forwards the injected props", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    renderInPanel(
+      <LabeledField label="API key">
+        <SecretInput />
+      </LabeledField>,
+    );
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(screen.getByLabelText(/API key/)).toHaveAttribute(
+      "type",
+      "password",
+    );
+    warn.mockRestore();
+  });
+
+  it("reports a consumer component that may swallow the injected props", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    function ConsumerControl(props: FieldControlProps): React.JSX.Element {
+      return <input {...props} />;
+    }
+
+    renderInPanel(
+      <LabeledField label="Chart source">
+        <ConsumerControl />
+      </LabeledField>,
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("LabeledField received ConsumerControl"),
+    );
+    warn.mockRestore();
   });
 
   it("injects name, disabled, and required into an element child", () => {
@@ -187,7 +222,7 @@ describe("LabeledField control injection", () => {
 
     expect(
       screen.getByRole("spinbutton", { name: "Cache limit exact value" }),
-    ).toHaveAccessibleDescription("Whole GiB Choose at least 4 GiB.");
+    ).toHaveAccessibleDescription("Whole GiB Error.Choose at least 4 GiB.");
     // The primary control received the attributes and none of the lookups.
     const primary = screen.getByRole("textbox", { name: "Cache limit" });
     expect(primary).toHaveAttribute("aria-invalid", "true");
@@ -220,8 +255,122 @@ describe("LabeledField control injection", () => {
     expect(
       screen.getByRole("textbox", { name: "Retention" }),
     ).toHaveAccessibleDescription(
-      "Whole days Choose at least one day. Applies to every logged source. The server keeps four weeks at most.",
+      "Whole days Error.Choose at least one day. Applies to every logged source. The server keeps four weeks at most.",
     );
+  });
+
+  it("reads its own text before either route the caller adds ids by", () => {
+    renderInPanel(
+      <>
+        <p id="port-hint">1 to 65535.</p>
+        <p id="port-note">Restarting the plugin frees the old port.</p>
+        <LabeledField
+          label="Port"
+          description="Whole numbers"
+          error="Choose a free port."
+          controlDescribedBy="port-note"
+        >
+          <TextInput aria-describedby="port-hint" />
+        </LabeledField>
+      </>,
+    );
+
+    // A describedby already on the child and an id named in
+    // controlDescribedBy are two routes to the same thing, so both follow the
+    // field's description and error rather than displacing them.
+    expect(
+      screen.getByRole("textbox", { name: "Port" }),
+    ).toHaveAccessibleDescription(
+      "Whole numbers Error.Choose a free port. 1 to 65535. Restarting the plugin frees the old port.",
+    );
+  });
+
+  it("names a repeated id once in the merged description", () => {
+    renderInPanel(
+      <>
+        <p id="keel-note">Metres below the keel.</p>
+        <LabeledField
+          label="Depth"
+          controlDescribedBy={["keel-note", "keel-note"]}
+        >
+          <TextInput aria-describedby="keel-note" />
+        </LabeledField>
+      </>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Depth" });
+    expect(input).toHaveAttribute("aria-describedby", "keel-note");
+    expect(input).toHaveAccessibleDescription("Metres below the keel.");
+  });
+
+  it("reads a required attribute the child already carries", () => {
+    const { container } = renderInPanel(
+      <LabeledField label="Port">
+        <TextInput required />
+      </LabeledField>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Port" })).toBeRequired();
+    expect(container.querySelector(".snui-required-mark")).toHaveTextContent(
+      "*",
+    );
+  });
+
+  it("exposes the required state to a composite control", () => {
+    renderInPanel(
+      <LabeledField label="Alert sources" required>
+        {(fieldProps) => {
+          const { controlProps } = splitLabeledFieldControlProps(fieldProps);
+          return (
+            <div {...controlProps} role="radiogroup" aria-label="Alert sources">
+              <span />
+            </div>
+          );
+        }}
+      </LabeledField>,
+    );
+
+    // A div, a fieldset, and a group role expose no required state from the
+    // native attribute, so the ARIA state travels beside it.
+    expect(screen.getByRole("radiogroup")).toHaveAttribute(
+      "aria-required",
+      "true",
+    );
+  });
+
+  it("leaves required and disabled off a child that carries neither", () => {
+    const { container } = renderInPanel(
+      <LabeledField label="Import progress" required disabled>
+        <progress value={40} max={100} />
+      </LabeledField>,
+    );
+
+    const bar = container.querySelector("progress");
+    // React would write both as bare attributes with no state behind them.
+    expect(bar).not.toHaveAttribute("required");
+    expect(bar).not.toHaveAttribute("disabled");
+    expect(bar).not.toHaveAttribute("aria-required");
+    // The wiring every child gets is unchanged.
+    expect(bar).toHaveAttribute("id");
+  });
+
+  it("reports a component child it cannot check", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    function HostInput(props: FieldControlProps): React.JSX.Element {
+      return <input {...props} />;
+    }
+
+    try {
+      renderInPanel(
+        <LabeledField label="Broker host">
+          <HostInput />
+        </LabeledField>,
+      );
+      expect(warn.mock.calls[0]?.[0]).toContain("HostInput");
+      expect(warn.mock.calls[0]?.[0]).toContain("render-prop form");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("merges a single caller id for an element child too", () => {
@@ -311,6 +460,72 @@ describe("LabeledField optional marker", () => {
 
     expect(container.querySelector(".snui-optional-mark")).toBeNull();
   });
+
+  it("takes a required marker of its own and adds no space without one", () => {
+    const { container } = renderInPanel(
+      <>
+        <LabeledField label="Server URL" required requiredLabel="(required)">
+          <TextInput />
+        </LabeledField>
+        <LabeledField label="Nickname">
+          <TextInput />
+        </LabeledField>
+      </>,
+    );
+
+    const labels = container.querySelectorAll(".snui-field__label");
+    expect(labels[0]?.querySelector(".snui-required-mark")).toHaveTextContent(
+      "(required)",
+    );
+    // The separator belongs to the marker, so a label without one ends where
+    // its text ends rather than padding the accessible name with a space.
+    expect(labels[1]?.textContent).toBe("Nickname");
+  });
+});
+
+describe("FieldGroup naming and description", () => {
+  it("names the group from label, and still accepts the legend spelling", () => {
+    renderInPanel(
+      <>
+        <FieldGroup label="Notifications">
+          <Checkbox label="Wind" />
+        </FieldGroup>
+        <FieldGroup legend="Providers">
+          <Checkbox label="Primary" />
+        </FieldGroup>
+        <FieldGroup label="Sources" legend="Ignored">
+          <Checkbox label="AIS" />
+        </FieldGroup>
+      </>,
+    );
+
+    expect(screen.getByRole("group", { name: "Notifications" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Providers" })).toBeTruthy();
+    // label decides when both are given, the way it does on the other groups.
+    expect(screen.getByRole("group", { name: "Sources" })).toBeTruthy();
+  });
+
+  it("reads its own text before the ids the caller adds", () => {
+    renderInPanel(
+      <>
+        <p id="alert-note">Alerts publish to the vessel bus.</p>
+        <FieldGroup
+          label="Notifications"
+          description="Choose the alerts to publish."
+          error="Select at least one alert."
+          groupDescribedBy="alert-note"
+        >
+          <Checkbox label="Wind" />
+        </FieldGroup>
+      </>,
+    );
+
+    expect(
+      screen.getByRole("group", { name: "Notifications" }),
+    ).toHaveAccessibleDescription(
+      "Choose the alerts to publish. Error.Select at least one alert. Alerts publish to the vessel bus.",
+    );
+  });
 });
 
 describe("FieldGroup group error", () => {
@@ -327,7 +542,7 @@ describe("FieldGroup group error", () => {
 
     const group = screen.getByRole("group", { name: "Notifications" });
     expect(group).toHaveAccessibleDescription(
-      "Choose the alerts to publish. Select at least one alert.",
+      "Choose the alerts to publish. Error.Select at least one alert.",
     );
     const error = screen.getByText("Select at least one alert.");
     expect(error).toHaveClass("snui-field-group__error");
@@ -371,7 +586,7 @@ describe("FieldGroup group error", () => {
     expect(region).toHaveTextContent("Select at least one alert.");
     expect(
       screen.getByRole("group", { name: "Notifications" }),
-    ).toHaveAccessibleDescription("Select at least one alert.");
+    ).toHaveAccessibleDescription("Error.Select at least one alert.");
   });
 });
 

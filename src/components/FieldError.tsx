@@ -4,10 +4,11 @@ import {
   type AnnouncementMode,
   liveRegionProps,
 } from "../utils/announcement.js";
+import { ToneMark } from "./ToneMark.js";
 
 interface FieldErrorProps {
   /** Element to render. Inline controls need a span, block fields a div. */
-  readonly as?: "div" | "span";
+  readonly as?: "div" | "span" | undefined;
   readonly className: string;
   readonly error: ReactNode;
   readonly hasError: boolean;
@@ -38,7 +39,18 @@ export function FieldError({
       role={region.role}
       aria-live={region["aria-live"]}
     >
-      {hasError ? error : null}
+      {hasError ? (
+        <>
+          {/*
+            The danger mark, the way Banner and StatusIndicator carry it. In
+            Night the danger color is the same hue as the muted description
+            above the error, so the shape and the announced tone word are what
+            separate them.
+          */}
+          <ToneMark tone="danger" />
+          {error}
+        </>
+      ) : null}
     </Element>
   );
 }

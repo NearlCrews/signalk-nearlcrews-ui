@@ -20,18 +20,44 @@ export interface AxeOptions {
 }
 
 /**
- * Runs axe over the page as it stands, color-contrast included, and fails on
- * any violation. Open overlays and enqueued toasts are part of the page, so
- * call it with those states present. A rule is left out only with a reason,
- * so every exception reads as a documented limitation at its call site.
- */
-/**
- * Waits for every running transition and animation to finish.
+ * The smallest a control may be, in CSS pixels, for the project under test.
  *
- * An axe pass that starts while an overlay is still fading measures colours
- * composited against whatever is behind it, not the ones the tokens set, and
- * reports a contrast failure that does not exist once the paint settles.
+ * A coarse pointer means a wet or gloved finger on a moving boat, so the
+ * package raises its control height there; a fine pointer keeps the ordinary
+ * one. Both browser specs that measure targets read the floor here, so the
+ * two lists cannot end up holding controls to different sizes.
  */
+export function controlTargetFloor(testInfo: TestInfo): number {
+  return testInfo.project.name === "mobile-chromium" ? 44 : 40;
+}
+
+/** Fails when a control's box is under the floor on either measured axis. */
+export async function expectTargetFloor(
+  target: Locator,
+  minimum: number,
+  axes: "height" | "both" = "height",
+): Promise<void> {
+  const box = await target.boundingBox();
+  expect(box, "Expected the control to have a rendered box.").not.toBeNull();
+  // Subpixel layout leaves a control that is exactly at the floor reporting a
+  // hair under it, which is the engine rounding rather than a small target.
+  expect(box?.height).toBeGreaterThanOrEqual(minimum - 0.01);
+  if (axes === "both") {
+    expect(box?.width).toBeGreaterThanOrEqual(minimum - 0.01);
+  }
+}
+
+/** Options for {@link settledScrollLeft}. */
+interface SettledScrollOptions {
+  /**
+   * Pixels the region must have scrolled before a repeated reading counts as
+   * settled, default 1. A poll with no floor settles on the origin the region
+   * has not left yet, so the default waits for the scroll to start; pass 0
+   * where the wait is for a return to the origin.
+   */
+  readonly minimum?: number;
+}
+
 /**
  * Reads `scrollLeft` once it stops moving.
  *
@@ -40,12 +66,16 @@ export interface AxeOptions {
  * twice in a row sees the region refuse to move rather than the engine
  * coalescing the two.
  */
-export async function settledScrollLeft(region: Locator): Promise<number> {
+export async function settledScrollLeft(
+  region: Locator,
+  options: SettledScrollOptions = {},
+): Promise<number> {
+  const minimum = options.minimum ?? 1;
   let previous = Number.NaN;
   await expect
     .poll(async () => {
       const current = await region.evaluate((element) => element.scrollLeft);
-      const settled = current > 1 && current === previous;
+      const settled = current >= minimum && current === previous;
       previous = current;
       return settled;
     })
@@ -53,6 +83,13 @@ export async function settledScrollLeft(region: Locator): Promise<number> {
   return previous;
 }
 
+/**
+ * Waits for every running transition and animation to finish.
+ *
+ * An axe pass that starts while an overlay is still fading measures colors
+ * composited against whatever is behind it, not the ones the tokens set, and
+ * reports a contrast failure that does not exist once the paint settles.
+ */
 export async function settleAnimations(page: Page): Promise<void> {
   await page.evaluate(async () => {
     const finishing = document
@@ -68,6 +105,12 @@ export async function settleAnimations(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Runs axe over the page as it stands, color-contrast included, and fails on
+ * any violation. Open overlays and enqueued toasts are part of the page, so
+ * call it with those states present. A rule is left out only with a reason,
+ * so every exception reads as a documented limitation at its call site.
+ */
 export async function expectNoAxeViolations(
   page: Page,
   options: AxeOptions = {},

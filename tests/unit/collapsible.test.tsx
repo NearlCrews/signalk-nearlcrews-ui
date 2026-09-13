@@ -138,14 +138,116 @@ describe("accordion coordination", () => {
     expect(onOpenChange).toHaveBeenCalledWith(true);
   });
 
-  it("rejects children that are not collapsible sections", () => {
+  it("rejects children that are not collapsible sections and names them", () => {
     expect(() =>
       renderInPanel(
         <Accordion>
           <div>Not a section</div>
         </Accordion>,
       ),
-    ).toThrow("Accordion accepts only CollapsibleSection children.");
+    ).toThrow("Accordion accepts only CollapsibleSection children; received");
+    expect(() =>
+      renderInPanel(
+        <Accordion>
+          <div>Not a section</div>
+        </Accordion>,
+      ),
+    ).toThrow("<div>");
+  });
+
+  it("tells the replaced section about the close the accordion made", async () => {
+    const user = userEvent.setup();
+    const onFirstOpenChange = vi.fn();
+    const onSecondOpenChange = vi.fn();
+    renderInPanel(
+      <Accordion>
+        <CollapsibleSection title="First" onOpenChange={onFirstOpenChange}>
+          First content
+        </CollapsibleSection>
+        <CollapsibleSection title="Second" onOpenChange={onSecondOpenChange}>
+          Second content
+        </CollapsibleSection>
+      </Accordion>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "First" }));
+    expect(onFirstOpenChange).toHaveBeenLastCalledWith(true);
+
+    await user.click(screen.getByRole("button", { name: "Second" }));
+    // The accordion, not the pressed section, closed the first one, so the
+    // first section is the one that has to hear about it.
+    expect(onFirstOpenChange).toHaveBeenLastCalledWith(false);
+    expect(onSecondOpenChange).toHaveBeenLastCalledWith(true);
+  });
+
+  it("opens the section a controlling panel names", async () => {
+    const user = userEvent.setup();
+    const onOpenIndexChange = vi.fn();
+
+    function Owner({
+      openIndex,
+    }: {
+      readonly openIndex: number | null;
+    }): React.JSX.Element {
+      return (
+        <Accordion openIndex={openIndex} onOpenIndexChange={onOpenIndexChange}>
+          <CollapsibleSection title="First">First content</CollapsibleSection>
+          <CollapsibleSection title="Second">Second content</CollapsibleSection>
+        </Accordion>
+      );
+    }
+
+    const { rerender } = renderInPanel(<Owner openIndex={null} />);
+    const first = screen.getByRole("button", { name: "First" });
+    expect(first).toHaveAttribute("aria-expanded", "false");
+
+    rerender(panel(<Owner openIndex={1} />));
+    expect(screen.getByRole("button", { name: "Second" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+
+    // A controlled accordion reports the press and leaves the state to the
+    // owner, which has not moved it.
+    await user.click(first);
+    expect(onOpenIndexChange).toHaveBeenCalledWith(0);
+    expect(first).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("takes the initially open section from defaultOpenIndex", () => {
+    renderInPanel(
+      <Accordion defaultOpenIndex={1}>
+        <CollapsibleSection title="First" defaultOpen>
+          First content
+        </CollapsibleSection>
+        <CollapsibleSection title="Second">Second content</CollapsibleSection>
+      </Accordion>,
+    );
+
+    expect(screen.getByRole("button", { name: "Second" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    expect(screen.getByRole("button", { name: "First" })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+  });
+
+  it("warns that it owns a child's open prop", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <Accordion>
+        <CollapsibleSection title="First" open>
+          First content
+        </CollapsibleSection>
+      </Accordion>,
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("Accordion owns the open state of every child"),
+    );
+    warn.mockRestore();
   });
 });
 
@@ -475,5 +577,222 @@ describe("section landmark opt-out", () => {
     expect(container.querySelector("section")).not.toHaveAttribute(
       "aria-labelledby",
     );
+  });
+
+  it("gives a consumer the heading as a focus destination", () => {
+    const headingRef = createRef<HTMLHeadingElement>();
+    renderInPanel(
+      <Section title="Connection" headingRef={headingRef}>
+        Content
+      </Section>,
+    );
+
+    const heading = screen.getByRole("heading", { name: "Connection" });
+    expect(headingRef.current).toBe(heading);
+    // Focusable only where a consumer asked for it, so an ordinary section
+    // adds nothing to what a reader has to move through.
+    expect(heading).toHaveAttribute("tabindex", "-1");
+    headingRef.current?.focus();
+    expect(heading).toHaveFocus();
+  });
+
+  it("leaves the heading out of the tab order without a ref", () => {
+    renderInPanel(<Section title="Connection">Content</Section>);
+
+    expect(
+      screen.getByRole("heading", { name: "Connection" }),
+    ).not.toHaveAttribute("tabindex");
+  });
+});
+
+describe("collapsible focus handoff", () => {
+  it("returns focus to the toggle when a press closes a section holding it", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <CollapsibleSection title="Advanced settings" defaultOpen>
+        <button type="button">Reset counters</button>
+      </CollapsibleSection>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    const inside = screen.getByRole("button", { name: "Reset counters" });
+    inside.focus();
+    expect(inside).toHaveFocus();
+
+    await user.click(toggle);
+    expect(toggle).toHaveFocus();
+  });
+
+  it("returns focus to the toggle when a controlled close hides the content", async () => {
+    const user = userEvent.setup();
+
+    function Owner({ open }: { readonly open: boolean }): React.JSX.Element {
+      return (
+        <CollapsibleSection title="Advanced settings" open={open}>
+          <button type="button">Reset counters</button>
+        </CollapsibleSection>
+      );
+    }
+
+    const { rerender } = renderInPanel(<Owner open />);
+    await user.click(screen.getByRole("button", { name: "Reset counters" }));
+
+    rerender(panel(<Owner open={false} />));
+    expect(
+      screen.getByRole("button", { name: "Advanced settings" }),
+    ).toHaveFocus();
+  });
+
+  it("moves no focus when a section closes while focus is elsewhere", async () => {
+    const user = userEvent.setup();
+
+    function Owner({ open }: { readonly open: boolean }): React.JSX.Element {
+      return (
+        <>
+          <button type="button">Outside action</button>
+          <CollapsibleSection title="Advanced settings" open={open}>
+            <button type="button">Reset counters</button>
+          </CollapsibleSection>
+        </>
+      );
+    }
+
+    const { rerender } = renderInPanel(<Owner open />);
+    const outside = screen.getByRole("button", { name: "Outside action" });
+    await user.click(outside);
+
+    rerender(panel(<Owner open={false} />));
+    expect(outside).toHaveFocus();
+  });
+
+  it("leaves an open section alone when a controlling owner declines the close", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderInPanel(
+      <CollapsibleSection
+        title="Advanced settings"
+        open
+        onOpenChange={onOpenChange}
+      >
+        <button type="button">Reset counters</button>
+      </CollapsibleSection>,
+    );
+
+    const inside = screen.getByRole("button", { name: "Reset counters" });
+    inside.focus();
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    await user.click(toggle);
+
+    // The owner heard the request and left `open` alone, so the content is
+    // still on screen, the toggle the reader pressed still has focus, and the
+    // handoff has not run for a close that never happened.
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(inside).toBeVisible();
+    expect(toggle).toHaveFocus();
+  });
+
+  it("ignores the toggle while disabled", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    renderInPanel(
+      <CollapsibleSection
+        title="Advanced settings"
+        disabled
+        onOpenChange={onOpenChange}
+      >
+        Content
+      </CollapsibleSection>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    expect(toggle).toBeDisabled();
+    await user.click(toggle);
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+});
+
+describe("collapsible tone, trigger, and ids", () => {
+  it("marks a toned section and announces the tone on its toggle", () => {
+    const { container } = renderInPanel(
+      <CollapsibleSection title="Advanced settings" tone="danger">
+        Content
+      </CollapsibleSection>,
+    );
+
+    expect(container.querySelector(".snui-collapsible--danger")).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: /Advanced settings/ }),
+    ).toHaveAccessibleName(/Error\.\s*Advanced settings/);
+  });
+
+  it("takes a tone label of its own", () => {
+    renderInPanel(
+      <CollapsibleSection
+        title="Advanced settings"
+        tone="danger"
+        toneLabel="Blocking problems"
+      >
+        Content
+      </CollapsibleSection>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: /Advanced settings/ }),
+    ).toHaveAccessibleName(/Blocking problems\.\s*Advanced settings/);
+  });
+
+  it("hands the toggle to a consumer ref and names it from idPrefix", () => {
+    const triggerRef = createRef<HTMLButtonElement>();
+    renderInPanel(
+      <CollapsibleSection
+        title="Advanced settings"
+        idPrefix="advanced"
+        triggerRef={triggerRef}
+      >
+        Content
+      </CollapsibleSection>,
+    );
+
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    expect(triggerRef.current).toBe(toggle);
+    expect(toggle).toHaveAttribute("id", "advanced-toggle");
+    expect(toggle).toHaveAttribute("aria-controls", "advanced-content");
+    expect(document.getElementById("advanced-title")).toHaveTextContent(
+      "Advanced settings",
+    );
+
+    // The panel can jump to the section it wants read without a DOM query.
+    triggerRef.current?.focus();
+    expect(toggle).toHaveFocus();
+  });
+
+  it("rejects an id prefix that cannot be an ARIA reference", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(() =>
+      renderInPanel(
+        <CollapsibleSection title="Advanced settings" idPrefix="two words">
+          Content
+        </CollapsibleSection>,
+      ),
+    ).toThrow("CollapsibleSection idPrefix");
+  });
+
+  it("mounts lazily retained content only once it has been opened", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <CollapsibleSection title="Advanced settings" mountStrategy="lazy-retain">
+        <span>Advanced content</span>
+      </CollapsibleSection>,
+    );
+
+    expect(screen.queryByText("Advanced content")).toBeNull();
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    await user.click(toggle);
+    expect(screen.getByText("Advanced content")).toBeVisible();
+
+    await user.click(toggle);
+    expect(screen.getByText("Advanced content")).not.toBeVisible();
   });
 });

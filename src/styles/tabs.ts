@@ -1,6 +1,7 @@
 import {
   DISABLED_DECLARATIONS,
   FORCED_COLORS_OUTLINE_DECLARATIONS,
+  NARROW_PANEL_QUERY,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
@@ -30,10 +31,15 @@ export const TABS_STYLES: StyleModule = {
   border-inline-end: 1px solid var(--snui-color-border);
 }
 
+/*
+ * The target floor belongs to the control in both axes, as it does on a
+ * compact button and a segmented option, so a one-character tab stays
+ * pressable. The label span keeps its own min-width for truncation.
+ */
 .snui-tab {
   display: inline-flex;
   min-height: var(--snui-control-min-height);
-  min-width: 0;
+  min-inline-size: var(--snui-control-min-height);
   align-items: center;
   gap: var(--snui-space-2);
   padding: var(--snui-space-2) var(--snui-space-3);
@@ -103,12 +109,54 @@ ${DISABLED_DECLARATIONS}
   padding-block-start: 0;
 }
 
+/*
+ * A narrow panel has no room for a tablist beside its panel, so a vertical
+ * set falls back to the horizontal arrangement rather than squeezing both
+ * columns. Only the presentation changes: the pattern still reports the
+ * orientation the consumer asked for, so the arrow keys stay the ones the
+ * reader was told about.
+ */
+${NARROW_PANEL_QUERY} {
+  .snui-tabs--vertical {
+    display: block;
+  }
+
+  .snui-tabs--vertical .snui-tablist {
+    flex-direction: row;
+    border-block-end: 1px solid var(--snui-color-border);
+    border-inline-end: 0;
+  }
+
+  .snui-tabs--vertical .snui-tab {
+    border-block-end: 2px solid transparent;
+    border-inline-end: 0;
+    margin-block-end: -1px;
+    margin-inline-end: 0;
+    border-radius: var(--snui-radius-sm) var(--snui-radius-sm) 0 0;
+  }
+
+  .snui-tabs--vertical .snui-tabpanel {
+    padding-block-start: var(--snui-space-3);
+  }
+}
+
 @media (forced-colors: active) {
   .snui-tab[aria-selected="true"] {
     forced-color-adjust: none;
     border-color: Highlight;
     background: Canvas;
     color: CanvasText;
+  }
+
+  /*
+   * Forced colors flattens the hover fill, which leaves the hovered tab
+   * painted exactly like its neighbors. Reconstruct it with a system
+   * highlight, as the menu item does.
+   */
+  .snui-tab:not(:disabled):not([aria-selected="true"]):hover {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
   }
 
   .snui-tab:focus-visible {
