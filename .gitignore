@@ -4,6 +4,9 @@ coverage/
 dist/
 fixtures/browser/dist/
 fixtures/federation/*/dist/
+# Every other directory entry carries a trailing slash; this one does not,
+# because a trailing slash matches directories only and an install tree
+# symlinked into the checkout would then show up as untracked.
 node_modules
 playwright-report/
 test-results/

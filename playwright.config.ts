@@ -6,6 +6,13 @@ import { BROWSER_URL } from "./fixtures/browser/browser-server.js";
  * (`ubuntu24-x64`, `ubuntu24-arm64`). A local run gets a `local-` prefix so its
  * images can never collide with, or be mistaken for, a hosted family; they are
  * ignored by Git and exist for inspection only.
+ *
+ * The variant repeats what `{platform}` in the path template already says,
+ * because every family so far is a Linux one. Both segments stay: `{platform}`
+ * separates a macOS or Windows run, and the variant separates two runner images
+ * or architectures on the same platform. Neither is redundant once a family
+ * lands that the other cannot tell apart, and renaming either one rewrites
+ * every committed baseline file name.
  */
 const snapshotVariant =
   process.env.SNUI_SNAPSHOT_VARIANT ?? `local-${process.arch}`;
@@ -17,7 +24,10 @@ export default defineConfig({
   fullyParallel: true,
   failOnFlakyTests: Boolean(process.env.CI),
   forbidOnly: Boolean(process.env.CI),
-  retries: process.env.CI ? 2 : 0,
+  // Retries buy the trace, not tolerance: `failOnFlakyTests` above keeps a run
+  // that only passed on a retry red, so one retry is enough to capture the
+  // `on-first-retry` trace that says why the first attempt failed.
+  retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL: BROWSER_URL,

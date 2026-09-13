@@ -2,12 +2,7 @@
 
 ## Supported versions
 
-Security fixes target the latest published release.
-
-| Version                  | Supported |
-| ------------------------ | --------- |
-| Latest published release | Yes       |
-| Earlier releases         | No        |
+Security fixes target the latest published release. Earlier releases receive no fixes.
 
 ## Report a vulnerability
 
@@ -28,6 +23,8 @@ The maintainer will acknowledge the report, assess severity, coordinate a correc
 The published package uses React Aria and React Aria Components as runtime dependencies, with React and React DOM as host-provided peer dependencies. It does not make network requests, call Signal K APIs, or handle plugin configuration. It writes only the shared theme preference to browser local storage, installs package CSS in the rendered panel's owner document, and portals overlays only into the owning `PanelRoot`. The framework-neutral `tokens.css` entry point declares CSS custom properties and `color-scheme`; importing it executes no script and performs no storage or network access. Installing the package still resolves the package's declared dependencies and peer dependencies.
 
 `SecretInput` is a presentation control, not a secret store or redaction boundary. Revealing a value changes the native input type, while the value remains available to the consumer and browser. Consumers are responsible for secret storage, log and notification redaction, validation, authorization, protected Signal K requests, and safe configuration persistence. Do not place credentials or private vessel data in toast content, compatibility notices, diagnostics, screenshots, or browser storage.
+
+The `snui-check-consumer` command that ships in this package runs on a maintainer's machine rather than in a panel, and it executes consumer code with the privileges of the user who runs it: it loads the installed package's federation entry, requires and calls the webpack configuration it finds beside `--root`, and with `--runtime` evaluates the built remote. The `node:vm` context that remote renders in answers browser globals as an API-compatibility harness, not as a security sandbox. Point the command only at a build and a working tree the operator already trusts.
 
 Consumers must supply a trusted CSP nonce when required, resolve React and React DOM through the Signal K Admin host singletons with Module Federation fallback imports disabled, and keep the package, its runtime dependencies, and both peer implementations current. A consumer remote must not embed separate React or React DOM implementations.
 
