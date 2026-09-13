@@ -80,6 +80,8 @@ Before moving panel content into a `CollapsibleSection`, read the `mountStrategy
 
 ## Changes in 0.11.0
 
+Published as 0.11.1. Version 0.11.0 was tagged but never reached npm, so a consumer moving off 0.10.1 pins 0.11.1 and applies everything below.
+
 This release removes every deprecated alias and prop the package carried, renames one prop across three components, and changes several defaults. Work through the required list first: each item is a compile error or a changed call signature, and the replacements are all exported today. The rest of the release is additive.
 
 ### Required migration work

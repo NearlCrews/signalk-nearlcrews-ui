@@ -6,7 +6,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-09-13
+
+The first published release of the 0.11 line. Version 0.11.0 was tagged but never reached npm: its publish workflow checked out only the release scripts, which had started importing the argument helper the shipped CLI keeps under `bin/lib`, so the run stopped before verifying the tarball. The publish job now checks out both trees, and everything listed under 0.11.0 ships in this version.
+
+### Fixed
+
+- The publish workflow checks out `bin` beside `scripts`, so the registry-ordering check can load the shared argument helper.
+
 ## [0.11.0] - 2026-09-13
+
+Tagged but not published; see 0.11.1.
 
 This release removes every deprecated alias and prop the package carried, adds the shared primitives six consumer panels had each written for themselves, and changes several defaults. `docs/migration.md` records the required work under "Changes in 0.11.0".
 
@@ -568,7 +578,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.9.0...v0.10.0

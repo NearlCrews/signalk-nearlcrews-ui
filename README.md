@@ -15,9 +15,9 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or App Store package. The API may still change during the `0.x` series, so consumers should pin an exact version.
 
-## What's new in 0.11.0
+## What's new in 0.11.1
 
-Version 0.11.0 clears out every deprecated alias and prop the package had accumulated, and brings in the primitives six consumer panels had each been writing for themselves. It is a breaking release: every item of required work is a compile error or a changed call signature, and every replacement is exported today, so a panel upgrades by following the errors and then deleting the local helpers the package now owns.
+Version 0.11.1 is the first published release of the 0.11 line: version 0.11.0 was tagged but never reached npm, because its publish workflow stopped on a checkout error before verifying the tarball, and the same content ships here. It clears out every deprecated alias and prop the package had accumulated, and brings in the primitives six consumer panels had each been writing for themselves. It is a breaking release: every item of required work is a compile error or a changed call signature, and every replacement is exported today, so a panel upgrades by following the errors and then deleting the local helpers the package now owns.
 
 Most of the rest is accessibility and correctness. Errors no longer depend on color, native form resets put controls back where they belong, and the controls a panel must block keep their place in the tab order instead of dropping the user on the document body.
 
@@ -29,7 +29,7 @@ Most of the rest is accessibility and correctness. Errors no longer depend on co
 - **`signalk-nearlcrews-ui/format` runs outside React.** The formatting and state helpers ship from an entry point with no React anywhere in its module graph, for a web worker, a service worker, or a plain Node script.
 - **Every deprecated alias and prop is gone.** Ten type aliases, the `legend`, `legendVisibility`, `onChange`, and `destructive` spellings, the `"comfortable"` density, `SaveActionBar.savedMessage`, and the `tabIndex` and `aria-labelledby` props the tab and disclosure panels own themselves were all removed, and `width` became `controlWidth` on three components. The [migration guide](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/migration.md) lists the required work in order, and every replacement is exported today.
 
-For everything that landed in 0.11.0, including the toast, live-region, and data-grid changes, read the [0.11.0 changelog](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/CHANGELOG.md#0110---2026-09-13).
+For everything that landed in 0.11.0, including the toast, live-region, and data-grid changes, read the [0.11.1 changelog](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/CHANGELOG.md#0111---2026-09-13) and the 0.11.0 entry beneath it.
 
 ## Compatibility
 
@@ -134,7 +134,7 @@ The repository checks the declaration against that committed baseline rather tha
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.11.0
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.11.1
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball. `--pack-destination ..` keeps the tarball out of the repository tree:
@@ -142,7 +142,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts --pack-destination ..
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui-0.11.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui-0.11.1.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while resolving React and React DOM from the Signal K Admin host through the integration supported by its bundler.
@@ -398,11 +398,11 @@ An inline token override applies in every selected theme. Use it only when that 
 
 The repository ships a fixture page that renders every exported component. The top of that page in each theme:
 
-![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.11.0/docs/screenshots/showcase-light.png)
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.11.1/docs/screenshots/showcase-light.png)
 
-![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.11.0/docs/screenshots/showcase-dark.png)
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.11.1/docs/screenshots/showcase-dark.png)
 
-![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.11.0/docs/screenshots/showcase-night.png)
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.11.1/docs/screenshots/showcase-night.png)
 
 The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
 
