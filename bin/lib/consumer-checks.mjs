@@ -6,11 +6,14 @@
 import { gzipSync } from "node:zlib";
 
 /**
- * A bare version: three numeric parts and an optional prerelease or build
- * suffix, with no range operator. The release policy publishes prereleases
- * under the `next` dist-tag, so a consumer trying one still pins exactly.
+ * A bare version: three numeric parts, at most one prerelease suffix, and at
+ * most one build suffix, with no range operator. The release policy publishes
+ * prereleases under the `next` dist-tag, so a consumer trying one still pins
+ * exactly. The two suffixes are matched once each so the pattern cannot
+ * backtrack across a run of hyphens.
  */
-const EXACT_VERSION = /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)*$/;
+const EXACT_VERSION =
+  /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 /**
  * Substrings that appear only when a React runtime was bundled. The internals
