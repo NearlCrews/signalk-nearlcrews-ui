@@ -1,4 +1,5 @@
-import { createDocumentRegistry } from "../utils/document-registry.js";
+import { createDocumentRegistry, once } from "../utils/document-registry.js";
+import { windowGlobal } from "../utils/window-global.js";
 
 /**
  * One installable stylesheet. The root module ships with `PanelRoot`; overlay
@@ -46,12 +47,15 @@ export function supportsNativeCssScope(
   return (
     ownerWindow !== null &&
     ownerWindow !== undefined &&
-    typeof Reflect.get(ownerWindow, "CSSScopeRule") === "function"
+    typeof windowGlobal(ownerWindow, "CSSScopeRule") === "function"
   );
 }
 
 function assertNativeScopeSupport(ownerDocument: Document): void {
   const ownerWindow = ownerDocument.defaultView;
+  // A document with no default view (one built through createHTMLDocument, or
+  // one whose frame was detached) renders nothing, so there is no presentation
+  // for the feature check to protect and no window to read the feature from.
   if (ownerWindow === null) return;
 
   if (!supportsNativeCssScope(ownerWindow)) throw new UnsupportedBrowserError();
@@ -68,14 +72,24 @@ function attachStyleElement(
   version: string,
   moduleId: string,
 ): void {
+  // `head` is typed as always present, and is null in a document built through
+  // createDocument. The widening states that, because a plain annotation is
+  // narrowed straight back by the initializer, and it keeps the check below
+  // naming that cause rather than throwing a bare TypeError out of the
+  // callback ref that installs the sheet.
+  const head = ownerDocument.head as HTMLHeadElement | null;
+  if (head === null) {
+    throw new Error(
+      "signalk-nearlcrews-ui styles need a document with a <head> element.",
+    );
+  }
+
   const firstModuleSheet =
     moduleId === ROOT_STYLE_MODULE_ID
-      ? ownerDocument.head.querySelector(
-          `style[data-snui-module-styles="${version}"]`,
-        )
+      ? head.querySelector(`style[data-snui-module-styles="${version}"]`)
       : null;
   if (firstModuleSheet === null) {
-    ownerDocument.head.append(element);
+    head.append(element);
   } else {
     firstModuleSheet.before(element);
   }
@@ -133,12 +147,9 @@ export function installStyleModule(
     };
   });
 
-  let released = false;
-  return () => {
-    if (released) return;
-    released = true;
+  return once(() => {
     styleRegistry.release(ownerDocument, key);
-  };
+  });
 }
 
 /** Installs the root sheet; the entry point `PanelRoot` uses. */

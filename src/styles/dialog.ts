@@ -1,11 +1,19 @@
-import { FORCED_COLORS_OUTLINE_DECLARATIONS } from "./fragments.js";
+import {
+  bodyEdgeMarginRules,
+  FORCED_COLORS_OUTLINE_DECLARATIONS,
+  NARROW_PANEL_QUERY,
+} from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
-import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
 
 /**
  * Modal dialog and scrim styles. Installed by `Dialog` and `AlertDialog`
  * through `useModuleStyles`, so a panel without a dialog never injects them.
+ *
+ * `--snui-visual-viewport-height` is written onto the dialog element by
+ * `Dialog` itself, from the visual viewport, so an on-screen keyboard shrinks
+ * the dialog instead of pushing its actions under the keyboard. It falls back
+ * to `100dvh` for a dialog measured before its first frame.
  */
 export const DIALOG_STYLES: StyleModule = {
   id: "dialog",
@@ -29,12 +37,22 @@ export const DIALOG_STYLES: StyleModule = {
 }
 
 .snui-scrim--blur {
+  -webkit-backdrop-filter: blur(0.25rem);
   backdrop-filter: blur(0.25rem);
 }
 
 .snui-scrim[data-entering],
 .snui-scrim[data-exiting] {
   opacity: 0;
+}
+
+/* Blurring a full viewport on every frame of a fade costs a visible hitch on
+   the hardware these panels run on, so the blur waits until the scrim is at
+   rest. */
+.snui-scrim--blur[data-entering],
+.snui-scrim--blur[data-exiting] {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .snui-dialog-frame {
@@ -61,11 +79,12 @@ export const DIALOG_STYLES: StyleModule = {
    * raised hover step; see the toast card for the same remap.
    */
   --snui-color-interactive-hover: var(--snui-color-hover-raised);
+  --snui-color-focus-ring-band: var(--snui-color-surface-raised);
   display: flex;
   width: 100%;
   max-width: 100%;
   max-height: calc(
-    var(--visual-viewport-height, 100dvh) -
+    var(--snui-visual-viewport-height, 100dvh) -
     max(var(--snui-space-4), env(safe-area-inset-top, 0px)) -
     max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))
   );
@@ -77,7 +96,9 @@ export const DIALOG_STYLES: StyleModule = {
   background: var(--snui-color-surface-raised);
   box-shadow: var(--snui-shadow-overlay);
   color: var(--snui-color-text);
-  overflow-y: auto;
+  /* The body scrolls, not the surface, so the title stays readable and the
+     actions stay reachable on a short landscape viewport. */
+  overflow: hidden;
 }
 
 .snui-dialog--standard {
@@ -97,14 +118,22 @@ export const DIALOG_STYLES: StyleModule = {
   min-width: 0;
   color: var(--snui-color-text-muted);
   overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .snui-dialog__body {
   min-width: 0;
+  /* A flex item does not shrink below its content without this, so the body
+     has to be told it may before it can scroll. */
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  /* A flick that overshoots the end of the body must not scroll the host page
+     behind the modal. */
+  overscroll-behavior: contain;
 }
 
-.snui-dialog__body > :first-child { margin-block-start: 0; }
-.snui-dialog__body > :last-child { margin-block-end: 0; }
+${bodyEdgeMarginRules("snui-dialog__body")}
 
 .snui-dialog__actions {
   display: flex;
@@ -117,7 +146,7 @@ export const DIALOG_STYLES: StyleModule = {
 }
 
 /* Below the narrow-panel breakpoint the dialog becomes a bottom sheet. */
-@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
+${NARROW_PANEL_QUERY} {
   .snui-scrim {
     align-items: flex-end;
     padding:
@@ -135,7 +164,7 @@ export const DIALOG_STYLES: StyleModule = {
     max-height: min(
       85dvh,
       calc(
-        var(--visual-viewport-height, 100dvh) -
+        var(--snui-visual-viewport-height, 100dvh) -
         env(safe-area-inset-bottom, 0px)
       )
     );
@@ -145,6 +174,13 @@ export const DIALOG_STYLES: StyleModule = {
 
   .snui-dialog__actions > .snui-button {
     flex: 1 1 auto;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .snui-scrim--blur {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 }
 

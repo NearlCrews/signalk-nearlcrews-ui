@@ -1,9 +1,15 @@
 import {
   DISABLED_DECLARATIONS,
+  NARROW_PANEL_QUERY,
   PRESSED_FILL_DECLARATION,
+  SURFACE_DECLARATIONS,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { CONTAINER_BREAKPOINT_NARROW } from "./tokens.js";
+import {
+  TONE_ACCENT_BAR_DECLARATIONS,
+  toneAccentBarRules,
+  toneSelectorList,
+} from "./tone-rules.js";
 
 export const COLLAPSIBLE_STYLES = scopeStyles(`
 .snui-accordion {
@@ -13,9 +19,27 @@ export const COLLAPSIBLE_STYLES = scopeStyles(`
 }
 
 .snui-collapsible {
-  border: 1px solid var(--snui-color-border);
-  border-radius: var(--snui-radius-md);
-  background: var(--snui-color-surface);
+${SURFACE_DECLARATIONS}
+  min-width: 0;
+}
+
+/*
+ * A toned section paints the same leading bar a toned Card does and carries
+ * the tone glyph beside its title, so a problem hidden inside a collapsed
+ * section is marked the same way everywhere. The bar belongs to the default
+ * variant: an embedded section draws no chrome of its own, so its tone shows
+ * as the glyph alone.
+ */
+${toneSelectorList("snui-collapsible")} {
+${TONE_ACCENT_BAR_DECLARATIONS}
+}
+
+${toneAccentBarRules("snui-collapsible")}
+
+.snui-collapsible__tone-glyph {
+  flex: none;
+  margin-inline-end: 0.375em;
+  vertical-align: middle;
 }
 
 /* Embedded sections sit inside a Card and borrow its chrome. */
@@ -45,13 +69,14 @@ export const COLLAPSIBLE_STYLES = scopeStyles(`
 
 /*
  * The heading takes the same type step a Section heading of that level would,
- * so sibling level-2 titles match whether or not they collapse.
+ * so sibling level-2 titles match whether or not they collapse. Only the size
+ * is restated: the foundation reset already gives every heading its line
+ * height and weight, which a font shorthand here would quietly drop.
  */
 .snui-collapsible__heading {
   min-width: 0;
   flex: 1 1 auto;
   margin: 0;
-  font: inherit;
   font-size: var(--snui-font-size);
 }
 
@@ -95,10 +120,18 @@ ${DISABLED_DECLARATIONS}
 .snui-collapsible__title {
   min-width: 0;
   overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
+/*
+ * The chevron is a text glyph, and its advance width varies by font, so the
+ * box is pinned to the 1em the narrow-panel indents below are measured
+ * against. Without it those indents miss the title's text edge.
+ */
 .snui-collapsible__chevron {
   flex: none;
+  inline-size: 1em;
+  text-align: center;
   transition: transform var(--snui-transition-fast);
 }
 
@@ -132,6 +165,7 @@ ${DISABLED_DECLARATIONS}
 .snui-collapsible__summary {
   color: var(--snui-color-text-muted);
   overflow-wrap: anywhere;
+  text-wrap: pretty;
 }
 
 .snui-collapsible__summary--header {
@@ -140,12 +174,16 @@ ${DISABLED_DECLARATIONS}
   flex: 0 1 auto;
 }
 
+/*
+ * The summary and the content share the header's inline edge, so every row of
+ * the block lines up against the same border rather than stepping in and out.
+ */
 .snui-collapsible__summary--below {
-  padding: 0 var(--snui-space-4) var(--snui-space-3);
+  padding: 0 var(--snui-space-3) var(--snui-space-3);
 }
 
 .snui-collapsible__content {
-  padding: var(--snui-space-3) var(--snui-space-4) var(--snui-space-4);
+  padding: var(--snui-space-3);
   border-block-start: 1px solid var(--snui-color-border);
 }
 
@@ -158,7 +196,7 @@ ${DISABLED_DECLARATIONS}
   padding-inline: 0;
 }
 
-@container snui-panel (max-width: ${CONTAINER_BREAKPOINT_NARROW}) {
+${NARROW_PANEL_QUERY} {
   .snui-collapsible__heading {
     flex-basis: 100%;
   }
@@ -169,6 +207,20 @@ ${DISABLED_DECLARATIONS}
 
   .snui-collapsible__actions {
     padding-inline-start: calc(var(--snui-space-3) + 1em);
+  }
+}
+
+@media (forced-colors: active) {
+  /*
+   * Forced colors flattens the hover and pressed fills, which leaves the
+   * toggle painted exactly like the header around it. Reconstruct both states
+   * with a system highlight, as the menu item does.
+   */
+  .snui-collapsible__toggle:not(:disabled):hover,
+  .snui-collapsible__toggle:not(:disabled):active {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
   }
 }
 `);

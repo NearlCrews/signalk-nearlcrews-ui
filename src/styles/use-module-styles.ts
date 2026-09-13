@@ -22,11 +22,13 @@ import {
  * is always known by the time the layout effect runs. Layout timing keeps a
  * later-mounted overlay styled before its first paint.
  *
- * `componentName` appears in the error thrown outside `PanelRoot`.
+ * `componentName` appears in the error thrown outside `PanelRoot`, so it is
+ * required: a default would name this hook in a message a consumer reads about
+ * the component they wrote.
  */
 export function useModuleStyles(
   module: StyleModule,
-  componentName = "useModuleStyles",
+  componentName: string,
 ): void {
   const panelRoot = usePanelPortalContainer(componentName);
 

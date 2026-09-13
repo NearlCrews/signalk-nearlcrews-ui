@@ -1,7 +1,14 @@
 import {
+  CONTROL_LABEL_DECLARATIONS,
+  CONTROL_ROW_DECLARATIONS,
   DISABLED_DECLARATIONS,
+  FIELD_DESCRIPTION_DECLARATIONS,
   FIELD_ERROR_DECLARATIONS,
+  FIELD_STACK_DECLARATIONS,
+  FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
+  FORCED_COLORS_INVALID_DECLARATIONS,
   focusRingDeclarations,
+  SELECTION_GLYPH_SIZE,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
@@ -16,24 +23,27 @@ export const RADIO_STYLES: StyleModule = {
   id: "radio",
   styles: scopeStyles(`
 .snui-radio-group {
-  display: grid;
-  min-width: 0;
-  gap: var(--snui-space-1);
+${FIELD_STACK_DECLARATIONS}
 }
 
 .snui-radio-group__label {
-  min-width: 0;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  overflow-wrap: anywhere;
+${CONTROL_LABEL_DECLARATIONS}
 }
 
 .snui-radio-group__description {
+  text-wrap: pretty;
   display: block;
-  min-width: 0;
-  color: var(--snui-color-text-muted);
-  font-size: var(--snui-font-size-sm);
-  overflow-wrap: anywhere;
+${FIELD_DESCRIPTION_DECLARATIONS}
+}
+
+/*
+ * A group held unavailable dims its own text with the options, so the whole
+ * control reads as unavailable rather than as a live question with dimmed
+ * answers. React Aria marks the group root while it is disabled.
+ */
+.snui-radio-group[data-disabled]
+  :is(.snui-radio-group__label, .snui-radio-group__description) {
+  color: var(--snui-color-text-disabled);
 }
 
 .snui-radio-group__options {
@@ -58,20 +68,14 @@ ${FIELD_ERROR_DECLARATIONS}
  * rest), so all visual rules key off the button.
  */
 .snui-radio__button {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: var(--snui-space-1) var(--snui-space-3);
-  align-items: start;
-  min-height: var(--snui-control-min-height);
-  padding-block: var(--snui-space-2);
-  cursor: pointer;
+${CONTROL_ROW_DECLARATIONS}
 }
 
 .snui-radio__control {
   display: grid;
   place-content: center;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: ${SELECTION_GLYPH_SIZE};
+  height: ${SELECTION_GLYPH_SIZE};
   margin: 0.125rem 0 0;
   border: 2px solid var(--snui-color-border);
   border-radius: 50%;
@@ -128,17 +132,23 @@ ${DISABLED_DECLARATIONS}
 }
 
 .snui-radio__label {
-  min-width: 0;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  overflow-wrap: anywhere;
+${CONTROL_LABEL_DECLARATIONS}
 }
 
 @media (forced-colors: active) {
   /* The invalid outline the root sheet reconstructs for every field. */
   .snui-radio__button[data-invalid] .snui-radio__control {
-    outline: 2px dashed CanvasText;
-    outline-offset: 1px;
+${FORCED_COLORS_INVALID_DECLARATIONS}
+  }
+
+  /*
+   * A span carrying an authored color is repainted with the forced palette's
+   * ordinary text color, not with its disabled one, the way a native control
+   * would be. The unavailable group says so with the system color instead.
+   */
+  .snui-radio-group[data-disabled]
+    :is(.snui-radio-group__label, .snui-radio-group__description) {
+    color: GrayText;
   }
 
   .snui-radio__control {
@@ -158,9 +168,7 @@ ${DISABLED_DECLARATIONS}
   }
 
   .snui-radio__button[data-focus-visible] .snui-radio__control {
-    outline: 2px solid CanvasText;
-    outline-offset: 2px;
-    box-shadow: none;
+${FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS}
   }
 
   .snui-radio__button[data-hovered]:not([data-disabled]) .snui-radio__control {

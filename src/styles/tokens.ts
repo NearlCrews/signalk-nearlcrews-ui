@@ -7,8 +7,6 @@ export type ColorTokenName =
   | "--snui-color-surface-stripe"
   | "--snui-color-interactive-hover"
   | "--snui-color-hover-raised"
-  | "--snui-color-surface-hover"
-  | "--snui-color-surface-raised-hover"
   | "--snui-color-text"
   | "--snui-color-text-muted"
   | "--snui-color-text-disabled"
@@ -17,6 +15,7 @@ export type ColorTokenName =
   | "--snui-color-accent-fill"
   | "--snui-color-accent-fill-hover"
   | "--snui-color-accent-subtle"
+  | "--snui-color-row-selected-hover"
   | "--snui-color-on-accent"
   | "--snui-color-link"
   | "--snui-color-link-hover"
@@ -29,7 +28,11 @@ export type ColorTokenName =
   | "--snui-color-danger"
   | "--snui-color-danger-subtle"
   | "--snui-color-info"
-  | "--snui-color-info-subtle";
+  | "--snui-color-info-subtle"
+  // The surface-first aliases are declared last here because they are emitted
+  // last, so the union, the public name list, and the sheet read in one order.
+  | "--snui-color-surface-hover"
+  | "--snui-color-surface-raised-hover";
 
 type HoverAliasTokenName =
   | "--snui-color-surface-hover"
@@ -45,14 +48,22 @@ type ThemeTokenSource = Readonly<
  * `--snui-color-surface-hover` and `--snui-color-surface-raised-hover` name
  * the same two fills as `--snui-color-interactive-hover` and
  * `--snui-color-hover-raised` with one word order (surface first, then state).
- * Both spellings are public; the aliases are derived so a pair cannot drift.
+ * Both spellings are public, and each alias points at its pair.
  */
+const HOVER_ALIAS_SOURCES: ReadonlyMap<
+  HoverAliasTokenName,
+  keyof ThemeTokenSource
+> = new Map([
+  ["--snui-color-surface-hover", "--snui-color-interactive-hover"],
+  ["--snui-color-surface-raised-hover", "--snui-color-hover-raised"],
+]);
+
 function withHoverAliases(tokens: ThemeTokenSource): ThemeTokenSet {
-  return {
-    ...tokens,
-    "--snui-color-surface-hover": tokens["--snui-color-interactive-hover"],
-    "--snui-color-surface-raised-hover": tokens["--snui-color-hover-raised"],
-  };
+  const resolved: Partial<Record<ColorTokenName, string>> = { ...tokens };
+  for (const [alias, source] of HOVER_ALIAS_SOURCES) {
+    resolved[alias] = tokens[source];
+  }
+  return resolved as ThemeTokenSet;
 }
 
 /*
@@ -77,6 +88,7 @@ export const LIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-accent-fill": "#2563eb",
   "--snui-color-accent-fill-hover": "#1d4ed8",
   "--snui-color-accent-subtle": "#e3ebfb",
+  "--snui-color-row-selected-hover": "#d4e0fa",
   "--snui-color-on-accent": "#ffffff",
   "--snui-color-link": "#1d4ed8",
   "--snui-color-link-hover": "#1e40af",
@@ -88,13 +100,16 @@ export const LIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-warning-subtle": "#fbeed6",
   "--snui-color-danger": "#b42318",
   "--snui-color-danger-subtle": "#fbe5e2",
-  "--snui-color-info": "#1e40af",
-  "--snui-color-info-subtle": "#e3ebfb",
+  "--snui-color-info": "#0e7490",
+  "--snui-color-info-subtle": "#cff4fc",
 });
 
 /*
  * Dark accent fills are light enough for the dark on-accent label to clear
  * APCA Lc 60 as well as WCAG AA, so button labels read at body-text strength.
+ * The border is light enough to hold 3:1 on the raised hover fill and on every
+ * subtle fill, which is where a data-grid separator lands when a row is
+ * hovered or selected.
  */
 export const DARK_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-background": "#10131c",
@@ -106,11 +121,12 @@ export const DARK_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-text": "#f5f7fa",
   "--snui-color-text-muted": "#b3bac7",
   "--snui-color-text-disabled": "#7f8898",
-  "--snui-color-border": "#667085",
+  "--snui-color-border": "#78839a",
   "--snui-color-track": "#3b4354",
   "--snui-color-accent-fill": "#83b3ff",
   "--snui-color-accent-fill-hover": "#9cc3ff",
   "--snui-color-accent-subtle": "#1d2b48",
+  "--snui-color-row-selected-hover": "#253657",
   "--snui-color-on-accent": "#10131c",
   "--snui-color-link": "#92b8ff",
   "--snui-color-link-hover": "#b6ceff",
@@ -122,21 +138,22 @@ export const DARK_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-warning-subtle": "#3a2d14",
   "--snui-color-danger": "#ff8b82",
   "--snui-color-danger-subtle": "#40201f",
-  "--snui-color-info": "#92b8ff",
-  "--snui-color-info-subtle": "#1d2b48",
+  "--snui-color-info": "#67d3e8",
+  "--snui-color-info-subtle": "#12333d",
 });
 
 /*
  * Night is red-preserving. Every foreground keeps green and blue at or below
  * 0x40, so almost all of the light a panel emits is red, which dark-adapted
- * eyes at a helm tolerate. Text-class tokens (text, links, focus, the four
- * tones, and the accent fills) also keep red at or above 0xe0 so they stay
- * readable; border and text-disabled deliberately carry less red, because
+ * eyes at a helm tolerate. Text-class tokens (text, muted text, links, focus,
+ * the four tones, and the accent fills) also keep red at or above 0xe0 so they
+ * stay readable; border and text-disabled deliberately carry less red, because
  * brightness is the only hierarchy the cap leaves. The tones and the subtle
- * fills therefore differ little or not at all: shape, glyph, and tone label
- * carry status in Night, never hue. The cap also bounds contrast: the
- * brightest allowed text on the surface is 5.9:1, about APCA Lc 41, so Night
- * is gated on WCAG AA and the APCA column in the contrast tests is advisory.
+ * fills therefore differ little or not at all, and focus reaches the same
+ * value as text: shape, glyph, offset, and tone label carry status and focus
+ * in Night, never hue. The cap also bounds contrast: the brightest allowed
+ * text on the surface is 5.9:1, about APCA Lc 41, so Night is gated on WCAG AA
+ * and the APCA column in the contrast tests is advisory.
  */
 export const NIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-background": "#050000",
@@ -144,15 +161,16 @@ export const NIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-surface-raised": "#190000",
   "--snui-color-surface-stripe": "#260000",
   "--snui-color-interactive-hover": "#330000",
-  "--snui-color-hover-raised": "#300606",
+  "--snui-color-hover-raised": "#360000",
   "--snui-color-text": "#ff4040",
   "--snui-color-text-muted": "#f23838",
-  "--snui-color-text-disabled": "#b03030",
+  "--snui-color-text-disabled": "#bb3434",
   "--snui-color-border": "#c03030",
   "--snui-color-track": "#5e1212",
   "--snui-color-accent-fill": "#ec3838",
   "--snui-color-accent-fill-hover": "#ff4040",
   "--snui-color-accent-subtle": "#2c0000",
+  "--snui-color-row-selected-hover": "#390404",
   "--snui-color-on-accent": "#100000",
   "--snui-color-link": "#ff3838",
   "--snui-color-link-hover": "#ff4040",
@@ -165,19 +183,32 @@ export const NIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-danger": "#ff3030",
   "--snui-color-danger-subtle": "#2c0000",
   "--snui-color-info": "#e84040",
+  // The cap leaves one usable tint, so every Night subtle fill, the accent one
+  // included, is this value; Light and Dark give the info tint its own hue.
   "--snui-color-info-subtle": "#2c0000",
 });
 
+/*
+ * An alias is emitted as a reference rather than a copy, so a consumer that
+ * overrides the token it names, and the raised remap dialogs, popovers, and
+ * toasts apply, reach both spellings of the same fill.
+ */
 function renderTokenBlock(tokens: ThemeTokenSet): string {
   return Object.entries(tokens)
-    .map(([name, value]) => `  ${name}: ${value};`)
+    .map(([name, value]) => {
+      const source = HOVER_ALIAS_SOURCES.get(name as HoverAliasTokenName);
+      return `  ${name}: ${source === undefined ? value : `var(${source})`};`;
+    })
     .join("\n");
 }
 
 /*
  * Elevation and the dialog scrim are per theme: a shadow or scrim tuned for
  * light surfaces is nearly invisible on dark ones, so Dark and Night carry
- * stronger alphas and each theme's scrim shares its shadow color.
+ * stronger alphas and each theme's scrim shares its shadow color. Night goes
+ * further and makes its scrim nearly opaque: a translucent one lets the host
+ * page's own brightness through the whole viewport, which is the dark
+ * adaptation Night exists to protect.
  */
 const LIGHT_SHADOW_BLOCK = `  --snui-shadow-flat: none;
   --snui-shadow-raised: 0 0.125rem 0.5rem rgb(15 23 42 / 14%);
@@ -190,7 +221,7 @@ const DARK_SHADOW_BLOCK = `  --snui-shadow-flat: none;
 const NIGHT_SHADOW_BLOCK = `  --snui-shadow-flat: none;
   --snui-shadow-raised: 0 0.125rem 0.5rem rgb(90 0 0 / 28%);
   --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(90 0 0 / 42%);
-  --snui-color-scrim: rgb(90 0 0 / 45%);`;
+  --snui-color-scrim: rgb(12 0 0 / 92%);`;
 
 const LIGHT_BLOCK = `${renderTokenBlock(LIGHT_TOKENS)}
 ${LIGHT_SHADOW_BLOCK}`;
@@ -224,10 +255,30 @@ export const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
  */
 export const TRANSITION_FAST_MS = 140;
 
-/** Initial data-grid row-height estimates in pixels, per density. */
+/**
+ * Initial data-grid row-height estimates in pixels, per density, for a coarse
+ * pointer.
+ *
+ * A virtualized row is sized by `--snui-control-min-height`, and a compact row
+ * subtracts `--snui-space-3` from it. 44 and 32 are that pair under the
+ * coarse-pointer block, where the control height is 2.75rem rather than the
+ * 2.5rem default, so the estimate has to follow the pointer: see
+ * {@link DATA_GRID_ROW_HEIGHTS_FINE} for the other set. Estimating a touch row
+ * on a laptop leaves every row reporting a correction the first time it is
+ * measured, which walks the scroll height during a fast scroll.
+ */
 export const DATA_GRID_ROW_HEIGHTS = {
   compact: 32,
   default: 44,
+} as const;
+
+/**
+ * The same estimates for a fine pointer, where `--snui-control-min-height` is
+ * 2.5rem rather than 2.75rem.
+ */
+export const DATA_GRID_ROW_HEIGHTS_FINE = {
+  compact: 28,
+  default: 40,
 } as const;
 
 /*
@@ -296,8 +347,12 @@ export const PUBLIC_FOUNDATION_TOKEN_NAMES = [
   "--snui-range-track-color",
   "--snui-input-group-control-min",
   "--snui-input-group-control-basis",
+  "--snui-field-inline-label-min",
+  "--snui-grid-track-min",
+  "--snui-action-bar-surface",
   "--snui-content-width-standard",
   "--snui-content-width-wide",
+  "--snui-color-focus-ring-band",
   "--snui-focus-ring",
   "--snui-shadow-flat",
   "--snui-shadow-raised",
@@ -341,9 +396,12 @@ export const TOKENS_ROOT_CLASS = "snui-tokens";
  * Renders the token declarations for one root selector, so the component styles
  * and the framework-neutral stylesheet cannot describe different palettes.
  *
- * The focus ring is two-tone: a surface-colored band fills the outline offset
- * so the ring keeps its own boundary beside a danger or accent edge, and a soft
- * focus-colored halo sits outside the outline.
+ * The focus ring is two-tone: a band fills the outline offset so the ring keeps
+ * its own boundary beside a danger or accent edge, and a soft focus-colored
+ * halo sits outside the outline. The band paints
+ * `--snui-color-focus-ring-band`, which defaults to the flat surface and is
+ * remapped by the modules that paint a raised one, so the band always matches
+ * the fill behind the control it surrounds.
  *
  * @internal
  */
@@ -370,9 +428,15 @@ ${TYPE_BLOCK}
   --snui-range-track-color: var(--snui-color-track);
   --snui-input-group-control-min: 7rem;
   --snui-input-group-control-basis: 12rem;
+  --snui-field-inline-label-min: 9rem;
+  --snui-grid-track-min: 12rem;
+  --snui-action-bar-surface: color-mix(in srgb, var(--snui-color-surface) 94%, transparent);
   --snui-content-width-standard: 72rem;
   --snui-content-width-wide: 96rem;
-  --snui-focus-ring: 0 0 0 2px var(--snui-color-surface), 0 0 0 6px color-mix(in srgb, var(--snui-color-focus) 38%, transparent);
+  --snui-color-focus-ring-band: var(--snui-color-surface);
+  --snui-focus-ring:
+    0 0 0 2px var(--snui-color-focus-ring-band),
+    0 0 0 6px color-mix(in srgb, var(--snui-color-focus) 38%, transparent);
   --snui-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --snui-transition-fast: ${String(TRANSITION_FAST_MS)}ms var(--snui-ease-standard);
   --snui-transition-normal: 240ms var(--snui-ease-standard);
@@ -382,12 +446,12 @@ ${Z_LAYER_BLOCK}
   color-scheme: light;
 }
 
-[data-bs-theme="light"] ${rootSelector}:not([data-snui-theme]),
-[data-coreui-theme="light"] ${rootSelector}:not([data-snui-theme]) {
-${LIGHT_BLOCK}
-  color-scheme: light;
-}
-
+/*
+ * Only the dark host markers get a block. Light is the base palette above, so
+ * a light marker has nothing left to declare, and where both markers sit in
+ * one ancestor chain this rule is the only one that matches, which is the
+ * result a light block placed ahead of it produced anyway.
+ */
 [data-bs-theme="dark"] ${rootSelector}:not([data-snui-theme]),
 [data-coreui-theme="dark"] ${rootSelector}:not([data-snui-theme]),
 .dark-mode ${rootSelector}:not([data-snui-theme]) {
@@ -402,12 +466,7 @@ ${DARK_BLOCK}
   }
 }
 
-@media (prefers-color-scheme: light) {
-  ${rootSelector}[data-snui-theme="system"] {
-${LIGHT_BLOCK}
-    color-scheme: light;
-  }
-}
+/* A light operating-system preference needs no block: it is the base palette. */
 
 ${rootSelector}[data-snui-theme="light"] {
 ${LIGHT_BLOCK}
@@ -424,8 +483,15 @@ ${NIGHT_BLOCK}
   color-scheme: dark;
 }
 
+/*
+ * A coarse pointer needs both halves of the target contract: a bigger control,
+ * and more space between one control and the next, because a gloved finger on
+ * a moving boat lands wide. The second space step is the gap adjacent actions
+ * are laid out with, so it grows with the controls it separates.
+ */
 @media (any-pointer: coarse) {
   ${rootSelector} {
+    --snui-space-2: 0.75rem;
     --snui-control-min-height: 2.75rem;
     --snui-range-thumb-size: 2.75rem;
   }

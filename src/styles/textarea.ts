@@ -23,19 +23,11 @@ export const TEXTAREA_STYLES: StyleModule = {
   field-sizing: content;
 }
 
-/* The 1rem floor the root sheet gives every text control on coarse pointers. */
-@media (any-pointer: coarse) {
-  .snui-textarea {
-    font-size: max(1rem, var(--snui-font-size));
-  }
-}
-
-@media (forced-colors: active) {
-  /* The invalid outline the root sheet reconstructs for every field. */
-  .snui-textarea[aria-invalid="true"] {
-    outline: 2px dashed CanvasText;
-    outline-offset: 1px;
-  }
-}
+/*
+ * The coarse-pointer type floor and the forced-colors invalid outline are not
+ * restated here. The control always carries snui-input as well, so the root
+ * sheet's rules for that class already reach it, and a second copy could only
+ * drift from the one every other field follows.
+ */
 `),
 };

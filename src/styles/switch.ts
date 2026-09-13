@@ -1,6 +1,25 @@
-import { DISABLED_DECLARATIONS, focusRingDeclarations } from "./fragments.js";
+import {
+  CONTROL_LABEL_DECLARATIONS,
+  DISABLED_DECLARATIONS,
+  FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
+  focusRingDeclarations,
+} from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
+
+/** Track geometry, stated once so the thumb cannot drift off its end. */
+const TRACK_WIDTH = "2.25rem";
+const TRACK_HEIGHT = "1.25rem";
+const TRACK_BORDER = "2px";
+const THUMB_SIZE = "0.875rem";
+const THUMB_INSET = "0.125rem";
+
+/**
+ * How far the thumb travels, measured across the track's padding box: the
+ * border-box width less both borders, the thumb, and the inset it keeps at
+ * each end.
+ */
+const THUMB_TRAVEL = `calc(${TRACK_WIDTH} - ${TRACK_BORDER} - ${TRACK_BORDER} - ${THUMB_SIZE} - ${THUMB_INSET} - ${THUMB_INSET})`;
 
 /**
  * Switch styles. Installed by `Switch` through `useOptionalModuleStyles`, so
@@ -20,10 +39,10 @@ export const SWITCH_STYLES: StyleModule = {
 
 .snui-switch__track {
   position: relative;
-  width: 2.25rem;
-  height: 1.25rem;
+  width: ${TRACK_WIDTH};
+  height: ${TRACK_HEIGHT};
   flex: none;
-  border: 2px solid var(--snui-color-border);
+  border: ${TRACK_BORDER} solid var(--snui-color-border);
   border-radius: var(--snui-radius-pill);
   background: var(--snui-color-surface);
   transition:
@@ -33,10 +52,10 @@ export const SWITCH_STYLES: StyleModule = {
 
 .snui-switch__thumb {
   position: absolute;
-  inset-inline-start: 0.125rem;
+  inset-inline-start: ${THUMB_INSET};
   inset-block-start: 50%;
-  width: 0.875rem;
-  height: 0.875rem;
+  width: ${THUMB_SIZE};
+  height: ${THUMB_SIZE};
   border-radius: 50%;
   background: var(--snui-color-text-muted);
   transform: translateY(-50%);
@@ -55,8 +74,34 @@ export const SWITCH_STYLES: StyleModule = {
 }
 
 .snui-switch__button[data-selected] .snui-switch__thumb {
-  inset-inline-start: calc(100% - 0.875rem - 0.125rem);
+  inset-inline-start: calc(100% - ${THUMB_SIZE} - ${THUMB_INSET});
   background: var(--snui-color-on-accent);
+}
+
+/*
+ * The travel above is an inline-direction offset, which is the only form a
+ * right-to-left panel mirrors on its own. Where the engine can match a
+ * direction selector, the same travel is handed to the compositor as a
+ * transform, with the mirror written out: an inline offset animates through
+ * layout, and this is the one animation a discrete control runs on every
+ * press. Chromium and Edge 118 and 119 match no :dir() selector, so they keep
+ * the layout form, which is correct in both directions there.
+ */
+@supports selector(:dir(rtl)) {
+  .snui-switch__thumb {
+    transition:
+      transform var(--snui-transition-fast),
+      background-color var(--snui-transition-fast);
+  }
+
+  .snui-switch__button[data-selected] .snui-switch__thumb {
+    inset-inline-start: ${THUMB_INSET};
+    transform: translate(${THUMB_TRAVEL}, -50%);
+  }
+
+  .snui-switch__button[data-selected] .snui-switch__thumb:dir(rtl) {
+    transform: translate(calc(-1 * ${THUMB_TRAVEL}), -50%);
+  }
 }
 
 .snui-switch__button[data-focus-visible] .snui-switch__track {
@@ -84,10 +129,7 @@ ${DISABLED_DECLARATIONS}
 }
 
 .snui-switch__label {
-  min-width: 0;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  overflow-wrap: anywhere;
+${CONTROL_LABEL_DECLARATIONS}
 }
 
 @media (forced-colors: active) {
@@ -114,9 +156,7 @@ ${DISABLED_DECLARATIONS}
   }
 
   .snui-switch__button[data-focus-visible] .snui-switch__track {
-    outline: 2px solid CanvasText;
-    outline-offset: 2px;
-    box-shadow: none;
+${FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS}
   }
 
   .snui-switch__button[data-hovered]:not([data-disabled]) .snui-switch__track {

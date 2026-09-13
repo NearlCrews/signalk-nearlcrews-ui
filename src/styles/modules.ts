@@ -1,12 +1,13 @@
 import { DIALOG_STYLES } from "./dialog.js";
 import { EMPTY_STATE_STYLES } from "./empty-state.js";
-import { PANEL_STYLES } from "./index.js";
 import { ROOT_STYLE_MODULE_ID, type StyleModule } from "./install.js";
 import { MENU_STYLES } from "./menu.js";
 import { POPOVER_STYLES } from "./popover.js";
 import { PROGRESS_STYLES } from "./progress.js";
 import { RADIO_STYLES } from "./radio.js";
 import { RANGE_STYLES } from "./range.js";
+import { PANEL_STYLES } from "./root-sheet.js";
+import { SIMPLE_TABLE_STYLES } from "./simple-table.js";
 import { SWITCH_STYLES } from "./switch.js";
 import { TABLE_STYLES } from "./table.js";
 import { TABS_STYLES } from "./tabs.js";
@@ -40,6 +41,7 @@ export const STYLE_MODULES: readonly StyleModule[] = [
   PROGRESS_STYLES,
   RADIO_STYLES,
   RANGE_STYLES,
+  SIMPLE_TABLE_STYLES,
   SWITCH_STYLES,
   TABLE_STYLES,
   TABS_STYLES,

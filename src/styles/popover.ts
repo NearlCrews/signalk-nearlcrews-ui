@@ -13,7 +13,14 @@ import { scopeStyles } from "./scope.js";
 export const POPOVER_STYLES: StyleModule = {
   id: "popover",
   styles: scopeStyles(`
-/* ==== Popover (anchored content overlay) ==== */
+/* ==== Popover (anchored content overlay) ====
+
+   No safe-area insets here: an anchored overlay is positioned by react-aria
+   against the visual viewport with a fixed container padding, which no CSS
+   environment variable reaches. A popover that flips to the edge of a notched
+   viewport can therefore sit under the cutout, unlike the scrim, the panel
+   content, and the toast host, which all fold the insets into their geometry.
+*/
 
 .snui-popover {
   /*
@@ -21,6 +28,7 @@ export const POPOVER_STYLES: StyleModule = {
    * control the consumer places there) use the raised hover step.
    */
   --snui-color-interactive-hover: var(--snui-color-hover-raised);
+  --snui-color-focus-ring-band: var(--snui-color-surface-raised);
   width: var(--snui-popover-width, auto);
   max-width: min(24rem, 100%);
   padding: var(--snui-space-3);
