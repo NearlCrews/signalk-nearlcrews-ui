@@ -16,6 +16,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  realpathSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -110,8 +111,11 @@ try {
     if (typeof target !== "string" || !/\.[cm]?js$/.test(target)) continue;
     const specifier =
       subpath === "." ? packageName : `${packageName}/${subpath.slice(2)}`;
-    const resolved = consumerRequire.resolve(specifier);
-    const expected = join(packageDirectory, ...target.split("/"));
+    // Both sides pass through realpath: require.resolve returns the real
+    // path, and on macOS the temporary workspace lives under /var, which is a
+    // symlink to /private/var.
+    const resolved = realpathSync(consumerRequire.resolve(specifier));
+    const expected = realpathSync(join(packageDirectory, ...target.split("/")));
     if (resolved !== expected) {
       throw new Error(
         `require.resolve("${specifier}") gave ${resolved}; expected ${expected}.`,
