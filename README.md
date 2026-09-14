@@ -15,26 +15,22 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or App Store package. The API may still change during the `0.x` series, so consumers should pin an exact version.
 
-## What's new in 0.11.1
+## What's new in 0.12.0
 
-Version 0.11.1 is the first published release of the 0.11 line: version 0.11.0 was tagged but never reached npm, because its publish workflow stopped on a checkout error before verifying the tarball, and the same content ships here. It clears out every deprecated alias and prop the package had accumulated, and brings in the primitives six consumer panels had each been writing for themselves. It is a breaking release: every item of required work is a compile error or a changed call signature, and every replacement is exported today, so a panel upgrades by following the errors and then deleting the local helpers the package now owns.
+Version 0.12.0 is a small release. Two announcements read correctly, one API reference row matches the code again, and panels do less work per render. It ships as a minor because the emitted declarations changed, and the release policy treats those as part of the public contract. No entry point gained or lost an export, so a panel upgrades by moving its pin.
 
-Most of the rest is accessibility and correctness. Errors no longer depend on color, native form resets put controls back where they belong, and the controls a panel must block keep their place in the tab order instead of dropping the user on the document body.
+- **An announcement keeps the punctuation it was written with.** A panel error whose title ended in "!" or "?" was announced with an extra full stop after it, because only a trailing "." was taken off before the title and the description were joined.
+- **A blank bundled string reads as absent.** `ThemeToggle` falls back to the package's host-theme guidance when a panel's label bundle supplies a blank `themeToggle.description`, which is the rule every other bundled string already followed.
+- **The `formatRelativeAge` row is accurate again.** The API reference still described the defaults from before 0.11.0. `numeric` is unset by default and resolves per unit, counting in numbers from the day up and taking the reader's words below it, and the fallback string is `"Unknown"`.
+- **Panels do less work per render.** A menu item derives its typeahead text when its children change, a button resolves its busy label only while it is loading, a portal consumer proves its owning panel root once per root, and a region tracking focus reads the focused element directly instead of building the composed path for every focus move in the document.
 
-- **The browser floors hold in practice.** Text direction is read from the computed style rather than a `:dir()` selector, so right-to-left arrow keys work on Chromium and Edge 118 and 119, the oldest engines the package supports. The unsaved-changes guard sets both the event cancellation and the legacy `returnValue`, so the browser's confirmation appears on every supported engine rather than only the newest.
-- **Night says it in more than color.** Every field, group, checkbox, radio group, and segmented-control error leads with the danger tone mark and a visually hidden tone word, because in Night the danger color shares a hue with the description above it. `Progress` takes `toneLabel`, `CollapsibleSection` takes `tone` and `toneLabel` so a problem inside a shut section is visible and spoken, and Night itself reads darker where it matters.
-- **Native form resets are honored across the field set.** `TextInput` and `NumberInput` restore their controlled value, an uncontrolled `CheckboxGroup` returns to its `defaultValue`, and `SegmentedControl` restores its default selection once the reset has finished dispatching. A control moved to another form by the `form` attribute listens to the form it belongs to.
-- **Blocking a control no longer destroys focus.** `SaveActionBar` refuses a blocked save through `aria-disabled` and a description, so Save and Discard keep their tab stops; `Checkbox` takes `ariaDisabled` and `Button` takes `disabledReason`. Closing a dialog whose opening control is gone leaves focus on the panel root, a disclosure hands focus back to its trigger, and a focused `NumberInput` gives up focus before a wheel or trackpad scroll can spin its value.
-- **New primitives, and one labels bundle for the whole panel.** `usePollFreshness`, `resolveFreshness`, `resolveReachability`, `formatCount`, `joinList`, `revealElement`, `revealAndFocus`, and `useFieldValidity` replace the staleness, reachability, plural, list-joining, scroll, and validity bookkeeping each panel had written itself. `PanelRoot` and `PanelShell` take `labels`, a `PanelLabels` bundle that replaces the package's English defaults for a whole panel and is read back with `usePanelLabels`; a component prop still wins over the bundle.
-- **`signalk-nearlcrews-ui/format` runs outside React.** The formatting and state helpers ship from an entry point with no React anywhere in its module graph, for a web worker, a service worker, or a plain Node script.
-- **Every deprecated alias and prop is gone.** Ten type aliases, the `legend`, `legendVisibility`, `onChange`, and `destructive` spellings, the `"comfortable"` density, `SaveActionBar.savedMessage`, and the `tabIndex` and `aria-labelledby` props the tab and disclosure panels own themselves were all removed, and `width` became `controlWidth` on three components. The [migration guide](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/migration.md) lists the required work in order, and every replacement is exported today.
-
-For everything that landed in 0.11.0, including the toast, live-region, and data-grid changes, read the [0.11.1 changelog](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/CHANGELOG.md#0111---2026-09-13) and the 0.11.0 entry beneath it.
+The full list, including the declaration change and the internal helpers it names, is in the [0.12.0 changelog](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/CHANGELOG.md#0120---2026-09-14).
 
 ## Compatibility
 
 | Version  | React peers                                 |
 | -------- | ------------------------------------------- |
+| `0.12.x` | `^19.2.0`                                   |
 | `0.11.x` | `^19.2.0`                                   |
 | `0.10.x` | `^19.2.0`                                   |
 | `0.9.x`  | `^19.2.0`                                   |
@@ -134,7 +130,7 @@ The repository checks the declaration against that committed baseline rather tha
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.11.1
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.12.0
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball. `--pack-destination ..` keeps the tarball out of the repository tree:
@@ -142,7 +138,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts --pack-destination ..
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui-0.11.1.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui-0.12.0.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while resolving React and React DOM from the Signal K Admin host through the integration supported by its bundler.
@@ -398,11 +394,11 @@ An inline token override applies in every selected theme. Use it only when that 
 
 The repository ships a fixture page that renders every exported component. The top of that page in each theme:
 
-![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.11.1/docs/screenshots/showcase-light.png)
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.12.0/docs/screenshots/showcase-light.png)
 
-![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.11.1/docs/screenshots/showcase-dark.png)
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.12.0/docs/screenshots/showcase-dark.png)
 
-![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.11.1/docs/screenshots/showcase-night.png)
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.12.0/docs/screenshots/showcase-night.png)
 
 The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
 
