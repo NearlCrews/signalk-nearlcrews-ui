@@ -1,9 +1,8 @@
 import { type ReactNode, useCallback, useMemo } from "react";
 import { usePanelTheme } from "../theme/context.js";
 import { THEME_CHOICES, type ThemeChoice } from "../theme/contract.js";
-import { resolveLabel } from "../utils/labels.js";
+import { resolveBundledContent, resolveLabel } from "../utils/labels.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
-import { hasReactContent } from "../utils/react-node.js";
 import {
   SegmentedControl,
   type SegmentedControlProps,
@@ -86,11 +85,12 @@ export function ThemeToggle({
         ? choices
         : [...choices, theme];
     return offered.map((value) => {
-      const override = labels?.[value];
       return {
-        label: hasReactContent(override)
-          ? override
-          : resolveLabel(bundledChoiceLabels?.[value], THEME_LABELS[value]),
+        label: resolveBundledContent(
+          labels?.[value],
+          bundledChoiceLabels?.[value],
+          THEME_LABELS[value],
+        ),
         value,
       };
     });
@@ -111,14 +111,16 @@ export function ThemeToggle({
       {...props}
       description={
         description === undefined && offersHostTheme
-          ? (bundledLabels?.description ?? HOST_THEME_DESCRIPTION)
+          ? // Blank bundle text reads as absent here too, so one empty entry
+            // in a partial translation does not blank the guidance.
+            resolveLabel(bundledLabels?.description, HOST_THEME_DESCRIPTION)
           : description
       }
-      label={
-        hasReactContent(label)
-          ? label
-          : resolveLabel(bundledLabels?.label, DEFAULT_THEME_TOGGLE_LABEL)
-      }
+      label={resolveBundledContent(
+        label,
+        bundledLabels?.label,
+        DEFAULT_THEME_TOGGLE_LABEL,
+      )}
       labelVisibility={labelVisibility}
       options={options}
       value={theme}

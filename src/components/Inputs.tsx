@@ -24,6 +24,7 @@ import {
 import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences, requireIdToken } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { isDevelopment } from "../utils/environment.js";
 import { resolveFieldRegions } from "../utils/field-error.js";
 import { markForwardsFieldControlProps } from "../utils/field-forwarding.js";
 import { observeFormReset } from "../utils/form-reset.js";
@@ -117,9 +118,9 @@ export type TextInputProps = Omit<
     readonly type?: TextInputType | undefined;
   };
 
-// Marked as forwarding the props a LabeledField injects, so the field takes
-// this control as an element child without a development warning. The mark
-// is annotated pure so an unused control is still dropped from a bundle.
+// See markForwardsFieldControlProps: this control is safe to pass to
+// LabeledField as an element child. Pure-annotated so an unused control still
+// tree-shakes.
 export const TextInput = /* @__PURE__ */ markForwardsFieldControlProps(
   function TextInput({
     className,
@@ -160,9 +161,6 @@ export type NumberInputProps = Omit<
   RefAttributes<HTMLInputElement> &
   MonospaceControlProps;
 
-// Marked as forwarding the props a LabeledField injects, so the field takes
-// this control as an element child without a development warning. The mark
-// is annotated pure so an unused control is still dropped from a bundle.
 export const NumberInput = /* @__PURE__ */ markForwardsFieldControlProps(
   function NumberInput({
     className,
@@ -221,9 +219,6 @@ function setRangeProgress(element: HTMLInputElement): void {
   element.style.setProperty("--snui-range-progress", `${String(safePercent)}%`);
 }
 
-// Marked as forwarding the props a LabeledField injects, so the field takes
-// this control as an element child without a development warning. The mark
-// is annotated pure so an unused control is still dropped from a bundle.
 export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
   function RangeInput({
     className,
@@ -273,9 +268,6 @@ export type SelectProps = SelectHTMLAttributes<HTMLSelectElement> &
   RefAttributes<HTMLSelectElement> &
   MonospaceControlProps;
 
-// Marked as forwarding the props a LabeledField injects, so the field takes
-// this control as an element child without a development warning. The mark
-// is annotated pure so an unused control is still dropped from a bundle.
 export const Select = /* @__PURE__ */ markForwardsFieldControlProps(
   function Select({
     className,
@@ -311,9 +303,6 @@ export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> &
     readonly minRows?: number | undefined;
   };
 
-// Marked as forwarding the props a LabeledField injects, so the field takes
-// this control as an element child without a development warning. The mark
-// is annotated pure so an unused control is still dropped from a bundle.
 export const Textarea = /* @__PURE__ */ markForwardsFieldControlProps(
   function Textarea({
     className,
@@ -455,7 +444,10 @@ export function Checkbox({
     }
   }, [checked, indeterminate]);
 
-  if (ariaLabel !== undefined) {
+  // The message is built only in a development build: warnOnce discards it in
+  // production, and JSON.stringify plus the template would otherwise run on
+  // every render of every box carrying the attribute.
+  if (isDevelopment() && ariaLabel !== undefined) {
     warnOnce(
       `checkbox-aria-label:${ariaLabel}`,
       `Checkbox received aria-label ${JSON.stringify(ariaLabel)} beside its label. The rendered label names the box, so the aria-label is ignored; pass the shorter text as label and set labelVisibility="hidden" to keep it off screen.`,

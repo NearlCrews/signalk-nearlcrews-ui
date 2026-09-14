@@ -12,6 +12,7 @@ import { POPOVER_STYLES } from "../styles/popover.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
 import { usePanelPortalContainerReady } from "../utils/portal.js";
+import { definedProps } from "../utils/props.js";
 import {
   type OverlayOpenState,
   type OverlayPlacement,
@@ -150,18 +151,15 @@ export function Popover({
     validatedTrigger.current = triggerElement;
   });
 
-  const surfaceStyle = useMemo<CSSProperties>(
-    () => ({
+  const surfaceStyle = useMemo<CSSProperties>(() => {
+    const length = typeof width === "number" ? `${String(width)}px` : width;
+    return {
       ...style,
-      ...(width === "auto"
-        ? {}
-        : {
-            "--snui-popover-width":
-              typeof width === "number" ? `${String(width)}px` : width,
-          }),
-    }),
-    [style, width],
-  );
+      ...definedProps({
+        "--snui-popover-width": width === "auto" ? undefined : length,
+      }),
+    };
+  }, [style, width]);
 
   return (
     <DialogTrigger {...overlayOpenProps({ open, defaultOpen, onOpenChange })}>

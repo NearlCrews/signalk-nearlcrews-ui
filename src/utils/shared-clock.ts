@@ -9,6 +9,13 @@
 
 import { createEmitter, type Emitter } from "./emitter.js";
 
+/**
+ * The cadence every reader of the shared clock ticks at unless it names its
+ * own. Stated here rather than per component, so an age and the freshness
+ * reading beside it cannot end up on two different clocks.
+ */
+export const DEFAULT_CLOCK_TICK_MS = 10_000;
+
 type Tick = (nowMs: number) => void;
 
 interface SharedClock {

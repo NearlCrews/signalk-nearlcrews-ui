@@ -12,6 +12,7 @@ import { focusedElement } from "../utils/focus.js";
 import { useResolvedHeading } from "../utils/heading-level.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { reactNodeText } from "../utils/react-node.js";
+import { joinSentences } from "../utils/text.js";
 import { Banner } from "./Banner.js";
 import { Button } from "./Button.js";
 
@@ -80,16 +81,12 @@ interface PanelErrorFallbackProps {
   readonly title: ReactNode | undefined;
 }
 
-const TRAILING_PERIOD = /\.$/;
-
 /** The failure as one spoken sentence, for a reader who cannot see it. */
 function spokenFailure(title: ReactNode, description: ReactNode): string {
-  // Each part is joined with its own full stop, so a title that already ends
-  // in one is not read as two.
-  return [reactNodeText(title), reactNodeText(description)]
-    .map((part) => part.trim().replace(TRAILING_PERIOD, ""))
-    .filter((part) => part.length > 0)
-    .join(". ");
+  // Each part closes its own sentence, so a title that already ends in one is
+  // not read as two and a title ending in "!" keeps the mark it was written
+  // with.
+  return joinSentences([reactNodeText(title), reactNodeText(description)]);
 }
 
 function PanelErrorFallback({

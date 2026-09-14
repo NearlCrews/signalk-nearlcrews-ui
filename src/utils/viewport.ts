@@ -56,6 +56,22 @@ export function readViewportEdges(ownerWindow: Window): ViewportEdges {
 }
 
 /** Rounds a layout measurement to hundredths so equal geometry compares equal. */
+/**
+ * Whether two measurements of the same geometry agree, member by member.
+ *
+ * Every value in such a record is a rounded length from
+ * {@link roundedLayoutValue} or a flag measured beside one, so equality is the
+ * whole rule and a member added later is compared without a line to remember.
+ * A comparator that silently stopped at the members it knew is what makes a
+ * scroll frame write geometry it should have skipped.
+ */
+export function layoutMatches<T extends object>(current: T, next: T): boolean {
+  for (const key of Object.keys(current) as (keyof T)[]) {
+    if (current[key] !== next[key]) return false;
+  }
+  return true;
+}
+
 export function roundedLayoutValue(value: number): number {
   return Math.round(value * 100) / 100;
 }

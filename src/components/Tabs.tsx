@@ -12,6 +12,7 @@ import {
   useState,
 } from "react";
 
+import { useControllableStateWhen } from "../hooks/use-controllable-state.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
 import { TABS_STYLES } from "../styles/tabs.js";
 import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
@@ -21,7 +22,7 @@ import { createRequiredContext, createValueContext } from "../utils/context.js";
 import { isRightToLeft } from "../utils/direction.js";
 import type { MountStrategy } from "../utils/mount-strategy.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
-import { nextRovingIndex } from "../utils/roving.js";
+import { mirrorsInRtl, nextRovingIndex } from "../utils/roving.js";
 import type { Orientation } from "../utils/variants.js";
 
 /** `"automatic"` selects a tab as arrow keys focus it; `"manual"` waits for Enter or Space. */
@@ -111,10 +112,14 @@ export function Tabs<Value extends string = string>(
    * component the way React decides it for a native input.
    */
   const [controlled] = useState(() => "value" in props);
-  const [internalValue, setInternalValue] = useState<Value | undefined>(
+  const [selected, commitValue] = useControllableStateWhen<Value | undefined>(
+    controlled,
+    value,
     defaultValue,
+    // A tab set never selects nothing on its own, so the callback only ever
+    // receives a real value; the wider slot is what the shared pair needs.
+    onValueChange as ((next: Value | undefined) => void) | undefined,
   );
-  const selected = controlled ? value : internalValue;
 
   const select = useCallback(
     (next: string): void => {
@@ -122,11 +127,9 @@ export function Tabs<Value extends string = string>(
       // A selection carries the value the tab put in the DOM, so the union is
       // the consumer's claim about the tabs it rendered rather than something
       // this component can check.
-      const nextValue = next as Value;
-      if (!controlled) setInternalValue(nextValue);
-      onValueChange?.(nextValue);
+      commitValue(next as Value);
     },
-    [controlled, onValueChange, selected],
+    [commitValue, selected],
   );
 
   const context = useMemo(
@@ -180,15 +183,12 @@ function moveFocus(
   const current = tabs.indexOf(event.currentTarget);
   if (current === -1) return;
 
-  // Only the horizontal arrows mirror, and reading the computed direction is
-  // the costly half of the step, so it is read for those keys alone.
-  const mirroring = event.key === "ArrowLeft" || event.key === "ArrowRight";
   const next = nextRovingIndex({
     count: tabs.length,
     currentIndex: current,
     key: event.key,
     orientation,
-    rtl: mirroring && isRightToLeft(list),
+    rtl: mirrorsInRtl(event.key) && isRightToLeft(list),
   });
   if (next === null) return;
 
@@ -213,7 +213,7 @@ export function TabList({
 }: TabListProps): React.JSX.Element {
   // The ancestor is read first, so a list outside Tabs reports that rather
   // than whichever of the two mistakes the consumer made second.
-  const { orientation } = useTabsContext("TabList");
+  const { orientation, selected } = useTabsContext("TabList");
   requireAccessibleName("TabList", ariaLabel, ariaLabelledBy);
 
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -229,12 +229,11 @@ export function TabList({
    * first enabled tab takes the stop instead, as a SegmentedControl option
    * does. The list is read from the DOM, the way arrow-key movement already
    * reads it, so its order and disabled state stay authoritative, and it is
-   * read after every commit because a list can gain, lose, or disable a tab
-   * without any of its own props changing. Writing the same answer back bails
-   * out of rendering, so the update chain the exhaustive-deps rule guards
-   * against ends on the first pass.
+   * read again whenever the list could have gained, lost, or disabled a tab,
+   * which is any commit carrying new children, and whenever the selection
+   * moved. Writing the same answer back bails out of rendering, so the update
+   * chain the exhaustive-deps rule guards against ends on the first pass.
    */
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- the list is read from the DOM after every commit
   useLayoutEffect(() => {
     const list = listRef.current;
     const fallback =
@@ -242,7 +241,7 @@ export function TabList({
         ? list.querySelector<HTMLButtonElement>(TAB_SELECTOR)
         : null;
     setFallbackValue(fallback?.dataset.snuiTabValue);
-  });
+  }, [children, selected]);
 
   return (
     <div

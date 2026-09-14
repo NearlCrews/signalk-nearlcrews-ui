@@ -9,7 +9,9 @@ import { createContext, type ReactNode, useContext } from "react";
  */
 export interface ValueContext<T> {
   readonly Provider: (props: {
-    readonly children: ReactNode;
+    // Optional so a caller building the provider with `createElement` can pass
+    // its children as arguments, which is the canonical form.
+    readonly children?: ReactNode | undefined;
     readonly value: T;
   }) => React.JSX.Element;
   readonly useValue: () => T;
@@ -35,6 +37,11 @@ export interface RequiredContext<T> {
   readonly Provider: ValueContext<T>["Provider"];
   /** Reads the value, naming the component that asked in the failure. */
   readonly useValue: (component: string) => T;
+  /**
+   * Reads the value, or null outside the provider, for the one part that
+   * renders either way and must not refuse.
+   */
+  readonly useOptionalValue: () => T | null;
 }
 
 /**
@@ -52,6 +59,7 @@ export function createRequiredContext<T>(
     Provider: ({ children, value }) => (
       <Context value={value}>{children}</Context>
     ),
+    useOptionalValue: () => useContext(Context),
     useValue: (component: string): T => {
       const value = useContext(Context);
       if (value === null) {

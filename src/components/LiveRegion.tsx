@@ -14,18 +14,12 @@ import {
 import { classNames } from "../utils/class-names.js";
 import { createPolymorphicElement } from "../utils/polymorphic.js";
 import { hasReactContent } from "../utils/react-node.js";
-import { useRepeatAnnouncement } from "../utils/repeat-announcement.js";
+import {
+  LIVE_REGION_BLANK_MS,
+  useRepeatAnnouncement,
+} from "../utils/repeat-announcement.js";
 
 export type LiveRegionElement = "div" | "span" | "p";
-
-/**
- * The blank beat a freshly mounted region waits out before it says anything.
- * A screen reader compares the region against the text it last read, so text
- * that appears inside one of its processing ticks reads as no change at all,
- * and nothing is spoken. The repeat beat is the same length and lives in
- * `useRepeatAnnouncement`, which every announcing component shares.
- */
-const MOUNT_BLANK_MS = 100;
 
 export interface LiveRegionProps
   extends Omit<HTMLAttributes<HTMLElement>, "aria-live" | "children">,
@@ -99,7 +93,7 @@ export function LiveRegion({
     if (settled) return undefined;
     // The ambient timer is deliberate: this component owns no node, so there
     // is no owning window to read the timer from.
-    const timer = setTimeout(markSettled, MOUNT_BLANK_MS);
+    const timer = setTimeout(markSettled, LIVE_REGION_BLANK_MS);
     return () => {
       clearTimeout(timer);
     };

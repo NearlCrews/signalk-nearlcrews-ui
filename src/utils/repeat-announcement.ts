@@ -1,13 +1,14 @@
 import { useEffect, useEffectEvent, useState } from "react";
 
 /**
- * The blank beat between a repeat announcement and its message. A screen
- * reader compares a live region against the text it last read, so text cleared
- * and restored inside one of its processing ticks reads as no change at all,
- * and nothing is spoken. A tenth of a second clears every tick this package
- * targets while staying under what a listener would notice as a delay.
+ * The blank beat a live region waits out, both before its first message and
+ * between a repeat announcement and its words. A screen reader compares a
+ * region against the text it last read, so text that appears or is restored
+ * inside one of its processing ticks reads as no change at all, and nothing is
+ * spoken. A tenth of a second clears every tick this package targets while
+ * staying under what a listener would notice as a delay.
  */
-const REPEAT_BLANK_MS = 100;
+export const LIVE_REGION_BLANK_MS = 100;
 
 /**
  * Withholds an announcing region's content for one beat so a screen reader
@@ -52,7 +53,7 @@ export function useRepeatAnnouncement(
   useEffect(() => {
     if (!withholding) return undefined;
 
-    const timer = setTimeout(adoptLatestKey, REPEAT_BLANK_MS);
+    const timer = setTimeout(adoptLatestKey, LIVE_REGION_BLANK_MS);
     return () => {
       clearTimeout(timer);
     };

@@ -63,13 +63,13 @@ describe("createDocumentRegistry", () => {
 
     expect(record.dispose).not.toHaveBeenCalled();
     expect(record.element.isConnected).toBe(true);
-    expect(registry.values(document)).toEqual([{ label: "counted" }]);
+    expect([...registry.values(document)]).toEqual([{ label: "counted" }]);
 
     registry.release(document, "key");
 
     expect(record.dispose).toHaveBeenCalledTimes(1);
     expect(record.element.isConnected).toBe(false);
-    expect(registry.values(document)).toEqual([]);
+    expect([...registry.values(document)]).toEqual([]);
     expect(
       Reflect.get(document, Symbol.for("fixture.registry.dispose")),
     ).toBeUndefined();
@@ -125,7 +125,7 @@ describe("createDocumentRegistry", () => {
     });
 
     expect(fromSecond.label).toBe("bundled twice");
-    expect(second.values(document)).toEqual([{ label: "bundled twice" }]);
+    expect([...second.values(document)]).toEqual([{ label: "bundled twice" }]);
 
     first.release(document, "key");
     expect(record.dispose).not.toHaveBeenCalled();
@@ -149,7 +149,7 @@ describe("createDocumentRegistry", () => {
     // A record left behind here would hold no references, so nothing could
     // ever release it, and the style conflict check would go on reporting it
     // as installed.
-    expect(registry.values(document)).toEqual([]);
+    expect([...registry.values(document)]).toEqual([]);
   });
 
   it("ignores a release for a key it never registered", () => {
@@ -158,7 +158,7 @@ describe("createDocumentRegistry", () => {
     );
 
     expect(() => registry.release(document, "missing")).not.toThrow();
-    expect(registry.values(document)).toEqual([]);
+    expect([...registry.values(document)]).toEqual([]);
   });
 
   it("keeps records of different documents apart", () => {
@@ -172,8 +172,8 @@ describe("createDocumentRegistry", () => {
     registry.acquire(document, "key", () => record);
     registry.acquire(otherDocument, "key", () => otherRecord);
 
-    expect(registry.values(document)).toEqual([{ label: "here" }]);
-    expect(registry.values(otherDocument)).toEqual([{ label: "there" }]);
+    expect([...registry.values(document)]).toEqual([{ label: "here" }]);
+    expect([...registry.values(otherDocument)]).toEqual([{ label: "there" }]);
 
     registry.release(document, "key");
     registry.release(otherDocument, "key");

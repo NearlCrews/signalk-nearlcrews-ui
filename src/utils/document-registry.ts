@@ -39,8 +39,12 @@ export interface DocumentRegistry<K, V> {
   ): V;
   /** Drops one reference. The last release disposes and forgets the record. */
   release(ownerDocument: Document, key: K): void;
-  /** Every value currently registered on the document, for conflict checks. */
-  values(ownerDocument: Document): readonly V[];
+  /**
+   * Every value currently registered on the document, for conflict checks.
+   * Yielded rather than collected: the style installer scans the records twice
+   * per module it installs, and neither scan keeps the list.
+   */
+  values(ownerDocument: Document): Iterable<V>;
 }
 
 /**
@@ -48,9 +52,6 @@ export interface DocumentRegistry<K, V> {
  * `Symbol.for(symbolKey)`. Change the key whenever the record shape changes, so
  * a package version that stores the old shape never reads the new one.
  */
-/** Shared answer for a document that holds no records, so no call allocates. */
-const NO_VALUES: readonly never[] = Object.freeze([]);
-
 export function createDocumentRegistry<K, V>(
   symbolKey: string,
 ): DocumentRegistry<K, V> {
@@ -109,13 +110,11 @@ export function createDocumentRegistry<K, V>(
       record.dispose();
     },
 
-    values(ownerDocument) {
+    *values(ownerDocument) {
       const records = read(ownerDocument);
-      if (records === undefined) return NO_VALUES;
+      if (records === undefined) return;
 
-      const values: V[] = [];
-      for (const record of records.values()) values.push(record.value);
-      return values;
+      for (const record of records.values()) yield record.value;
     },
   };
 }

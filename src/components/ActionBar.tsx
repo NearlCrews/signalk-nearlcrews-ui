@@ -11,15 +11,16 @@ import {
 import { flushSync } from "react-dom";
 
 import { classNames } from "../utils/class-names.js";
-import { isDevelopment } from "../utils/environment.js";
 import { focusedElement } from "../utils/focus.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { composeRef } from "../utils/ref.js";
 import {
+  layoutMatches,
   observePanelViewport,
   readViewportEdges,
   roundedLayoutValue,
 } from "../utils/viewport.js";
+import { warnOnce } from "../utils/warn-once.js";
 
 export type ActionBarSticky = "bottom" | "top" | "viewport-bottom";
 
@@ -83,20 +84,6 @@ const MAXIMUM_SETTLING_MEASUREMENTS = 4;
  * on an edge cannot alternate the bar between docked and natural flow.
  */
 const DOCKING_HYSTERESIS = 1;
-
-function placementsMatch(
-  current: ViewportPlacement,
-  next: ViewportPlacement,
-): boolean {
-  return (
-    current.bottomInset === next.bottomInset &&
-    current.docked === next.docked &&
-    current.height === next.height &&
-    current.left === next.left &&
-    current.viewportBottom === next.viewportBottom &&
-    current.width === next.width
-  );
-}
 
 const SCROLLABLE_OVERFLOW: ReadonlySet<string> = new Set([
   "auto",
@@ -252,18 +239,6 @@ function ActionBarContent({
   );
 }
 
-/**
- * Misuses already reported, so a panel warns once for each rather than once
- * per mount or once per frame.
- */
-const REPORTED_DOCKING_FAULTS = new Set<string>();
-
-function warnDockingFault(fault: string, message: string): void {
-  if (!isDevelopment() || REPORTED_DOCKING_FAULTS.has(fault)) return;
-  REPORTED_DOCKING_FAULTS.add(fault);
-  console.warn(message);
-}
-
 // The variant arrives resolved from the caller below rather than defaulted a
 // second time here, so the class name this builds always names one.
 function ViewportBottomActionBar({
@@ -304,8 +279,8 @@ function ViewportBottomActionBar({
     const ownerWindow = ownerDocument.defaultView;
     const panelRoot = anchor.closest<HTMLElement>("[data-snui-root]");
     if (ownerWindow === null || panelRoot === null) {
-      warnDockingFault(
-        "root",
+      warnOnce(
+        "action-bar-docking:root",
         'ActionBar sticky="viewport-bottom" found no PanelRoot ancestor, so it renders as ordinary flow content and never docks. Render it inside a PanelRoot.',
       );
       return undefined;
@@ -364,7 +339,7 @@ function ViewportBottomActionBar({
         viewportBottom: roundedLayoutValue(viewportBottom),
         width: roundedLayoutValue(anchorRect.width),
       };
-      if (placementsMatch(placementRef.current, nextPlacement)) return null;
+      if (layoutMatches(placementRef.current, nextPlacement)) return null;
       placementRef.current = nextPlacement;
       return nextPlacement;
     };
@@ -388,8 +363,8 @@ function ViewportBottomActionBar({
       // Reaching the bound is not the same as settling, and the difference is
       // invisible on screen: the bar simply stays one measurement short of
       // correct on every frame.
-      warnDockingFault(
-        "settle",
+      warnOnce(
+        "action-bar-docking:settle",
         "ActionBar could not settle its docked geometry within its measurement bound, so the bar may sit one measurement behind the layout. A layout whose height depends on the docked bar is the usual cause.",
       );
     };

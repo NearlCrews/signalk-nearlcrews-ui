@@ -19,6 +19,7 @@ import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { resolveFieldError } from "../utils/field-error.js";
+import { definedProps } from "../utils/props.js";
 import { racDomProps } from "../utils/react-aria.js";
 import {
   hasReactContent,
@@ -102,16 +103,14 @@ export function RadioGroup({
       isReadOnly={readOnly ?? false}
       isInvalid={hasError}
       orientation={orientation}
-      {...(name === undefined ? {} : { name })}
-      {...(value === undefined ? {} : { value })}
-      {...(defaultValue === undefined ? {} : { defaultValue })}
-      {...(onValueChange === undefined ? {} : { onChange: onValueChange })}
-      {...(describedBy === undefined
-        ? {}
-        : { "aria-describedby": describedBy })}
-      {...(referencedErrorId === undefined
-        ? {}
-        : { "aria-errormessage": referencedErrorId })}
+      {...definedProps({
+        name,
+        value,
+        defaultValue,
+        onChange: onValueChange,
+        "aria-describedby": describedBy,
+        "aria-errormessage": referencedErrorId,
+      })}
     >
       <Label className="snui-radio-group__label">{label}</Label>
       {hasDescription ? (

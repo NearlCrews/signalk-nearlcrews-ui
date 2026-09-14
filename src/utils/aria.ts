@@ -1,14 +1,28 @@
+import { hasText } from "./labels.js";
 import { joinList } from "./text.js";
 
 /**
  * Reports whether either naming attribute carries text. Blank strings do not
- * name a control, so they read the same as an absent attribute.
+ * name a control, so they read the same as an absent attribute, which is the
+ * rule `hasText` owns for every caller-supplied string in the package.
  */
 export function hasAccessibleName(
   label: string | undefined,
   labelledBy: string | undefined,
 ): boolean {
-  return (label?.trim() ?? "") !== "" || (labelledBy?.trim() ?? "") !== "";
+  return hasText(label) || hasText(labelledBy);
+}
+
+/**
+ * Reads the one-or-many form a describing-ids prop takes as a list, so a field
+ * and a fieldset cannot disagree about what a caller may pass. The result
+ * feeds {@link joinIdReferences}, which drops the entries left unset.
+ */
+export function idReferenceList(
+  value: string | readonly (string | undefined)[] | undefined,
+): readonly (string | undefined)[] {
+  if (value === undefined) return [];
+  return typeof value === "string" ? [value] : value;
 }
 
 const WHITESPACE = /\s/;

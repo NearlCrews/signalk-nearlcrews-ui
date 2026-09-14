@@ -192,6 +192,25 @@ export const FORCED_COLORS_INVALID_DECLARATIONS = [
 export const SELECTION_GLYPH_SIZE = "1.25rem";
 
 /**
+ * The diameter of the tone dot. The status indicator and the toast card paint
+ * the same mark, and the per-tone shapes are cut to this size, so resizing it
+ * in one module alone would show two different dots in one panel.
+ */
+const TONE_DOT_SIZE = "0.75rem";
+
+/**
+ * The circle the per-tone shapes in `tone-rules.ts` refine. Both dots start
+ * from it; a block adds only what its own layout needs beside it.
+ */
+export const TONE_DOT_DECLARATIONS = [
+  `  width: ${TONE_DOT_SIZE};`,
+  `  height: ${TONE_DOT_SIZE};`,
+  "  border: 2px solid currentColor;",
+  "  border-radius: 50%;",
+  "  background: currentColor;",
+].join("\n");
+
+/**
  * The thickness of a horizontal track: the range slider's and the progress
  * bar's. The slider centers its thumb against this, so a change made in one
  * module alone would leave the thumb off center.

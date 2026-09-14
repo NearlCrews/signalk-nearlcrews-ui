@@ -14,6 +14,7 @@ import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasText } from "../utils/labels.js";
+import { definedProps } from "../utils/props.js";
 import { requireContent } from "../utils/react-node.js";
 import type { SemanticTone } from "../utils/tone.js";
 import { ToneMark } from "./ToneMark.js";
@@ -115,13 +116,11 @@ export function Progress({
         tone === undefined ? undefined : `snui-progress--tone-${tone}`,
         className,
       )}
-      {...(describedBy === undefined
-        ? {}
-        : { "aria-describedby": describedBy })}
+      {...definedProps({ "aria-describedby": describedBy })}
       minValue={usableRange ? min : 0}
       maxValue={usableRange ? max : 100}
       {...(indeterminate ? { isIndeterminate: true } : { value })}
-      {...(valueText === undefined ? {} : { valueLabel: valueText })}
+      {...definedProps({ valueLabel: valueText })}
     >
       <div className="snui-progress__heading">
         {described ? (

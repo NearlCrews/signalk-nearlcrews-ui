@@ -14,6 +14,16 @@ export function focusedElement(ownerDocument: Document): HTMLElement | null {
 }
 
 /**
+ * Whether focus has fallen to the document body, which is where a close that
+ * had nowhere to hand focus back to leaves it. The body is what
+ * `activeElement` reports when nothing is focused, so the test that a reader
+ * was left nowhere is written once rather than per overlay.
+ */
+export function focusIsOnBody(ownerDocument: Document): boolean {
+  return ownerDocument.activeElement === ownerDocument.body;
+}
+
+/**
  * Puts focus on the panel root itself, the destination of last resort.
  *
  * The root is not normally focusable, so it borrows a tabindex for the one

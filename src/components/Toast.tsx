@@ -41,6 +41,7 @@ import { usePanelPortalContainer } from "../utils/portal.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import type { SemanticTone } from "../utils/tone.js";
 import {
+  layoutMatches,
   observePanelViewport,
   readViewportEdges,
   roundedLayoutValue,
@@ -144,19 +145,6 @@ interface ToastHostPlacement {
   readonly width: number;
 }
 
-function toastPlacementsMatch(
-  current: ToastHostPlacement,
-  next: ToastHostPlacement,
-): boolean {
-  return (
-    current.bottom === next.bottom &&
-    current.left === next.left &&
-    current.top === next.top &&
-    current.visible === next.visible &&
-    current.width === next.width
-  );
-}
-
 /**
  * The host precedes the panel content so the notifications landmark is one
  * Tab from the panel start. It is fixed-positioned, so the position changes
@@ -228,7 +216,7 @@ function createToastHost(
     // Every value is rounded, so equal geometry compares equal. Custom
     // properties inherit, and a redundant write would invalidate style for
     // the host and every card below it once per scroll frame.
-    if (placement !== null && toastPlacementsMatch(placement, next)) return;
+    if (placement !== null && layoutMatches(placement, next)) return;
     placement = next;
 
     element.toggleAttribute("data-snui-toast-host-visible", next.visible);
@@ -527,8 +515,11 @@ export function createToastQueue<T extends ToastContent = ToastContent>(
       return key;
     },
     dismiss: (key) => {
-      if (!snapshot.some((queued) => queued.key === key)) return;
-      snapshot = snapshot.filter((queued) => queued.key !== key);
+      const index = snapshot.findIndex((queued) => queued.key === key);
+      if (index === -1) return;
+      const next = [...snapshot];
+      next.splice(index, 1);
+      snapshot = next;
       FOCUSED_TOAST_COUNTS.delete(key);
       emit();
     },

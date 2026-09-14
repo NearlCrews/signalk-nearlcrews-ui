@@ -7,6 +7,7 @@ import {
 import { SWITCH_STYLES } from "../styles/switch.js";
 import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
+import { definedProps } from "../utils/props.js";
 import { racDomProps } from "../utils/react-aria.js";
 import { resolveLabelContent, type WithLabel } from "../utils/react-node.js";
 
@@ -74,17 +75,17 @@ export function Switch({
       {...domProps}
       ref={ref}
       className={classNames("snui-switch", className)}
-      {...(form === undefined ? {} : { form })}
       isDisabled={disabled ?? false}
       isReadOnly={readOnly ?? false}
       isRequired={required ?? false}
-      {...(name === undefined ? {} : { name })}
-      {...(value === undefined ? {} : { value })}
-      {...(checked === undefined ? {} : { isSelected: checked })}
-      {...(defaultChecked === undefined
-        ? {}
-        : { defaultSelected: defaultChecked })}
-      {...(onCheckedChange === undefined ? {} : { onChange: onCheckedChange })}
+      {...definedProps({
+        form,
+        name,
+        value,
+        isSelected: checked,
+        defaultSelected: defaultChecked,
+        onChange: onCheckedChange,
+      })}
     >
       <SwitchButton className="snui-switch__button">
         <span className="snui-switch__track" aria-hidden="true">

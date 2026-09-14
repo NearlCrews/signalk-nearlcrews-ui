@@ -35,7 +35,9 @@ import {
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { joinIdReferences, requireAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { mediaMatches } from "../utils/motion.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
+import { definedProps } from "../utils/props.js";
 import { hasReactContent, plainReactNodeText } from "../utils/react-node.js";
 import type { Density, Visibility } from "../utils/variants.js";
 import { EmptyState } from "./EmptyState.js";
@@ -82,11 +84,9 @@ type ColumnMinStyle = CSSProperties &
  * height during a fast scroll. jsdom implements no matchMedia, which reads as
  * the fine pointer a development machine has.
  */
-const ROW_HEIGHTS =
-  typeof globalThis.matchMedia === "function" &&
-  globalThis.matchMedia("(any-pointer: coarse)").matches
-    ? DATA_GRID_ROW_HEIGHTS
-    : DATA_GRID_ROW_HEIGHTS_FINE;
+const ROW_HEIGHTS = mediaMatches(globalThis, "(any-pointer: coarse)")
+  ? DATA_GRID_ROW_HEIGHTS
+  : DATA_GRID_ROW_HEIGHTS_FINE;
 
 /**
  * Initial size estimates the Virtualizer lays rows out with before it measures
@@ -496,6 +496,27 @@ interface ResolvedHeader<TColumn> {
   readonly headerChildren: ReactNode | ((column: TColumn) => ReactElement);
 }
 
+type ResolvedDecorations = Omit<ResolvedHeader<never>, "headerChildren">;
+
+/**
+ * The decorations half of a resolved header, which both resolvers build the
+ * same way. The empty-map short circuit is what keeps an undecorated grid out
+ * of per-cell decoration work, so it travels with the list it belongs to.
+ */
+function resolvedDecorations(
+  keys: readonly (Key | undefined)[],
+  decorations: readonly ColumnDecoration[],
+): ResolvedDecorations {
+  const hasDecoration = decorations.some(isDecorated);
+  return {
+    decorations,
+    decorationsByKey: hasDecoration
+      ? indexDecorations(keys, decorations)
+      : NO_DECORATIONS_BY_KEY,
+    hasDecoration,
+  };
+}
+
 function indexDecorations(
   keys: readonly (Key | undefined)[],
   decorations: readonly ColumnDecoration[],
@@ -552,17 +573,11 @@ function resolveStaticHeader<TColumn>(
     return result;
   });
 
-  const decorations = columnElements.map(decorationOf);
-  const hasDecoration = decorations.some(isDecorated);
   return {
-    decorations,
-    decorationsByKey: hasDecoration
-      ? indexDecorations(
-          columnElements.map((element) => element.props.id),
-          decorations,
-        )
-      : NO_DECORATIONS_BY_KEY,
-    hasDecoration,
+    ...resolvedDecorations(
+      columnElements.map((element) => element.props.id),
+      columnElements.map(decorationOf),
+    ),
     headerChildren,
   };
 }
@@ -592,22 +607,14 @@ function resolveDynamicHeader<TColumn>(
   // it was rendered from.
   const decorations: ColumnDecoration[] = [];
   const keys: (Key | undefined)[] = [];
-  columns.forEach((column, index) => {
+  columns.forEach((column) => {
     const element = children(column);
     if (!isHeaderColumnElement(element)) return;
     decorations.push(decorationOf(element));
-    keys.push(element.props.id ?? getItemKey(columns[index]));
+    keys.push(element.props.id ?? getItemKey(column));
   });
 
-  const hasDecoration = decorations.some(isDecorated);
-  return {
-    decorations,
-    decorationsByKey: hasDecoration
-      ? indexDecorations(keys, decorations)
-      : NO_DECORATIONS_BY_KEY,
-    hasDecoration,
-    headerChildren,
-  };
+  return { ...resolvedDecorations(keys, decorations), headerChildren };
 }
 
 /** Title of an empty grid whose caller and panel bundle both leave it out. */
@@ -749,17 +756,19 @@ export function DataGrid<TRow, TColumn = unknown>({
     <Table
       className="snui-data-grid__table"
       selectionMode={selectionMode}
-      {...(ariaLabel === undefined ? {} : { "aria-label": ariaLabel })}
-      {...(labelledBy === undefined ? {} : { "aria-labelledby": labelledBy })}
-      {...(defaultSelectedKeys === undefined ? {} : { defaultSelectedKeys })}
-      {...(selectedKeys === undefined ? {} : { selectedKeys })}
-      {...(onSelectionChange === undefined ? {} : { onSelectionChange })}
-      {...(sortDescriptor === undefined ? {} : { sortDescriptor })}
-      {...(onSortChange === undefined ? {} : { onSortChange })}
+      {...definedProps({
+        "aria-label": ariaLabel,
+        "aria-labelledby": labelledBy,
+        defaultSelectedKeys,
+        selectedKeys,
+        onSelectionChange,
+        sortDescriptor,
+        onSortChange,
+      })}
     >
       <TableHeader
         className="snui-data-grid__header"
-        {...(columns === undefined ? {} : { columns })}
+        {...definedProps({ columns })}
       >
         {header.headerChildren}
       </TableHeader>

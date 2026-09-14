@@ -1,8 +1,6 @@
 import {
-  createContext,
   createElement,
   type ReactNode,
-  useContext,
   useLayoutEffect,
   useReducer,
 } from "react";
@@ -11,6 +9,7 @@ import {
   useUNSAFE_PortalContext,
 } from "react-aria/PortalProvider";
 import { PACKAGE_VERSION, ROOT_CLASS } from "../version.js";
+import { createRequiredContext } from "./context.js";
 
 // The UNSAFE portal API is upstream's explicit no-stability marker, so every
 // internal consumer reaches it through this one module: an upstream rename or
@@ -25,9 +24,11 @@ import { PACKAGE_VERSION, ROOT_CLASS } from "../version.js";
 
 type PortalContainerResolver = () => HTMLElement | null;
 
-const PanelPortalOwnerContext = createContext<PortalContainerResolver | null>(
-  null,
-);
+const {
+  Provider: PanelPortalOwnerProvider,
+  useOptionalValue: useOptionalPortalOwner,
+  useValue: usePortalOwner,
+} = createRequiredContext<PortalContainerResolver>("PanelRoot");
 
 interface PanelPortalProviderProps {
   readonly children: ReactNode;
@@ -40,7 +41,7 @@ export function PanelPortalProvider({
   getContainer,
 }: PanelPortalProviderProps): React.JSX.Element {
   return createElement(
-    PanelPortalOwnerContext,
+    PanelPortalOwnerProvider,
     { value: getContainer },
     createElement(UNSAFE_PortalProvider, { children, getContainer }),
   );
@@ -88,7 +89,7 @@ export function usePanelPortalContainerReady(componentName: string): boolean {
  * root sheet in.
  */
 export function useOptionalPanelRoot(): HTMLElement | null {
-  const ownerGetContainer = useContext(PanelPortalOwnerContext);
+  const ownerGetContainer = useOptionalPortalOwner();
   const ready = usePortalContainerReady();
 
   if (!ready || ownerGetContainer === null) return null;
@@ -106,17 +107,33 @@ function portalContainerError(componentName: string, reason: string): Error {
   );
 }
 
+/**
+ * Roots already proven to be this package's own versioned `PanelRoot`.
+ *
+ * The three attribute reads cannot change their answer for a given element,
+ * and every component that portals or installs a style module asks on every
+ * render, so a virtualized grid re-rendering on scroll would otherwise pay
+ * them per frame.
+ */
+const VERSIONED_PANEL_ROOTS = new WeakSet<HTMLElement>();
+
+function isVersionedPanelRoot(element: HTMLElement): boolean {
+  if (VERSIONED_PANEL_ROOTS.has(element)) return true;
+  const versioned =
+    element.classList.contains(ROOT_CLASS) &&
+    element.hasAttribute("data-snui-root") &&
+    element.getAttribute("data-snui-version") === PACKAGE_VERSION;
+  if (versioned) VERSIONED_PANEL_ROOTS.add(element);
+  return versioned;
+}
+
 /** Resolves and verifies the exact PanelRoot that owns a portal consumer. */
 export function usePanelPortalContainer(
   componentName: string,
 ): HTMLElement | null {
-  const ownerGetContainer = useContext(PanelPortalOwnerContext);
+  const ownerGetContainer = usePortalOwner(componentName);
   const { getContainer } = useUNSAFE_PortalContext();
   const ready = usePortalContainerReady();
-
-  if (ownerGetContainer === null) {
-    throw new Error(`${componentName} must be rendered inside PanelRoot.`);
-  }
 
   if (getContainer == null) {
     throw portalContainerError(
@@ -131,11 +148,7 @@ export function usePanelPortalContainer(
   if (owner === null) return null;
 
   const resolved = getContainer();
-  const isVersionedPanelRoot =
-    owner.classList.contains(ROOT_CLASS) &&
-    owner.hasAttribute("data-snui-root") &&
-    owner.getAttribute("data-snui-version") === PACKAGE_VERSION;
-  if (resolved !== owner || !isVersionedPanelRoot) {
+  if (resolved !== owner || !isVersionedPanelRoot(owner)) {
     throw portalContainerError(
       componentName,
       "The resolved container is another element",

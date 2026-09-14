@@ -19,12 +19,12 @@ import { usePanelLocale } from "../utils/locale.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { createPolymorphicElement } from "../utils/polymorphic.js";
 import { definedProps } from "../utils/props.js";
-import { subscribeToClock } from "../utils/shared-clock.js";
+import {
+  DEFAULT_CLOCK_TICK_MS,
+  subscribeToClock,
+} from "../utils/shared-clock.js";
 
 export type RelativeAgeElement = "time" | "span";
-
-/** Default interval between re-renders while the component owns the clock. */
-const DEFAULT_TICK_MS = 10_000;
 
 export interface RelativeAgeProps
   extends Omit<HTMLAttributes<HTMLElement>, "children">,
@@ -61,7 +61,7 @@ export function RelativeAge({
   className,
   options: suppliedOptions,
   since,
-  tickMs = DEFAULT_TICK_MS,
+  tickMs = DEFAULT_CLOCK_TICK_MS,
   ...props
 }: RelativeAgeProps): React.JSX.Element {
   const panelLocale = usePanelLocale();
@@ -70,10 +70,10 @@ export function RelativeAge({
   // the same panel formats itself cannot end up in two languages. The panel's
   // fallback wording joins on the same terms.
   const options = useMemo<FormatRelativeAgeOptions | undefined>(() => {
-    const panelDefaults = {
-      ...(panelLocale === undefined ? {} : { locale: panelLocale }),
-      ...(bundledFallback === undefined ? {} : { fallback: bundledFallback }),
-    };
+    const panelDefaults = definedProps({
+      locale: panelLocale,
+      fallback: bundledFallback,
+    });
     if (Object.keys(panelDefaults).length === 0) return suppliedOptions;
     return { ...panelDefaults, ...definedProps(suppliedOptions ?? {}) };
   }, [bundledFallback, panelLocale, suppliedOptions]);
@@ -98,9 +98,9 @@ export function RelativeAge({
   });
 
   useEffect(() => {
-    // A non-finite cadence would reach setInterval as zero, so it is treated
-    // as no ticking at all rather than as a runaway timer.
-    if (!ownsClock || !Number.isFinite(tickMs) || tickMs <= 0) return undefined;
+    // A cadence that is not a positive finite number does not tick at all;
+    // subscribeToClock owns that rule for every reader of the shared clock.
+    if (!ownsClock) return undefined;
     return subscribeToClock(tickMs, readClock);
   }, [ownsClock, tickMs]);
 

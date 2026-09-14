@@ -158,11 +158,10 @@ function useButtonState<Props extends ButtonProps>(
 
   const isAriaDisabled = resolveAriaDisabled(ariaDisabled, nativeAriaDisabled);
   const blocksActivation = isAriaDisabled || loading;
-  const effectiveLoadingLabel = resolveBundledLabel(
-    loadingLabel,
-    usePanelLabels()?.button?.loading,
-    DEFAULT_LOADING_LABEL,
-  );
+  // Read unconditionally, because the bundle is a hook, and resolved only in
+  // the branch that renders it: Button is the most instantiated component in
+  // the package and the busy label shows on none of the ordinary renders.
+  const bundledLoadingLabel = usePanelLabels()?.button?.loading;
   const baseId = useId();
   const loadingId = `${baseId}-loading`;
   const reasonId = `${baseId}-reason`;
@@ -199,7 +198,11 @@ function useButtonState<Props extends ButtonProps>(
                 className="snui-visually-hidden"
                 aria-hidden="true"
               >
-                {effectiveLoadingLabel}
+                {resolveBundledLabel(
+                  loadingLabel,
+                  bundledLoadingLabel,
+                  DEFAULT_LOADING_LABEL,
+                )}
               </span>
             </>
           ) : null}

@@ -10,9 +10,9 @@ import {
   type AnnouncementMode,
   resolveAnnouncingRegion,
 } from "../utils/announcement.js";
-import { joinIdReferences } from "../utils/aria.js";
+import { hasAccessibleName, joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { hasText, trimmedText } from "../utils/labels.js";
+import { trimmedText } from "../utils/labels.js";
 import {
   createPolymorphicElement,
   type PolymorphicProps,
@@ -285,16 +285,15 @@ export function Card({
    * told which one it is in. A caller-supplied role wins, so a card rendered
    * as a landmark stays one.
    */
-  const groupProps =
-    hasText(label) || hasText(labelledBy)
-      ? {
-          role: "group",
-          ...definedProps({
-            "aria-label": trimmedText(label) || undefined,
-            "aria-labelledby": trimmedText(labelledBy) || undefined,
-          }),
-        }
-      : {};
+  const groupProps = hasAccessibleName(label, labelledBy)
+    ? {
+        role: "group",
+        ...definedProps({
+          "aria-label": trimmedText(label) || undefined,
+          "aria-labelledby": trimmedText(labelledBy) || undefined,
+        }),
+      }
+    : {};
 
   return createPolymorphicElement(
     as,

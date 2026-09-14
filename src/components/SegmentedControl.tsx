@@ -20,8 +20,13 @@ import { isRightToLeft } from "../utils/direction.js";
 import { resolveFieldRegions } from "../utils/field-error.js";
 import { observeFormReset } from "../utils/form-reset.js";
 import { requireNonEmptyUniqueOptions } from "../utils/options.js";
+import { definedProps } from "../utils/props.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
-import { nextRovingIndex } from "../utils/roving.js";
+import {
+  mirrorsInRtl,
+  nextRovingIndex,
+  rovingKeyAxis,
+} from "../utils/roving.js";
 import type { Orientation, Visibility } from "../utils/variants.js";
 import { FieldError } from "./FieldError.js";
 
@@ -46,21 +51,6 @@ const platformHint =
 const FOCUS_MOVE_MODIFIER: "ctrlKey" | "metaKey" = /Mac/i.test(platformHint)
   ? "metaKey"
   : "ctrlKey";
-
-/**
- * The axis a key travels along, whatever the group's own orientation.
- *
- * The radio pattern binds both axes, so Down moves to the next option in a
- * horizontal group too. Only the horizontal pair mirrors in a right-to-left
- * panel, which is exactly what asking the shared step for a vertical group
- * expresses.
- */
-const KEY_AXIS: Readonly<Record<string, Orientation>> = {
-  ArrowDown: "vertical",
-  ArrowLeft: "horizontal",
-  ArrowRight: "horizontal",
-  ArrowUp: "vertical",
-};
 
 const OPTION_SELECTOR = '[role="radio"]';
 
@@ -233,7 +223,7 @@ export function SegmentedControl<Value extends string>({
     event: KeyboardEvent<HTMLButtonElement>,
     currentValue: Value,
   ): void => {
-    const axis = KEY_AXIS[event.key] ?? orientation;
+    const axis = rovingKeyAxis(event.key) ?? orientation;
     const nextIndex = nextRovingIndex({
       count: enabledOptions.length,
       currentIndex: enabledOptions.findIndex(
@@ -241,11 +231,7 @@ export function SegmentedControl<Value extends string>({
       ),
       key: event.key,
       orientation: axis,
-      // Resolved for the mirroring pair alone, so an unrelated key press does
-      // not read a computed style.
-      rtl:
-        KEY_AXIS[event.key] === "horizontal" &&
-        isRightToLeft(event.currentTarget),
+      rtl: mirrorsInRtl(event.key) && isRightToLeft(event.currentTarget),
     });
     if (nextIndex === null) return;
     const nextOption = enabledOptions[nextIndex];
@@ -268,12 +254,10 @@ export function SegmentedControl<Value extends string>({
       aria-invalid={hasError || undefined}
       aria-orientation={orientation}
       aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
-      {...(describedBy === undefined
-        ? {}
-        : { "aria-describedby": describedBy })}
-      {...(referencedErrorId === undefined
-        ? {}
-        : { "aria-errormessage": referencedErrorId })}
+      {...definedProps({
+        "aria-describedby": describedBy,
+        "aria-errormessage": referencedErrorId,
+      })}
     >
       <span
         id={labelId}

@@ -5,17 +5,11 @@ import {
   FIELD_STACK_DECLARATIONS,
   NARROW_PANEL_QUERY,
   PROSE_MEASURE_DECLARATION,
+  TONE_DOT_DECLARATIONS,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import { toneColorRules, toneDotShapeRules } from "./tone-rules.js";
-
-/**
- * Diameter of the status dot. Internal geometry rather than a token: it is the
- * size the per-tone shapes need to stay distinguishable, not a value a
- * consumer themes.
- */
-const STATUS_DOT_SIZE = "0.75rem";
 
 export const COMPONENT_STYLES = scopeStyles(`
 /*
@@ -211,12 +205,8 @@ ${visuallyHiddenDeclarations()}
 
 /* Large enough for the per-tone shapes to read at a glance. */
 .snui-status__dot {
-  width: ${STATUS_DOT_SIZE};
-  height: ${STATUS_DOT_SIZE};
+${TONE_DOT_DECLARATIONS}
   flex: none;
-  border: 2px solid currentColor;
-  border-radius: 50%;
-  background: currentColor;
 }
 
 .snui-status--neutral { color: var(--snui-color-text-muted); }

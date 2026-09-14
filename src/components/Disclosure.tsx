@@ -17,8 +17,9 @@ import {
 } from "../hooks/use-focus-return.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
 import { hasAccessibleName, requireIdToken } from "../utils/aria.js";
-import { isDevelopment } from "../utils/environment.js";
+import { focusIsOnBody } from "../utils/focus.js";
 import type { MountStrategy } from "../utils/mount-strategy.js";
+import { warnOnce } from "../utils/warn-once.js";
 import { Button, type ButtonAsButtonProps } from "./Button.js";
 
 export interface UseDisclosureOptions {
@@ -190,10 +191,9 @@ export function useDisclosure({
  * mounted yet takes nothing away from anyone.
  */
 function warnLostTrigger(panelNode: HTMLElement | null): void {
-  if (!isDevelopment() || panelNode === null) return;
-  const ownerDocument = panelNode.ownerDocument;
-  if (ownerDocument.activeElement !== ownerDocument.body) return;
-  console.warn(
+  if (panelNode === null || !focusIsOnBody(panelNode.ownerDocument)) return;
+  warnOnce(
+    "disclosure-lost-trigger",
     "useDisclosure closed a panel whose trigger is no longer mounted, so focus stayed on the document body. Keep the trigger mounted for the lifetime of the disclosure.",
   );
 }

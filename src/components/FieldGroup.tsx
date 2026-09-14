@@ -5,7 +5,7 @@ import {
   useId,
 } from "react";
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { joinIdReferences } from "../utils/aria.js";
+import { idReferenceList, joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { resolveFieldRegions } from "../utils/field-error.js";
 import {
@@ -46,14 +46,6 @@ interface FieldGroupBaseProps
  */
 export type FieldGroupProps = FieldGroupBaseProps & WithLabel<"legend">;
 
-/** Reads the one-or-many form of `groupDescribedBy` as a list of ids. */
-function describedByIds(
-  value: FieldGroupBaseProps["groupDescribedBy"],
-): readonly (string | undefined)[] {
-  if (value === undefined) return [];
-  return typeof value === "string" ? [value] : value;
-}
-
 export function FieldGroup({
   actions,
   "aria-describedby": ariaDescribedBy,
@@ -92,7 +84,7 @@ export function FieldGroup({
         ariaDescribedBy,
         descriptionId,
         referencedErrorId,
-        ...describedByIds(groupDescribedBy),
+        ...idReferenceList(groupDescribedBy),
       )}
     >
       <legend className="snui-field-group__legend">{groupLabel}</legend>

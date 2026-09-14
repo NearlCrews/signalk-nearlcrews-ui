@@ -20,8 +20,7 @@ import { DIALOG_STYLES } from "../styles/dialog.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { isDevelopment } from "../utils/environment.js";
-import { focusPanelRoot } from "../utils/focus.js";
+import { focusIsOnBody, focusPanelRoot } from "../utils/focus.js";
 import type { HeadingLevel } from "../utils/heading.js";
 import {
   OverlayLayerProvider,
@@ -36,6 +35,7 @@ import {
   readViewportEdges,
   roundedLayoutValue,
 } from "../utils/viewport.js";
+import { warnOnce } from "../utils/warn-once.js";
 import { Button, type ButtonVariant } from "./Button.js";
 import {
   type OverlayOpenState,
@@ -114,16 +114,9 @@ interface DialogSurfaceProps extends DialogProps {
   readonly role: "dialog" | "alertdialog";
 }
 
-/**
- * Component names already warned about, so a dialog with no route out reports
- * itself once rather than once per render.
- */
-const REPORTED_ROUTELESS_DIALOGS = new Set<string>();
-
 function warnNoRouteOut(componentName: string): void {
-  if (!isDevelopment() || REPORTED_ROUTELESS_DIALOGS.has(componentName)) return;
-  REPORTED_ROUTELESS_DIALOGS.add(componentName);
-  console.warn(
+  warnOnce(
+    `dialog-no-route-out:${componentName}`,
     `${componentName} refuses both the scrim and Escape and renders no actions, so the user may have no way out. Pass actions, or render a close control in children.`,
   );
 }
@@ -174,7 +167,7 @@ function DialogFocusBackstop({ panelRoot }: DialogFocusBackstopProps): null {
       const ownerDocument = panelRoot.ownerDocument;
       const ownerWindow = ownerDocument.defaultView;
       ownerWindow?.requestAnimationFrame(() => {
-        if (ownerDocument.activeElement !== ownerDocument.body) return;
+        if (!focusIsOnBody(ownerDocument)) return;
         if (!panelRoot.isConnected) return;
         focusPanelRoot(panelRoot);
       });

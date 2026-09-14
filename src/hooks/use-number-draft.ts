@@ -9,6 +9,7 @@ import {
   type WheelEvent,
 } from "react";
 import { isDevelopment } from "../utils/environment.js";
+import { warnOnce } from "../utils/warn-once.js";
 
 /** Why a draft cannot be committed. Keys the per-reason validation messages. */
 export type NumberDraftInvalidReason =
@@ -125,13 +126,9 @@ function snapDownToStep(value: number, step: number, base: number): number {
   return roundToStepPrecision(snapped, step, base);
 }
 
-const REPORTED_RULE_WARNINGS = new Set<string>();
-
 /** Reports one rules mistake once, in development only. */
 function warnRules(message: string): void {
-  if (REPORTED_RULE_WARNINGS.has(message)) return;
-  REPORTED_RULE_WARNINGS.add(message);
-  console.warn(`resolveNumberDraft: ${message}`);
+  warnOnce(`number-draft-rules:${message}`, `resolveNumberDraft: ${message}`);
 }
 
 /**

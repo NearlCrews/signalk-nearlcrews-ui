@@ -21,6 +21,40 @@ export function formatCount(
 }
 
 /**
+ * Sentence punctuation a phrase may already end with. A stop is added to text
+ * that ends in none of these, so a caller whose own wording ends in one is
+ * never announced as "Caution!.".
+ */
+const SENTENCE_ENDINGS = new Set([".", "!", "?", "…"]);
+
+/** Whether text already closes a sentence. */
+export function endsSentence(text: string): boolean {
+  return SENTENCE_ENDINGS.has(text.slice(-1));
+}
+
+/**
+ * Text as one sentence, with a full stop added unless it closes itself. Used
+ * for anything read straight into the words after it, where two sentences run
+ * together without one.
+ */
+export function asSentence(text: string): string {
+  return endsSentence(text) ? text : `${text}.`;
+}
+
+/**
+ * Parts read one after another, each closing its own sentence and blank parts
+ * dropped, so a title and the description under it are announced as two
+ * sentences however either one is punctuated.
+ */
+export function joinSentences(parts: readonly string[]): string {
+  return parts
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .map(asSentence)
+    .join(" ");
+}
+
+/**
  * Joins words into a phrase with a serial comma: "a", "a and b", and
  * "a, b, and c". `Intl.ListFormat` is deliberately not used, because the
  * serial comma is this package's rule rather than a locale's preference and

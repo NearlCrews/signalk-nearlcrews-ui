@@ -2758,16 +2758,23 @@ export type PanelAnnounce = (message: string, options?: PanelAnnounceOptions) =>
  * the message it wants read.
  */
 export declare const PanelAnnouncerProvider: (props: {
-    readonly children: import("react").ReactNode;
+    readonly children?: import("react").ReactNode | undefined;
     readonly value: PanelAnnounce;
 }) => React.JSX.Element, usePanelAnnouncer: () => PanelAnnounce;
 
 === utils/aria.d.ts ===
 /**
  * Reports whether either naming attribute carries text. Blank strings do not
- * name a control, so they read the same as an absent attribute.
+ * name a control, so they read the same as an absent attribute, which is the
+ * rule `hasText` owns for every caller-supplied string in the package.
  */
 export declare function hasAccessibleName(label: string | undefined, labelledBy: string | undefined): boolean;
+/**
+ * Reads the one-or-many form a describing-ids prop takes as a list, so a field
+ * and a fieldset cannot disagree about what a caller may pass. The result
+ * feeds {@link joinIdReferences}, which drops the entries left unset.
+ */
+export declare function idReferenceList(value: string | readonly (string | undefined)[] | undefined): readonly (string | undefined)[];
 /**
  * Requires an id a consumer supplied to be usable as an ARIA reference, and
  * reports it back. `aria-controls` and `aria-labelledby` hold space separated
@@ -2812,6 +2819,13 @@ export declare function landmarkLabel(landmark: boolean, ariaLabelledBy: string 
  * put focus back narrows it the same way.
  */
 export declare function focusedElement(ownerDocument: Document): HTMLElement | null;
+/**
+ * Whether focus has fallen to the document body, which is where a close that
+ * had nowhere to hand focus back to leaves it. The body is what
+ * `activeElement` reports when nothing is focused, so the test that a reader
+ * was left nowhere is written once rather than per overlay.
+ */
+export declare function focusIsOnBody(ownerDocument: Document): boolean;
 /**
  * Puts focus on the panel root itself, the destination of last resort.
  *
@@ -2956,21 +2970,36 @@ export type PanelLocale = string | readonly string[];
  * the two cannot disagree. Undefined means the runtime's own default locale.
  */
 export declare const PanelLocaleProvider: (props: {
-    readonly children: import("react").ReactNode;
+    readonly children?: import("react").ReactNode | undefined;
     readonly value: PanelLocale | undefined;
 }) => React.JSX.Element, usePanelLocale: () => PanelLocale | undefined;
 
 === utils/motion.d.ts ===
 /**
- * Reports the user's reduced-motion preference for a given view.
+ * The part of a view a media query needs, so a module-scope constant can ask
+ * the global scope the same way a component asks its owning window.
+ */
+interface MediaQueryView {
+    readonly matchMedia?: (query: string) => {
+        readonly matches: boolean;
+    } | undefined;
+}
+/**
+ * Whether a view matches a media query, for a view that may not implement one.
  *
- * Pass the window that owns the element about to move, usually
+ * Pass the window that owns the element the answer is about, usually
  * `element.ownerDocument.defaultView`, which is null for a document no window
- * presents. jsdom implements neither `matchMedia` nor the media query, so the
- * lookup is feature detected rather than assumed, and a missing implementation
- * reads as "motion is fine".
+ * presents. jsdom implements neither `matchMedia` nor these queries, so the
+ * lookup is feature detected rather than assumed and an unanswerable query
+ * reads as unmatched.
+ */
+export declare function mediaMatches(view: MediaQueryView | null | undefined, query: string): boolean;
+/**
+ * Reports the user's reduced-motion preference for a given view. A view that
+ * cannot answer reads as "motion is fine".
  */
 export declare function prefersReducedMotion(view: Window | null | undefined): boolean;
+export {};
 
 === utils/mount-strategy.d.ts ===
 /**
@@ -3078,7 +3107,7 @@ export interface PanelLabels {
  * package's English defaults, which is every panel that passes no bundle.
  */
 export declare const PanelLabelsProvider: (props: {
-    readonly children: import("react").ReactNode;
+    readonly children?: import("react").ReactNode | undefined;
     readonly value: PanelLabels | undefined;
 }) => React.JSX.Element, usePanelLabels: () => PanelLabels | undefined;
 export {};
@@ -3208,6 +3237,20 @@ export declare function plainReactNodeText(node: ReactNode): string | undefined;
  * `formatCount(2, "match", "matches")`.
  */
 export declare function formatCount(count: number, singular: string, plural?: string): string;
+/** Whether text already closes a sentence. */
+export declare function endsSentence(text: string): boolean;
+/**
+ * Text as one sentence, with a full stop added unless it closes itself. Used
+ * for anything read straight into the words after it, where two sentences run
+ * together without one.
+ */
+export declare function asSentence(text: string): string;
+/**
+ * Parts read one after another, each closing its own sentence and blank parts
+ * dropped, so a title and the description under it are announced as two
+ * sentences however either one is punctuated.
+ */
+export declare function joinSentences(parts: readonly string[]): string;
 /**
  * Joins words into a phrase with a serial comma: "a", "a and b", and
  * "a, b, and c". `Intl.ListFormat` is deliberately not used, because the

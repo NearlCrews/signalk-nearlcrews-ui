@@ -1,6 +1,12 @@
 import { Children, Fragment, isValidElement, type ReactNode } from "react";
 
 /**
+ * A run of whitespace, hoisted because {@link reactNodeText} recurses once per
+ * element child and would otherwise build the pattern per node of the tree.
+ */
+const WHITESPACE_RUN = /\s+/g;
+
+/**
  * Throws when a required slot carries no rendered content. Blank text and
  * empty fragments count as absent, so a component never ships an unnamed
  * control or an untitled surface.
@@ -94,7 +100,7 @@ export function reactNodeText(node: ReactNode): string {
   // together into one word and typeahead on the second word would never
   // match. Runs of whitespace collapse so the join does not double a space the
   // caller wrote.
-  return fragments.join(" ").replace(/\s+/g, " ");
+  return fragments.join(" ").replace(WHITESPACE_RUN, " ");
 }
 
 /**

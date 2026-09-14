@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useControllableState } from "../hooks/use-controllable-state.js";
 import { classNames } from "../utils/class-names.js";
-import { isDevelopment } from "../utils/environment.js";
+import { warnOnce } from "../utils/warn-once.js";
 import {
   CollapsibleSection,
   type CollapsibleSectionProps,
@@ -138,16 +138,13 @@ function describeChild(child: ReactNode): string {
 }
 
 /**
- * Whether the ignored-open mistake has been reported. A child element carries
- * a new props object on every render, so the report is latched here rather
- * than per child, which would repeat it for every frame the mistake survives.
+ * A child element carries a new props object on every render, so the report is
+ * keyed on the mistake rather than on the child, which would repeat it for
+ * every frame the mistake survives.
  */
-let reportedIgnoredOpen = false;
-
 function warnIgnoredOpen(): void {
-  if (!isDevelopment() || reportedIgnoredOpen) return;
-  reportedIgnoredOpen = true;
-  console.warn(
+  warnOnce(
+    "accordion-ignored-open",
     "Accordion owns the open state of every child, so the open prop on a CollapsibleSection inside it is ignored. Control the accordion through openIndex instead.",
   );
 }

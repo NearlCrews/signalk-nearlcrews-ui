@@ -6,7 +6,7 @@ import {
   useNumberDraft,
 } from "../hooks/use-number-draft.js";
 import { joinIdReferences } from "../utils/aria.js";
-import { resolveLabel } from "../utils/labels.js";
+import { resolveBundledContent } from "../utils/labels.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { hasReactContent } from "../utils/react-node.js";
 import { NumberInput, type NumberInputProps } from "./Inputs.js";
@@ -229,12 +229,11 @@ export function NumberField({
   const draftMessage =
     draft.invalidReason === undefined
       ? undefined
-      : hasReactContent(messageOverride)
-        ? messageOverride
-        : resolveLabel(
-            bundledMessages?.[draft.invalidReason],
-            defaultMessage(draft.invalidReason, rules),
-          );
+      : resolveBundledContent(
+          messageOverride,
+          bundledMessages?.[draft.invalidReason],
+          defaultMessage(draft.invalidReason, rules),
+        );
   const showUnit = hasReactContent(unit);
   // The keyboard hints are defaults a caller may replace, so they are applied
   // before the caller's own attributes; everything else in the draft's props

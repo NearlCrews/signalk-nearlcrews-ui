@@ -28,7 +28,18 @@ export function useFocusWithin<T extends Element>(
 
     holdsFocus.current = node.contains(ownerDocument.activeElement);
     const trackFocus = (event: FocusEvent): void => {
-      holdsFocus.current = event.composedPath().includes(node);
+      // `focusin` reports the shadow host rather than the node inside it, so
+      // the composed path is the only answer for focus that landed inside a
+      // shadow tree. Every other move is answered from the target alone,
+      // which matters because each tracked region runs this listener for
+      // every focus move in the document and composedPath allocates the whole
+      // ancestor chain.
+      const target = event.target;
+      holdsFocus.current =
+        (target instanceof Node && node.contains(target)) ||
+        (target instanceof Element &&
+          target.shadowRoot !== null &&
+          event.composedPath().includes(node));
     };
     ownerDocument.addEventListener("focusin", trackFocus);
     return () => {

@@ -13,13 +13,13 @@ import { useFocusReturnOnClose } from "../hooks/use-focus-return.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
 import { joinIdReferences, landmarkLabel } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { isDevelopment } from "../utils/environment.js";
 import { revealElement } from "../utils/focus.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
-import { resolveLabel } from "../utils/labels.js";
+import { resolveBundledContent } from "../utils/labels.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { definedProps } from "../utils/props.js";
 import { hasReactContent } from "../utils/react-node.js";
+import { warnOnce } from "../utils/warn-once.js";
 import { Button, type ButtonVariant } from "./Button.js";
 
 export type InlineConfirmCancelReason = "cancel" | "escape";
@@ -28,16 +28,9 @@ const DEFAULT_CANCEL_LABEL = "Cancel";
 const DEFAULT_CONFIRM_LABEL = "Confirm";
 const DEFAULT_TITLE = "Confirm action";
 
-/**
- * Whether the generic destructive confirmation has been reported, so a panel
- * that ships the default label hears about it once rather than per render.
- */
-let reportedGenericConfirm = false;
-
 function warnGenericDestructiveConfirm(): void {
-  if (!isDevelopment() || reportedGenericConfirm) return;
-  reportedGenericConfirm = true;
-  console.warn(
+  warnOnce(
+    "inline-confirm-generic-destructive",
     `InlineConfirm renders a destructive confirmation labeled "${DEFAULT_CONFIRM_LABEL}", which names no consequence. Pass confirmLabel, such as "Delete route", wherever the region reaches a user.`,
   );
 }
@@ -140,16 +133,22 @@ export function InlineConfirm({
   const bundledLabels = usePanelLabels()?.inlineConfirm;
   const effectiveTitle = hasReactContent(title)
     ? title
-    : hasReactContent(fallbackTitle)
-      ? fallbackTitle
-      : resolveLabel(bundledLabels?.fallbackTitle, DEFAULT_TITLE);
-  const effectiveCancelLabel = hasReactContent(cancelLabel)
-    ? cancelLabel
-    : resolveLabel(bundledLabels?.cancel, DEFAULT_CANCEL_LABEL);
+    : resolveBundledContent(
+        fallbackTitle,
+        bundledLabels?.fallbackTitle,
+        DEFAULT_TITLE,
+      );
+  const effectiveCancelLabel = resolveBundledContent(
+    cancelLabel,
+    bundledLabels?.cancel,
+    DEFAULT_CANCEL_LABEL,
+  );
   const hasConfirmLabel = hasReactContent(confirmLabel);
-  const effectiveConfirmLabel = hasConfirmLabel
-    ? confirmLabel
-    : resolveLabel(bundledLabels?.confirm, DEFAULT_CONFIRM_LABEL);
+  const effectiveConfirmLabel = resolveBundledContent(
+    confirmLabel,
+    bundledLabels?.confirm,
+    DEFAULT_CONFIRM_LABEL,
+  );
   const Heading = HEADING_ELEMENTS[headingLevel];
 
   if (confirmVariant === "danger" && !hasConfirmLabel) {

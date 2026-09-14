@@ -2,10 +2,10 @@ import { useEffect, useState } from "react";
 
 import type { RelativeAgeTimestamp } from "../utils/format-relative-age.js";
 import { type Freshness, resolveFreshness } from "../utils/freshness.js";
-import { subscribeToClock } from "../utils/shared-clock.js";
-
-/** Default interval between freshness re-reads, matching `RelativeAge`. */
-const DEFAULT_TICK_MS = 10_000;
+import {
+  DEFAULT_CLOCK_TICK_MS,
+  subscribeToClock,
+} from "../utils/shared-clock.js";
 
 export interface PollFreshnessOptions {
   /** Age at which the last sample stops counting as current. */
@@ -29,14 +29,13 @@ export interface PollFreshness extends Freshness {
  */
 export function usePollFreshness(
   lastUpdated: RelativeAgeTimestamp | null | undefined,
-  { staleAfterMs, tickMs = DEFAULT_TICK_MS }: PollFreshnessOptions,
+  { staleAfterMs, tickMs = DEFAULT_CLOCK_TICK_MS }: PollFreshnessOptions,
 ): PollFreshness {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
-  useEffect(() => {
-    if (tickMs <= 0) return undefined;
-    return subscribeToClock(tickMs, setNowMs);
-  }, [tickMs]);
+  // A cadence that is not a positive finite number does not tick at all;
+  // subscribeToClock owns that rule for every reader of the shared clock.
+  useEffect(() => subscribeToClock(tickMs, setNowMs), [tickMs]);
 
   return { ...resolveFreshness(lastUpdated, nowMs, staleAfterMs), nowMs };
 }

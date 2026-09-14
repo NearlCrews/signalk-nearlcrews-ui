@@ -8,10 +8,12 @@ import {
   useId,
 } from "react";
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { joinIdReferences } from "../utils/aria.js";
+import { idReferenceList, joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { isDevelopment } from "../utils/environment.js";
 import { resolveFieldRegions } from "../utils/field-error.js";
 import { forwardsFieldControlProps } from "../utils/field-forwarding.js";
+import { definedProps } from "../utils/props.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { type Density, resolveDensity } from "../utils/variants.js";
 import { warnOnce } from "../utils/warn-once.js";
@@ -140,14 +142,18 @@ function requireLabelableIntrinsicChild(
 ): void {
   if (typeof child.type !== "string") {
     if (forwardsFieldControlProps(child.type)) return;
-    const name =
-      typeof child.type === "function" && child.type.name !== ""
-        ? child.type.name
-        : "an anonymous component";
-    warnOnce(
-      `labeled-field-composite:${name}`,
-      `LabeledField received ${name} as its child, which it cannot check for the injected id and description props. A component that does not forward them leaves the label pointing at nothing; use the render-prop form for a composite control.`,
-    );
+    // The report is built only in a development build, where warnOnce is the
+    // only thing that reads it.
+    if (isDevelopment()) {
+      const name =
+        typeof child.type === "function" && child.type.name !== ""
+          ? child.type.name
+          : "an anonymous component";
+      warnOnce(
+        `labeled-field-composite:${name}`,
+        `LabeledField received ${name} as its child, which it cannot check for the injected id and description props. A component that does not forward them leaves the label pointing at nothing; use the render-prop form for a composite control.`,
+      );
+    }
     return;
   }
   if (
@@ -160,14 +166,6 @@ function requireLabelableIntrinsicChild(
       "LabeledField element children must render a labelable form control. Use the render-prop form for composite controls.",
     );
   }
-}
-
-/** Reads the one-or-many form of `controlDescribedBy` as a list of ids. */
-function describedByIds(
-  value: LabeledFieldProps["controlDescribedBy"],
-): readonly (string | undefined)[] {
-  if (value === undefined) return [];
-  return typeof value === "string" ? [value] : value;
 }
 
 export function LabeledField({
@@ -208,7 +206,7 @@ export function LabeledField({
     descriptionId,
     referencedErrorId,
     elementChild?.props["aria-describedby"],
-    ...describedByIds(controlDescribedBy),
+    ...idReferenceList(controlDescribedBy),
   );
   const errorMessage = joinIdReferences(
     elementChild?.props["aria-errormessage"],
@@ -227,14 +225,16 @@ export function LabeledField({
     STATELESS_LABELABLE_ELEMENTS.has(elementChild.type);
   const injectedProps: FieldControlProps & { readonly id: string } = {
     id: controlId,
-    ...(describedBy === undefined ? {} : { "aria-describedby": describedBy }),
+    ...definedProps({
+      "aria-describedby": describedBy,
+      name: controlName,
+    }),
     ...(referencedErrorId === undefined
       ? {}
       : {
           "aria-errormessage": errorMessage,
           "aria-invalid": true,
         }),
-    ...(controlName === undefined ? {} : { name: controlName }),
     ...(controlDisabled && !statelessChild ? { disabled: true } : {}),
     ...(controlRequired && !statelessChild
       ? // The ARIA state travels beside the native attribute, because a
@@ -247,10 +247,7 @@ export function LabeledField({
     typeof children === "function"
       ? children({
           ...injectedProps,
-          ...(descriptionId === undefined ? {} : { descriptionId }),
-          ...(referencedErrorId === undefined
-            ? {}
-            : { errorId: referencedErrorId }),
+          ...definedProps({ descriptionId, errorId: referencedErrorId }),
         })
       : cloneElement(children, injectedProps);
 

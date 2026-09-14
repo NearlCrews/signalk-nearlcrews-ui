@@ -1,5 +1,34 @@
 import type { Orientation } from "./variants.js";
 
+/**
+ * The axis a key travels along, whatever the group's own orientation.
+ *
+ * The radio and tab patterns bind both axes, so Down moves to the next option
+ * in a horizontal group too. Only the horizontal pair mirrors in a
+ * right-to-left panel, which is exactly what asking the step below for a
+ * vertical group expresses.
+ */
+const KEY_AXIS: Readonly<Record<string, Orientation>> = {
+  ArrowDown: "vertical",
+  ArrowLeft: "horizontal",
+  ArrowRight: "horizontal",
+  ArrowUp: "vertical",
+};
+
+/** The axis an arrow key travels along, or undefined for any other key. */
+export function rovingKeyAxis(key: string): Orientation | undefined {
+  return KEY_AXIS[key];
+}
+
+/**
+ * Whether a key mirrors in a right-to-left panel. Callers ask before reading
+ * the computed direction, which is the costly half of a roving step, so an
+ * unrelated key press never reaches a style lookup.
+ */
+export function mirrorsInRtl(key: string): boolean {
+  return rovingKeyAxis(key) === "horizontal";
+}
+
 /** One arrow, Home, or End press against a roving-focus group. */
 export interface RovingStep {
   /** How many items the group holds. */

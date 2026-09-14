@@ -1,7 +1,14 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { hasText, resolveBundledLabel, trimmedText } from "../utils/labels.js";
+import { resolveBundledLabels, trimmedText } from "../utils/labels.js";
 import { type PanelLabels, usePanelLabels } from "../utils/panel-labels.js";
 import type { StatusTone } from "../utils/tone.js";
 import { ActionBar, type ActionBarProps } from "./ActionBar.js";
@@ -179,7 +186,7 @@ function resolveStateWithLabels(
       tone: "info",
     };
   }
-  if (hasText(validationMessage)) {
+  if (validationMessage !== "") {
     return {
       blocked: true,
       discardDisabled: !dirty,
@@ -236,43 +243,7 @@ function resolveLabels(
   overrides: Partial<SaveActionBarLabels> | undefined,
   bundled?: PanelLabels["saveActionBar"],
 ): SaveActionBarLabels {
-  return {
-    clean: resolveBundledLabel(
-      overrides?.clean,
-      bundled?.clean,
-      DEFAULT_LABELS.clean,
-    ),
-    discard: resolveBundledLabel(
-      overrides?.discard,
-      bundled?.discard,
-      DEFAULT_LABELS.discard,
-    ),
-    save: resolveBundledLabel(
-      overrides?.save,
-      bundled?.save,
-      DEFAULT_LABELS.save,
-    ),
-    saved: resolveBundledLabel(
-      overrides?.saved,
-      bundled?.saved,
-      DEFAULT_LABELS.saved,
-    ),
-    saving: resolveBundledLabel(
-      overrides?.saving,
-      bundled?.saving,
-      DEFAULT_LABELS.saving,
-    ),
-    unconfigured: resolveBundledLabel(
-      overrides?.unconfigured,
-      bundled?.unconfigured,
-      DEFAULT_LABELS.unconfigured,
-    ),
-    unsaved: resolveBundledLabel(
-      overrides?.unsaved,
-      bundled?.unsaved,
-      DEFAULT_LABELS.unsaved,
-    ),
-  };
+  return resolveBundledLabels(DEFAULT_LABELS, overrides, bundled);
 }
 
 /**
@@ -375,7 +346,13 @@ export function SaveActionBar({
 }: SaveActionBarProps): React.JSX.Element {
   const statusRef = useRef<HTMLDivElement>(null);
   const statusId = useId();
-  const labels = resolveLabels(labelOverrides, usePanelLabels()?.saveActionBar);
+  const bundledLabels = usePanelLabels()?.saveActionBar;
+  // Seven labels of which at most four ever render, re-resolved on every
+  // dirty, saving, and saved transition otherwise.
+  const labels = useMemo(
+    () => resolveLabels(labelOverrides, bundledLabels),
+    [bundledLabels, labelOverrides],
+  );
   const savedWindowClosed = useSavedMessageWindowClosed(
     saveRequestedAt,
     savedMessageDurationMs,

@@ -4,6 +4,7 @@ import {
   type ReactNode,
   type RefAttributes,
   useCallback,
+  useMemo,
 } from "react";
 import {
   MenuTrigger,
@@ -243,8 +244,13 @@ export function MenuItem({
   ...props
 }: MenuItemProps): React.JSX.Element {
   // Derived from the children alone, so the tone name below never joins the
-  // string keystrokes are matched against.
-  const resolvedTextValue = textValue ?? reactNodeText(children).trim();
+  // string keystrokes are matched against. Walking the child tree is the
+  // costly half of rendering an item, and the answer changes only when the
+  // children do, so opening or closing the menu walks no item again.
+  const resolvedTextValue = useMemo(
+    () => textValue ?? reactNodeText(children).trim(),
+    [children, textValue],
+  );
   const danger = tone === "danger";
   const menuItemToneLabel = resolveBundledLabel(
     toneLabel,

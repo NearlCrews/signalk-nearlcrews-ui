@@ -3,6 +3,10 @@
  * component ships the same label with the same blank-falls-back behavior.
  */
 
+import type { ReactNode } from "react";
+
+import { hasReactContent } from "./react-node.js";
+
 /** Default accessible name announced while a button is loading. */
 export const DEFAULT_LOADING_LABEL = "Working";
 
@@ -49,4 +53,41 @@ export function resolveBundledLabel(
   fallback: string,
 ): string {
   return trimmedText(label) || trimmedText(bundled) || fallback;
+}
+
+/**
+ * The same order for a slot whose override is rendered content rather than a
+ * string. An override carrying no rendered content reads as absent, which is
+ * the content-shaped spelling of the blank rule above, and the bundle and the
+ * fallback resolve exactly as they do for a label.
+ */
+export function resolveBundledContent(
+  content: ReactNode,
+  bundled: string | undefined,
+  fallback: ReactNode,
+): ReactNode {
+  if (hasReactContent(content)) return content;
+  return trimmedText(bundled) || fallback;
+}
+
+/**
+ * A whole group of labels resolved at once, so a component that ships several
+ * defaults states the order once rather than per key. A key added to the
+ * defaults is resolved without a matching line to remember, which is what
+ * keeps a new status from silently losing its translation.
+ */
+export function resolveBundledLabels<K extends string>(
+  defaults: Readonly<Record<K, string>>,
+  overrides: Readonly<Partial<Record<K, string | undefined>>> | undefined,
+  bundled: Readonly<Partial<Record<K, string | undefined>>> | undefined,
+): Record<K, string> {
+  const resolved = {} as Record<K, string>;
+  for (const key of Object.keys(defaults) as K[]) {
+    resolved[key] = resolveBundledLabel(
+      overrides?.[key],
+      bundled?.[key],
+      defaults[key],
+    );
+  }
+  return resolved;
 }

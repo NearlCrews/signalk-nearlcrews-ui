@@ -1,5 +1,8 @@
 import { versionedAnimationName } from "../version.js";
-import { visuallyHiddenDeclarations } from "./fragments.js";
+import {
+  TONE_DOT_DECLARATIONS,
+  visuallyHiddenDeclarations,
+} from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 import {
@@ -11,13 +14,6 @@ import {
 
 /** The keyframe name the toast card animates in with. */
 const TOAST_ENTER_ANIMATION = versionedAnimationName("toast-enter");
-
-/*
- * The tone dot's own diameter. Internal geometry rather than a token: it is
- * the size this one mark needs beside the card's text, not a value a consumer
- * themes.
- */
-const TOAST_TONE_DOT_SIZE = "0.75rem";
 
 /**
  * Toast region and card styles. Installed by `ToastRegion` through
@@ -139,13 +135,9 @@ ${toneDescendantColorRules(
   ":is(.snui-toast__tone, .snui-toast__tone-glyph)",
 )}
 
-/* The size StatusIndicator uses, so the per-tone shapes read at a glance. */
+/* The same mark StatusIndicator paints, so the shapes read at a glance. */
 .snui-toast__tone-dot {
-  width: ${TOAST_TONE_DOT_SIZE};
-  height: ${TOAST_TONE_DOT_SIZE};
-  border: 2px solid currentColor;
-  border-radius: 50%;
-  background: currentColor;
+${TONE_DOT_DECLARATIONS}
 }
 
 /*
