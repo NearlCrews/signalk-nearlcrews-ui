@@ -5,32 +5,7 @@ import {
   readViewportEdges,
   roundedLayoutValue,
 } from "../../src/utils/viewport.js";
-import { installVisualViewport } from "../helpers.js";
-
-/** Captures animation frames so a test runs them one at a time. */
-function stubAnimationFrames(): {
-  readonly frames: FrameRequestCallback[];
-  readonly cancelled: number[];
-  runAll: () => void;
-} {
-  const frames: FrameRequestCallback[] = [];
-  const cancelled: number[] = [];
-  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-    frames.push(callback);
-    return frames.length;
-  });
-  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((handle) => {
-    cancelled.push(handle);
-  });
-  return {
-    cancelled,
-    frames,
-    runAll: () => {
-      const pending = frames.splice(0);
-      for (const frame of pending) frame(0);
-    },
-  };
-}
+import { installVisualViewport, stubAnimationFrames } from "../helpers.js";
 
 afterEach(() => {
   vi.unstubAllGlobals();

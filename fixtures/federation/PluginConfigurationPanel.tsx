@@ -1,6 +1,7 @@
 import { Button, PanelShell, StatusIndicator } from "signalk-nearlcrews-ui";
 import { EmptyState } from "signalk-nearlcrews-ui/composites";
 import { Cell, Column, DataGrid, Row } from "signalk-nearlcrews-ui/data-grid";
+import { formatCount } from "signalk-nearlcrews-ui/format";
 import { SecretInput } from "signalk-nearlcrews-ui/forms";
 import { createToastQueue, ToastRegion } from "signalk-nearlcrews-ui/overlays";
 
@@ -45,7 +46,7 @@ export default function PluginConfigurationPanel({
   return (
     <PanelShell themeToggle="end">
       <StatusIndicator tone="success">Fixture ready</StatusIndicator>
-      <p>Saved {configuration.saveCount} times</p>
+      <p>Saved {formatCount(configuration.saveCount, "time")}</p>
       <EmptyState
         title="Composite entry ready"
         description="Loaded through the composites subpath."

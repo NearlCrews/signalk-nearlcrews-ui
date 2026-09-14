@@ -21,6 +21,7 @@ import {
   installVisualViewport,
   panel,
   renderInPanel,
+  stubAnimationFrames,
 } from "../helpers.js";
 
 /** A rectangle a spec pins on an element, read fresh at every measurement. */
@@ -785,14 +786,7 @@ describe("chrome primitives", () => {
   it("settles an alternating docking geometry inside one animation frame", () => {
     const { restore, visualViewport } = installVisualViewport({ height: 600 });
 
-    const frames: FrameRequestCallback[] = [];
-    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
-      frames.push(callback);
-      return frames.length;
-    });
-    vi.spyOn(window, "cancelAnimationFrame").mockImplementation(
-      () => undefined,
-    );
+    const { frames } = stubAnimationFrames();
 
     const { container, unmount } = render(
       <PanelRoot data-testid="settle-panel">

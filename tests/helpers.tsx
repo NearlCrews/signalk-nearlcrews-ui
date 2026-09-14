@@ -39,6 +39,40 @@ export async function flushAnimationFrames(): Promise<void> {
   });
 }
 
+/** Captured animation frames, the handles cancelled, and a way to run them. */
+export interface AnimationFrameStub {
+  readonly cancelled: number[];
+  readonly frames: FrameRequestCallback[];
+  readonly runAll: () => void;
+}
+
+/**
+ * Captures animation frames so a spec runs them one at a time.
+ *
+ * jsdom schedules real frames, which a spec asserting what one frame did
+ * cannot observe, so both the viewport measurements and the docking chrome
+ * drive their frames from here.
+ */
+export function stubAnimationFrames(): AnimationFrameStub {
+  const frames: FrameRequestCallback[] = [];
+  const cancelled: number[] = [];
+  vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+    frames.push(callback);
+    return frames.length;
+  });
+  vi.spyOn(window, "cancelAnimationFrame").mockImplementation((handle) => {
+    cancelled.push(handle);
+  });
+  return {
+    cancelled,
+    frames,
+    runAll: () => {
+      const pending = frames.splice(0);
+      for (const frame of pending) frame(0);
+    },
+  };
+}
+
 /** A stub visual viewport together with the restore its spec must run. */
 export interface VisualViewportStub {
   readonly restore: () => void;

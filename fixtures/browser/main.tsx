@@ -1,5 +1,4 @@
-import { StrictMode, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { useRef, useState } from "react";
 
 import {
   ActionBar,
@@ -32,6 +31,7 @@ import {
 } from "signalk-nearlcrews-ui";
 import { CheckboxGroup } from "signalk-nearlcrews-ui/composites";
 import { createToastQueue, ToastRegion } from "signalk-nearlcrews-ui/overlays";
+import { mountFixture } from "./mount.js";
 
 type LogLevel = "minimal" | "normal" | "verbose";
 const fixtureParameters = new URLSearchParams(window.location.search);
@@ -371,18 +371,11 @@ function Fixture(): React.JSX.Element {
   );
 }
 
-const container = document.querySelector("#root");
-if (!(container instanceof HTMLElement)) {
-  throw new Error("Browser fixture root was not found.");
-}
-
-createRoot(container).render(
-  <StrictMode>
-    <main className={simulateAdminHost ? "app-body" : undefined}>
-      <Fixture />
-      {simulateAdminHost ? (
-        <div className="admin-host__after-panel-content" aria-hidden="true" />
-      ) : null}
-    </main>
-  </StrictMode>,
+mountFixture(
+  <main className={simulateAdminHost ? "app-body" : undefined}>
+    <Fixture />
+    {simulateAdminHost ? (
+      <div className="admin-host__after-panel-content" aria-hidden="true" />
+    ) : null}
+  </main>,
 );

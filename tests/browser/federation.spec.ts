@@ -29,7 +29,7 @@ test("loads classic and ESM remotes against host React and ReactDOM", async ({
     .locator("#classic-root")
     .getByRole("button", { name: "Save configuration" })
     .click();
-  await expect(page.locator("#classic-root")).toContainText("Saved 1 times");
+  await expect(page.locator("#classic-root")).toContainText("Saved 1 time");
   await expect(page.locator("#esm-root")).toContainText("Saved 0 times");
 
   const roots = page.locator("[data-snui-version]");

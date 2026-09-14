@@ -9,6 +9,14 @@ import { RADIO_STYLES } from "../../src/styles/radio.js";
 import { RANGE_STYLES } from "../../src/styles/range.js";
 import { SWITCH_STYLES } from "../../src/styles/switch.js";
 
+/**
+ * The sheet with every run of whitespace collapsed, so an assertion reads the
+ * rule rather than the formatter's line breaks and indentation.
+ */
+function normalizedCss(css: string): string {
+  return css.replace(/\s+/g, " ");
+}
+
 /** The rule bodies a selector opens, comments and nesting left as they are. */
 function ruleBodies(css: string, selector: string): string[] {
   const bodies: string[] = [];
@@ -27,8 +35,8 @@ describe("radio group styles", () => {
   it("dims the group's own text while the group is unavailable", () => {
     // A full-strength label over dimmed options reads as a live question with
     // unavailable answers rather than as an unavailable control.
-    expect(RADIO_STYLES.styles).toContain(
-      ".snui-radio-group[data-disabled]\n  :is(.snui-radio-group__label, .snui-radio-group__description) {\n  color: var(--snui-color-text-disabled);",
+    expect(normalizedCss(RADIO_STYLES.styles)).toContain(
+      ".snui-radio-group[data-disabled] :is(.snui-radio-group__label, .snui-radio-group__description) { color: var(--snui-color-text-disabled);",
     );
     // Forced colors repaints authored text with its ordinary color, so the
     // unavailable state is restated with the system one.
@@ -81,8 +89,8 @@ describe("range styles", () => {
   it("rebuilds the filled portion under forced colors", () => {
     // The flat system color the track would otherwise take leaves the thumb
     // as the only reading of the value.
-    expect(RANGE_STYLES.styles).toContain(
-      "Highlight 0 var(--snui-range-progress, 0%),\n      ButtonText var(--snui-range-progress, 0%)",
+    expect(normalizedCss(RANGE_STYLES.styles)).toContain(
+      "Highlight 0 var(--snui-range-progress, 0%), ButtonText var(--snui-range-progress, 0%)",
     );
     expect(
       ruleBodies(RANGE_STYLES.styles, ".snui-range::-moz-range-progress"),
@@ -102,8 +110,8 @@ describe("switch styles", () => {
     // its own, so the transform arrives with its own mirror and only where
     // the engine can match the direction selector.
     expect(SWITCH_STYLES.styles).toContain("@supports selector(:dir(rtl)) {");
-    expect(SWITCH_STYLES.styles).toContain(
-      "transition:\n      transform var(--snui-transition-fast),",
+    expect(normalizedCss(SWITCH_STYLES.styles)).toContain(
+      "transition: transform var(--snui-transition-fast),",
     );
     const travel = "calc(2.25rem - 2px - 2px - 0.875rem - 0.125rem - 0.125rem)";
     expect(SWITCH_STYLES.styles).toContain(`translate(${travel}, -50%)`);

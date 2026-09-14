@@ -10,6 +10,53 @@ const federationRoots = {
   esm: resolve(repositoryRoot, "fixtures/federation/esm/dist"),
 } as const;
 
+interface PackageAlias {
+  readonly find: string;
+  readonly replacement: string;
+}
+
+/**
+ * The package's own entry points, aliased to the built files, derived from the
+ * exports map so a new entry point reaches the browser fixtures without an
+ * edit here. Vite matches a string alias by prefix, so the bare package name
+ * resolves last: ahead of the subpaths it would swallow every one of them.
+ */
+function packageEntryAliases(): PackageAlias[] {
+  const manifest = JSON.parse(
+    readFileSync(resolve(repositoryRoot, "package.json"), "utf8"),
+  ) as {
+    readonly exports: Readonly<Record<string, unknown>>;
+    readonly name: string;
+  };
+
+  const subpathAliases: PackageAlias[] = [];
+  let rootAlias: PackageAlias | undefined;
+  for (const [subpath, declaration] of Object.entries(manifest.exports)) {
+    const target =
+      typeof declaration === "object" &&
+      declaration !== null &&
+      "import" in declaration
+        ? (declaration as { readonly import?: unknown }).import
+        : undefined;
+    if (typeof target !== "string" || !target.endsWith(".js")) continue;
+
+    const replacement = resolve(repositoryRoot, target);
+    if (subpath === ".") {
+      rootAlias = { find: manifest.name, replacement };
+      continue;
+    }
+    subpathAliases.push({
+      find: `${manifest.name}/${subpath.replace(/^\.\//, "")}`,
+      replacement,
+    });
+  }
+
+  if (rootAlias === undefined) {
+    throw new Error("package.json declares no root JavaScript export.");
+  }
+  return [...subpathAliases, rootAlias];
+}
+
 const CSP_FIXTURE_NONCE = "snui-csp-fixture";
 const CSP_FIXTURE_MODULE_ID = "/csp-fixture.tsx";
 const RESOLVED_CSP_FIXTURE_MODULE_ID = `\0${CSP_FIXTURE_MODULE_ID}`;
@@ -151,28 +198,7 @@ export default defineConfig({
   root: import.meta.dirname,
   plugins: [cspFixtureServer(), federationAssetServer(), react()],
   resolve: {
-    alias: [
-      {
-        find: "signalk-nearlcrews-ui/composites",
-        replacement: resolve(repositoryRoot, "dist/composites.js"),
-      },
-      {
-        find: "signalk-nearlcrews-ui/data-grid",
-        replacement: resolve(repositoryRoot, "dist/data-grid.js"),
-      },
-      {
-        find: "signalk-nearlcrews-ui/forms",
-        replacement: resolve(repositoryRoot, "dist/forms.js"),
-      },
-      {
-        find: "signalk-nearlcrews-ui/overlays",
-        replacement: resolve(repositoryRoot, "dist/overlays.js"),
-      },
-      {
-        find: "signalk-nearlcrews-ui",
-        replacement: resolve(repositoryRoot, "dist/index.js"),
-      },
-    ],
+    alias: packageEntryAliases(),
   },
   define: {
     __CLASSIC_REMOTE_URL__: JSON.stringify(

@@ -1,5 +1,4 @@
-import { StrictMode, useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { useMemo, useState } from "react";
 
 import {
   ActionBar,
@@ -77,6 +76,7 @@ import {
   ToastRegion,
   toast,
 } from "signalk-nearlcrews-ui/overlays";
+import { mountFixture } from "./mount.js";
 
 const showcaseParameters = new URLSearchParams(window.location.search);
 /** Mirrors the Admin's fixed header and sidebar around the panel. */
@@ -822,15 +822,10 @@ function Showcase(): React.JSX.Element {
   );
 }
 
-const container = document.querySelector("#root");
-if (!(container instanceof HTMLElement)) {
-  throw new Error("Browser showcase root was not found.");
-}
-
 if (showHostChrome) document.body.classList.add("host-chrome");
 
-createRoot(container).render(
-  <StrictMode>
+mountFixture(
+  <>
     {showHostChrome ? (
       <>
         <header className="app-header">Signal K host header</header>
@@ -842,5 +837,5 @@ createRoot(container).render(
     <main className={showHostChrome ? "app-body" : undefined}>
       <Showcase />
     </main>
-  </StrictMode>,
+  </>,
 );
