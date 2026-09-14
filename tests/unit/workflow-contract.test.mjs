@@ -36,12 +36,16 @@ const packageJson = JSON.parse(
 
 const nodeMatrix = readInlineList(ciWorkflow, "node");
 const architectures = readScalarValues(ciWorkflow, "architecture");
+const packageLabels = readScalarValues(ciWorkflow, "label");
 const ciJobNames = readJobNames(ciWorkflow).flatMap((name) => {
   if (name.includes("matrix.node")) {
     return expandMatrixName(name, "node", nodeMatrix);
   }
   if (name.includes("matrix.architecture")) {
     return expandMatrixName(name, "architecture", architectures);
+  }
+  if (name.includes("matrix.label")) {
+    return expandMatrixName(name, "label", packageLabels);
   }
   return [name];
 });
@@ -80,6 +84,37 @@ describe("CI matrix and required release checks", () => {
         `devEngines floor ${floor} needs a matching ci.yml matrix entry`,
       ).toBe(true);
     }
+  });
+
+  /*
+   * Every standalone `node-version` in the workflow claims to be the floor
+   * from devEngines or a floating major line. Only the matrix was checked
+   * before, so moving the floor left the standalone pins testing against a
+   * version the package no longer declares, with their comments still saying
+   * otherwise.
+   */
+  it("sets up Node at a declared floor or a floating major everywhere", () => {
+    const floors = packageJson.devEngines.runtime.version
+      .split("||")
+      .map((part) => part.trim().replace(/^\^/, ""));
+    const versions = readScalarValues(ciWorkflow, "node-version").filter(
+      (version) => !version.includes("${{"),
+    );
+    expect(versions.length).toBeGreaterThan(0);
+    for (const version of versions) {
+      const floating = /^\d+$/.test(version);
+      expect(
+        floating || floors.includes(version),
+        `node-version ${version} is neither a devEngines floor nor a floating major`,
+      ).toBe(true);
+    }
+  });
+
+  it("names one package-validation job per platform label", () => {
+    expect(packageLabels).toEqual(["Windows", "macOS"]);
+    expect(requiredCiChecks).toContain("Windows package validation");
+    // macOS reports without blocking, so it must not become a required check.
+    expect(requiredCiChecks).not.toContain("macOS package validation");
   });
 
   it("keeps the full dependency audit out of the required checks", () => {

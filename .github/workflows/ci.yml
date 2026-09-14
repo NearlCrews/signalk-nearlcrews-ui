@@ -152,10 +152,25 @@ jobs:
       - name: Audit the full dependency tree
         run: npm run audit
 
-  windows-package:
-    name: Windows package validation
-    runs-on: windows-latest
+  package-validation:
+    # The package scripts shell out to tar and create symlinks, so they are
+    # proven on the two platforms where a POSIX assumption shows. Windows
+    # blocks a release; macOS reports without blocking, because it is not a
+    # required check for main, so a macOS-only break is visible here rather
+    # than found alone on a laptop. Branch protection names the rendered job,
+    # so changing a label means updating the required checks in the same pull
+    # request.
+    name: ${{ matrix.label }} package validation
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows
+            os: windows-latest
+          - label: macOS
+            os: macos-latest
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -167,7 +182,10 @@ jobs:
           # Pinned to the Node 24 floor from devEngines.runtime.
           node-version: 24.15.0
           package-manager-cache: false
-      - name: Set up npm
+      # The npm bootstrap is the one step the two platforms do not share:
+      # PowerShell has no POSIX shell to write the prefix out with.
+      - name: Set up npm on Windows
+        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $npmPrefix = Join-Path $env:RUNNER_TEMP "npm-global"
@@ -175,39 +193,8 @@ jobs:
           npm install --global "npm@$npmRange" --prefix $npmPrefix
           $npmPrefix | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           & (Join-Path $npmPrefix "npm.cmd") --version
-      - name: Cache npm downloads
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.npm
-          key: windows-npm-24.15.0-${{ hashFiles('package-lock.json') }}
-          restore-keys: |
-            windows-npm-24.15.0-
-            windows-npm-
-      - name: Install dependencies
-        run: npm ci
-      - name: Validate package
-        run: npm run test:package
-
-  macos-package:
-    # The package scripts shell out to tar and create symlinks, and macOS is
-    # the third platform contributors build this package on. The job reports
-    # without blocking: it is not a required check for main, so a macOS-only
-    # break is visible here rather than found alone on a laptop.
-    name: macOS package validation
-    runs-on: macos-latest
-    timeout-minutes: 15
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - name: Set up Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          # Pinned to the Node 24 floor from devEngines.runtime.
-          node-version: 24.15.0
-          package-manager-cache: false
       - name: Set up npm
+        if: runner.os != 'Windows'
         env:
           NPM_CONFIG_PREFIX: ${{ runner.temp }}/npm-global
         run: |
@@ -218,10 +205,11 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.npm
-          key: macos-npm-24.15.0-${{ hashFiles('package-lock.json') }}
+          # The download cache holds tarballs rather than built artifacts, so
+          # the runner and the lockfile are the whole key.
+          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            macos-npm-24.15.0-
-            macos-npm-
+            ${{ runner.os }}-npm-
       - name: Install dependencies
         run: npm ci
       - name: Validate package
