@@ -68,6 +68,12 @@ export default defineConfig({
       // scripts/*.mjs) run as child processes in the tests that exercise them,
       // which the in-process coverage provider cannot see, so including them
       // would report a permanent zero rather than a real gap.
+      //
+      // These three roots are the partition the per-file gate measures too.
+      // COVERAGE_ROOTS in scripts/lib/coverage-contract.mjs declares them for
+      // that gate, and a unit test holds this list and the per-root thresholds
+      // below against it, so a root cannot be measured by one and skipped by
+      // the other.
       include: [
         "src/**/*.{ts,tsx}",
         "bin/lib/**/*.mjs",

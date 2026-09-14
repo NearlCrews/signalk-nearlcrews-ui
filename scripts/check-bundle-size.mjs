@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { gzipSync } from "node:zlib";
 import { build } from "esbuild";
 
+import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";
 import { assertNoReactRuntime } from "../bin/lib/consumer-checks.mjs";
 import {
   assertPublicBundleBudgets,
@@ -29,7 +30,11 @@ const hostExternals = SIGNALK_HOST_SHARED_MODULES.flatMap((name) => [
  * because the numbers it prints are the ones the enforcing run compares
  * against, and the release diff is where the new numbers get reviewed.
  */
-const printTable = process.argv.includes("--table");
+const OPTIONS = ["--table"];
+const argv = process.argv.slice(2);
+assertKnownOptions(argv, OPTIONS);
+
+const printTable = readFlag(argv, "--table");
 
 /*
  * Each entry is measured bundled alone, so a component's own style module
@@ -97,14 +102,38 @@ async function measureEntry(entry, entryTarget) {
   return gzipSync(outputFile.contents, { level: 9 }).byteLength;
 }
 
-// The entries are independent, so they build together rather than one after
-// another; Promise.all keeps the table in the order the entries were listed.
-const measuredEntries = await Promise.all(
-  [...publicEntries].map(async ([entry, entryTarget]) => ({
-    entry,
-    gzipBytes: await measureEntry(entry, entryTarget),
-  })),
-);
+// The public token stylesheet must stay framework-neutral. Bundling the public
+// export catches imported script or React inputs in addition to measuring its
+// actual standalone consumer output.
+const tokensTarget = "./dist/tokens.css";
+const recordedTokens = recordedSizes.get(TOKENS_CSS_ENTRY);
+if (recordedTokens === undefined) {
+  throw new Error(
+    `${SIZE_TABLE_DOCUMENT} records no size for ${TOKENS_CSS_ENTRY}.`,
+  );
+}
+assertPublicCssExport(manifest.exports, tokensTarget);
+
+// Every bundle is independent of every other, the stylesheet included, so they
+// build together rather than one after another; Promise.all keeps the table in
+// the order the entries were listed.
+const [measuredEntries, tokensResult] = await Promise.all([
+  Promise.all(
+    [...publicEntries].map(async ([entry, entryTarget]) => ({
+      entry,
+      gzipBytes: await measureEntry(entry, entryTarget),
+    })),
+  ),
+  build({
+    entryPoints: [repositoryPath(tokensTarget)],
+    bundle: true,
+    minify: true,
+    platform: "browser",
+    target: "es2022",
+    write: false,
+    metafile: true,
+  }),
+]);
 
 const tableRows = [];
 for (const { entry, gzipBytes } of measuredEntries) {
@@ -124,26 +153,6 @@ for (const { entry, gzipBytes } of measuredEntries) {
   process.stdout.write(`${entry} bundle is ${String(gzipBytes)} gzip bytes.\n`);
 }
 
-// The public token stylesheet must stay framework-neutral. Bundling the public
-// export catches imported script or React inputs in addition to measuring its
-// actual standalone consumer output.
-const tokensTarget = "./dist/tokens.css";
-const recordedTokens = recordedSizes.get(TOKENS_CSS_ENTRY);
-if (recordedTokens === undefined) {
-  throw new Error(
-    `${SIZE_TABLE_DOCUMENT} records no size for ${TOKENS_CSS_ENTRY}.`,
-  );
-}
-assertPublicCssExport(manifest.exports, tokensTarget);
-const tokensResult = await build({
-  entryPoints: [repositoryPath(tokensTarget)],
-  bundle: true,
-  minify: true,
-  platform: "browser",
-  target: "es2022",
-  write: false,
-  metafile: true,
-});
 if (tokensResult.outputFiles.length !== 1) {
   throw new Error(
     `esbuild produced ${String(tokensResult.outputFiles.length)} output files for the tokens.css bundle; expected exactly one.`,

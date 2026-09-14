@@ -8,13 +8,17 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 
-import { readValues } from "../bin/lib/cli-arguments.mjs";
+import { assertKnownOptions, readValues } from "../bin/lib/cli-arguments.mjs";
 import { repositoryPath } from "./lib/paths.mjs";
 import {
   hostedSnapshotVariants,
   missingSnapshotFiles,
   orphanSnapshotFiles,
 } from "./lib/snapshot-families.mjs";
+
+const OPTIONS = ["--variant"];
+const argv = process.argv.slice(2);
+assertKnownOptions(argv, OPTIONS);
 
 const SPEC_PATH = repositoryPath("tests", "browser", "panel.spec.ts");
 const SNAPSHOT_DIRECTORY = `${SPEC_PATH}-snapshots`;
@@ -26,7 +30,7 @@ const [specSource, presentFiles, ciWorkflow] = await Promise.all([
 ]);
 
 const explicitVariants = readValues(
-  process.argv.slice(2),
+  argv,
   "--variant",
   "a family name such as ubuntu24-x64",
 );

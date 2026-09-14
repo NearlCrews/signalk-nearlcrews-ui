@@ -22,6 +22,7 @@ import { readFile, writeFile } from "node:fs/promises";
 
 import { subset } from "semver";
 
+import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";
 import {
   createFederationShared,
   SIGNALK_HOST_SHARED_MODULES,
@@ -34,10 +35,14 @@ import {
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 import { escapeRegExp } from "./lib/regexp.mjs";
 
+const OPTIONS = ["--check-registry", "--update"];
+const argv = process.argv.slice(2);
+assertKnownOptions(argv, OPTIONS);
+
 const baselinePath = repositoryPath("tests", "host-contract.baseline.json");
 const contractPackage = "@signalk/server-admin-ui-dependencies";
-const shouldUpdate = process.argv.includes("--update");
-const shouldCheckRegistry = process.argv.includes("--check-registry");
+const shouldUpdate = readFlag(argv, "--update");
+const shouldCheckRegistry = readFlag(argv, "--check-registry");
 
 if (shouldUpdate && shouldCheckRegistry) {
   throw new Error("Choose either --update or --check-registry, not both.");

@@ -26,16 +26,32 @@ export const TOOLING_COVERAGE_FLOORS = Object.freeze({
 });
 
 /**
- * Where measured files live, with the floors and the file type each root
- * takes. A summary entry outside every root, such as a test helper, is not
- * measured at all.
+ * Where measured files live, with the floors, the file type, and the glob each
+ * root takes. A summary entry outside every root, such as a test helper, is
+ * not measured at all.
+ *
+ * Exported because the Vitest configuration measures the same partition, and a
+ * root declared in one place and not the other would leave the per-file gate
+ * quietly measuring nothing while the aggregate still passed. A unit test
+ * holds the two lists together.
  */
-const COVERAGE_ROOTS = Object.freeze([
-  Object.freeze({ directory: "src", extension: /\.tsx?$/, key: "source" }),
-  Object.freeze({ directory: "bin/lib", extension: /\.mjs$/, key: "tooling" }),
+export const COVERAGE_ROOTS = Object.freeze([
+  Object.freeze({
+    directory: "src",
+    extension: /\.tsx?$/,
+    files: "**/*.{ts,tsx}",
+    key: "source",
+  }),
+  Object.freeze({
+    directory: "bin/lib",
+    extension: /\.mjs$/,
+    files: "**/*.mjs",
+    key: "tooling",
+  }),
   Object.freeze({
     directory: "scripts/lib",
     extension: /\.mjs$/,
+    files: "**/*.mjs",
     key: "tooling",
   }),
 ]);
@@ -84,12 +100,11 @@ function assertFloors(floors, description) {
 }
 
 /** The root a summary entry belongs to, and its path relative to that root. */
-function locateFile(repositoryRoot, name) {
+function locateFile(roots, repositoryRoot, name) {
   const filePath = isAbsolute(name)
     ? resolve(name)
     : resolve(repositoryRoot, name);
-  for (const root of COVERAGE_ROOTS) {
-    const rootPath = resolve(repositoryRoot, root.directory);
+  for (const { root, rootPath } of roots) {
     const withinRoot = relative(rootPath, filePath);
     if (
       withinRoot.length === 0 ||
@@ -127,11 +142,17 @@ export function assertPerFileCoverage(
   assertCoverageRecord(summary.total, "Coverage total");
   const floorsByKey = { source: floors, tooling: toolingFloors };
   const files = Object.entries(summary).filter(([name]) => name !== "total");
+  // Resolved once rather than once per root per summary entry, which is a
+  // thousand redundant path resolutions on a summary of a few hundred files.
+  const roots = COVERAGE_ROOTS.map((root) => ({
+    root,
+    rootPath: resolve(repositoryRoot, root.directory),
+  }));
 
   const failures = [];
   let measuredFileCount = 0;
   for (const [name, record] of files) {
-    const located = locateFile(repositoryRoot, name);
+    const located = locateFile(roots, repositoryRoot, name);
     if (located === undefined) {
       continue;
     }

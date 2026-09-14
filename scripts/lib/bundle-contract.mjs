@@ -1,6 +1,12 @@
 import { basename, extname } from "node:path";
 
-export function assertPublicBundleBudgets(exportsField, entryBudgets) {
+/**
+ * The published JavaScript entry points, as entry name to target, derived from
+ * the exports map so no reader keeps its own list. Every check that asks which
+ * entries the package ships asks here: a hand-kept copy is how the entry added
+ * in a release goes unverified.
+ */
+export function publicJavaScriptEntries(exportsField) {
   if (exportsField === null || typeof exportsField !== "object") {
     throw new Error("package.json exports must be an object.");
   }
@@ -30,6 +36,12 @@ export function assertPublicBundleBudgets(exportsField, entryBudgets) {
     }
     exportedEntries.set(expectedEntry, importTarget);
   }
+
+  return exportedEntries;
+}
+
+export function assertPublicBundleBudgets(exportsField, entryBudgets) {
+  const exportedEntries = publicJavaScriptEntries(exportsField);
 
   const budgetNames = Object.keys(entryBudgets).sort();
   const exportNames = [...exportedEntries.keys()].sort();

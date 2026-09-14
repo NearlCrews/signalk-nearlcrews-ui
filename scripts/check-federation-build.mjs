@@ -7,12 +7,22 @@ import {
   assertNoReactRuntime,
   assertVersionStamp,
 } from "../bin/lib/consumer-checks.mjs";
+import { publicJavaScriptEntries } from "./lib/bundle-contract.mjs";
 import { createFederationShared } from "./lib/federation-share.mjs";
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 
 const require = createRequire(import.meta.url);
-const { peerDependencies, version } = await readPackageJson();
+const {
+  exports: packageExports,
+  peerDependencies,
+  version,
+} = await readPackageJson();
 const expectedShared = createFederationShared(peerDependencies);
+// Derived from the exports map rather than listed here, so an entry point
+// added in a release is verified by the build it ships in.
+const packageEntryFiles = [...publicJavaScriptEntries(packageExports).keys()]
+  .map((entry) => `${entry}.js`)
+  .sort();
 
 /**
  * An ES module says so with an export statement. A substring test for the word
@@ -121,13 +131,7 @@ for (const [format, files, stats] of [
   const moduleNames = collectModuleNames(stats.modules ?? []).filter(
     (name) => typeof name === "string",
   );
-  for (const entryPoint of [
-    "composites.js",
-    "data-grid.js",
-    "forms.js",
-    "index.js",
-    "overlays.js",
-  ]) {
+  for (const entryPoint of packageEntryFiles) {
     if (!moduleNames.some((name) => name.includes(`dist/${entryPoint}`))) {
       throw new Error(
         `${format} fixture did not consume the ${entryPoint} package entry point.`,

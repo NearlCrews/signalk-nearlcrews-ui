@@ -5,7 +5,7 @@
  * directory, so `npm run` from a subdirectory and a direct `node scripts/...`
  * invocation read the same files.
  */
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,31 @@ export const distDirectory = join(repositoryRoot, "dist");
 
 export function repositoryPath(...segments) {
   return join(repositoryRoot, ...segments);
+}
+
+/**
+ * Every file under `directory` whose name `matches`, depth first.
+ *
+ * `skipDirectories` names the directory entries the walk never descends into,
+ * by bare name at any depth. Written once here because more than one check
+ * walks the tree for one kind of file, and a second copy is a second place to
+ * teach about a directory that must be skipped. Sibling directories are read
+ * together, so the walk costs the depth of the tree rather than its size.
+ */
+export async function collectFiles(directory, options) {
+  const { matches, skipDirectories } = options;
+  const entries = await readdir(directory, { withFileTypes: true });
+  const found = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = join(directory, entry.name);
+      if (entry.isDirectory()) {
+        if (skipDirectories?.has(entry.name)) return [];
+        return collectFiles(entryPath, options);
+      }
+      return entry.isFile() && matches(entry.name) ? [entryPath] : [];
+    }),
+  );
+  return found.flat();
 }
 
 export async function readPackageJson() {

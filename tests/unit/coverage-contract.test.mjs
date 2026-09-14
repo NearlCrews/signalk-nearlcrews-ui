@@ -1,12 +1,13 @@
 import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
-
 import {
   assertPerFileCoverage,
   COVERAGE_FLOORS,
+  COVERAGE_ROOTS,
   TOOLING_COVERAGE_FLOORS,
 } from "../../scripts/lib/coverage-contract.mjs";
+import vitestConfig from "../../vitest.config.js";
 
 const repositoryRoot = "/workspace/project";
 
@@ -201,5 +202,31 @@ describe("per-file coverage contract", () => {
         { repositoryRoot },
       ),
     ).toThrow("Coverage summary contains an invalid src file: src/panel.css.");
+  });
+});
+
+describe("measured roots", () => {
+  const coverage = vitestConfig.test?.coverage ?? {};
+
+  /*
+   * The partition is declared once, in COVERAGE_ROOTS, and Vitest has to
+   * measure exactly it. A root Vitest stopped including would leave locateFile
+   * with nothing to locate, so the per-file gate would quietly stop measuring
+   * those files while the aggregate still passed, and a root Vitest included
+   * without a per-root threshold would be gated by the aggregate alone.
+   */
+  it("are the roots Vitest measures", () => {
+    expect(coverage.include).toEqual(
+      COVERAGE_ROOTS.map((root) => `${root.directory}/${root.files}`),
+    );
+  });
+
+  it("each carry their own Vitest threshold", () => {
+    const globKeys = Object.keys(coverage.thresholds ?? {}).filter((key) =>
+      key.includes("/"),
+    );
+    expect(globKeys).toEqual(
+      COVERAGE_ROOTS.map((root) => `${root.directory}/**`),
+    );
   });
 });

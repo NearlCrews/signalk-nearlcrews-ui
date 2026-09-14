@@ -78,7 +78,9 @@ try {
     } catch {
       /* The server is still starting. */
     }
-    await delay(READY_INTERVAL_MS);
+    // Not after the last attempt: a server that never comes up would cost a
+    // whole extra interval before the failure below is reported.
+    if (attempt < READY_ATTEMPTS - 1) await delay(READY_INTERVAL_MS);
   }
 
   if (!ready) {

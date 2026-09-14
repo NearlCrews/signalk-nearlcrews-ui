@@ -11,8 +11,10 @@
  *
  * Run `npm run declarations:update` to accept an intended change.
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+
+import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";
 
 import {
   describeSnapshotDifference,
@@ -21,23 +23,20 @@ import {
   renderDeclarationSnapshot,
 } from "./lib/declaration-graph.mjs";
 import {
+  collectFiles,
   distDirectory,
   readPackageJson,
   repositoryPath,
 } from "./lib/paths.mjs";
 
-const baselinePath = repositoryPath("tests", "declarations.baseline.txt");
-const shouldUpdate = process.argv.includes("--update");
+const OPTIONS = ["--update"];
+const argv = process.argv.slice(2);
+assertKnownOptions(argv, OPTIONS);
 
-function collectDeclarations(directory) {
-  const found = [];
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const entryPath = join(directory, entry.name);
-    if (entry.isDirectory()) found.push(...collectDeclarations(entryPath));
-    else if (/\.d\.[cm]?ts$/.test(entry.name)) found.push(entryPath);
-  }
-  return found;
-}
+const baselinePath = repositoryPath("tests", "declarations.baseline.txt");
+const shouldUpdate = readFlag(argv, "--update");
+
+const DECLARATION_FILE = /\.d\.[cm]?ts$/;
 
 // The graph walk and the snapshot ask for the same files, so each one is read
 // from disk once rather than once per reader.
@@ -51,7 +50,11 @@ function readDeclaration(file) {
   return source;
 }
 
-const emitted = collectDeclarations(distDirectory)
+const emitted = (
+  await collectFiles(distDirectory, {
+    matches: (name) => DECLARATION_FILE.test(name),
+  })
+)
   .map((file) => relative(distDirectory, file).split(sep).join("/"))
   .sort();
 if (emitted.length === 0) {

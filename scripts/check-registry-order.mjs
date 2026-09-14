@@ -10,10 +10,13 @@
  * Usage: node scripts/check-registry-order.mjs --candidate 0.9.0 --latest 0.8.2
  * Prints `latest` or `next` on success.
  */
-import { readOption } from "../bin/lib/cli-arguments.mjs";
+import { assertKnownOptions, readOption } from "../bin/lib/cli-arguments.mjs";
 import { resolveDistTag } from "./lib/release-checks.mjs";
 
+const OPTIONS = ["--candidate", "--latest"];
 const argv = process.argv.slice(2);
+assertKnownOptions(argv, OPTIONS);
+
 // The shared reader answers undefined for an option nobody passed, so the
 // required half is stated here where the usage line is.
 const candidate = readOption(argv, "--candidate", "a version");

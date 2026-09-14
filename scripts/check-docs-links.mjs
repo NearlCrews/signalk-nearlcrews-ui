@@ -4,11 +4,11 @@
  * The rules themselves live in ./lib/docs-links.mjs; this file is the runner
  * `npm run docs:links` invokes.
  */
-import { readdir, readFile, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
 
 import { localDestinations, markdownAnchors } from "./lib/docs-links.mjs";
-import { repositoryPath } from "./lib/paths.mjs";
+import { collectFiles, repositoryPath } from "./lib/paths.mjs";
 
 const repositoryRoot = repositoryPath();
 const ignoredDirectories = new Set([
@@ -22,25 +22,6 @@ const ignoredDirectories = new Set([
   "test-results",
 ]);
 
-async function markdownFiles(directory = repositoryRoot) {
-  const files = [];
-
-  for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (entry.isDirectory()) {
-      if (!ignoredDirectories.has(entry.name)) {
-        files.push(...(await markdownFiles(resolve(directory, entry.name))));
-      }
-      continue;
-    }
-
-    if (entry.isFile() && extname(entry.name).toLowerCase() === ".md") {
-      files.push(resolve(directory, entry.name));
-    }
-  }
-
-  return files;
-}
-
 /** Whether the target exists, and whether it is a file rather than a directory. */
 async function describeTarget(targetFile) {
   try {
@@ -51,16 +32,37 @@ async function describeTarget(targetFile) {
 }
 
 const anchorCache = new Map();
+// Many links point at the same handful of documents, and an uncached check
+// paid one stat round trip per link rather than per target.
+const targetCache = new Map();
+
+async function cachedTarget(targetFile) {
+  let target = targetCache.get(targetFile);
+  if (target === undefined) {
+    target = await describeTarget(targetFile);
+    targetCache.set(targetFile, target);
+  }
+  return target;
+}
+
 const failures = [];
-const files = await markdownFiles();
+const files = await collectFiles(repositoryRoot, {
+  matches: (name) => extname(name).toLowerCase() === ".md",
+  skipDirectories: ignoredDirectories,
+});
 
 // A walk that found nothing would otherwise report a pass it never earned.
 if (files.length === 0) {
   throw new Error(`No Markdown files found under ${repositoryRoot}.`);
 }
 
-for (const sourceFile of files) {
-  const markdown = await readFile(sourceFile, "utf8");
+// Read together rather than one at a time: the checking loop below is ordered
+// so its failures read in file order, but the reads themselves are not.
+const sources = await Promise.all(files.map((file) => readFile(file, "utf8")));
+
+for (const [index, sourceFile] of files.entries()) {
+  const markdown = sources[index] ?? "";
+  const sourceName = relative(repositoryRoot, sourceFile);
 
   for (const { destination, line } of localDestinations(markdown)) {
     const [pathWithQuery, rawFragment] = destination.split("#", 2);
@@ -69,9 +71,8 @@ for (const sourceFile of files) {
       pathPart.length === 0
         ? sourceFile
         : resolve(dirname(sourceFile), decodeURIComponent(pathPart));
-    const sourceName = relative(repositoryRoot, sourceFile);
 
-    const target = await describeTarget(targetFile);
+    const target = await cachedTarget(targetFile);
     if (target === "missing") {
       failures.push(
         `${sourceName}:${line}: missing local target ${destination}`,

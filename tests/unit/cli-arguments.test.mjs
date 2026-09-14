@@ -2,10 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertKnownOptions,
+  formatCount,
   joinNames,
   readOption,
   readValues,
 } from "../../bin/lib/cli-arguments.mjs";
+import {
+  joinList,
+  formatCount as packageFormatCount,
+} from "../../src/utils/text.js";
 
 describe("readOption", () => {
   it("reads the value a flag was given", () => {
@@ -85,5 +90,36 @@ describe("assertKnownOptions", () => {
     ).toThrow(
       "--one, --two, and --three are not options this check takes. Read the usage.",
     );
+  });
+});
+
+describe("the command line's copies of the package wording helpers", () => {
+  // `bin` ships without `scripts` and cannot import the package's TypeScript
+  // sources, so the wording rules are written twice. These hold the copies to
+  // the originals, so a change to either reaches both.
+  const lists = [
+    [],
+    ["one"],
+    ["one", "two"],
+    ["one", "two", "three"],
+    ["one", "two", "three", "four"],
+  ];
+
+  it("join a list the way joinList does", () => {
+    for (const names of lists) {
+      expect(joinNames(names)).toBe(joinList(names));
+      expect(joinNames(names, "or")).toBe(joinList(names, "or"));
+    }
+  });
+
+  it("count a noun the way formatCount does", () => {
+    for (const count of [0, 1, 2, 11]) {
+      expect(formatCount(count, "bundle")).toBe(
+        packageFormatCount(count, "bundle"),
+      );
+      expect(formatCount(count, "match", "matches")).toBe(
+        packageFormatCount(count, "match", "matches"),
+      );
+    }
   });
 });

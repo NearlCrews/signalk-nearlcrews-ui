@@ -29,7 +29,17 @@ export function hostedSnapshotVariants(ciWorkflowSource) {
   return variants;
 }
 
+/**
+ * Names already read from a spec source. Both the missing-file and the
+ * orphan-file readers ask for them, once per variant each, and the answer is
+ * a pure function of the source they are given.
+ */
+const SNAPSHOT_NAMES = new Map();
+
 export function collectSnapshotNames(specSource) {
+  const cached = SNAPSHOT_NAMES.get(specSource);
+  if (cached !== undefined) return cached;
+
   const names = new Set();
   for (const match of specSource.matchAll(LITERAL_SNAPSHOT_CALL)) {
     if (match[1] !== undefined) names.add(match[1]);
@@ -39,7 +49,9 @@ export function collectSnapshotNames(specSource) {
   if (names.size === 0) {
     throw new Error("The browser spec declares no literal screenshot names.");
   }
-  return [...names].sort();
+  const sorted = [...names].sort();
+  SNAPSHOT_NAMES.set(specSource, sorted);
+  return sorted;
 }
 
 export function snapshotProject(snapshot) {

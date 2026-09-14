@@ -25,6 +25,25 @@ export function joinNames(names, conjunction = "and") {
 }
 
 /**
+ * Counts a noun: "1 bundle", "3 bundles". A noun the trailing "s" does not
+ * pluralize passes its own plural. The package's own `formatCount` is
+ * TypeScript that `bin` cannot import, so this is the copy the command line
+ * uses, kept in step with it by a unit assertion.
+ */
+export function formatCount(count, singular, plural) {
+  const noun = count === 1 ? singular : (plural ?? `${singular}s`);
+  return `${count} ${noun}`;
+}
+
+/**
+ * Whether a boolean option was given. Written here so every check reads its
+ * flags the same way and validates them with {@link assertKnownOptions}.
+ */
+export function readFlag(argv, name) {
+  return argv.includes(name);
+}
+
+/**
  * The one value given for `name`, or undefined. Repeating the option is an
  * error: silently keeping the first value checks something other than what the
  * caller asked for. `requires` names what the option takes, for the message.

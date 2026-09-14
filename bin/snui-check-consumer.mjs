@@ -32,6 +32,7 @@ import { basename, dirname, join, resolve } from "node:path";
 
 import {
   assertKnownOptions,
+  formatCount,
   joinNames,
   readOption,
   readValues,
@@ -304,10 +305,10 @@ async function main() {
     const saves = Math.max(0, ...saveCalls);
     if (saves > 0) {
       throw new Error(
-        `The panel called save ${saves} ${saves === 1 ? "time" : "times"} in each render. The host passes save for a user action, and a panel that saves during render saves on every host render.`,
+        `The panel called save ${formatCount(saves, "time")} in each render. The host passes save for a user action, and a panel that saves during render saves on every host render.`,
       );
     }
-    runtimeMessage = `, panel rendered from ${scripts.length} ${scripts.length === 1 ? "bundle" : "bundles"}`;
+    runtimeMessage = `, panel rendered from ${formatCount(scripts.length, "bundle")}`;
   }
 
   process.stdout.write(

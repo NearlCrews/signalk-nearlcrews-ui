@@ -174,10 +174,9 @@ export function createPanelContext({ scriptUrl = DEFAULT_SCRIPT_URL } = {}) {
 export function disposePanelContext(context) {
   const timers = CONTEXT_TIMERS.get(context);
   if (timers === undefined) return;
-  for (const handle of timers) {
-    globalThis.clearTimeout(handle);
-    globalThis.clearInterval(handle);
-  }
+  // Node's clearTimeout and clearInterval both accept any Timeout, so one
+  // call clears either kind of handle.
+  for (const handle of timers) globalThis.clearTimeout(handle);
   timers.clear();
 }
 

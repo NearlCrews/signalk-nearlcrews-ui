@@ -1,4 +1,5 @@
 import { localDestinations } from "./docs-links.mjs";
+import { escapeRegExp } from "./regexp.mjs";
 
 export const PACKAGE_NAME = "signalk-nearlcrews-ui";
 
@@ -464,7 +465,7 @@ function validateReadmeShape(packageJson, readme) {
 
 /** Extra changelog demands an approved release makes: a date, and a compare link to the tag. */
 function validateApprovedRelease(packageJson, changelog) {
-  const escapedVersion = packageJson.version.replaceAll(".", String.raw`\.`);
+  const escapedVersion = escapeRegExp(packageJson.version);
   const datedHeading = new RegExp(
     String.raw`^## \[${escapedVersion}\] - \d{4}-\d{2}-\d{2}$`,
     "m",
