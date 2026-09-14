@@ -10,10 +10,10 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 
+import { useComposedRef } from "../hooks/use-node-ref.js";
 import { classNames } from "../utils/class-names.js";
 import { focusedElement } from "../utils/focus.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
-import { composeRef } from "../utils/ref.js";
 import {
   layoutMatches,
   observePanelViewport,
@@ -433,15 +433,9 @@ function ViewportBottomActionBar({
     };
   }, []);
 
-  // The caller ref composes through composeRef in a layout effect, as
-  // PanelRoot does, so swapping the ref never disturbs the measuring effect
-  // that owns barRef.
-  useLayoutEffect(() => {
-    const node = barRef.current;
-    if (node === null) return undefined;
-
-    return composeRef(ref, node);
-  }, [ref]);
+  // The caller ref composes in a layout effect, as PanelRoot does, so
+  // swapping the ref never disturbs the measuring effect that owns barRef.
+  useComposedRef(barRef, ref);
 
   useLayoutEffect(() => {
     if (!placement.docked) return undefined;
