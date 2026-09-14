@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- The `formatRelativeAge` row in the API reference still described the defaults from before 0.11.0. `numeric` is unset by default and resolves per unit, counting in numbers from the day up and taking the reader's words below it, and the fallback string is `"Unknown"`. The defaults table in the same document and the README were already correct.
+
 ## [0.11.1] - 2026-09-13
 
 The first published release of the 0.11 line. Version 0.11.0 was tagged but never reached npm: its publish workflow checked out only the release scripts, which had started importing the argument helper the shipped CLI keeps under `bin/lib`, so the run stopped before verifying the tarball. The publish job now checks out both trees, and everything listed under 0.11.0 ships in this version.
