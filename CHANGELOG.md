@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - Panels do less work per render. A menu item derives its typeahead text when its children change rather than on every render, a button resolves its busy label only while it is loading, a portal consumer proves its owning panel root once per root rather than once per render, and a region tracking focus reads the focused element directly instead of building the composed path for every focus move in the document.
-- `PanelAnnouncerProvider`, `PanelLocaleProvider`, and `PanelLabelsProvider` declare `children` as optional, and the emitted declarations name the internal helpers the components now share: `idReferenceList`, `focusIsOnBody`, `mediaMatches`, `endsSentence`, `asSentence`, and `joinSentences`. No entry point exports those helpers, so nothing a consumer imports changed.
+- `PanelAnnouncerProvider`, `PanelLocaleProvider`, and `PanelLabelsProvider` declare `children` as optional, and the emitted declarations name the internal helpers the components now share: `idReferenceList`, `focusIsOnBody`, `mediaMatches`, `asSentence`, and `joinSentences`. No entry point exports those helpers, so nothing a consumer imports changed.
 
 ### Fixed
 

@@ -28,7 +28,7 @@ export function formatCount(
 const SENTENCE_ENDINGS = new Set([".", "!", "?", "…"]);
 
 /** Whether text already closes a sentence. */
-export function endsSentence(text: string): boolean {
+function endsSentence(text: string): boolean {
   return SENTENCE_ENDINGS.has(text.slice(-1));
 }
 

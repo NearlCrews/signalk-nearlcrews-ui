@@ -3237,8 +3237,6 @@ export declare function plainReactNodeText(node: ReactNode): string | undefined;
  * `formatCount(2, "match", "matches")`.
  */
 export declare function formatCount(count: number, singular: string, plural?: string): string;
-/** Whether text already closes a sentence. */
-export declare function endsSentence(text: string): boolean;
 /**
  * Text as one sentence, with a full stop added unless it closes itself. Used
  * for anything read straight into the words after it, where two sentences run
