@@ -78,6 +78,14 @@ Use `Accordion` only when at most one section may remain open and child order is
 
 Before moving panel content into a `CollapsibleSection`, read the `mountStrategy` rules in the API reference. Under the default retaining strategy the hidden subtree keeps its state while every effect in it runs its cleanup on collapse and runs again on expand, so an effect written to run once on mount runs once per expand. Two consumer panels have already lost work to that rule: a field that reported validity from an effect dropped its invalid state when the section collapsed and then discarded an in-progress edit on the next expand, and an abortable request left its control permanently `aria-busy` because the cleanup aborted the request while the completion path that clears the flag never ran. Audit any subtree that reports validity, starts abortable work, or registers a listener it expects to keep observing while hidden.
 
+## Unreleased
+
+These changes are backward compatible. No consuming code requires modification.
+
+- A panel error announcement keeps the punctuation its title and description were written with, so a title ending in "!" or "?" is no longer announced with an extra full stop after it. A panel that asserted the announced string exactly should read it again.
+- `ThemeToggle` falls back to the package's host-theme guidance when a panel's label bundle supplies a blank `themeToggle.description`, which is the blank-is-absent rule every other bundled string already followed.
+- The emitted declarations change without changing any entry point: `PanelAnnouncerProvider`, `PanelLocaleProvider`, and `PanelLabelsProvider` declare `children` as optional, and `utils/aria.d.ts`, `utils/focus.d.ts`, `utils/motion.d.ts`, and `utils/text.d.ts` name the internal helpers the components share. None of them is exported from an entry point, so no import resolves differently.
+
 ## Changes in 0.11.0
 
 Published as 0.11.1. Version 0.11.0 was tagged but never reached npm, so a consumer moving off 0.10.1 pins 0.11.1 and applies everything below.

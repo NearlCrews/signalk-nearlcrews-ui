@@ -6,8 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- Panels do less work per render. A menu item derives its typeahead text when its children change rather than on every render, a button resolves its busy label only while it is loading, a portal consumer proves its owning panel root once per root rather than once per render, and a region tracking focus reads the focused element directly instead of building the composed path for every focus move in the document.
+- `PanelAnnouncerProvider`, `PanelLocaleProvider`, and `PanelLabelsProvider` declare `children` as optional, and the emitted declarations name the internal helpers the components now share: `idReferenceList`, `focusIsOnBody`, `mediaMatches`, `endsSentence`, `asSentence`, and `joinSentences`. No entry point exports those helpers, so nothing a consumer imports changed.
+
 ### Fixed
 
+- A panel error announcement keeps the punctuation its title and description were written with. A title ending in "!" or "?" was announced with an extra full stop after it, because only a trailing "." was taken off before the two parts were joined.
+- `ThemeToggle` falls back to the package's host-theme guidance when a panel's label bundle supplies a blank `themeToggle.description`. Blank bundle text reads as absent at every other step, and this one entry blanked the guidance instead.
 - The `formatRelativeAge` row in the API reference still described the defaults from before 0.11.0. `numeric` is unset by default and resolves per unit, counting in numbers from the day up and taking the reader's words below it, and the fallback string is `"Unknown"`. The defaults table in the same document and the README were already correct.
 
 ## [0.11.1] - 2026-09-13
