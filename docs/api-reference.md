@@ -1,6 +1,6 @@
 # API reference
 
-This reference summarizes the public `0.11.x` API. The TypeScript declarations shipped with the package are the canonical source for complete native HTML and React Aria prop types. This document focuses on package-specific props, defaults, entry points, ref targets, and user-visible strings.
+This reference summarizes the public `0.12.x` API. The TypeScript declarations shipped with the package are the canonical source for complete native HTML and React Aria prop types. This document focuses on package-specific props, defaults, entry points, ref targets, and user-visible strings.
 
 ## Entry points
 
@@ -26,12 +26,12 @@ The gzip size of each entry bundled alone, with React and React DOM external, as
 
 | Import path                        | Gzip bytes | Budget (bytes) |
 | ---------------------------------- | ---------: | -------------: |
-| `signalk-nearlcrews-ui`            |      40514 |          43008 |
-| `signalk-nearlcrews-ui/composites` |      24853 |          26624 |
-| `signalk-nearlcrews-ui/data-grid`  |      80176 |          84992 |
+| `signalk-nearlcrews-ui`            |      40476 |          43008 |
+| `signalk-nearlcrews-ui/composites` |      24927 |          26624 |
+| `signalk-nearlcrews-ui/data-grid`  |      80287 |          86016 |
 | `signalk-nearlcrews-ui/format`     |       1080 |           2048 |
-| `signalk-nearlcrews-ui/forms`      |      29139 |          31744 |
-| `signalk-nearlcrews-ui/overlays`   |      66523 |          70656 |
+| `signalk-nearlcrews-ui/forms`      |      29214 |          31744 |
+| `signalk-nearlcrews-ui/overlays`   |      66641 |          70656 |
 | `signalk-nearlcrews-ui/tokens.css` |       1631 |           2048 |
 
 ## Package root

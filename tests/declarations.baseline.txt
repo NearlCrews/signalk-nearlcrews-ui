@@ -2251,7 +2251,7 @@ export { Cell, type CellProps, Column, DataGrid, type DataGridCaptionVisibility,
 
 === federation.d.cts ===
 /**
- * Module Federation share map for signalk-nearlcrews-ui 0.11.1.
+ * Module Federation share map for signalk-nearlcrews-ui 0.12.0.
  * Generated from package.json at build time. Do not edit.
  */
 export type SignalKHostSharedModule = "react" | "react-dom";
@@ -3300,11 +3300,11 @@ export type SpaceScale = (typeof SPACE_SCALE)[number];
 
 === version.d.ts ===
 /** The package version used to isolate styles from other loaded versions. */
-export declare const PACKAGE_VERSION = "0.11.1";
+export declare const PACKAGE_VERSION = "0.12.0";
 /** The root class is private and may change without notice. */
 export declare const ROOT_CLASS = "snui-root";
 /** The exact selector prevents styles from crossing package-version roots. */
-export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.11.1\"]";
+export declare const ROOT_SELECTOR = ".snui-root[data-snui-version=\"0.12.0\"]";
 /** A versioned global name prevents keyframe collisions between package copies. */
 export declare function versionedAnimationName(suffix: string): string;
 export declare const SPINNER_ANIMATION_NAME: string;

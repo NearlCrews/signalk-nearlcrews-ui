@@ -188,7 +188,7 @@ That class is the one documented exception to version-scoped styling. It carries
 Every descendant selector is inside a native CSS scope rooted at the exact package version and bounded by the next versioned root, such as:
 
 ```css
-@scope (.snui-root[data-snui-version="0.11.1"])
+@scope (.snui-root[data-snui-version="0.12.0"])
   to ([data-snui-version]) {
   /* component rules */
 }
@@ -196,7 +196,7 @@ Every descendant selector is inside a native CSS scope rooted at the exact packa
 
 The root token declarations and the selectors matching host theme markers intentionally remain outside `@scope`. They target the exact versioned root itself, including a root beneath a host theme marker, rather than styling its descendants. Wrapping those selectors would prevent the root and host-theme cases from resolving correctly. Every rule that styles panel descendants remains inside the version-bounded scope.
 
-`@keyframes` rules are the other thing written outside the scope block: a keyframes rule is not a descendant rule and cannot live inside `@scope`, so every module declares its keyframes at the top level under a name that carries the package version (`snui-v0-11-1-spin`, for example). The versioned name is what keeps two package copies in one document from redefining each other's animations.
+`@keyframes` rules are the other thing written outside the scope block: a keyframes rule is not a descendant rule and cannot live inside `@scope`, so every module declares its keyframes at the top level under a name that carries the package version (`snui-v0-12-0-spin`, for example). The versioned name is what keeps two package copies in one document from redefining each other's animations.
 
 Style delivery is modular. `PanelRoot` installs the root sheet (tokens, the foundation reset, buttons, text inputs, selects, checkboxes, segmented controls, components, forms, layout, feedback, and collapsible sections) on every mount. Every other component's rules form a module of their own, one per component: `dialog`, `empty-state`, `menu`, `popover`, `progress`, `radio`, `range`, `simple-table`, `switch`, `table`, `tabs`, `textarea`, and `toast`. Each is installed by the one component that renders it, in the same document, under the same package version and CSP nonce as the root sheet, and removed when the last consumer unmounts. A panel that renders no dialog therefore carries no dialog CSS, neither installed at runtime nor bundled: a module is reached only from its own component, so a bundler drops it with the component. The JavaScript entry-point boundaries described under Compatibility hold for CSS too. The root sheet is the `<style data-snui-styles="…">` element; module sheets carry `data-snui-module-styles` with the version and `data-snui-style-module` with the module id, and a module sheet always follows the root sheet of its version in the head so cascade order (root, then modules) holds even after a host removes and the package re-appends the root sheet.
 

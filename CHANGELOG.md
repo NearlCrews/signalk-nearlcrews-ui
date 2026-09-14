@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-09-14
+
+A documentation correction, two announcement fixes, and internal helpers the components now share instead of each writing their own. No entry point gained or lost an export, but the emitted declarations changed, and the release policy counts those as part of the public contract, so this ships as a minor rather than a patch.
+
 ### Changed
 
 - Panels do less work per render. A menu item derives its typeahead text when its children change rather than on every render, a button resolves its busy label only while it is loading, a portal consumer proves its owning panel root once per root rather than once per render, and a region tracking focus reads the focused element directly instead of building the composed path for every focus move in the document.
@@ -589,7 +593,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.10.0...v0.10.1
