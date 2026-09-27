@@ -49,7 +49,7 @@ export function toneSelectorList(block: string, modifierPrefix = ""): string {
  * `selector` builds the full selector for a tone, so a block can paint itself
  * or a descendant.
  */
-export function toneColorRules(
+function toneColorRules(
   selector: (tone: SemanticTone) => string,
   property: string,
 ): string {
