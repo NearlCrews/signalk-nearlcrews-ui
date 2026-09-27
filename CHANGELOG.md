@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
+- Components do less work per render. Every `TextInput`, `NumberInput`, `RangeInput`, and `Checkbox` reads its latest reset handler through an effect event instead of a layout effect that ran on every render, toast cards take the dismiss label their region resolves once instead of each reading the panel labels, and `RelativeAge` parses a string timestamp once per render rather than again on every clock tick that checks whether its words changed.
 - The emitted declarations no longer include the internal `OVERLAY_PLACEMENTS` map or the `announcementRole` helper, neither of which any package entry point exported, and the `overlayOpenProps` comment in `components/overlay-placement.d.ts` gives the actual reason an unset prop is left out.
 - `DisclosurePanel` passes `className` through with its other props, so its declared signature no longer names it separately. The class still lands on the panel section.
 
