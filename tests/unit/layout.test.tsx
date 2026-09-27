@@ -1,10 +1,13 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-// The justification type is imported from the module that owns it: the root
-// barrel entry lands with the rest of this release's export changes.
-import type { LayoutJustification } from "../../src/components/Layout.js";
-import { Card, Cluster, MetricGrid, Stack } from "../../src/index.js";
+import {
+  Card,
+  Cluster,
+  type LayoutJustification,
+  MetricGrid,
+  Stack,
+} from "../../src/index.js";
 import { renderInPanel } from "../helpers.js";
 
 /** The card element itself, which carries the block class. */

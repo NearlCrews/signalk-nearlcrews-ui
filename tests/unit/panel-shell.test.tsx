@@ -1,8 +1,15 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import axe from "axe-core";
 import { createRef } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  type MockInstance,
+  vi,
+} from "vitest";
 
 import {
   CollapsibleSection,
@@ -11,16 +18,28 @@ import {
   PanelShell,
   Section,
   UnsupportedBrowserNotice,
+  usePanelAnnouncer,
   useUnsavedChangesGuard,
 } from "../../src/index.js";
-import { usePanelAnnouncer } from "../../src/utils/announcer.js";
-import { renderInPanel } from "../helpers.js";
+import { expectNoAxeViolations, follows, renderInPanel } from "../helpers.js";
 
-function follows(first: Element, second: Element): boolean {
-  return Boolean(
-    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
-  );
+/** The shell's theme selector, found by the group name it always carries. */
+function themeGroup(): HTMLElement {
+  return screen.getByRole("radiogroup", { name: "Panel theme" });
 }
+
+/** Whether the panel content throws on its next render. */
+let armed = true;
+
+/** Panel content that fails to render while armed. */
+function Bomb(): React.JSX.Element {
+  if (armed) throw new Error("Panel content failed.");
+  return <p>Recovered content</p>;
+}
+
+afterEach(() => {
+  armed = true;
+});
 
 interface AnnounceProps {
   readonly assertive?: boolean | undefined;
@@ -64,7 +83,7 @@ describe("PanelShell", () => {
     ).toBeVisible();
     expect(screen.getByText("Manage cached charts.")).toBeVisible();
     const body = screen.getByText("Body");
-    const toggle = screen.getByRole("radiogroup", { name: "Panel theme" });
+    const toggle = themeGroup();
     expect(follows(body, toggle)).toBe(true);
     expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
   });
@@ -76,7 +95,7 @@ describe("PanelShell", () => {
       </PanelShell>,
     );
 
-    const toggle = screen.getByRole("radiogroup", { name: "Panel theme" });
+    const toggle = themeGroup();
     expect(
       follows(screen.getByRole("heading", { name: "Sources" }), toggle),
     ).toBe(true);
@@ -103,13 +122,9 @@ describe("PanelShell", () => {
     // The stack lays its children out in one column, so the shell's own
     // wrapper is what holds the selector at the trailing edge; without it a
     // consumer has to re-align the toggle with its own stylesheet.
-    const wrapper = container.querySelector(".snui-panel-shell__theme-toggle");
-    expect(wrapper).not.toBeNull();
     expect(
-      wrapper?.contains(
-        screen.getByRole("radiogroup", { name: "Panel theme" }),
-      ),
-    ).toBe(true);
+      container.querySelector(".snui-panel-shell__theme-toggle"),
+    ).toContainElement(themeGroup());
 
     rerender(
       <PanelShell themeToggle="end">
@@ -117,10 +132,8 @@ describe("PanelShell", () => {
       </PanelShell>,
     );
     expect(
-      container
-        .querySelector(".snui-panel-shell__theme-toggle")
-        ?.contains(screen.getByRole("radiogroup", { name: "Panel theme" })),
-    ).toBe(true);
+      container.querySelector(".snui-panel-shell__theme-toggle"),
+    ).toContainElement(themeGroup());
   });
 
   it("forwards theme toggle props and omits the title block without a title", () => {
@@ -194,7 +207,7 @@ describe("PanelShell", () => {
 
     // Without a title there is nothing to sit between, and leading the panel
     // would hand the theme selector the panel's first tab stop.
-    const toggle = screen.getByRole("radiogroup", { name: "Panel theme" });
+    const toggle = themeGroup();
     expect(follows(screen.getByText("Body"), toggle)).toBe(true);
   });
 
@@ -288,6 +301,13 @@ describe("PanelShell", () => {
   describe("without native CSS scope", () => {
     const descriptor = Object.getOwnPropertyDescriptor(window, "CSSScopeRule");
 
+    beforeEach(() => {
+      Object.defineProperty(window, "CSSScopeRule", {
+        configurable: true,
+        value: undefined,
+      });
+    });
+
     afterEach(() => {
       if (descriptor === undefined) {
         Reflect.deleteProperty(window, "CSSScopeRule");
@@ -297,10 +317,6 @@ describe("PanelShell", () => {
     });
 
     it("renders the compatibility notice instead of a panel root", () => {
-      Object.defineProperty(window, "CSSScopeRule", {
-        configurable: true,
-        value: undefined,
-      });
       const { container } = render(
         <PanelShell title="Chart locker" headingLevel={3}>
           <p>Body</p>
@@ -321,10 +337,6 @@ describe("PanelShell", () => {
     });
 
     it("carries the shell's own attributes and labels into the notice", () => {
-      Object.defineProperty(window, "CSSScopeRule", {
-        configurable: true,
-        value: undefined,
-      });
       render(
         <PanelShell
           id="chart-locker"
@@ -353,10 +365,6 @@ describe("PanelShell", () => {
     });
 
     it("renders a consumer notice when one is supplied", () => {
-      Object.defineProperty(window, "CSSScopeRule", {
-        configurable: true,
-        value: undefined,
-      });
       render(
         <PanelShell unsupported={<p>Open this page in the vessel browser.</p>}>
           <p>Body</p>
@@ -372,22 +380,20 @@ describe("PanelShell", () => {
 });
 
 describe("PanelShell error boundary", () => {
-  let armed = true;
+  let consoleError: MockInstance<typeof console.error>;
 
-  function Bomb(): React.JSX.Element {
-    if (armed) throw new Error("Panel content failed.");
-    return <p>Recovered content</p>;
-  }
-
-  afterEach(() => {
-    armed = true;
+  // React reports every caught render error on the console, and so does the
+  // boundary itself; only one spec reads what they wrote.
+  beforeEach(() => {
+    consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
   });
 
   it("hands the boundary props to the boundary around the content", async () => {
     const user = userEvent.setup();
     const onError = vi.fn();
     const onReload = vi.fn();
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     render(
       <PanelShell
         title="Chart locker"
@@ -416,9 +422,7 @@ describe("PanelShell error boundary", () => {
     expect(
       screen.getByRole("heading", { level: 2, name: "Chart locker" }),
     ).toBeVisible();
-    expect(
-      screen.getByRole("radiogroup", { name: "Panel theme" }),
-    ).toBeVisible();
+    expect(themeGroup()).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Reload Admin" }));
     expect(onReload).toHaveBeenCalledOnce();
@@ -426,7 +430,6 @@ describe("PanelShell error boundary", () => {
 
   it("keeps the default fallback and recovery when no fallback is given", async () => {
     const user = userEvent.setup();
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { container } = render(
       <PanelShell title="Chart locker">
         <Bomb />
@@ -445,7 +448,6 @@ describe("PanelShell error boundary", () => {
   });
 
   it("offers a page reload by default and drops it when asked", () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { rerender } = render(
       <PanelShell title="Chart locker">
         <Bomb />
@@ -465,7 +467,6 @@ describe("PanelShell error boundary", () => {
   });
 
   it("reloads the host page from the default secondary action", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const reload = vi.fn();
     // Only the one method the fallback calls: jsdom's own Location cannot be
     // spied on, and copying it would spread a class instance.
@@ -480,13 +481,9 @@ describe("PanelShell error boundary", () => {
     await user.click(screen.getByRole("button", { name: "Reload page" }));
 
     expect(reload).toHaveBeenCalledTimes(1);
-    vi.unstubAllGlobals();
   });
 
   it("records the failure on the console with no error handler wired", () => {
-    const consoleError = vi
-      .spyOn(console, "error")
-      .mockImplementation(() => undefined);
     render(
       <PanelShell title="Chart locker">
         <Bomb />
@@ -503,7 +500,6 @@ describe("PanelShell error boundary", () => {
   });
 
   it("announces the failure rather than taking focus that sits elsewhere", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     armed = false;
     // Built fresh per render: React skips re-rendering a subtree handed the
     // very same element, and this test needs the second render to run.
@@ -558,21 +554,13 @@ describe("PanelShell error boundary", () => {
 });
 
 describe("PanelErrorBoundary", () => {
-  let armed = true;
-
-  function Bomb(): React.JSX.Element {
-    if (armed) throw new Error("Render failed.");
-    return <p>Recovered content</p>;
-  }
-
-  afterEach(() => {
-    armed = true;
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
   });
 
   it("catches a render error, reports it, and recovers on Try again", async () => {
     const user = userEvent.setup();
     const onError = vi.fn();
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { container } = renderInPanel(
       <PanelErrorBoundary onError={onError}>
         <Bomb />
@@ -595,7 +583,6 @@ describe("PanelErrorBoundary", () => {
   it("offers the secondary reload action only when a handler is given", async () => {
     const user = userEvent.setup();
     const onReload = vi.fn();
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { container } = renderInPanel(
       <PanelErrorBoundary
         onReload={onReload}
@@ -617,7 +604,6 @@ describe("PanelErrorBoundary", () => {
   });
 
   it("warns about discarded changes only where the reload is offered", () => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const { container } = renderInPanel(
       <>
         <PanelErrorBoundary>
@@ -644,7 +630,6 @@ describe("PanelErrorBoundary", () => {
   it("hands a custom fallback the error and both actions", async () => {
     const user = userEvent.setup();
     const onReload = vi.fn();
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
     const fallback = vi.fn(
       ({ error, reload, reset }: PanelErrorBoundaryFallbackProps) => (
         <div>
@@ -664,7 +649,7 @@ describe("PanelErrorBoundary", () => {
       </PanelErrorBoundary>,
     );
 
-    expect(screen.getByText("Render failed.")).toBeVisible();
+    expect(screen.getByText("Panel content failed.")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Reload" }));
     expect(onReload).toHaveBeenCalledOnce();
     armed = false;
@@ -699,19 +684,7 @@ describe("UnsupportedBrowserNotice", () => {
       </main>,
     );
 
-    const result = await axe.run(container, {
-      runOnly: {
-        type: "tag",
-        values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"],
-      },
-      rules: {
-        // jsdom cannot compute rendered colors, so this reports incomplete
-        // rather than pass; the token pairs are audited directly elsewhere.
-        "color-contrast": { enabled: false },
-      },
-    });
-
-    expect(result.violations).toEqual([]);
+    await expectNoAxeViolations(container);
   });
 
   it("keeps its own heading beside a consumer's label reference", () => {

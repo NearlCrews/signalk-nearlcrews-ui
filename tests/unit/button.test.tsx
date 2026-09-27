@@ -1,25 +1,32 @@
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, createRef } from "react";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import type { IconOnlyButtonProps } from "../../src/components/Button.js";
-import { Button, PanelRoot } from "../../src/index.js";
+import { Button, type IconOnlyButtonProps } from "../../src/index.js";
+import { panel, renderInPanel } from "../helpers.js";
+
+/** The anchor a Button rendered around the given text. */
+function anchorAround(text: string): HTMLAnchorElement {
+  const anchor = screen.getByText(text).closest("a");
+  if (!(anchor instanceof HTMLAnchorElement)) {
+    throw new Error("Button did not render an anchor element.");
+  }
+  return anchor;
+}
 
 describe("Button anchors", () => {
   it("renders an anchor with href and the shared button classes", () => {
-    render(
-      <PanelRoot>
-        <Button
-          as="a"
-          href="#details"
-          variant="primary"
-          size="compact"
-          shape="pill"
-        >
-          Details
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button
+        as="a"
+        href="#details"
+        variant="primary"
+        size="compact"
+        shape="pill"
+      >
+        Details
+      </Button>,
     );
 
     const link = screen.getByRole("link", { name: "Details" });
@@ -45,12 +52,10 @@ describe("Button anchors", () => {
     "mailto:crew@example.com",
     "tel:+15551234567",
   ])("preserves the safe href %s", (href) => {
-    render(
-      <PanelRoot>
-        <Button as="a" href={href}>
-          Details
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button as="a" href={href}>
+        Details
+      </Button>,
     );
 
     expect(screen.getByRole("link", { name: "Details" })).toHaveAttribute(
@@ -69,19 +74,13 @@ describe("Button anchors", () => {
   ])("makes the unsafe href %s inert", async (href) => {
     const user = userEvent.setup();
     const onClick = vi.fn();
-    const { container } = render(
-      <PanelRoot>
-        <Button as="a" href={href} onClick={onClick}>
-          Unsafe
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button as="a" href={href} onClick={onClick}>
+        Unsafe
+      </Button>,
     );
 
-    const anchor = container.querySelector("a");
-    expect(anchor).not.toBeNull();
-    if (!(anchor instanceof HTMLAnchorElement)) {
-      throw new Error("Button did not render an anchor element.");
-    }
+    const anchor = anchorAround("Unsafe");
     expect(anchor).not.toHaveAttribute("href");
     expect(anchor).toHaveAttribute("aria-disabled", "true");
     // Without href an anchor is generic, so the link role is restated.
@@ -92,8 +91,8 @@ describe("Button anchors", () => {
 
   it("warns once per rejected href in development and never for safe ones", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Button as="a" href="ftp://example.com/chart">
           First
         </Button>
@@ -106,7 +105,7 @@ describe("Button anchors", () => {
         <Button as="a" href="https://example.com/docs">
           Safe
         </Button>
-      </PanelRoot>,
+      </>,
     );
 
     expect(warn).toHaveBeenCalledTimes(2);
@@ -121,27 +120,22 @@ describe("Button anchors", () => {
   it("stays silent about rejected hrefs in production builds", () => {
     vi.stubEnv("NODE_ENV", "production");
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    try {
-      render(
-        <PanelRoot>
-          <Button as="a" href="ftp://example.com/production">
-            Quiet
-          </Button>
-        </PanelRoot>,
-      );
-      expect(warn).not.toHaveBeenCalled();
-      expect(screen.getByRole("link", { name: "Quiet" })).toHaveAttribute(
-        "aria-disabled",
-        "true",
-      );
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    renderInPanel(
+      <Button as="a" href="ftp://example.com/production">
+        Quiet
+      </Button>,
+    );
+
+    expect(warn).not.toHaveBeenCalled();
+    expect(screen.getByRole("link", { name: "Quiet" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 
   it("defaults rel on a new browsing context and honors a caller's own", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Button as="a" href="https://example.com/docs" target="_blank">
           Docs
         </Button>
@@ -156,7 +150,7 @@ describe("Button anchors", () => {
         <Button as="a" href="https://example.com/help">
           Help
         </Button>
-      </PanelRoot>,
+      </>,
     );
 
     // Without it the destination is handed the panel's own origin, which
@@ -176,12 +170,10 @@ describe("Button anchors", () => {
 
   it("forwards the ref to the anchor element", () => {
     const ref = createRef<HTMLAnchorElement>();
-    render(
-      <PanelRoot>
-        <Button as="a" href="#docs" ref={ref}>
-          Docs
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button as="a" href="#docs" ref={ref}>
+        Docs
+      </Button>,
     );
 
     expect(ref.current).toBeInstanceOf(HTMLAnchorElement);
@@ -191,25 +183,19 @@ describe("Button anchors", () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
     const onKeyDown = vi.fn();
-    render(
-      <PanelRoot>
-        <Button
-          as="a"
-          href="https://example.com/docs"
-          loading
-          onClick={onClick}
-          onKeyDown={onKeyDown}
-        >
-          Docs
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button
+        as="a"
+        href="https://example.com/docs"
+        loading
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+      >
+        Docs
+      </Button>,
     );
 
-    const anchor = screen.getByText("Docs").closest("a");
-    expect(anchor).not.toBeNull();
-    if (!(anchor instanceof HTMLAnchorElement)) {
-      throw new Error("Button did not render an anchor element.");
-    }
+    const anchor = anchorAround("Docs");
     expect(anchor).not.toHaveAttribute("href");
     expect(anchor).toHaveAttribute("aria-disabled", "true");
     expect(anchor).toHaveAttribute("role", "link");
@@ -230,25 +216,19 @@ describe("Button anchors", () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
     const onKeyDown = vi.fn();
-    render(
-      <PanelRoot>
-        <Button
-          as="a"
-          href="https://example.com/docs"
-          ariaDisabled
-          onClick={onClick}
-          onKeyDown={onKeyDown}
-        >
-          Docs
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button
+        as="a"
+        href="https://example.com/docs"
+        ariaDisabled
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+      >
+        Docs
+      </Button>,
     );
 
-    const anchor = screen.getByText("Docs").closest("a");
-    expect(anchor).not.toBeNull();
-    if (!(anchor instanceof HTMLAnchorElement)) {
-      throw new Error("Button did not render an anchor element.");
-    }
+    const anchor = anchorAround("Docs");
     expect(anchor).not.toHaveAttribute("href");
     expect(anchor).toHaveAttribute("aria-disabled", "true");
     expect(anchor).not.toHaveAttribute("aria-busy");
@@ -268,15 +248,15 @@ describe("Button anchors", () => {
   it("honors the native aria-disabled attribute on an anchor", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Button as="a" href="#docs" aria-disabled="true" onClick={onClick}>
           Docs
         </Button>
         <Button as="a" href="#guide" aria-disabled={true} onClick={onClick}>
           Guide
         </Button>
-      </PanelRoot>,
+      </>,
     );
 
     await user.click(screen.getByText("Docs"));
@@ -288,12 +268,10 @@ describe("Button anchors", () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
     const onKeyDown = vi.fn();
-    render(
-      <PanelRoot>
-        <Button as="a" href="#details" onClick={onClick} onKeyDown={onKeyDown}>
-          Details
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button as="a" href="#details" onClick={onClick} onKeyDown={onKeyDown}>
+        Details
+      </Button>,
     );
 
     const link = screen.getByRole("link", { name: "Details" });
@@ -312,11 +290,7 @@ describe("Button anchors", () => {
 
 describe("Button width and icon-only modifiers", () => {
   it("applies the full-width modifier through a class, not inline style", () => {
-    render(
-      <PanelRoot>
-        <Button fullWidth>Save</Button>
-      </PanelRoot>,
-    );
+    renderInPanel(<Button fullWidth>Save</Button>);
 
     const button = screen.getByRole("button", { name: "Save" });
     expect(button).toHaveClass("snui-button--full-width");
@@ -324,12 +298,10 @@ describe("Button width and icon-only modifiers", () => {
   });
 
   it("falls back to the default loading label for whitespace-only labels", () => {
-    render(
-      <PanelRoot>
-        <Button loading loadingLabel="   " aria-label="Save settings">
-          Save
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button loading loadingLabel="   " aria-label="Save settings">
+        Save
+      </Button>,
     );
 
     expect(
@@ -338,11 +310,7 @@ describe("Button width and icon-only modifiers", () => {
   });
 
   it("omits the full-width modifier by default", () => {
-    render(
-      <PanelRoot>
-        <Button>Save</Button>
-      </PanelRoot>,
-    );
+    renderInPanel(<Button>Save</Button>);
 
     expect(screen.getByRole("button", { name: "Save" })).not.toHaveClass(
       "snui-button--full-width",
@@ -350,38 +318,30 @@ describe("Button width and icon-only modifiers", () => {
   });
 
   it("throws when an icon-only button has no accessible name", () => {
+    const unnamed =
+      "Button with iconOnly requires an accessible name: pass a non-empty aria-label or aria-labelledby.";
     expect(() =>
-      render(
-        <PanelRoot>
-          <Button iconOnly>
-            <svg aria-hidden="true" />
-          </Button>
-        </PanelRoot>,
+      renderInPanel(
+        <Button iconOnly>
+          <svg aria-hidden="true" />
+        </Button>,
       ),
-    ).toThrow(
-      "Button with iconOnly requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
-    );
+    ).toThrow(unnamed);
 
     expect(() =>
-      render(
-        <PanelRoot>
-          <Button iconOnly aria-label="   ">
-            <svg aria-hidden="true" />
-          </Button>
-        </PanelRoot>,
+      renderInPanel(
+        <Button iconOnly aria-label="   ">
+          <svg aria-hidden="true" />
+        </Button>,
       ),
-    ).toThrow(
-      "Button with iconOnly requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
-    );
+    ).toThrow(unnamed);
   });
 
   it("renders an icon-only button named with aria-label", () => {
-    render(
-      <PanelRoot>
-        <Button iconOnly aria-label="Add source">
-          <svg aria-hidden="true" />
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button iconOnly aria-label="Add source">
+        <svg aria-hidden="true" />
+      </Button>,
     );
 
     const button = screen.getByRole("button", { name: "Add source" });
@@ -390,13 +350,13 @@ describe("Button width and icon-only modifiers", () => {
   });
 
   it("accepts aria-labelledby as the icon-only accessible name", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <span id="add-source-label">Add source</span>
         <Button iconOnly aria-labelledby="add-source-label">
           <svg aria-hidden="true" />
         </Button>
-      </PanelRoot>,
+      </>,
     );
 
     const button = screen.getByRole("button", { name: "Add source" });
@@ -426,15 +386,15 @@ describe("Button disabled states", () => {
   it("lets ariaDisabled decide when both spellings are present", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Button ariaDisabled={false} aria-disabled="true" onClick={onClick}>
           Enabled by prop
         </Button>
         <Button ariaDisabled aria-disabled="false" onClick={onClick}>
           Blocked by prop
         </Button>
-      </PanelRoot>,
+      </>,
     );
 
     const enabled = screen.getByRole("button", { name: "Enabled by prop" });
@@ -451,12 +411,10 @@ describe("Button disabled states", () => {
   it("reads the native aria-disabled attribute while the prop is absent", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
-    render(
-      <PanelRoot>
-        <Button aria-disabled="true" onClick={onClick}>
-          Save
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button aria-disabled="true" onClick={onClick}>
+        Save
+      </Button>,
     );
 
     const button = screen.getByRole("button", { name: "Save" });
@@ -466,15 +424,15 @@ describe("Button disabled states", () => {
   });
 
   it("omits aria-disabled from a natively disabled button", () => {
-    render(
-      <PanelRoot>
+    renderInPanel(
+      <>
         <Button disabled loading>
           Save
         </Button>
         <Button disabled ariaDisabled>
           Reset
         </Button>
-      </PanelRoot>,
+      </>,
     );
 
     const save = screen.getByRole("button", { name: "Save" });
@@ -489,12 +447,10 @@ describe("Button disabled states", () => {
 
 describe("Button blocked reason", () => {
   it("describes a blocked button and drops the reason once it is live", () => {
-    const { rerender } = render(
-      <PanelRoot>
-        <Button ariaDisabled disabledReason="Nothing has changed yet.">
-          Save
-        </Button>
-      </PanelRoot>,
+    const { rerender } = renderInPanel(
+      <Button ariaDisabled disabledReason="Nothing has changed yet.">
+        Save
+      </Button>,
     );
 
     // The point of ariaDisabled over native disabled is that the control
@@ -504,9 +460,7 @@ describe("Button blocked reason", () => {
     expect(blocked).toHaveAccessibleDescription("Nothing has changed yet.");
 
     rerender(
-      <PanelRoot>
-        <Button disabledReason="Nothing has changed yet.">Save</Button>
-      </PanelRoot>,
+      panel(<Button disabledReason="Nothing has changed yet.">Save</Button>),
     );
 
     const live = screen.getByRole("button", { name: "Save" });
@@ -515,17 +469,15 @@ describe("Button blocked reason", () => {
   });
 
   it("keeps the accessible name the button had before it was blocked", () => {
-    render(
-      <PanelRoot>
-        <Button ariaDisabled disabledReason="Choose a source first.">
-          Apply
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button ariaDisabled disabledReason="Choose a source first.">
+        Apply
+      </Button>,
     );
 
     // The reason is a description; rewriting the name would announce the
     // control as a different one mid-interaction.
-    expect(screen.getByRole("button", { name: "Apply" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
   });
 });
 
@@ -533,12 +485,10 @@ describe("Button list-line variant", () => {
   it("renders the text variant with the shared button behavior", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
-    render(
-      <PanelRoot>
-        <Button variant="text" ariaDisabled onClick={onClick}>
-          Depth to keel
-        </Button>
-      </PanelRoot>,
+    renderInPanel(
+      <Button variant="text" ariaDisabled onClick={onClick}>
+        Depth to keel
+      </Button>,
     );
 
     // A dense row keeps the focus ring, the target height, and the blocked
@@ -574,11 +524,7 @@ describe("Button native form", () => {
   it("keeps native button semantics for the default rendering", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();
-    render(
-      <PanelRoot>
-        <Button onClick={onClick}>Save</Button>
-      </PanelRoot>,
-    );
+    renderInPanel(<Button onClick={onClick}>Save</Button>);
 
     const button = screen.getByRole("button", { name: "Save" });
     expect(button.tagName).toBe("BUTTON");

@@ -510,6 +510,15 @@ describe("form primitives", () => {
   });
 });
 
+/** Waits for a banner to hand focus on to the destination the fixture names. */
+async function expectFocusHandedOn(): Promise<void> {
+  await waitFor(() => {
+    expect(
+      screen.getByRole("button", { name: "Provider settings" }),
+    ).toHaveFocus();
+  });
+}
+
 describe("feedback and layout primitives", () => {
   it("rejects whitespace-only names for semantic grouping primitives", () => {
     expect(() => render(<FieldGroup legend="  ">Content</FieldGroup>)).toThrow(
@@ -724,11 +733,7 @@ describe("feedback and layout primitives", () => {
     render(<Fixture />);
     await user.click(screen.getByRole("button", { name: "Dismiss" }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Provider settings" }),
-      ).toHaveFocus();
-    });
+    await expectFocusHandedOn();
   });
 
   it("hands focus on when a consumer action takes the banner away", async () => {
@@ -758,11 +763,7 @@ describe("feedback and layout primitives", () => {
     render(<Fixture />);
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Provider settings" }),
-      ).toHaveFocus();
-    });
+    await expectFocusHandedOn();
   });
 
   it("hands focus on when an announcing banner's actions go with its message", async () => {
@@ -794,11 +795,7 @@ describe("feedback and layout primitives", () => {
     render(<Fixture />);
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
-    await waitFor(() => {
-      expect(
-        screen.getByRole("button", { name: "Provider settings" }),
-      ).toHaveFocus();
-    });
+    await expectFocusHandedOn();
   });
 
   it("leaves focus where a panel puts it in the banner's place", async () => {
@@ -1196,6 +1193,15 @@ describe("Progress tone and description", () => {
   });
 });
 
+/** The props every confirmation requires, with fresh handlers per call. */
+function confirmationProps() {
+  return {
+    message: "Resetting.",
+    onCancel: vi.fn(),
+    onConfirm: vi.fn(),
+  } as const;
+}
+
 describe("buttons and confirmation", () => {
   it("groups consumer icons and labels inside the button content slot", () => {
     renderInPanel(
@@ -1217,25 +1223,23 @@ describe("buttons and confirmation", () => {
     const onSubmit = vi.fn((event: React.SubmitEvent<HTMLFormElement>) =>
       event.preventDefault(),
     );
-    const renderButton = (loading: boolean): React.JSX.Element => (
-      <PanelRoot>
-        <form onSubmit={onSubmit}>
-          <Button
-            loading={loading}
-            variant="primary"
-            type="submit"
-            onClick={onClick}
-          >
-            Save
-          </Button>
-        </form>
-      </PanelRoot>
+    const saveForm = (loading: boolean): React.JSX.Element => (
+      <form onSubmit={onSubmit}>
+        <Button
+          loading={loading}
+          variant="primary"
+          type="submit"
+          onClick={onClick}
+        >
+          Save
+        </Button>
+      </form>
     );
-    const { rerender } = render(renderButton(false));
+    const { rerender } = renderInPanel(saveForm(false));
     const idleButton = screen.getByRole("button", { name: "Save" });
     idleButton.focus();
 
-    rerender(renderButton(true));
+    rerender(panel(saveForm(true)));
 
     // The accessible name stays stable across the busy transition; busy state
     // is conveyed as a description plus aria-busy.
@@ -1305,36 +1309,22 @@ describe("buttons and confirmation", () => {
 
   it("focuses cancel in an inline confirmation and restores focus", async () => {
     const user = userEvent.setup();
-    const onCancel = vi.fn();
-    const onConfirm = vi.fn();
-    const { rerender } = renderInPanel(
+    const props = {
+      ...confirmationProps(),
+      message: "This removes the cached source.",
+    };
+    const deletion = (open: boolean): React.JSX.Element => (
       <>
         <Button>Delete source</Button>
-        <InlineConfirm
-          open={false}
-          message="This removes the cached source."
-          onCancel={onCancel}
-          onConfirm={onConfirm}
-        />
-      </>,
+        <InlineConfirm {...props} open={open} />
+      </>
     );
+    const { rerender } = renderInPanel(deletion(false));
 
     const trigger = screen.getByRole("button", { name: "Delete source" });
     await user.click(trigger);
 
-    rerender(
-      panel(
-        <>
-          <Button>Delete source</Button>
-          <InlineConfirm
-            open
-            message="This removes the cached source."
-            onCancel={onCancel}
-            onConfirm={onConfirm}
-          />
-        </>,
-      ),
-    );
+    rerender(panel(deletion(true)));
 
     const confirmation = screen.getByRole("region", {
       name: "Confirm action",
@@ -1348,36 +1338,20 @@ describe("buttons and confirmation", () => {
     );
 
     await user.keyboard("{Escape}");
-    expect(onCancel).toHaveBeenCalledOnce();
+    expect(props.onCancel).toHaveBeenCalledOnce();
 
-    rerender(
-      panel(
-        <>
-          <Button>Delete source</Button>
-          <InlineConfirm
-            open={false}
-            message="This removes the cached source."
-            onCancel={onCancel}
-            onConfirm={onConfirm}
-          />
-        </>,
-      ),
-    );
+    rerender(panel(deletion(false)));
 
     expect(screen.getByRole("button", { name: "Delete source" })).toHaveFocus();
   });
 
   it("focuses the confirmation container when it opens busy", async () => {
     const user = userEvent.setup();
+    const props = confirmationProps();
     const { rerender } = renderInPanel(
       <>
         <Button>Start reset</Button>
-        <InlineConfirm
-          open={false}
-          message="Resetting."
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />
+        <InlineConfirm {...props} open={false} />
       </>,
     );
 
@@ -1386,14 +1360,7 @@ describe("buttons and confirmation", () => {
       panel(
         <>
           <Button>Start reset</Button>
-          <InlineConfirm
-            open
-            busy
-            title={null}
-            message="Resetting."
-            onCancel={vi.fn()}
-            onConfirm={vi.fn()}
-          />
+          <InlineConfirm {...props} open busy title={null} />
         </>,
       ),
     );
@@ -1415,11 +1382,7 @@ describe("buttons and confirmation", () => {
 
   it("does not steal focus when busy changes after focus leaves", async () => {
     const user = userEvent.setup();
-    const props = {
-      message: "Resetting.",
-      onCancel: vi.fn(),
-      onConfirm: vi.fn(),
-    } as const;
+    const props = confirmationProps();
     const { rerender } = renderInPanel(
       <>
         <Button>Outside action</Button>
@@ -1447,11 +1410,7 @@ describe("buttons and confirmation", () => {
 
   it("leaves focus in place when dismissed after focus moved away", async () => {
     const user = userEvent.setup();
-    const props = {
-      message: "Resetting.",
-      onCancel: vi.fn(),
-      onConfirm: vi.fn(),
-    } as const;
+    const props = confirmationProps();
     const { rerender } = renderInPanel(
       <>
         <Button>Outside action</Button>
@@ -1482,11 +1441,7 @@ describe("buttons and confirmation", () => {
 
   it("keeps an internal action focused when it becomes busy", async () => {
     const user = userEvent.setup();
-    const props = {
-      message: "Resetting.",
-      onCancel: vi.fn(),
-      onConfirm: vi.fn(),
-    } as const;
+    const props = confirmationProps();
     const { rerender } = renderInPanel(<InlineConfirm {...props} open />);
 
     const cancel = screen.getByRole("button", { name: "Cancel" });
@@ -1508,26 +1463,20 @@ describe("buttons and confirmation", () => {
 
   it("keeps the way out of a busy confirmation open", async () => {
     const user = userEvent.setup();
-    const onCancel = vi.fn();
-    const onConfirm = vi.fn();
-    const props = {
-      message: "Resetting.",
-      onCancel,
-      onConfirm,
-    } as const;
+    const props = confirmationProps();
     renderInPanel(<InlineConfirm {...props} open busy />);
 
     // Confirm is the only action busy blocks; the decision has not been made
     // twice, so pressing it again must do nothing.
     await user.click(screen.getByRole("button", { name: "Confirm" }));
-    expect(onConfirm).not.toHaveBeenCalled();
+    expect(props.onConfirm).not.toHaveBeenCalled();
 
     await user.keyboard("{Escape}");
-    expect(onCancel).toHaveBeenCalledExactlyOnceWith("escape");
+    expect(props.onCancel).toHaveBeenCalledExactlyOnceWith("escape");
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onCancel).toHaveBeenCalledTimes(2);
-    expect(onCancel).toHaveBeenLastCalledWith("cancel");
+    expect(props.onCancel).toHaveBeenCalledTimes(2);
+    expect(props.onCancel).toHaveBeenLastCalledWith("cancel");
   });
 
   it("focuses the confirmation inside its own document realm", () => {
@@ -1538,11 +1487,7 @@ describe("buttons and confirmation", () => {
 
     const container = ownerDocument.createElement("div");
     ownerDocument.body.append(container);
-    const props = {
-      message: "Resetting.",
-      onCancel: vi.fn(),
-      onConfirm: vi.fn(),
-    } as const;
+    const props = confirmationProps();
     const { unmount } = render(
       <PanelRoot>
         <InlineConfirm {...props} open />

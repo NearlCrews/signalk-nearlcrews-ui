@@ -1,11 +1,12 @@
 import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   resolveSaveActionBarState,
   SaveActionBar,
   type SaveActionBarLabels,
+  type SaveActionBarProps,
 } from "../../src/composites.js";
 import { panel, renderInPanel } from "../helpers.js";
 
@@ -19,6 +20,21 @@ const LABELS: SaveActionBarLabels = {
   unsaved: "Unsaved changes",
 };
 
+/** The instant every saved-window spec freezes the clock at. */
+const NOW = Date.UTC(2026, 8, 10, 9, 0, 0);
+
+/** A clean bar with inert handlers unless the spec passes its own. */
+function saveBar(props: Partial<SaveActionBarProps> = {}): React.JSX.Element {
+  return (
+    <SaveActionBar
+      dirty={false}
+      onSave={vi.fn()}
+      onDiscard={vi.fn()}
+      {...props}
+    />
+  );
+}
+
 const BASE = {
   dirty: false,
   invalidMessage: undefined,
@@ -29,6 +45,29 @@ const BASE = {
 } as const;
 
 describe("resolveSaveActionBarState", () => {
+  it("lists the state fields in a stable order", () => {
+    // Consumers serialize the state and snapshot it, so the key order is part
+    // of what the rules return, and every state keeps the same one.
+    const order = [
+      "blocked",
+      "discardDisabled",
+      "live",
+      "message",
+      "saveDisabled",
+      "tone",
+    ];
+    for (const input of [
+      BASE,
+      { ...BASE, dirty: true },
+      { ...BASE, dirty: true, invalidMessage: "Fix the port." },
+      { ...BASE, saving: true },
+      { ...BASE, saveRequestedAt: 1 },
+      { ...BASE, unconfigured: true },
+    ]) {
+      expect(Object.keys(resolveSaveActionBarState(input))).toEqual(order);
+    }
+  });
+
   it("disables both actions for a clean, configured plugin", () => {
     expect(resolveSaveActionBarState(BASE)).toEqual({
       blocked: false,
@@ -119,9 +158,7 @@ describe("resolveSaveActionBarState", () => {
 
 describe("SaveActionBar", () => {
   it("renders the status as a polite live region with the state tone", () => {
-    const { container } = renderInPanel(
-      <SaveActionBar dirty onSave={vi.fn()} onDiscard={vi.fn()} />,
-    );
+    const { container } = renderInPanel(saveBar({ dirty: true }));
 
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("Information. Unsaved changes");
@@ -135,13 +172,10 @@ describe("SaveActionBar", () => {
 
   it("disables the actions for a clean plugin and honors label overrides", () => {
     renderInPanel(
-      <SaveActionBar
-        dirty={false}
-        onSave={vi.fn()}
-        onDiscard={vi.fn()}
-        sticky="bottom"
-        labels={{ clean: "Nothing to save", save: "Apply", discard: "Reset" }}
-      />,
+      saveBar({
+        sticky: "bottom",
+        labels: { clean: "Nothing to save", save: "Apply", discard: "Reset" },
+      }),
     );
 
     expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
@@ -151,12 +185,10 @@ describe("SaveActionBar", () => {
 
   it("shows the validation message in the status and blocks Save", () => {
     const { container } = renderInPanel(
-      <SaveActionBar
-        dirty
-        invalidMessage="Choose a port between 1 and 65535."
-        onSave={vi.fn()}
-        onDiscard={vi.fn()}
-      />,
+      saveBar({
+        dirty: true,
+        invalidMessage: "Choose a port between 1 and 65535.",
+      }),
     );
 
     // One polite region carries every state, so the role is already mounted
@@ -179,9 +211,7 @@ describe("SaveActionBar", () => {
   it("keeps a saving button focusable and busy", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
-    renderInPanel(
-      <SaveActionBar dirty saving onSave={onSave} onDiscard={vi.fn()} />,
-    );
+    renderInPanel(saveBar({ dirty: true, onSave, saving: true }));
 
     const save = screen.getByRole("button", { name: "Save" });
     expect(save).toBeEnabled();
@@ -201,13 +231,10 @@ describe("SaveActionBar", () => {
 
   it("reports a requested save with the configurable message", () => {
     renderInPanel(
-      <SaveActionBar
-        dirty={false}
-        saveRequestedAt={Date.now()}
-        labels={{ saved: "Sent to the server" }}
-        onSave={vi.fn()}
-        onDiscard={vi.fn()}
-      />,
+      saveBar({
+        labels: { saved: "Sent to the server" },
+        saveRequestedAt: Date.now(),
+      }),
     );
 
     expect(screen.getByRole("status")).toHaveTextContent(
@@ -240,17 +267,12 @@ describe("SaveActionBar", () => {
 });
 
 describe("SaveActionBar saved message window", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ now: NOW });
+  });
+
   it("takes the saved message down when its window closes", () => {
-    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
-    vi.useFakeTimers({ now });
-    const { unmount } = renderInPanel(
-      <SaveActionBar
-        dirty={false}
-        saveRequestedAt={now}
-        onSave={vi.fn()}
-        onDiscard={vi.fn()}
-      />,
-    );
+    const { unmount } = renderInPanel(saveBar({ saveRequestedAt: NOW }));
 
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("Save sent to the server");
@@ -268,30 +290,12 @@ describe("SaveActionBar saved message window", () => {
   });
 
   it("restarts the window for a second save rather than inheriting the first", () => {
-    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
-    vi.useFakeTimers({ now });
-    const { rerender } = renderInPanel(
-      <SaveActionBar
-        dirty={false}
-        saveRequestedAt={now}
-        onSave={vi.fn()}
-        onDiscard={vi.fn()}
-      />,
-    );
+    const { rerender } = renderInPanel(saveBar({ saveRequestedAt: NOW }));
 
     act(() => {
       vi.advanceTimersByTime(2_000);
     });
-    rerender(
-      panel(
-        <SaveActionBar
-          dirty={false}
-          saveRequestedAt={now + 2_000}
-          onSave={vi.fn()}
-          onDiscard={vi.fn()}
-        />,
-      ),
-    );
+    rerender(panel(saveBar({ saveRequestedAt: NOW + 2_000 })));
 
     act(() => {
       vi.advanceTimersByTime(2_000);
@@ -307,15 +311,8 @@ describe("SaveActionBar saved message window", () => {
   });
 
   it("measures the window from the request, not from the mount", () => {
-    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
-    vi.useFakeTimers({ now });
     const { rerender } = renderInPanel(
-      <SaveActionBar
-        dirty={false}
-        saveRequestedAt={now - 5_000}
-        onSave={vi.fn()}
-        onDiscard={vi.fn()}
-      />,
+      saveBar({ saveRequestedAt: NOW - 5_000 }),
     );
 
     // A panel that remounts holding an old timestamp does not replay a save
@@ -323,16 +320,7 @@ describe("SaveActionBar saved message window", () => {
     expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
     const idleTimers = vi.getTimerCount();
 
-    rerender(
-      panel(
-        <SaveActionBar
-          dirty={false}
-          saveRequestedAt={now}
-          onSave={vi.fn()}
-          onDiscard={vi.fn()}
-        />,
-      ),
-    );
+    rerender(panel(saveBar({ saveRequestedAt: NOW })));
 
     // A closed window waits for nothing; an open one waits once.
     expect(screen.getByRole("status")).toHaveTextContent(
@@ -342,15 +330,8 @@ describe("SaveActionBar saved message window", () => {
   });
 
   it("leaves an unusable timestamp alone and clamps one from a fast clock", () => {
-    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
-    vi.useFakeTimers({ now });
     const { rerender } = renderInPanel(
-      <SaveActionBar
-        dirty={false}
-        saveRequestedAt={Number.NaN}
-        onSave={vi.fn()}
-        onDiscard={vi.fn()}
-      />,
+      saveBar({ saveRequestedAt: Number.NaN }),
     );
 
     // Nothing to measure from, so the bar keeps reporting the request and
@@ -361,16 +342,7 @@ describe("SaveActionBar saved message window", () => {
     const idleTimers = vi.getTimerCount();
 
     // A host clock a minute ahead of this one cannot stretch the window.
-    rerender(
-      panel(
-        <SaveActionBar
-          dirty={false}
-          saveRequestedAt={now + 60_000}
-          onSave={vi.fn()}
-          onDiscard={vi.fn()}
-        />,
-      ),
-    );
+    rerender(panel(saveBar({ saveRequestedAt: NOW + 60_000 })));
     expect(vi.getTimerCount()).toBe(idleTimers + 1);
     act(() => {
       vi.advanceTimersByTime(2_500);
@@ -379,16 +351,8 @@ describe("SaveActionBar saved message window", () => {
   });
 
   it("honors a custom window and leaves zero to the consumer", () => {
-    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
-    vi.useFakeTimers({ now });
     const { rerender } = renderInPanel(
-      <SaveActionBar
-        dirty={false}
-        saveRequestedAt={now}
-        savedMessageDurationMs={6_000}
-        onSave={vi.fn()}
-        onDiscard={vi.fn()}
-      />,
+      saveBar({ saveRequestedAt: NOW, savedMessageDurationMs: 6_000 }),
     );
 
     act(() => {
@@ -404,13 +368,7 @@ describe("SaveActionBar saved message window", () => {
 
     rerender(
       panel(
-        <SaveActionBar
-          dirty={false}
-          saveRequestedAt={now + 6_000}
-          savedMessageDurationMs={0}
-          onSave={vi.fn()}
-          onDiscard={vi.fn()}
-        />,
+        saveBar({ saveRequestedAt: NOW + 6_000, savedMessageDurationMs: 0 }),
       ),
     );
     // Nothing is waiting to take it down: the panel owns the window again.
@@ -429,12 +387,7 @@ describe("SaveActionBar focus and repeated requests", () => {
     const user = userEvent.setup();
     const onSave = vi.fn();
     const { container } = renderInPanel(
-      <SaveActionBar
-        dirty
-        focusOnAction="none"
-        onSave={onSave}
-        onDiscard={vi.fn()}
-      />,
+      saveBar({ dirty: true, focusOnAction: "none", onSave }),
     );
 
     const save = screen.getByRole("button", { name: "Save" });
@@ -449,16 +402,8 @@ describe("SaveActionBar focus and repeated requests", () => {
   });
 
   it("reopens the saved window for a second save stamped with the same instant", () => {
-    const now = Date.UTC(2026, 8, 10, 9, 0, 0);
-    vi.useFakeTimers({ now });
-    const { rerender } = renderInPanel(
-      <SaveActionBar
-        dirty={false}
-        saveRequestedAt={now}
-        onSave={vi.fn()}
-        onDiscard={vi.fn()}
-      />,
-    );
+    vi.useFakeTimers({ now: NOW });
+    const { rerender } = renderInPanel(saveBar({ saveRequestedAt: NOW }));
 
     act(() => {
       vi.advanceTimersByTime(2_500);
@@ -467,26 +412,8 @@ describe("SaveActionBar focus and repeated requests", () => {
 
     // An edit and a second save inside the same millisecond carry the same
     // timestamp, and the second one is still its own request.
-    rerender(
-      panel(
-        <SaveActionBar
-          dirty
-          saveRequestedAt={now}
-          onSave={vi.fn()}
-          onDiscard={vi.fn()}
-        />,
-      ),
-    );
-    rerender(
-      panel(
-        <SaveActionBar
-          dirty={false}
-          saveRequestedAt={now}
-          onSave={vi.fn()}
-          onDiscard={vi.fn()}
-        />,
-      ),
-    );
+    rerender(panel(saveBar({ dirty: true, saveRequestedAt: NOW })));
+    rerender(panel(saveBar({ saveRequestedAt: NOW })));
     expect(screen.getByRole("status")).toHaveTextContent(
       "Save sent to the server",
     );

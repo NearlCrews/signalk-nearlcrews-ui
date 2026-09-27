@@ -1,6 +1,6 @@
-import { act, render, screen, within } from "@testing-library/react";
-import { createRef, type ReactElement, type Ref } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { act, screen, within } from "@testing-library/react";
+import { createRef, type ReactElement, type ReactNode, type Ref } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Accordion } from "../../src/composites.js";
 import {
@@ -22,7 +22,7 @@ import {
   Text,
   VisuallyHidden,
 } from "../../src/index.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { follows, panel, renderInPanel } from "../helpers.js";
 
 /** Reads the visually hidden announcement text inside an element. */
 function announcementOf(element: Element | null | undefined): string | null {
@@ -233,8 +233,11 @@ describe("LiveRegion", () => {
 });
 
 describe("LiveRegion repeat announcements", () => {
-  it("empties and refills the region when the announce key changes", () => {
+  beforeEach(() => {
     vi.useFakeTimers();
+  });
+
+  it("empties and refills the region when the announce key changes", () => {
     const { rerender } = renderInPanel(
       <LiveRegion message="All sources enabled" announceKey={1} />,
     );
@@ -259,7 +262,6 @@ describe("LiveRegion repeat announcements", () => {
   });
 
   it("finishes the beat it started for a key that lands mid-beat", () => {
-    vi.useFakeTimers();
     const { rerender, unmount } = renderInPanel(
       <LiveRegion message="Two paths detected" announceKey="scan-1" />,
     );
@@ -289,7 +291,6 @@ describe("LiveRegion repeat announcements", () => {
   });
 
   it("waits for nothing when there is nothing to re-announce", () => {
-    vi.useFakeTimers();
     const { rerender } = renderInPanel(
       <LiveRegion message="Scan complete" announceKey={1} />,
     );
@@ -309,7 +310,6 @@ describe("LiveRegion repeat announcements", () => {
   });
 
   it("leaves a region without an announce key untimed", () => {
-    vi.useFakeTimers();
     const { rerender } = renderInPanel(<LiveRegion message="Saved" />);
 
     rerender(panel(<LiveRegion message="Saved" />));
@@ -324,24 +324,26 @@ describe("LiveRegion repeat announcements", () => {
 });
 
 describe("repeat announcements on visible regions", () => {
-  it("re-announces an unchanged status when the key changes", () => {
+  beforeEach(() => {
     vi.useFakeTimers();
-    const { rerender } = renderInPanel(
-      <StatusIndicator live="polite" announceKey={1}>
-        Preset applied
-      </StatusIndicator>,
+  });
+
+  /** An announcing indicator carrying one announce key. */
+  function indicator(announceKey: number, children: ReactNode): ReactElement {
+    return (
+      <StatusIndicator live="polite" announceKey={announceKey}>
+        {children}
+      </StatusIndicator>
     );
+  }
+
+  it("re-announces an unchanged status when the key changes", () => {
+    const { rerender } = renderInPanel(indicator(1, "Preset applied"));
 
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("Preset applied");
 
-    rerender(
-      panel(
-        <StatusIndicator live="polite" announceKey={2}>
-          Preset applied
-        </StatusIndicator>,
-      ),
-    );
+    rerender(panel(indicator(2, "Preset applied")));
     expect(status).toBeEmptyDOMElement();
 
     act(() => {
@@ -354,30 +356,19 @@ describe("repeat announcements on visible regions", () => {
   });
 
   it("keeps a banner's actions through the repeat beat", () => {
-    vi.useFakeTimers();
-    const { rerender } = renderInPanel(
+    const failure = (announceKey: number): ReactElement => (
       <Banner
         data-testid="banner"
         live="polite"
-        announceKey={1}
+        announceKey={announceKey}
         onDismiss={() => undefined}
       >
         Retry failed
-      </Banner>,
+      </Banner>
     );
+    const { rerender } = renderInPanel(failure(1));
 
-    rerender(
-      panel(
-        <Banner
-          data-testid="banner"
-          live="polite"
-          announceKey={2}
-          onDismiss={() => undefined}
-        >
-          Retry failed
-        </Banner>,
-      ),
-    );
+    rerender(panel(failure(2)));
 
     const banner = screen.getByTestId("banner");
     expect(banner).not.toHaveTextContent("Retry failed");
@@ -392,31 +383,14 @@ describe("repeat announcements on visible regions", () => {
   });
 
   it("costs nothing while the region has nothing to announce", () => {
-    vi.useFakeTimers();
-    const { rerender } = renderInPanel(
-      <StatusIndicator live="polite" announceKey={1}>
-        {null}
-      </StatusIndicator>,
-    );
+    const { rerender } = renderInPanel(indicator(1, null));
 
     // A key that changes during a quiet spell is taken as read, so the first
     // real status is not held back for a beat nobody needed.
-    rerender(
-      panel(
-        <StatusIndicator live="polite" announceKey={2}>
-          {null}
-        </StatusIndicator>,
-      ),
-    );
+    rerender(panel(indicator(2, null)));
     expect(vi.getTimerCount()).toBe(0);
 
-    rerender(
-      panel(
-        <StatusIndicator live="polite" announceKey={2}>
-          Provider reachable
-        </StatusIndicator>,
-      ),
-    );
+    rerender(panel(indicator(2, "Provider reachable")));
     expect(screen.getByRole("status")).toHaveTextContent("Provider reachable");
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -752,21 +726,16 @@ describe("CollapsibleSection additions", () => {
       </CollapsibleSection>,
     );
 
-    const header = container.querySelector(".snui-collapsible__header");
-    const leading = header?.querySelector(".snui-collapsible__leading");
-    const heading = header?.querySelector(".snui-collapsible__heading");
-    expect(leading).not.toBeNull();
-    expect(heading).not.toBeNull();
-    expect(
-      leading !== null &&
-        leading !== undefined &&
-        heading !== null &&
-        heading !== undefined &&
-        Boolean(
-          leading.compareDocumentPosition(heading) &
-            Node.DOCUMENT_POSITION_FOLLOWING,
-        ),
-    ).toBe(true);
+    const leading = container.querySelector(
+      ".snui-collapsible__header .snui-collapsible__leading",
+    );
+    const heading = container.querySelector(
+      ".snui-collapsible__header .snui-collapsible__heading",
+    );
+    if (leading === null || heading === null) {
+      throw new Error("The header rendered no leading slot or heading.");
+    }
+    expect(follows(leading, heading)).toBe(true);
     const checkbox = screen.getByRole("checkbox", {
       name: "Enable chart source",
     });
@@ -909,12 +878,11 @@ describe("refs and attribute passthrough", () => {
     "resolves the $name ref to its root element",
     ({ render: renderCase, tagName }) => {
       const ref = createRef<never>();
-      const { unmount } = render(panel(renderCase(ref)));
+      renderInPanel(renderCase(ref));
 
       const target = screen.getByTestId("target");
       expect(target.tagName).toBe(tagName);
       expect(ref.current).toBe(target);
-      unmount();
     },
   );
 

@@ -13,6 +13,8 @@ import { subscribeToClock } from "../../src/utils/shared-clock.js";
 const EN = { locale: "en" } as const;
 const NARROW_EN = { ...RELATIVE_AGE_NARROW, ...EN } as const;
 const DAY_MS = 86_400_000;
+/** The instant every clock-driven spec measures from. */
+const NOW = Date.UTC(2026, 8, 5, 12, 0, 0);
 
 describe("formatRelativeAge defaults", () => {
   it("reads as words below a day and counts in numbers above one", () => {
@@ -131,27 +133,25 @@ describe("formatRelativeAge locales", () => {
 });
 
 describe("formatRelativeAgeSince", () => {
-  const now = Date.UTC(2026, 8, 5, 12, 0, 0);
-
   it("accepts epoch milliseconds, ISO strings, and dates", () => {
-    expect(formatRelativeAgeSince(now - 60_000, now, EN)).toBe("1 minute ago");
+    expect(formatRelativeAgeSince(NOW - 60_000, NOW, EN)).toBe("1 minute ago");
     expect(
-      formatRelativeAgeSince(new Date(now - 3_600_000).toISOString(), now, EN),
+      formatRelativeAgeSince(new Date(NOW - 3_600_000).toISOString(), NOW, EN),
     ).toBe("1 hour ago");
-    expect(formatRelativeAgeSince(new Date(now - DAY_MS), now, EN)).toBe(
+    expect(formatRelativeAgeSince(new Date(NOW - DAY_MS), NOW, EN)).toBe(
       "1 day ago",
     );
   });
 
   it("falls back for missing or unreadable timestamps", () => {
-    expect(formatRelativeAgeSince(null, now)).toBe("Unknown");
-    expect(formatRelativeAgeSince(undefined, now)).toBe("Unknown");
-    expect(formatRelativeAgeSince("not a timestamp", now)).toBe("Unknown");
+    expect(formatRelativeAgeSince(null, NOW)).toBe("Unknown");
+    expect(formatRelativeAgeSince(undefined, NOW)).toBe("Unknown");
+    expect(formatRelativeAgeSince("not a timestamp", NOW)).toBe("Unknown");
   });
 
   it("treats a timestamp slightly ahead of now as now", () => {
-    expect(formatRelativeAgeSince(now + 30_000, now, EN)).toBe("now");
-    expect(formatRelativeAgeSince(now + 120_000, now, EN)).toBe("Unknown");
+    expect(formatRelativeAgeSince(NOW + 30_000, NOW, EN)).toBe("now");
+    expect(formatRelativeAgeSince(NOW + 120_000, NOW, EN)).toBe("Unknown");
   });
 });
 
@@ -171,9 +171,8 @@ describe("RelativeAge", () => {
   });
 
   it("owns the clock for a timestamp and stamps the time element", () => {
-    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
-    vi.useFakeTimers({ now });
-    const since = now - 5_000;
+    vi.useFakeTimers({ now: NOW });
+    const since = NOW - 5_000;
     const { unmount } = render(
       <RelativeAge since={since} tickMs={1_000} options={EN} />,
     );
@@ -192,9 +191,8 @@ describe("RelativeAge", () => {
   });
 
   it("runs one timer per cadence however many ages read it", () => {
-    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
-    vi.useFakeTimers({ now });
-    const since = now - 5_000;
+    vi.useFakeTimers({ now: NOW });
+    const since = NOW - 5_000;
     const { unmount } = render(
       <>
         <RelativeAge since={since} tickMs={1_000} options={EN} />
@@ -228,12 +226,11 @@ describe("RelativeAge", () => {
   });
 
   it("accepts an ISO timestamp and an explicit span element", () => {
-    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
-    vi.useFakeTimers({ now });
+    vi.useFakeTimers({ now: NOW });
     render(
       <RelativeAge
         as="span"
-        since={new Date(now - 3_600_000).toISOString()}
+        since={new Date(NOW - 3_600_000).toISOString()}
         options={EN}
         data-testid="age"
       />,
@@ -246,9 +243,8 @@ describe("RelativeAge", () => {
   });
 
   it("re-reads the clock when a paused age resumes", () => {
-    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
-    vi.useFakeTimers({ now });
-    const since = now - 60_000;
+    vi.useFakeTimers({ now: NOW });
+    const since = NOW - 60_000;
 
     function Section({
       visible,
@@ -277,9 +273,8 @@ describe("RelativeAge", () => {
   });
 
   it("moves to a new cadence and stops once the age is precomputed", () => {
-    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
-    vi.useFakeTimers({ now });
-    const since = now - 5_000;
+    vi.useFakeTimers({ now: NOW });
+    const since = NOW - 5_000;
     const { rerender } = render(
       <RelativeAge since={since} tickMs={1_000} options={EN} />,
     );
@@ -324,14 +319,13 @@ describe("RelativeAge", () => {
   });
 
   it("re-renders only when the words change", () => {
-    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
-    vi.useFakeTimers({ now });
+    vi.useFakeTimers({ now: NOW });
     let renders = 0;
 
     function Counted(): React.JSX.Element {
       renders += 1;
       return (
-        <RelativeAge since={now - 3 * 3_600_000} tickMs={1_000} options={EN} />
+        <RelativeAge since={NOW - 3 * 3_600_000} tickMs={1_000} options={EN} />
       );
     }
 
@@ -366,13 +360,12 @@ describe("RelativeAge", () => {
 
 describe("shared clock", () => {
   it("tells a new subscriber the current instant", () => {
-    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
-    vi.useFakeTimers({ now });
+    vi.useFakeTimers({ now: NOW });
     const onTick = vi.fn();
 
     const stop = subscribeToClock(10_000, onTick);
 
-    expect(onTick).toHaveBeenCalledWith(now);
+    expect(onTick).toHaveBeenCalledWith(NOW);
     stop();
     expect(vi.getTimerCount()).toBe(0);
   });
