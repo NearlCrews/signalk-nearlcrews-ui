@@ -55,6 +55,31 @@ export const RAISED_OVERLAY_DECLARATIONS = [
   "  transition:\n    opacity var(--snui-transition-fast),\n    transform var(--snui-transition-fast);",
 ].join("\n");
 
+/**
+ * The hover step and focus ring band every raised overlay surface remaps for
+ * what it paints inside. In Dark the flat hover fill equals the raised
+ * surface, so a hover fill inside a toast, a dialog, or a popover would
+ * vanish without the raised step, and the ring band has to match the fill
+ * behind the control.
+ */
+export const RAISED_SURFACE_TOKEN_DECLARATIONS = [
+  "  --snui-color-interactive-hover: var(--snui-color-hover-raised);",
+  "  --snui-color-focus-ring-band: var(--snui-color-surface-raised);",
+].join("\n");
+
+/**
+ * Padding that keeps a fixed, viewport-sized layer clear of the device safe
+ * areas and never tighter than the standard gutter. Safe-area insets are
+ * physical edges, so the shorthand stays physical.
+ */
+export const SAFE_AREA_PADDING_DECLARATIONS = [
+  "  padding:",
+  "    max(var(--snui-space-4), env(safe-area-inset-top, 0px))",
+  "    max(var(--snui-space-4), env(safe-area-inset-right, 0px))",
+  "    max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))",
+  "    max(var(--snui-space-4), env(safe-area-inset-left, 0px));",
+].join("\n");
+
 /** The entering and exiting state of an anchored overlay. */
 export const OVERLAY_TRANSITION_DECLARATIONS = [
   "  opacity: 0;",
@@ -103,6 +128,15 @@ export const DISABLED_DECLARATIONS = [
   "  opacity: 1;",
 ].join("\n");
 
+/**
+ * A control blocked either way: natively disabled, or held focusable through
+ * aria-disabled so closing it on a focused control cannot destroy that focus.
+ * Both arguments weigh (0,1,0) and `:is()` takes the weight of its most
+ * specific argument, so substituting it for either one changes no rule's
+ * specificity.
+ */
+export const BLOCKED_SELECTOR = ':is(:disabled, [aria-disabled="true"])';
+
 /** Pressed-state tint painted over the interactive hover fill. */
 export const PRESSED_FILL_DECLARATION =
   "  background: var(--snui-color-accent-subtle);";
@@ -125,6 +159,19 @@ export const CONTROL_LABEL_DECLARATIONS = [
   "  overflow-wrap: anywhere;",
 ].join("\n");
 
+/**
+ * The visible name of a group of controls: a fieldset legend, or the label a
+ * radiogroup draws in its place.
+ */
+export const GROUP_LEGEND_DECLARATIONS = [
+  "  max-width: 100%;",
+  "  min-width: 0;",
+  "  padding: 0;",
+  "  color: var(--snui-color-text);",
+  "  font-weight: var(--snui-font-weight-bold);",
+  "  overflow-wrap: anywhere;",
+].join("\n");
+
 /** Shared presentation for the muted description under a label. */
 export const FIELD_DESCRIPTION_DECLARATIONS = [
   "  min-width: 0;",
@@ -139,6 +186,23 @@ export const SURFACE_DECLARATIONS = [
   "  border-radius: var(--snui-radius-md);",
   "  background: var(--snui-color-surface);",
 ].join("\n");
+
+/**
+ * The text a table caption takes, shared by Table and DataGrid so a panel
+ * moving between them keeps its caption.
+ */
+export const TABLE_CAPTION_DECLARATIONS = [
+  "  color: var(--snui-color-text);",
+  "  font-weight: var(--snui-font-weight-semibold);",
+  "  text-align: start;",
+  "  overflow-wrap: anywhere;",
+].join("\n");
+
+/**
+ * The width of the leading tone bar on Banner, Card, Toast, and a toned
+ * section, which a selected data grid row matches with its own leading bar.
+ */
+export const TONE_BAR_WIDTH = "0.3rem";
 
 /**
  * The row a checkbox or a radio is pressed by: the box, the text beside it,
@@ -157,8 +221,8 @@ export const CONTROL_ROW_DECLARATIONS = [
 
 /**
  * The optical nudge a square glyph takes to sit on a line of text beside it,
- * for the checkbox box and the card tone glyph. Stated once so the two cannot
- * drift apart.
+ * for the checkbox box, the radio dial, and the card tone glyph. Stated once
+ * so they cannot drift apart.
  */
 export const GLYPH_BASELINE_NUDGE = "0.125rem";
 

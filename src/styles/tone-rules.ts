@@ -7,6 +7,7 @@
  */
 
 import type { SemanticTone } from "../utils/tone.js";
+import { TONE_BAR_WIDTH } from "./fragments.js";
 
 /**
  * The semantic tones in the order every rule set lists them. Checked against
@@ -20,14 +21,26 @@ const SEMANTIC_TONES = [
 ] as const satisfies readonly SemanticTone[];
 
 /**
+ * The modifier class a block carries for one tone. Every generator below
+ * builds its selectors from this, so a block's tone classes are spelled once.
+ */
+function toneModifier(
+  block: string,
+  tone: SemanticTone,
+  modifierPrefix: string,
+): string {
+  return `.${block}--${modifierPrefix}${tone}`;
+}
+
+/**
  * The comma-joined selector group for one block, so a rule shared by every
  * tone lists them from the same source the per-tone rules come from.
  * `modifierPrefix` matches {@link toneAccentBarRules}, so a block can name its
  * decorative variant.
  */
 export function toneSelectorList(block: string, modifierPrefix = ""): string {
-  return SEMANTIC_TONES.map(
-    (tone) => `.${block}--${modifierPrefix}${tone}`,
+  return SEMANTIC_TONES.map((tone) =>
+    toneModifier(block, tone, modifierPrefix),
   ).join(",\n");
 }
 
@@ -46,22 +59,53 @@ export function toneColorRules(
 }
 
 /**
+ * One rule per semantic tone painting the toned block itself, the shape a
+ * badge or a line of text takes when the tone colors the whole element. The
+ * prefix lets a block offer a decorative variant (`accent-`) beside its
+ * semantic one.
+ */
+export function toneBlockColorRules(
+  block: string,
+  property = "color",
+  modifierPrefix = "",
+): string {
+  return toneColorRules(
+    (tone) => toneModifier(block, tone, modifierPrefix),
+    property,
+  );
+}
+
+/**
  * The leading tone bar Banner introduced, shared with every surface that marks
  * itself with a tone (Card, Toast). The prefix lets a block offer a decorative
  * variant (`accent-`) beside its semantic one.
  */
 export function toneAccentBarRules(block: string, modifierPrefix = ""): string {
-  return toneColorRules(
-    (tone) => `.${block}--${modifierPrefix}${tone}`,
+  return toneBlockColorRules(
+    block,
     "border-inline-start-color",
+    modifierPrefix,
   );
 }
 
 /** Declarations for the bar itself, applied to the block. */
 export const TONE_ACCENT_BAR_DECLARATIONS = [
   "  border: 1px solid var(--snui-color-border);",
-  "  border-inline-start-width: 0.3rem;",
+  `  border-inline-start-width: ${TONE_BAR_WIDTH};`,
 ].join("\n");
+
+/**
+ * The whole tone bar for one block: the bar declarations on every toned
+ * modifier, then one color rule per tone. `modifierPrefix` names a decorative
+ * variant, as it does for {@link toneAccentBarRules}.
+ */
+export function toneAccentBar(block: string, modifierPrefix = ""): string {
+  return `${toneSelectorList(block, modifierPrefix)} {
+${TONE_ACCENT_BAR_DECLARATIONS}
+}
+
+${toneAccentBarRules(block, modifierPrefix)}`;
+}
 
 /**
  * Dot shape per semantic tone. The info radius is proportional so the rounded
@@ -86,19 +130,25 @@ const TONE_DOT_SHAPES: Readonly<Record<SemanticTone, string>> = {
  */
 export function toneDotShapeRules(block: string, dotClass: string): string {
   return SEMANTIC_TONES.map(
-    (tone) => `.${block}--${tone} .${dotClass} {\n${TONE_DOT_SHAPES[tone]}\n}`,
+    (tone) =>
+      `${toneModifier(block, tone, "")} .${dotClass} {\n${TONE_DOT_SHAPES[tone]}\n}`,
   ).join("\n");
 }
 
 /**
  * One rule per semantic tone painting a descendant of a toned block, the shape
- * a surface uses when the tone colors a glyph or a mark inside it rather than
- * the block itself.
+ * a surface uses when the tone colors a glyph, a mark, or a fill inside it
+ * rather than the block itself. `modifierPrefix` is the part of the tone
+ * modifier ahead of the tone name, for a block whose modifiers carry one.
  */
 export function toneDescendantColorRules(
   block: string,
   descendant: string,
   property = "color",
+  modifierPrefix = "",
 ): string {
-  return toneColorRules((tone) => `.${block}--${tone} ${descendant}`, property);
+  return toneColorRules(
+    (tone) => `${toneModifier(block, tone, modifierPrefix)} ${descendant}`,
+    property,
+  );
 }
