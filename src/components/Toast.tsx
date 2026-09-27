@@ -15,7 +15,10 @@ import { createPortal } from "react-dom";
 
 import { useNodeRef } from "../hooks/use-node-ref.js";
 import { TOAST_STYLES } from "../styles/toast.js";
-import { TRANSITION_FAST_MS } from "../styles/tokens.js";
+import {
+  type FoundationTokenName,
+  TRANSITION_FAST_MS,
+} from "../styles/tokens.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import {
   type AnnouncementMode,
@@ -70,12 +73,19 @@ const STICKY_TONES: ReadonlySet<SemanticTone> = new Set(["danger", "warning"]);
 const MAX_QUEUED_TOASTS = 5;
 
 const TOAST_EXIT_FALLBACK_BUFFER_MS = 10;
+/** The token the card's exit transition runs on. */
+const TOAST_EXIT_TRANSITION_TOKEN: FoundationTokenName =
+  "--snui-transition-fast";
+/** The first CSS time in a token, such as "140ms" or "0.2s". */
+const CSS_TIME_PATTERN = /([\d.]+)\s*(ms|s)\b/;
 const TOAST_TITLE_MESSAGE = "Toast requires a non-empty title.";
 
 const TOAST_CARD_SELECTOR = ".snui-toast";
 /** A card that is not already leaving; exiting cards are never focus targets. */
 const LIVE_TOAST_CARD_SELECTOR = `${TOAST_CARD_SELECTOR}:not([data-exiting])`;
 const TOAST_DISMISS_SELECTOR = ".snui-toast__dismiss";
+/** The dismiss button of a card that is not already leaving. */
+const LIVE_TOAST_DISMISS_SELECTOR = `${LIVE_TOAST_CARD_SELECTOR} ${TOAST_DISMISS_SELECTOR}`;
 
 const FOCUSED_TOAST_COUNTS = new Map<string, number>();
 
@@ -121,6 +131,22 @@ function resolveToastLive(content: ToastContent): AnnouncementMode {
   );
 }
 
+/**
+ * How long a card's exit transition runs, read from the token the card
+ * resolves, so a consumer who changes the transition's duration moves the
+ * fallback with it. A missing or unparseable token reads as the package
+ * default.
+ */
+function exitTransitionMs(view: Window, card: HTMLElement | null): number {
+  if (card === null) return TRANSITION_FAST_MS;
+  const match = CSS_TIME_PATTERN.exec(
+    view.getComputedStyle(card).getPropertyValue(TOAST_EXIT_TRANSITION_TOKEN),
+  );
+  if (match === null) return TRANSITION_FAST_MS;
+  const duration = Number(match[1]) * (match[2] === "s" ? 1000 : 1);
+  return Number.isFinite(duration) ? duration : TRANSITION_FAST_MS;
+}
+
 interface ToastHostHandle {
   readonly element: HTMLDivElement;
   /**
@@ -145,17 +171,16 @@ interface ToastHostPlacement {
   readonly width: number;
 }
 
-/**
- * The host precedes the panel content so the notifications landmark is one
- * Tab from the panel start. It is fixed-positioned, so the position changes
- * only the focus order.
- */
-function insertToastHost(panelRoot: HTMLElement, element: HTMLElement): void {
-  panelRoot.insertBefore(
-    element,
-    panelRoot.querySelector(":scope > .snui-root__content"),
-  );
-}
+/** The custom property each measured host length is written to. */
+const TOAST_HOST_LENGTH_PROPERTIES = [
+  ["--snui-toast-host-top", "top"],
+  ["--snui-toast-host-bottom", "bottom"],
+  ["--snui-toast-host-left", "left"],
+  ["--snui-toast-host-width", "width"],
+] as const satisfies readonly (readonly [
+  string,
+  Exclude<keyof ToastHostPlacement, "visible">,
+])[];
 
 function createToastHost(
   panelRoot: HTMLElement,
@@ -170,9 +195,15 @@ function createToastHost(
   // announced nor dismissable.
   element.setAttribute("data-react-aria-top-layer", "");
   // The registry attaches the record itself whenever an acquire finds the
-  // element disconnected, so the insertion keeps one owner.
+  // element disconnected, so the insertion keeps one owner. The host precedes
+  // the panel content so the notifications landmark is one Tab from the panel
+  // start; it is fixed-positioned, so the position changes only the focus
+  // order.
   const attach = (): void => {
-    insertToastHost(panelRoot, element);
+    panelRoot.insertBefore(
+      element,
+      panelRoot.querySelector(":scope > .snui-root__content"),
+    );
   };
 
   if (ownerWindow === null) {
@@ -220,19 +251,9 @@ function createToastHost(
     placement = next;
 
     element.toggleAttribute("data-snui-toast-host-visible", next.visible);
-    element.style.setProperty("--snui-toast-host-top", `${String(next.top)}px`);
-    element.style.setProperty(
-      "--snui-toast-host-bottom",
-      `${String(next.bottom)}px`,
-    );
-    element.style.setProperty(
-      "--snui-toast-host-left",
-      `${String(next.left)}px`,
-    );
-    element.style.setProperty(
-      "--snui-toast-host-width",
-      `${String(next.width)}px`,
-    );
+    for (const [property, length] of TOAST_HOST_LENGTH_PROPERTIES) {
+      element.style.setProperty(property, `${String(next[length])}px`);
+    }
   };
 
   // Focus that enters the host remembers where it came from, so dismissing
@@ -263,14 +284,6 @@ function createToastHost(
     focusPanelRoot(panelRoot);
   };
 
-  const firstToastControl = (): HTMLElement | null => {
-    for (const card of element.querySelectorAll(LIVE_TOAST_CARD_SELECTOR)) {
-      const control = card.querySelector<HTMLElement>(TOAST_DISMISS_SELECTOR);
-      if (control !== null) return control;
-    }
-    return null;
-  };
-
   // F6 is the landmark shortcut React Aria's own toast region uses: from
   // inside the panel it moves focus into the notifications, and from inside
   // the host it moves focus back where it came from. Both spellings toggle,
@@ -295,7 +308,9 @@ function createToastHost(
       return;
     }
     if (!panelRoot.contains(focused)) return;
-    const control = firstToastControl();
+    const control = element.querySelector<HTMLElement>(
+      LIVE_TOAST_DISMISS_SELECTOR,
+    );
     if (control === null) return;
     event.preventDefault();
     control.focus();
@@ -325,6 +340,11 @@ const TOAST_HOSTS = createDocumentRegistry<HTMLElement, ToastHostHandle>(
   "signalk-nearlcrews-ui.toast-host-registry.v2",
 );
 
+/** A server render has no document to host toasts in. */
+function getServerToastHost(): null {
+  return null;
+}
+
 function useToastHost(panelRoot: HTMLElement | null): ToastHostHandle | null {
   const hostRef = useRef<ToastHostHandle | null>(null);
   const subscribe = useCallback(
@@ -343,9 +363,8 @@ function useToastHost(panelRoot: HTMLElement | null): ToastHostHandle | null {
     [panelRoot],
   );
   const getSnapshot = useCallback(() => hostRef.current, []);
-  const getServerSnapshot = useCallback(() => null, []);
 
-  return useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  return useSyncExternalStore(subscribe, getSnapshot, getServerToastHost);
 }
 
 export interface ToastContent {
@@ -446,20 +465,18 @@ function toastRetentionPriority(content: ToastContent): number {
 }
 
 /**
- * Index of the toast that makes room for the arrival, or -1 when the queue
- * keeps everything it holds and the arrival is refused.
+ * Index of the queued toast that makes room for the arrival, or -1 when the
+ * queue keeps everything it holds and the arrival is refused. A focused toast
+ * is never the one chosen.
  */
 function chooseToastToEvict<T extends ToastContent>(
-  items: readonly QueuedToast<T>[],
+  queued: readonly QueuedToast<T>[],
   incomingPriority: number,
 ): number {
   let candidateIndex = -1;
   let candidatePriority = Number.POSITIVE_INFINITY;
-  // The final item is the newly enqueued toast, so the choice is made among
-  // the existing cards.
-  for (let index = 0; index < items.length - 1; index += 1) {
-    const item = items[index];
-    if (item === undefined || FOCUSED_TOAST_COUNTS.has(item.key)) continue;
+  for (const [index, item] of queued.entries()) {
+    if (FOCUSED_TOAST_COUNTS.has(item.key)) continue;
     const priority = toastRetentionPriority(item.content);
     if (priority < candidatePriority) {
       candidateIndex = index;
@@ -496,14 +513,17 @@ export function createToastQueue<T extends ToastContent = ToastContent>(
       const next = [...snapshot, queued];
       let dropped: QueuedToast<T> | undefined;
       if (next.length > MAX_QUEUED_TOASTS) {
-        const index = chooseToastToEvict(next, toastRetentionPriority(content));
+        // Chosen among the toasts already queued, which keep their indices
+        // in `next`; the arrival is last.
+        const index = chooseToastToEvict(
+          snapshot,
+          toastRetentionPriority(content),
+        );
         if (index === -1) {
           options.onEvict?.({ reason: "rejected", toast: queued });
           return key;
         }
-        dropped = next[index];
-        next.splice(index, 1);
-        if (dropped !== undefined) FOCUSED_TOAST_COUNTS.delete(dropped.key);
+        [dropped] = next.splice(index, 1);
       }
       snapshot = next;
       emit();
@@ -541,7 +561,8 @@ interface ToastCardProps<T extends ToastContent> {
   readonly item: QueuedToast<T>;
   readonly queue: ToastQueue<T>;
   readonly defaultDuration?: number | undefined;
-  readonly dismissLabel?: string | undefined;
+  /** Already resolved by the region, so every card reads the same one. */
+  readonly dismissLabel: string;
 }
 
 function ToastCardImpl<T extends ToastContent>({
@@ -605,41 +626,20 @@ function ToastCardImpl<T extends ToastContent>({
     setExiting(true);
   }, [stopCountdown]);
 
+  // The transition end removes the card; this timer is the fallback for an
+  // engine that never fires one, and the whole exit under reduced motion.
   useLayoutEffect(() => {
     const view = viewRef.current;
     if (!exiting || view === null) return undefined;
-    // One cleanup for both branches, so a re-run can never orphan the handle
-    // it is about to overwrite.
-    const clearExitTimer = (): void => {
-      if (exitTimerRef.current === null) return;
-      view.clearTimeout(exitTimerRef.current);
+    const delay = prefersReducedMotion(view)
+      ? 0
+      : exitTransitionMs(view, cardRef.current) + TOAST_EXIT_FALLBACK_BUFFER_MS;
+    const timer = view.setTimeout(finishExit, delay);
+    exitTimerRef.current = timer;
+    return () => {
+      view.clearTimeout(timer);
       exitTimerRef.current = null;
     };
-    if (prefersReducedMotion(view)) {
-      exitTimerRef.current = view.setTimeout(finishExit, 0);
-      return clearExitTimer;
-    }
-
-    const card = cardRef.current;
-    const token =
-      card === null
-        ? ""
-        : view
-            .getComputedStyle(card)
-            .getPropertyValue("--snui-transition-fast");
-    const tokenMatch = /([\d.]+)\s*(ms|s)\b/.exec(token);
-    const tokenDuration =
-      tokenMatch === null
-        ? TRANSITION_FAST_MS
-        : Number(tokenMatch[1]) * (tokenMatch[2] === "s" ? 1000 : 1);
-    const exitDurationMs = Number.isFinite(tokenDuration)
-      ? tokenDuration
-      : TRANSITION_FAST_MS;
-    exitTimerRef.current = view.setTimeout(
-      finishExit,
-      exitDurationMs + TOAST_EXIT_FALLBACK_BUFFER_MS,
-    );
-    return clearExitTimer;
   }, [exiting, finishExit]);
 
   const startCountdown = useCallback((): void => {
@@ -686,12 +686,6 @@ function ToastCardImpl<T extends ToastContent>({
       stopCountdown();
     };
   }, [key, startCountdown, stopCountdown]);
-
-  const effectiveDismissLabel = resolveBundledLabel(
-    dismissLabel,
-    usePanelLabels()?.toastRegion?.dismiss,
-    DEFAULT_DISMISS_LABEL,
-  );
 
   return (
     // Pointer and focus handlers only pause the auto-dismiss countdown; the
@@ -759,7 +753,7 @@ function ToastCardImpl<T extends ToastContent>({
         size="compact"
         iconOnly
         className="snui-toast__dismiss"
-        aria-label={effectiveDismissLabel}
+        aria-label={dismissLabel}
         // Every card names its button "Dismiss", so the description is what
         // tells a screen reader user which notification this one closes.
         aria-describedby={titleId}
@@ -780,14 +774,25 @@ function ToastCardImpl<T extends ToastContent>({
 
 /**
  * Memoized so one arrival re-renders only the card it changed: `item`, `queue`,
- * and the two labels are stable for a surviving card, and the other four cards
- * in a full queue have no work to do. The cast restores the generic signature
- * that `memo` erases.
+ * the default duration, and the resolved dismiss label are stable for a
+ * surviving card, and the other four cards in a full queue have no work to do.
+ * The cast restores the generic signature that `memo` erases.
  */
 const ToastCard = memo(ToastCardImpl) as typeof ToastCardImpl;
 
 /** Landmark name for a region whose caller and panel bundle both leave it out. */
 const DEFAULT_TOAST_REGION_LABEL = "Notifications";
+
+/** The card that holds focus inside a region. */
+interface FocusedToastCard {
+  /**
+   * Its position among the cards that are not leaving, or -1 when it is
+   * leaving itself. Counted over the same live list the region reads when the
+   * card goes, so the two agree while another card is mid-exit.
+   */
+  readonly index: number;
+  readonly key: string;
+}
 
 export interface ToastRegionProps<T extends ToastContent = ToastContent>
   extends Omit<
@@ -844,6 +849,11 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
   if (!effectiveLabel) {
     throw new Error("ToastRegion requires a non-empty label.");
   }
+  const effectiveDismissLabel = resolveBundledLabel(
+    dismissLabel,
+    bundledRegionLabels?.dismiss,
+    DEFAULT_DISMISS_LABEL,
+  );
 
   useModuleStyles(TOAST_STYLES, "ToastRegion");
   const toasts = useSyncExternalStore(
@@ -857,13 +867,9 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
   const regionRef = useRef<HTMLElement | null>(null);
   const setRegionRef = useNodeRef(regionRef, ref);
 
-  // The key of the card that contains focus, or null, with its position among
-  // the cards that are not leaving. A removed card fires no blur, so both
-  // outlive the card and tell the effect below where focus was. The position
-  // is counted over the same live list the effect reads, so the two agree
-  // while another card is mid-exit.
-  const focusedKeyRef = useRef<string | null>(null);
-  const focusedIndexRef = useRef(-1);
+  // The card that contains focus, or null. A removed card fires no blur, so
+  // the record outlives the card and tells the effect below where focus was.
+  const focusedCardRef = useRef<FocusedToastCard | null>(null);
 
   const showing = toasts.length > 0;
   // The host measures nothing while it holds no cards, so the first card of a
@@ -876,12 +882,10 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
   // occupies its slot (the next older one, else the newest remaining), and
   // when none remains it returns to where it was before entering the host.
   useLayoutEffect(() => {
-    const focusedKey = focusedKeyRef.current;
-    if (focusedKey === null || host === null) return;
-    if (toasts.some((item) => item.key === focusedKey)) return;
-    const focusedIndex = focusedIndexRef.current;
-    focusedKeyRef.current = null;
-    focusedIndexRef.current = -1;
+    const focused = focusedCardRef.current;
+    if (focused === null || host === null) return;
+    if (toasts.some((item) => item.key === focused.key)) return;
+    focusedCardRef.current = null;
     const survivors =
       regionRef.current?.querySelectorAll<HTMLElement>(
         LIVE_TOAST_CARD_SELECTOR,
@@ -889,8 +893,8 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
     // Past the end of the list there is no next older card, so the newest
     // remaining notification takes the focus rather than the bottom of the
     // stack.
-    const slot =
-      focusedIndex >= 0 && focusedIndex < survivors.length ? focusedIndex : 0;
+    const { index } = focused;
+    const slot = index >= 0 && index < survivors.length ? index : 0;
     const dismiss =
       survivors[slot]?.querySelector<HTMLElement>(TOAST_DISMISS_SELECTOR) ??
       null;
@@ -905,7 +909,7 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
   // the same way, so the consumer removing a region never strands the user.
   useLayoutEffect(() => {
     return () => {
-      if (focusedKeyRef.current !== null) host?.restoreFocus();
+      if (focusedCardRef.current !== null) host?.restoreFocus();
     };
   }, [host]);
 
@@ -923,7 +927,7 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
         item={item}
         queue={queue}
         defaultDuration={defaultDuration}
-        dismissLabel={dismissLabel}
+        dismissLabel={effectiveDismissLabel}
       />,
     );
   }
@@ -937,18 +941,24 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
       aria-label={effectiveLabel}
       onFocus={(event) => {
         const card = event.target.closest<HTMLElement>(TOAST_CARD_SELECTOR);
-        const live = event.currentTarget.querySelectorAll(
-          LIVE_TOAST_CARD_SELECTOR,
-        );
-        focusedKeyRef.current = card?.dataset.snuiToastKey ?? null;
-        focusedIndexRef.current =
-          card === null ? -1 : Array.prototype.indexOf.call(live, card);
+        const key = card?.dataset.snuiToastKey;
+        focusedCardRef.current =
+          key === undefined
+            ? null
+            : {
+                index: Array.prototype.indexOf.call(
+                  event.currentTarget.querySelectorAll(
+                    LIVE_TOAST_CARD_SELECTOR,
+                  ),
+                  card,
+                ),
+                key,
+              };
         onFocus?.(event);
       }}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
-          focusedKeyRef.current = null;
-          focusedIndexRef.current = -1;
+          focusedCardRef.current = null;
         }
         onBlur?.(event);
       }}
