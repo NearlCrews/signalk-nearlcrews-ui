@@ -142,8 +142,10 @@ export function Column({
   return (
     <RACColumn
       {...props}
-      {...(numeric ? { "data-snui-numeric": "" } : {})}
-      {...(wrap ? { "data-snui-wrap": "" } : {})}
+      {...definedProps({
+        "data-snui-numeric": numeric ? "" : undefined,
+        "data-snui-wrap": wrap ? "" : undefined,
+      })}
     />
   );
 }
@@ -256,18 +258,13 @@ export type DataGridProps<TRow, TColumn = unknown> = DataGridBaseProps<TRow> &
 /** The `id` or `key` an item exposes, when it exposes one React Aria accepts. */
 function getItemKey(item: unknown): Key | undefined {
   if (item !== null && typeof item === "object") {
-    const candidate =
-      (item as Record<string, unknown>).id ??
-      (item as Record<string, unknown>).key;
+    const record = item as Record<string, unknown>;
+    const candidate = record.id ?? record.key;
     if (typeof candidate === "string" || typeof candidate === "number") {
       return candidate;
     }
   }
   return undefined;
-}
-
-function getRowKey(item: unknown, index: number): Key {
-  return getItemKey(item) ?? index;
 }
 
 function isPlainStyle(style: unknown): style is CSSProperties | undefined {
@@ -301,6 +298,10 @@ function isColumnElement(
   return isValidElement<DataGridColumnProps>(node) && node.type === Column;
 }
 
+function isCellElement(node: ReactNode): node is ReactElement<CellProps> {
+  return isValidElement<CellProps>(node) && node.type === Cell;
+}
+
 /**
  * Every element child of the header is one column, whatever component drew it.
  * A wrapper component or a bare React Aria Column counts, because dropping one
@@ -317,14 +318,14 @@ function isHeaderColumnElement(
 // recurse into fragments so enhancements apply either way.
 function flattenColumns(
   children: ReactNode,
+  columns: ReactElement<DataGridColumnProps>[] = [],
 ): ReactElement<DataGridColumnProps>[] {
-  const columns: ReactElement<DataGridColumnProps>[] = [];
   Children.forEach(children, (child) => {
     if (isFragmentElement(child)) {
-      columns.push(...flattenColumns(child.props.children));
-      return;
+      flattenColumns(child.props.children, columns);
+    } else if (isHeaderColumnElement(child)) {
+      columns.push(child);
     }
-    if (isHeaderColumnElement(child)) columns.push(child);
   });
   return columns;
 }
@@ -379,11 +380,10 @@ type CellDecorationProps = Partial<CellProps> & {
  * reachable through a title once the one-line cell truncates it.
  */
 function decorateCell(
-  cell: ReactNode,
+  cell: ReactElement<CellProps>,
   decoration: ColumnDecoration | undefined,
   virtualized: boolean,
-): ReactNode {
-  if (!isValidElement<CellProps>(cell) || cell.type !== Cell) return cell;
+): ReactElement<CellProps> {
   const props: CellDecorationProps = {};
   let decorated = false;
   if (decoration?.numeric === true) {
@@ -444,7 +444,7 @@ function decorateCells(
         decorateCells(cell.props.children, decorations, virtualized, cursor),
       );
     }
-    if (!isValidElement<CellProps>(cell) || cell.type !== Cell) return cell;
+    if (!isCellElement(cell)) return cell;
     const decoration = decorations[cursor.index];
     cursor.index += 1;
     return decorateCell(cell, decoration, virtualized);
@@ -464,12 +464,13 @@ function decorateRow<TColumn>(
 ): ReactElement<RowProps<TColumn>> {
   const cells = row.props.children;
   if (typeof cells === "function") {
-    const renderCell = cells;
     return cloneElement(row, {
       children: (column: TColumn) => {
+        const cell = cells(column);
+        if (!isCellElement(cell)) return cell;
         const key = getItemKey(column);
         return decorateCell(
-          renderCell(column),
+          cell,
           key === undefined ? undefined : decorationsByKey.get(key),
           virtualized,
         );
@@ -559,9 +560,7 @@ function resolveStaticHeader<TColumn>(
             minWidth: cssWidth,
             width: cssWidth,
           }}
-        >
-          {column.props.children}
-        </Column>
+        />
       );
     }
     // RAC requires one row-header column and throws without it; default
@@ -688,7 +687,7 @@ export function DataGrid<TRow, TColumn = unknown>({
     () =>
       virtualized
         ? items.map((value, index) => ({
-            id: getRowKey(value, index),
+            id: getItemKey(value) ?? index,
             odd: zebra && index % 2 === 1,
             value,
           }))

@@ -154,7 +154,6 @@ export function CollapsibleSection({
   });
 
   const toggle = (): void => {
-    if (disabled) return;
     commitOpen(!effectiveOpen);
   };
 
@@ -162,9 +161,15 @@ export function CollapsibleSection({
     mountStrategy === "retain" ||
     effectiveOpen ||
     (mountStrategy === "lazy-retain" && hasOpened);
-  const renderSummary =
+  const summaryNode =
     hasReactContent(summary) &&
-    (summaryVisibility === "always" || !effectiveOpen);
+    (summaryVisibility === "always" || !effectiveOpen) ? (
+      <div
+        className={`snui-collapsible__summary snui-collapsible__summary--${summaryPlacement}`}
+      >
+        {summary}
+      </div>
+    ) : null;
 
   return (
     <section
@@ -211,20 +216,12 @@ export function CollapsibleSection({
             </span>
           </button>
         </Heading>
-        {renderSummary && summaryPlacement === "header" ? (
-          <div className="snui-collapsible__summary snui-collapsible__summary--header">
-            {summary}
-          </div>
-        ) : null}
+        {summaryPlacement === "header" ? summaryNode : null}
         {hasReactContent(actions) ? (
           <div className="snui-collapsible__actions">{actions}</div>
         ) : null}
       </header>
-      {renderSummary && summaryPlacement === "below" ? (
-        <div className="snui-collapsible__summary snui-collapsible__summary--below">
-          {summary}
-        </div>
-      ) : null}
+      {summaryPlacement === "below" ? summaryNode : null}
       <div
         ref={contentRef}
         id={contentId}

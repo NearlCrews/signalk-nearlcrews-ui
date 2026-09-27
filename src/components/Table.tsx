@@ -94,6 +94,14 @@ export function Table({
   );
 }
 
+/** The class list a header or body cell takes, with the numeric option. */
+function cellClassName(
+  numeric: boolean,
+  className: string | undefined,
+): string {
+  return classNames(numeric && "snui-table__cell--numeric", className);
+}
+
 export interface TableHeaderCellProps
   extends ThHTMLAttributes<HTMLTableCellElement>,
     RefAttributes<HTMLTableCellElement> {
@@ -114,7 +122,7 @@ export function TableHeaderCell({
       {...props}
       ref={ref}
       scope={scope}
-      className={classNames(numeric && "snui-table__cell--numeric", className)}
+      className={cellClassName(numeric, className)}
     />
   );
 }
@@ -133,11 +141,7 @@ export function TableCell({
   ...props
 }: TableCellProps): React.JSX.Element {
   return (
-    <td
-      {...props}
-      ref={ref}
-      className={classNames(numeric && "snui-table__cell--numeric", className)}
-    />
+    <td {...props} ref={ref} className={cellClassName(numeric, className)} />
   );
 }
 

@@ -1,10 +1,8 @@
 import {
-  createContext,
   type HTMLAttributes,
   type ReactNode,
   type RefAttributes,
   useCallback,
-  useContext,
   useId,
   useLayoutEffect,
   useMemo,
@@ -17,6 +15,7 @@ import {
 } from "../hooks/use-focus-return.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
 import { hasAccessibleName, requireIdToken } from "../utils/aria.js";
+import { createValueContext } from "../utils/context.js";
 import { focusIsOnBody } from "../utils/focus.js";
 import type { MountStrategy } from "../utils/mount-strategy.js";
 import { warnOnce } from "../utils/warn-once.js";
@@ -200,7 +199,8 @@ function warnLostTrigger(panelNode: HTMLElement | null): void {
 
 export type DisclosureContextValue = UseDisclosureResult;
 
-const DisclosureContext = createContext<DisclosureContextValue | null>(null);
+const { Provider: DisclosureProvider, useValue: useDisclosureContext } =
+  createValueContext<DisclosureContextValue | null>(null);
 
 /**
  * The disclosure a composed part belongs to: the one its `disclosure` prop
@@ -212,7 +212,7 @@ function useResolvedDisclosure(
   component: string,
   supplied: UseDisclosureResult | undefined,
 ): DisclosureContextValue {
-  const value = useContext(DisclosureContext);
+  const value = useDisclosureContext();
   const resolved = supplied ?? value;
   if (resolved === null) {
     throw new Error(
@@ -246,7 +246,7 @@ export function Disclosure({
   ...options
 }: DisclosureProps): React.JSX.Element {
   const disclosure = useDisclosure(options);
-  return <DisclosureContext value={disclosure}>{children}</DisclosureContext>;
+  return <DisclosureProvider value={disclosure}>{children}</DisclosureProvider>;
 }
 
 export type DisclosureTriggerProps = Omit<
