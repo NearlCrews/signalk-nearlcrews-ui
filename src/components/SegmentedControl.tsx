@@ -21,7 +21,7 @@ import { resolveFieldRegions } from "../utils/field-error.js";
 import { observeFormReset } from "../utils/form-reset.js";
 import { requireNonEmptyUniqueOptions } from "../utils/options.js";
 import { definedProps } from "../utils/props.js";
-import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { requireContent } from "../utils/react-node.js";
 import {
   mirrorsInRtl,
   nextRovingIndex,
@@ -150,10 +150,9 @@ export function SegmentedControl<Value extends string>({
 
   const groupId = useId();
   const labelId = `${groupId}-label`;
-  const hasDescription = hasReactContent(description);
-  const hasError = hasReactContent(error);
-  const { descriptionId, errorId, referencedErrorId, rendersError } =
-    resolveFieldRegions(groupId, hasDescription, hasError, errorLive);
+  const regions = resolveFieldRegions(groupId, description, error, errorLive);
+  const { descriptionId, hasDescription, hasError, referencedErrorId } =
+    regions;
   const describedBy = joinIdReferences(
     ariaDescribedBy,
     descriptionId,
@@ -312,15 +311,12 @@ export function SegmentedControl<Value extends string>({
           );
         })}
       </div>
-      {rendersError ? (
-        <FieldError
-          className="snui-segmented__error"
-          error={error}
-          hasError={hasError}
-          id={errorId}
-          live={errorLive}
-        />
-      ) : null}
+      <FieldError
+        className="snui-segmented__error"
+        error={error}
+        live={errorLive}
+        region={regions}
+      />
       {name === undefined ? null : (
         <input
           ref={attachHiddenInput}

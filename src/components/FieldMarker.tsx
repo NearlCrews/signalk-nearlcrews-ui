@@ -6,7 +6,10 @@ interface FieldMarkerProps {
   /** Marker for a control that is not required. Blank content draws nothing. */
   readonly optionalLabel?: ReactNode | undefined;
   readonly required: boolean;
-  /** Marker for a required control. Blank content draws nothing. */
+  /**
+   * Marker for a required control, an asterisk unless the field gives its
+   * own. Blank content draws nothing.
+   */
   readonly requiredLabel?: ReactNode | undefined;
 }
 
@@ -23,7 +26,7 @@ interface FieldMarkerProps {
 export function FieldMarker({
   optionalLabel,
   required,
-  requiredLabel,
+  requiredLabel = "*",
 }: FieldMarkerProps): ReactNode {
   if (required) {
     if (!hasReactContent(requiredLabel)) return null;

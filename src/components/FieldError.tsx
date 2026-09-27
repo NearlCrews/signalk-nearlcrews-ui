@@ -4,6 +4,7 @@ import {
   type AnnouncementMode,
   liveRegionProps,
 } from "../utils/announcement.js";
+import type { FieldErrorState } from "../utils/field-error.js";
 import { ToneMark } from "./ToneMark.js";
 
 interface FieldErrorProps {
@@ -11,35 +12,36 @@ interface FieldErrorProps {
   readonly as?: "div" | "span" | undefined;
   readonly className: string;
   readonly error: ReactNode;
-  readonly hasError: boolean;
-  readonly id: string | undefined;
   readonly live: AnnouncementMode;
+  /** The ids and mounting rule {@link resolveFieldRegions} resolved. */
+  readonly region: FieldErrorState;
 }
 
 /**
- * The error region shared by every field wrapper. Render it whenever
- * {@link resolveFieldError} reports `rendersError`, so the live region is in
- * place before its text arrives.
+ * The error region shared by every field wrapper. It mounts whenever the
+ * resolved region says the container belongs in the DOM, so the live region
+ * is in place before its text arrives, and it draws the message only while
+ * the region is referenced, which is exactly while there is an error.
  */
 export function FieldError({
   as: Element = "div",
   className,
   error,
-  hasError,
-  id,
   live,
-}: FieldErrorProps): React.JSX.Element {
+  region,
+}: FieldErrorProps): React.JSX.Element | null {
+  if (!region.rendersError) return null;
   // A roled live region does not also carry aria-live; liveRegionProps emits
   // exactly one of the pair.
-  const region = liveRegionProps(live);
+  const { "aria-live": ariaLive, role } = liveRegionProps(live);
   return (
     <Element
-      id={id}
+      id={region.errorId}
       className={className}
-      role={region.role}
-      aria-live={region["aria-live"]}
+      role={role}
+      aria-live={ariaLive}
     >
-      {hasError ? (
+      {region.referencedErrorId === undefined ? null : (
         <>
           {/*
             The danger mark, the way Banner and StatusIndicator carry it. In
@@ -50,7 +52,7 @@ export function FieldError({
           <ToneMark tone="danger" />
           {error}
         </>
-      ) : null}
+      )}
     </Element>
   );
 }

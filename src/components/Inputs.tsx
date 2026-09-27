@@ -28,7 +28,7 @@ import { isDevelopment } from "../utils/environment.js";
 import { resolveFieldRegions } from "../utils/field-error.js";
 import { markForwardsFieldControlProps } from "../utils/field-forwarding.js";
 import { observeFormReset } from "../utils/form-reset.js";
-import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { requireContent } from "../utils/react-node.js";
 import type { Visibility } from "../utils/variants.js";
 import { warnOnce } from "../utils/warn-once.js";
 import { FieldError } from "./FieldError.js";
@@ -407,7 +407,7 @@ export function Checkbox({
   optionalLabel,
   ref,
   required = false,
-  requiredLabel = "*",
+  requiredLabel,
   ...props
 }: CheckboxProps): React.JSX.Element {
   requireContent(label, "Checkbox requires a non-empty label.");
@@ -454,10 +454,9 @@ export function Checkbox({
     );
   }
 
-  const hasDescription = hasReactContent(description);
-  const hasError = hasReactContent(error);
-  const { descriptionId, errorId, referencedErrorId, rendersError } =
-    resolveFieldRegions(controlId, hasDescription, hasError, errorLive);
+  const regions = resolveFieldRegions(controlId, description, error, errorLive);
+  const { descriptionId, hasDescription, hasError, referencedErrorId } =
+    regions;
   const describedBy = joinIdReferences(
     ariaDescribedBy,
     descriptionId,
@@ -561,16 +560,13 @@ export function Checkbox({
           {description}
         </span>
       ) : null}
-      {rendersError ? (
-        <FieldError
-          as="span"
-          className="snui-checkbox__error"
-          error={error}
-          hasError={hasError}
-          id={errorId}
-          live={errorLive}
-        />
-      ) : null}
+      <FieldError
+        as="span"
+        className="snui-checkbox__error"
+        error={error}
+        live={errorLive}
+        region={regions}
+      />
     </div>
   );
 }

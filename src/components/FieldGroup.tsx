@@ -67,10 +67,13 @@ export function FieldGroup({
   );
 
   const generatedId = useId();
-  const hasDescription = hasReactContent(description);
-  const hasError = hasReactContent(error);
-  const { descriptionId, errorId, referencedErrorId, rendersError } =
-    resolveFieldRegions(generatedId, hasDescription, hasError, errorLive);
+  const regions = resolveFieldRegions(
+    generatedId,
+    description,
+    error,
+    errorLive,
+  );
+  const { descriptionId, hasDescription, referencedErrorId } = regions;
 
   return (
     <fieldset
@@ -98,15 +101,12 @@ export function FieldGroup({
       ) : null}
       <div className="snui-field-group__content">
         {children}
-        {rendersError ? (
-          <FieldError
-            className="snui-field-group__error"
-            error={error}
-            hasError={hasError}
-            id={errorId}
-            live={errorLive}
-          />
-        ) : null}
+        <FieldError
+          className="snui-field-group__error"
+          error={error}
+          live={errorLive}
+          region={regions}
+        />
       </div>
     </fieldset>
   );

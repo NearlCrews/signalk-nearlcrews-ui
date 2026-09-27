@@ -345,27 +345,43 @@ describe("resolveAnnouncingRegion", () => {
 
 describe("resolveFieldRegions", () => {
   it("names only the regions the field renders", () => {
-    expect(resolveFieldRegions("field", false, false, "off")).toEqual({
+    // Blank text reads as absent, the way every slot in the package reads it.
+    expect(resolveFieldRegions("field", undefined, "  ", "off")).toEqual({
       descriptionId: undefined,
       errorId: undefined,
+      hasDescription: false,
+      hasError: false,
       referencedErrorId: undefined,
       rendersError: false,
     });
   });
 
   it("names the description and the error it is showing", () => {
-    expect(resolveFieldRegions("field", true, true, "off")).toEqual({
+    expect(
+      resolveFieldRegions(
+        "field",
+        "Stored in seconds",
+        "Choose at least 4.",
+        "off",
+      ),
+    ).toEqual({
       descriptionId: "field-description",
       errorId: "field-error",
+      hasDescription: true,
+      hasError: true,
       referencedErrorId: "field-error",
       rendersError: true,
     });
   });
 
   it("mounts an announcing error region before there is an error", () => {
-    expect(resolveFieldRegions("field", false, false, "polite")).toEqual({
+    expect(
+      resolveFieldRegions("field", undefined, undefined, "polite"),
+    ).toEqual({
       descriptionId: undefined,
       errorId: "field-error",
+      hasDescription: false,
+      hasError: false,
       referencedErrorId: undefined,
       rendersError: true,
     });

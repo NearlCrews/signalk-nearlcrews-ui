@@ -14,7 +14,7 @@ import { isDevelopment } from "../utils/environment.js";
 import { resolveFieldRegions } from "../utils/field-error.js";
 import { forwardsFieldControlProps } from "../utils/field-forwarding.js";
 import { definedProps } from "../utils/props.js";
-import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { requireContent } from "../utils/react-node.js";
 import { type Density, resolveDensity } from "../utils/variants.js";
 import { warnOnce } from "../utils/warn-once.js";
 import { FieldError } from "./FieldError.js";
@@ -183,7 +183,7 @@ export function LabeledField({
   optionalLabel,
   ref,
   required = false,
-  requiredLabel = "*",
+  requiredLabel,
   ...props
 }: LabeledFieldProps): React.JSX.Element {
   requireContent(label, "LabeledField requires a non-empty label.");
@@ -194,10 +194,13 @@ export function LabeledField({
     requireLabelableIntrinsicChild(elementChild);
   }
   const controlId = elementChild?.props.id ?? `${generatedId}-control`;
-  const hasDescription = hasReactContent(description);
-  const hasError = hasReactContent(error);
-  const { descriptionId, errorId, referencedErrorId, rendersError } =
-    resolveFieldRegions(generatedId, hasDescription, hasError, errorLive);
+  const regions = resolveFieldRegions(
+    generatedId,
+    description,
+    error,
+    errorLive,
+  );
+  const { descriptionId, hasDescription, referencedErrorId } = regions;
   // The field's own text is read first, then whatever the caller added,
   // whichever route it arrived by: an `aria-describedby` already on the child
   // element and the ids in `controlDescribedBy` both follow the description
@@ -276,15 +279,12 @@ export function LabeledField({
         </div>
       ) : null}
       <div className="snui-field__control">{control}</div>
-      {rendersError ? (
-        <FieldError
-          className="snui-field__error"
-          error={error}
-          hasError={hasError}
-          id={errorId}
-          live={errorLive}
-        />
-      ) : null}
+      <FieldError
+        className="snui-field__error"
+        error={error}
+        live={errorLive}
+        region={regions}
+      />
     </div>
   );
 }

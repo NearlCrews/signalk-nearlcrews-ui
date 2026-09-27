@@ -18,11 +18,10 @@ import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { resolveFieldError } from "../utils/field-error.js";
+import { resolveFieldRegions } from "../utils/field-error.js";
 import { definedProps } from "../utils/props.js";
 import { racDomProps } from "../utils/react-aria.js";
 import {
-  hasReactContent,
   requireContent,
   resolveLabelContent,
   type WithLabel,
@@ -84,13 +83,15 @@ export function RadioGroup({
   requireContent(label, "RadioGroup requires a non-empty label.");
 
   const generatedId = useId();
-  const hasDescription = hasReactContent(description);
-  const hasError = hasReactContent(error);
-  const { errorId, referencedErrorId, rendersError } = resolveFieldError(
+  // React Aria wires the description slot itself, so the resolved description
+  // id goes unused here and only the error half reaches the group.
+  const regions = resolveFieldRegions(
     generatedId,
-    hasError,
+    description,
+    error,
     errorLive,
   );
+  const { hasDescription, hasError, referencedErrorId } = regions;
   const describedBy = joinIdReferences(ariaDescribedBy, referencedErrorId);
   const domProps = racDomProps<RACRadioGroupProps>(props);
 
@@ -119,15 +120,12 @@ export function RadioGroup({
         </Text>
       ) : null}
       <div className="snui-radio-group__options">{children}</div>
-      {rendersError ? (
-        <FieldError
-          className="snui-radio-group__error"
-          error={error}
-          hasError={hasError}
-          id={errorId}
-          live={errorLive}
-        />
-      ) : null}
+      <FieldError
+        className="snui-radio-group__error"
+        error={error}
+        live={errorLive}
+        region={regions}
+      />
     </RACRadioGroup>
   );
 }
