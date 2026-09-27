@@ -5,8 +5,10 @@ import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
+import { exportSpecifier } from "../../scripts/lib/bundle-contract.mjs";
 import {
   findRelativeLinks,
+  isPrivate,
   MAINTAINED_PACKAGE_DOCS,
   validatePackageMetadata,
   validatePackedFiles,
@@ -211,6 +213,13 @@ describe("package release metadata", () => {
         withPackageJson({ allowScripts: { esbuild: true } }),
       ),
     ).toThrow("allowScripts must equal");
+  });
+
+  it("reads any truthy private value as private, as npm does", () => {
+    expect(isPrivate({})).toBe(false);
+    expect(isPrivate({ private: false })).toBe(false);
+    expect(isPrivate({ private: true })).toBe(true);
+    expect(isPrivate({ private: "false" })).toBe(true);
   });
 
   it("rejects any private value, not only the boolean", () => {
@@ -545,10 +554,7 @@ describe("exports map resolution", () => {
   it("resolves every JavaScript entry through require", () => {
     for (const [subpath, declaration] of Object.entries(realManifest.exports)) {
       if (typeof declaration === "string") continue;
-      const specifier =
-        subpath === "."
-          ? packageJson.name
-          : `${packageJson.name}/${subpath.slice(2)}`;
+      const specifier = exportSpecifier(packageJson.name, subpath);
       const target = declaration.require ?? declaration.default;
       expect(consumerRequire.resolve(specifier)).toBe(
         join(packageDirectory, ...target.split("/")),

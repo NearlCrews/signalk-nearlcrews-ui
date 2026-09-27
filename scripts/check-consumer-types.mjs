@@ -24,6 +24,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { exportSpecifier } from "./lib/bundle-contract.mjs";
 import { createFederationShared } from "./lib/federation-share.mjs";
 import { parseNpmPackResult, runNpmPack } from "./lib/npm-pack.mjs";
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
@@ -109,8 +110,7 @@ try {
         ? declaration
         : (declaration.require ?? declaration.default);
     if (typeof target !== "string" || !/\.[cm]?js$/.test(target)) continue;
-    const specifier =
-      subpath === "." ? packageName : `${packageName}/${subpath.slice(2)}`;
+    const specifier = exportSpecifier(packageName, subpath);
     // Both sides pass through realpath: require.resolve returns the real
     // path, and on macOS the temporary workspace lives under /var, which is a
     // symlink to /private/var.

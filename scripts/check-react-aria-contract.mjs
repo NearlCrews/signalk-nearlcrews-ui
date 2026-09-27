@@ -1,10 +1,9 @@
-import { readFile } from "node:fs/promises";
-import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
+import { readJson, readPackageJson, repositoryPath } from "./lib/paths.mjs";
 import { assertReactAriaContract } from "./lib/react-aria-contract.mjs";
 
 const [manifest, packageLock] = await Promise.all([
   readPackageJson(),
-  readFile(repositoryPath("package-lock.json"), "utf8").then(JSON.parse),
+  readJson(repositoryPath("package-lock.json")),
 ]);
 const versions = assertReactAriaContract(manifest, packageLock);
 

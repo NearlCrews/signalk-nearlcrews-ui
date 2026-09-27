@@ -33,12 +33,8 @@ describe("per-file coverage contract", () => {
   it("accepts every covered source file at or above the floors", () => {
     const summary = {
       total: record(),
-      [resolve(repositoryRoot, "src/components/Button.tsx")]: record({
-        branches: COVERAGE_FLOORS.branches,
-        functions: COVERAGE_FLOORS.functions,
-        lines: COVERAGE_FLOORS.lines,
-        statements: COVERAGE_FLOORS.statements,
-      }),
+      [resolve(repositoryRoot, "src/components/Button.tsx")]:
+        record(COVERAGE_FLOORS),
       "src/utils/ref.ts": record(),
       "src/forms.ts": {
         branches: metric(0, 0),
@@ -56,12 +52,7 @@ describe("per-file coverage contract", () => {
     const summary = {
       total: record(),
       "src/utils/ref.ts": record(),
-      "bin/lib/panel-runtime.mjs": record({
-        branches: TOOLING_COVERAGE_FLOORS.branches,
-        functions: TOOLING_COVERAGE_FLOORS.functions,
-        lines: TOOLING_COVERAGE_FLOORS.lines,
-        statements: TOOLING_COVERAGE_FLOORS.statements,
-      }),
+      "bin/lib/panel-runtime.mjs": record(TOOLING_COVERAGE_FLOORS),
       [resolve(repositoryRoot, "scripts/lib/paths.mjs")]: record(),
     };
 

@@ -10,23 +10,24 @@ import { readdir, readFile } from "node:fs/promises";
 
 import { assertKnownOptions, readValues } from "../bin/lib/cli-arguments.mjs";
 import { repositoryPath } from "./lib/paths.mjs";
+import { CI_WORKFLOW_PATH } from "./lib/release-checks.mjs";
 import {
   hostedSnapshotVariants,
   missingSnapshotFiles,
   orphanSnapshotFiles,
+  PANEL_SNAPSHOT_DIRECTORY,
+  PANEL_SPEC,
 } from "./lib/snapshot-families.mjs";
+import { bulletList } from "./lib/text.mjs";
 
 const OPTIONS = ["--variant"];
 const argv = process.argv.slice(2);
 assertKnownOptions(argv, OPTIONS);
 
-const SPEC_PATH = repositoryPath("tests", "browser", "panel.spec.ts");
-const SNAPSHOT_DIRECTORY = `${SPEC_PATH}-snapshots`;
-
 const [specSource, presentFiles, ciWorkflow] = await Promise.all([
-  readFile(SPEC_PATH, "utf8"),
-  readdir(SNAPSHOT_DIRECTORY),
-  readFile(repositoryPath(".github", "workflows", "ci.yml"), "utf8"),
+  readFile(repositoryPath(PANEL_SPEC), "utf8"),
+  readdir(repositoryPath(PANEL_SNAPSHOT_DIRECTORY)),
+  readFile(repositoryPath(CI_WORKFLOW_PATH), "utf8"),
 ]);
 
 const explicitVariants = readValues(
@@ -50,9 +51,7 @@ const failures = variants.flatMap((variant) => [
 
 if (failures.length > 0) {
   throw new Error(
-    `Visual baseline families do not match the browser spec:\n${failures
-      .map((failure) => `- ${failure}`)
-      .join("\n")}`,
+    `Visual baseline families do not match the browser spec:\n${bulletList(failures)}`,
   );
 }
 

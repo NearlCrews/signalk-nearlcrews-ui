@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   collectRelativeSpecifiers,
   declarationPathFor,
-  describeSnapshotDifference,
   entryDeclarationFiles,
   reachableDeclarations,
   renderDeclarationSnapshot,
+  snapshotDifferences,
 } from "../../scripts/lib/declaration-graph.mjs";
 
 const files = new Map([
@@ -109,15 +109,15 @@ describe("declaration graph", () => {
           ? 'export type Tone = "info";\n'
           : readSource(file),
     );
-    expect(describeSnapshotDifference(before, after)).toEqual([
-      "utils/node.d.ts (added)",
-      "utils/tone.d.ts (changed)",
+    expect(snapshotDifferences(before, after)).toEqual([
+      { change: "added", file: "utils/node.d.ts" },
+      { change: "changed", file: "utils/tone.d.ts" },
     ]);
-    expect(describeSnapshotDifference(after, before)).toEqual([
-      "utils/node.d.ts (removed)",
-      "utils/tone.d.ts (changed)",
+    expect(snapshotDifferences(after, before)).toEqual([
+      { change: "removed", file: "utils/node.d.ts" },
+      { change: "changed", file: "utils/tone.d.ts" },
     ]);
-    expect(describeSnapshotDifference(before, before)).toEqual([]);
+    expect(snapshotDifferences(before, before)).toEqual([]);
   });
 
   it("names a file whose change sits below its first line", () => {
@@ -135,11 +135,9 @@ describe("declaration graph", () => {
         ].join("\n"),
       );
 
-    expect(
-      describeSnapshotDifference(render("info"), render("danger")),
-    ).toEqual(["overlays.d.ts (changed)"]);
-    expect(describeSnapshotDifference(render("info"), render("info"))).toEqual(
-      [],
-    );
+    expect(snapshotDifferences(render("info"), render("danger"))).toEqual([
+      { change: "changed", file: "overlays.d.ts" },
+    ]);
+    expect(snapshotDifferences(render("info"), render("info"))).toEqual([]);
   });
 });

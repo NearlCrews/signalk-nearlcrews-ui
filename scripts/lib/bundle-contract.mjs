@@ -1,6 +1,26 @@
 import { basename, extname } from "node:path";
 
 /**
+ * A React or React DOM module path inside a bundle's inputs. Both are host
+ * shares, so a bundle that lists one carries a React copy of its own.
+ */
+export const BUNDLED_REACT_MODULE = /node_modules[\\/]react(?:-dom)?[\\/]/;
+
+/** The string an exports-map conditions object gives `condition`, if any. */
+export function conditionTarget(declaration, condition) {
+  return declaration !== null &&
+    typeof declaration === "object" &&
+    typeof declaration[condition] === "string"
+    ? declaration[condition]
+    : undefined;
+}
+
+/** The specifier a consumer imports an exports-map subpath by. */
+export function exportSpecifier(packageName, subpath) {
+  return subpath === "." ? packageName : `${packageName}/${subpath.slice(2)}`;
+}
+
+/**
  * The published JavaScript entry points, as entry name to target, derived from
  * the exports map so no reader keeps its own list. Every check that asks which
  * entries the package ships asks here: a hand-kept copy is how the entry added
@@ -16,11 +36,7 @@ export function publicJavaScriptEntries(exportsField) {
     const importTarget =
       typeof declaration === "string"
         ? declaration
-        : declaration !== null &&
-            typeof declaration === "object" &&
-            typeof declaration.import === "string"
-          ? declaration.import
-          : undefined;
+        : conditionTarget(declaration, "import");
     if (importTarget === undefined || extname(importTarget) !== ".js") {
       continue;
     }

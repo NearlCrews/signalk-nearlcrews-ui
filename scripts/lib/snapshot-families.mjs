@@ -11,6 +11,12 @@
  */
 import { readScalarValues } from "./workflow-matrix.mjs";
 
+/** The browser spec every hosted screenshot comes from, from the repository root. */
+export const PANEL_SPEC = "tests/browser/panel.spec.ts";
+
+/** Where the Playwright snapshot path template files that spec's images. */
+export const PANEL_SNAPSHOT_DIRECTORY = `${PANEL_SPEC}-snapshots`;
+
 /** Matches the literal screenshot calls the browser spec makes. */
 const LITERAL_SNAPSHOT_CALL =
   /(?:toHaveScreenshot|withActiveSave)\(\s*(?:page,\s*)?["']([^"']+\.png)["']/g;
@@ -41,8 +47,8 @@ export function collectSnapshotNames(specSource) {
   if (cached !== undefined) return cached;
 
   const names = new Set();
-  for (const match of specSource.matchAll(LITERAL_SNAPSHOT_CALL)) {
-    if (match[1] !== undefined) names.add(match[1]);
+  for (const [, name] of specSource.matchAll(LITERAL_SNAPSHOT_CALL)) {
+    names.add(name);
   }
   // A spec that builds its names dynamically, or a renamed helper, would leave
   // every reader comparing an empty set and reporting a family as complete.

@@ -7,9 +7,12 @@ import {
   assertNoReactRuntime,
   assertVersionStamp,
 } from "../bin/lib/consumer-checks.mjs";
-import { publicJavaScriptEntries } from "./lib/bundle-contract.mjs";
+import {
+  BUNDLED_REACT_MODULE,
+  publicJavaScriptEntries,
+} from "./lib/bundle-contract.mjs";
 import { createFederationShared } from "./lib/federation-share.mjs";
-import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
+import { readJson, readPackageJson, repositoryPath } from "./lib/paths.mjs";
 
 const require = createRequire(import.meta.url);
 const {
@@ -57,20 +60,18 @@ if (JSON.stringify(federationEntry.shared) !== JSON.stringify(expectedShared)) {
 
 async function readJavaScript(directory) {
   const names = await readdir(directory);
-  const javascriptNames = names.filter((name) => name.endsWith(".js"));
-  const files = await Promise.all(
-    javascriptNames.map(async (name) => ({
-      name,
-      source: await readFile(join(directory, name), "utf8"),
-    })),
+  return Promise.all(
+    names
+      .filter((name) => name.endsWith(".js"))
+      .map(async (name) => ({
+        name,
+        source: await readFile(join(directory, name), "utf8"),
+      })),
   );
-  return files;
 }
 
 async function readStats(directory) {
-  const stats = JSON.parse(
-    await readFile(join(directory, "stats.json"), "utf8"),
-  );
+  const stats = await readJson(join(directory, "stats.json"));
   if (stats.errorsCount !== 0 || stats.warningsCount !== 0) {
     throw new Error(
       `Federation build reported ${stats.errorsCount} errors and ${stats.warningsCount} warnings.`,
@@ -86,16 +87,19 @@ function collectModuleNames(modules) {
   ]);
 }
 
-const classicDist = repositoryPath("fixtures", "federation", "classic", "dist");
-const esmDist = repositoryPath("fixtures", "federation", "esm", "dist");
-const classicFiles = await readJavaScript(classicDist);
-const esmFiles = await readJavaScript(esmDist);
-const classicStats = await readStats(classicDist);
-const esmStats = await readStats(esmDist);
-const classicRemote = classicFiles.find(
-  (file) => file.name === "remoteEntry.js",
-);
-const esmRemote = esmFiles.find((file) => file.name === "remoteEntry.js");
+/** One fixture build's scripts, stats, and remote entry, read together. */
+async function readFixture(format) {
+  const dist = repositoryPath("fixtures", "federation", format, "dist");
+  const [files, stats] = await Promise.all([
+    readJavaScript(dist),
+    readStats(dist),
+  ]);
+  const remote = files.find((file) => file.name === "remoteEntry.js");
+  return { files, format, remote, stats };
+}
+
+const fixtures = await Promise.all(["classic", "esm"].map(readFixture));
+const [{ remote: classicRemote }, { remote: esmRemote }] = fixtures;
 
 if (!classicRemote?.source.includes("signalk_nearlcrews_ui")) {
   throw new Error(
@@ -107,11 +111,9 @@ if (esmRemote === undefined || !ESM_EXPORT.test(esmRemote.source)) {
   throw new Error("ESM remoteEntry.js does not contain module exports.");
 }
 
-for (const [format, remote] of [
-  ["classic", classicRemote],
-  ["esm", esmRemote],
-]) {
-  if (!remote?.source.includes("./PluginConfigurationPanel")) {
+// Both remotes exist past the two checks above.
+for (const { format, remote } of fixtures) {
+  if (!remote.source.includes("./PluginConfigurationPanel")) {
     throw new Error(
       `${format} remoteEntry.js does not expose ./PluginConfigurationPanel.`,
     );
@@ -120,10 +122,7 @@ for (const [format, remote] of [
   assertConsumedShares(remote.source, expectedShared, parseRange);
 }
 
-for (const [format, files, stats] of [
-  ["classic", classicFiles, classicStats],
-  ["esm", esmFiles, esmStats],
-]) {
+for (const { files, format, stats } of fixtures) {
   const sources = files.map((file) => file.source);
   assertVersionStamp(sources, version);
   assertNoReactRuntime(sources.join("\n"), `The ${format} fixture`);
@@ -148,7 +147,7 @@ for (const [format, files, stats] of [
   }
 
   const bundledReactModules = moduleNames.filter((name) =>
-    /node_modules[\\/]react(?:-dom)?[\\/]/.test(name),
+    BUNDLED_REACT_MODULE.test(name),
   );
   const unexpectedReactModules = bundledReactModules.filter(
     (name) =>

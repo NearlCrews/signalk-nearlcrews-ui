@@ -4,19 +4,16 @@
  * that track an installed version, the CI cancellation rule the release gate
  * depends on, and the corpus each documentation gate reads.
  */
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
 import { repositoryPath } from "../../scripts/lib/paths.mjs";
 
-const WORKFLOW_NAMES = [
-  "ci.yml",
-  "external-docs-links.yml",
-  "host-contract.yml",
-  "npm-publish.yml",
-  "update-baselines.yml",
-];
+/** Read from the directory, so a new workflow is held to these rules too. */
+const WORKFLOW_NAMES = readdirSync(
+  repositoryPath(".github", "workflows"),
+).filter((name) => name.endsWith(".yml"));
 
 function readText(...parts) {
   return readFileSync(repositoryPath(...parts), "utf8");

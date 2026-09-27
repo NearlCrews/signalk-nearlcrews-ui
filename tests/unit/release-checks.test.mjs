@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   assertSuccessfulReleaseChecks,
+  CI_WORKFLOW_PATH,
+  CODEQL_WORKFLOW_PATH,
   fetchAllPages,
   hasMorePages,
-  parseCheckRunsPage,
-  parseWorkflowRunsPage,
+  parsePage,
   REQUIRED_RELEASE_CHECKS,
   resolveDistTag,
 } from "../../scripts/lib/release-checks.mjs";
@@ -13,8 +14,6 @@ import {
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const OTHER_SHA = "fedcba9876543210fedcba9876543210fedcba98";
 const REPOSITORY = "NearlCrews/signalk-nearlcrews-ui";
-const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
-const CODEQL_WORKFLOW_PATH = "dynamic/github-code-scanning/codeql";
 
 function workflowRun(id, path, overrides = {}) {
   return {
@@ -71,7 +70,6 @@ describe("release check parser", () => {
     const { checkRuns, workflowRuns } = successfulFixture();
     const first = REQUIRED_RELEASE_CHECKS[0];
     expect(first).toBeDefined();
-    if (first === undefined) return;
     checkRuns.push(
       checkRun(first, 100, 1, {
         conclusion: "failure",
@@ -93,14 +91,6 @@ describe("release check parser", () => {
     expect(pending).toBeDefined();
     expect(failed).toBeDefined();
     expect(wrongCommit).toBeDefined();
-    if (
-      missing === undefined ||
-      pending === undefined ||
-      failed === undefined ||
-      wrongCommit === undefined
-    ) {
-      return;
-    }
 
     const brokenChecks = checkRuns
       .filter((candidate) => candidate.name !== missing.name)
@@ -147,7 +137,6 @@ describe("release check parser", () => {
     const { checkRuns, workflowRuns } = successfulFixture();
     const requirement = REQUIRED_RELEASE_CHECKS[0];
     expect(requirement).toBeDefined();
-    if (requirement === undefined) return;
     checkRuns.push(
       checkRun(requirement, 100, 9_000, { conclusion: "failure" }),
     );
@@ -175,7 +164,6 @@ describe("release check parser", () => {
     const { checkRuns, workflowRuns } = successfulFixture();
     const requirement = REQUIRED_RELEASE_CHECKS[0];
     expect(requirement).toBeDefined();
-    if (requirement === undefined) return;
     workflowRuns.push(workflowRun(300, ".github/workflows/spoof.yml"));
     const spoofedChecks = checkRuns.map((candidate) =>
       candidate.name === requirement.name
@@ -196,7 +184,6 @@ describe("release check parser", () => {
     const { checkRuns, workflowRuns } = successfulFixture();
     const requirement = REQUIRED_RELEASE_CHECKS[0];
     expect(requirement).toBeDefined();
-    if (requirement === undefined) return;
     const spoofedChecks = checkRuns.map((candidate) =>
       candidate.name === requirement.name
         ? { ...candidate, app: { slug: "untrusted-app" } }
@@ -228,21 +215,29 @@ describe("release check parser", () => {
   it("validates paginated API response shapes", () => {
     const requirement = REQUIRED_RELEASE_CHECKS[0];
     expect(requirement).toBeDefined();
-    if (requirement === undefined) return;
     const candidateCheck = checkRun(requirement, 100, 1_000);
     const checkPage = { total_count: 1, check_runs: [candidateCheck] };
     const workflowPage = {
       total_count: 1,
       workflow_runs: [workflowRun(100, CI_WORKFLOW_PATH)],
     };
-    expect(parseCheckRunsPage(checkPage)).toEqual(checkPage);
-    expect(parseWorkflowRunsPage(workflowPage)).toEqual(workflowPage);
-    expect(() => parseCheckRunsPage({ check_runs: [] })).toThrow(
-      "GitHub returned an invalid check-runs response.",
+    expect(parsePage(checkPage, "check_runs", "check-runs")).toEqual(checkPage);
+    expect(parsePage(workflowPage, "workflow_runs", "workflow-runs")).toEqual(
+      workflowPage,
     );
-    expect(() => parseWorkflowRunsPage({ workflow_runs: [] })).toThrow(
-      "GitHub returned an invalid workflow-runs response.",
-    );
+    expect(() =>
+      parsePage({ check_runs: [] }, "check_runs", "check-runs"),
+    ).toThrow("GitHub returned an invalid check-runs response.");
+    expect(() =>
+      parsePage({ workflow_runs: [] }, "workflow_runs", "workflow-runs"),
+    ).toThrow("GitHub returned an invalid workflow-runs response.");
+    expect(() =>
+      parsePage(
+        { total_count: 1, workflow_runs: [] },
+        "check_runs",
+        "check-runs",
+      ),
+    ).toThrow("GitHub returned an invalid check-runs response.");
     expect(
       hasMorePages({
         collectedCount: 100,
@@ -286,7 +281,6 @@ describe("paged GitHub collections", () => {
         arrayKey: "check_runs",
         fetchPage: pagedFetch(pages),
         label: "check-runs",
-        parse: parseCheckRunsPage,
         perPage: 2,
         token: "test-token",
         url: "https://api.github.com/repos/owner/name/commits/sha/check-runs",
@@ -300,7 +294,6 @@ describe("paged GitHub collections", () => {
         arrayKey: "check_runs",
         fetchPage: pagedFetch([]),
         label: "check-runs",
-        parse: parseCheckRunsPage,
         token: "test-token",
         url: "https://api.github.com/repos/owner/name/commits/sha/check-runs",
       }),
@@ -313,7 +306,6 @@ describe("paged GitHub collections", () => {
         fetchPage: pagedFetch([full, full, full]),
         label: "check-runs",
         maximumPages: 2,
-        parse: parseCheckRunsPage,
         perPage: 1,
         token: "test-token",
         url: "https://api.github.com/repos/owner/name/commits/sha/check-runs",

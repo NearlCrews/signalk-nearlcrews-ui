@@ -7,12 +7,17 @@ import { readdirSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { repositoryPath } from "../../scripts/lib/paths.mjs";
-import { REQUIRED_RELEASE_CHECKS } from "../../scripts/lib/release-checks.mjs";
+import { readPackageJson, repositoryPath } from "../../scripts/lib/paths.mjs";
+import {
+  CI_WORKFLOW_PATH,
+  REQUIRED_RELEASE_CHECKS,
+} from "../../scripts/lib/release-checks.mjs";
 import {
   hostedSnapshotVariants,
   missingSnapshotFiles,
   orphanSnapshotFiles,
+  PANEL_SNAPSHOT_DIRECTORY,
+  PANEL_SPEC,
 } from "../../scripts/lib/snapshot-families.mjs";
 import {
   expandMatrixName,
@@ -21,33 +26,35 @@ import {
   readScalarValues,
 } from "../../scripts/lib/workflow-matrix.mjs";
 
-const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 const ciWorkflow = readFileSync(repositoryPath(CI_WORKFLOW_PATH), "utf8");
 const refreshWorkflow = readFileSync(
   repositoryPath(".github", "workflows", "update-baselines.yml"),
   "utf8",
 );
-const PANEL_SPEC_PATH = repositoryPath("tests", "browser", "panel.spec.ts");
-const panelSpec = readFileSync(PANEL_SPEC_PATH, "utf8");
-const SNAPSHOT_DIRECTORY = `${PANEL_SPEC_PATH}-snapshots`;
-const packageJson = JSON.parse(
-  readFileSync(repositoryPath("package.json"), "utf8"),
-);
+const panelSpec = readFileSync(repositoryPath(PANEL_SPEC), "utf8");
+const packageJson = await readPackageJson();
+
+/** The devEngines Node floors, as bare versions. */
+const nodeFloors = packageJson.devEngines.runtime.version
+  .split("||")
+  .map((part) => part.trim().replace(/^\^/, ""));
 
 const nodeMatrix = readInlineList(ciWorkflow, "node");
 const architectures = readScalarValues(ciWorkflow, "architecture");
 const packageLabels = readScalarValues(ciWorkflow, "label");
+/** The values a CI job name expands over, by matrix key. */
+const matrixValues = {
+  architecture: architectures,
+  label: packageLabels,
+  node: nodeMatrix,
+};
 const ciJobNames = readJobNames(ciWorkflow).flatMap((name) => {
-  if (name.includes("matrix.node")) {
-    return expandMatrixName(name, "node", nodeMatrix);
-  }
-  if (name.includes("matrix.architecture")) {
-    return expandMatrixName(name, "architecture", architectures);
-  }
-  if (name.includes("matrix.label")) {
-    return expandMatrixName(name, "label", packageLabels);
-  }
-  return [name];
+  const key = Object.keys(matrixValues).find((candidate) =>
+    name.includes(`matrix.${candidate}`),
+  );
+  return key === undefined
+    ? [name]
+    : expandMatrixName(name, key, matrixValues[key]);
 });
 const requiredCiChecks = REQUIRED_RELEASE_CHECKS.filter(
   (check) => check.workflowPath === CI_WORKFLOW_PATH,
@@ -70,11 +77,8 @@ describe("CI matrix and required release checks", () => {
   });
 
   it("pins the devEngines Node floors in the matrix", () => {
-    const floors = packageJson.devEngines.runtime.version
-      .split("||")
-      .map((part) => part.trim().replace(/^\^/, ""));
-    expect(floors).toHaveLength(nodeMatrix.length);
-    for (const floor of floors) {
+    expect(nodeFloors).toHaveLength(nodeMatrix.length);
+    for (const floor of nodeFloors) {
       const [major, minor, patch] = floor.split(".");
       const pinned = nodeMatrix.includes(floor);
       const floating =
@@ -94,9 +98,6 @@ describe("CI matrix and required release checks", () => {
    * otherwise.
    */
   it("sets up Node at a declared floor or a floating major everywhere", () => {
-    const floors = packageJson.devEngines.runtime.version
-      .split("||")
-      .map((part) => part.trim().replace(/^\^/, ""));
     const versions = readScalarValues(ciWorkflow, "node-version").filter(
       (version) => !version.includes("${{"),
     );
@@ -104,7 +105,7 @@ describe("CI matrix and required release checks", () => {
     for (const version of versions) {
       const floating = /^\d+$/.test(version);
       expect(
-        floating || floors.includes(version),
+        floating || nodeFloors.includes(version),
         `node-version ${version} is neither a devEngines floor nor a floating major`,
       ).toBe(true);
     }
@@ -140,7 +141,7 @@ describe("hosted visual-baseline families", () => {
   });
 
   it("has a committed baseline for every screenshot in every family", () => {
-    const present = readdirSync(SNAPSHOT_DIRECTORY);
+    const present = readdirSync(repositoryPath(PANEL_SNAPSHOT_DIRECTORY));
     for (const variant of ciVariants) {
       expect(
         missingSnapshotFiles(panelSpec, variant, present),
@@ -150,11 +151,11 @@ describe("hosted visual-baseline families", () => {
   });
 
   it("keeps no baseline a renamed or deleted screenshot left behind", () => {
-    const present = readdirSync(SNAPSHOT_DIRECTORY);
+    const present = readdirSync(repositoryPath(PANEL_SNAPSHOT_DIRECTORY));
     for (const variant of ciVariants) {
       expect(
         orphanSnapshotFiles(panelSpec, variant, present),
-        `Delete the ${variant} images no screenshot in ${PANEL_SPEC_PATH} asks for.`,
+        `Delete the ${variant} images no screenshot in ${PANEL_SPEC} asks for.`,
       ).toEqual([]);
     }
   });

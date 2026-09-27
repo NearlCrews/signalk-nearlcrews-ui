@@ -1,7 +1,6 @@
+import { PACKAGE_NAME } from "../../bin/lib/consumer-checks.mjs";
 import { localDestinations } from "./docs-links.mjs";
 import { escapeRegExp } from "./regexp.mjs";
-
-export const PACKAGE_NAME = "signalk-nearlcrews-ui";
 
 const PACKAGE_DESCRIPTION =
   "Accessible, theme-aware React primitives for Signal K administration panels.";
@@ -109,6 +108,15 @@ function requireSameMembers(actual, expected, label) {
 }
 
 /**
+ * Whether npm treats the manifest as private. Absent or exactly false is
+ * public, not "not the boolean true": npm treats any truthy value here as
+ * private, a JSON string included.
+ */
+export function isPrivate(manifest) {
+  return manifest.private !== undefined && manifest.private !== false;
+}
+
+/**
  * The Signal K App Store README view rewrites image targets and nothing else,
  * so every other relative destination is dead there, whether it points at a
  * Markdown file, at LICENSE, or at a policy file under .github. Every
@@ -163,9 +171,7 @@ function validateIdentity(packageJson) {
     throw new Error(`Unexpected package name: ${packageJson.name}`);
   }
 
-  // Absent or exactly false, not "not the boolean true": npm treats any truthy
-  // value here as private, a JSON string included.
-  if (packageJson.private !== undefined && packageJson.private !== false) {
+  if (isPrivate(packageJson)) {
     throw new Error(
       "The package must remain publishable as a public npm dependency.",
     );
@@ -381,7 +387,7 @@ function validateVersionAgreement({
   ];
   if (
     versionMatches.length !== 1 ||
-    versionMatches[0]?.[1] !== packageJson.version
+    versionMatches[0][1] !== packageJson.version
   ) {
     throw new Error(
       `src/version.ts does not match package version ${packageJson.version}.`,
@@ -432,7 +438,7 @@ function validateReadmeShape(packageJson, readme) {
   const whatsNewHeadings = [...readme.matchAll(/^## What's new in (.+)$/gm)];
   if (
     whatsNewHeadings.length !== 1 ||
-    whatsNewHeadings[0]?.[1] !== packageJson.version
+    whatsNewHeadings[0][1] !== packageJson.version
   ) {
     throw new Error(
       `README.md must contain exactly one What's new in ${packageJson.version} heading.`,

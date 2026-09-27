@@ -1,5 +1,15 @@
 const DEFAULT_ATTEMPTS = 3;
 
+/** Whether `value` is a peer dependency map: an object of range strings. */
+export function isRangeMap(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.values(value).every((range) => typeof range === "string")
+  );
+}
+
 function describeRegistryResult(value) {
   if (Array.isArray(value)) {
     return `array(length=${value.length})`;
@@ -40,12 +50,7 @@ function normalizeRegistryResult(parsed, contractPackage) {
     result === null ||
     typeof result !== "object" ||
     typeof result.version !== "string" ||
-    result.peerDependencies === null ||
-    typeof result.peerDependencies !== "object" ||
-    Array.isArray(result.peerDependencies) ||
-    Object.values(result.peerDependencies).some(
-      (range) => typeof range !== "string",
-    )
+    !isRangeMap(result.peerDependencies)
   ) {
     throw new Error(
       `The npm registry returned ${describeRegistryResult(parsed)} for ${contractPackage}; expected version and peerDependencies fields.`,

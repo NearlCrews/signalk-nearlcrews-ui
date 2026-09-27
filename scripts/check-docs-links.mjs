@@ -31,19 +31,18 @@ async function describeTarget(targetFile) {
   }
 }
 
-const anchorCache = new Map();
-// Many links point at the same handful of documents, and an uncached check
-// paid one stat round trip per link rather than per target.
-const targetCache = new Map();
-
-async function cachedTarget(targetFile) {
-  let target = targetCache.get(targetFile);
-  if (target === undefined) {
-    target = await describeTarget(targetFile);
-    targetCache.set(targetFile, target);
-  }
-  return target;
+/**
+ * Answers `compute(key)` once per key. Many links point at the same handful of
+ * documents, and an uncached check paid one stat round trip, and one parse of
+ * the target's headings, per link rather than per target.
+ */
+async function cached(cache, key, compute) {
+  if (!cache.has(key)) cache.set(key, await compute(key));
+  return cache.get(key);
 }
+
+const targetCache = new Map();
+const anchorCache = new Map();
 
 const failures = [];
 const files = await collectFiles(repositoryRoot, {
@@ -59,20 +58,29 @@ if (files.length === 0) {
 // Read together rather than one at a time: the checking loop below is ordered
 // so its failures read in file order, but the reads themselves are not.
 const sources = await Promise.all(files.map((file) => readFile(file, "utf8")));
+const sourceByFile = new Map(
+  files.map((file, index) => [file, sources[index]]),
+);
 
-for (const [index, sourceFile] of files.entries()) {
-  const markdown = sources[index] ?? "";
+/** A link target's headings, from the walk's own read unless it lies outside the walk. */
+async function readAnchors(markdownFile) {
+  return markdownAnchors(
+    sourceByFile.get(markdownFile) ?? (await readFile(markdownFile, "utf8")),
+  );
+}
+
+for (const [sourceFile, markdown] of sourceByFile) {
   const sourceName = relative(repositoryRoot, sourceFile);
 
   for (const { destination, line } of localDestinations(markdown)) {
     const [pathWithQuery, rawFragment] = destination.split("#", 2);
-    const pathPart = pathWithQuery?.split("?", 1)[0] ?? "";
+    const [pathPart] = pathWithQuery.split("?", 1);
     const targetFile =
       pathPart.length === 0
         ? sourceFile
         : resolve(dirname(sourceFile), decodeURIComponent(pathPart));
 
-    const target = await cachedTarget(targetFile);
+    const target = await cached(targetCache, targetFile, describeTarget);
     if (target === "missing") {
       failures.push(
         `${sourceName}:${line}: missing local target ${destination}`,
@@ -94,12 +102,7 @@ for (const [index, sourceFile] of files.entries()) {
       continue;
     }
 
-    let anchors = anchorCache.get(targetFile);
-    if (anchors === undefined) {
-      anchors = markdownAnchors(await readFile(targetFile, "utf8"));
-      anchorCache.set(targetFile, anchors);
-    }
-
+    const anchors = await cached(anchorCache, targetFile, readAnchors);
     const fragment = decodeURIComponent(rawFragment).toLowerCase();
     if (!anchors.has(fragment)) {
       failures.push(

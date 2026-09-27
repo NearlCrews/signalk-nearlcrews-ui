@@ -17,10 +17,11 @@ import { join, relative, sep } from "node:path";
 import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";
 
 import {
-  describeSnapshotDifference,
+  DECLARATION_FILE,
   entryDeclarationFiles,
   reachableDeclarations,
   renderDeclarationSnapshot,
+  snapshotDifferences,
 } from "./lib/declaration-graph.mjs";
 import {
   collectFiles,
@@ -28,6 +29,7 @@ import {
   readPackageJson,
   repositoryPath,
 } from "./lib/paths.mjs";
+import { bulletList } from "./lib/text.mjs";
 
 const OPTIONS = ["--update"];
 const argv = process.argv.slice(2);
@@ -35,8 +37,6 @@ assertKnownOptions(argv, OPTIONS);
 
 const baselinePath = repositoryPath("tests", "declarations.baseline.txt");
 const shouldUpdate = readFlag(argv, "--update");
-
-const DECLARATION_FILE = /\.d\.[cm]?ts$/;
 
 // The graph walk and the snapshot ask for the same files, so each one is read
 // from disk once rather than once per reader.
@@ -84,25 +84,25 @@ if (shouldUpdate) {
   }
 
   if (baseline !== snapshot) {
+    const differences = snapshotDifferences(baseline, snapshot);
     // A file the baseline held that is still emitted but no longer reachable
     // left the public contract without disappearing: a private change.
-    const differences = describeSnapshotDifference(baseline, snapshot).map(
-      (difference) => {
-        const file = difference.replace(/ \(removed\)$/, "");
-        return difference.endsWith(" (removed)") && emittedFiles.has(file)
-          ? `${file} (left the public contract: still emitted, no longer reachable from an entry)`
-          : difference;
-      },
+    const leftContract = ({ change, file }) =>
+      change === "removed" && emittedFiles.has(file);
+    const publicChange = differences.some(
+      (difference) => !leftContract(difference),
     );
-    const publicDifferences = differences.filter(
-      (difference) => !difference.includes("left the public contract"),
+    const lines = differences.map((difference) =>
+      leftContract(difference)
+        ? `${difference.file} (left the public contract: still emitted, no longer reachable from an entry)`
+        : `${difference.file} (${difference.change})`,
     );
     throw new Error(
       "Emitted public declarations differ from the committed baseline.\n" +
-        (publicDifferences.length > 0
+        (publicChange
           ? "These files are reachable from the package entry points, so this is a\npublic API change:\n"
           : "No reachable file changed; the baseline only stops covering files that\nbecame private:\n") +
-        `${differences.map((difference) => `- ${difference}`).join("\n")}\n` +
+        `${bulletList(lines)}\n` +
         `Private declaration files (${String(privateCount)} not reachable from any entry) are not\n` +
         "part of the contract and are not compared. Classify any public change\n" +
         "under the semantic-versioning policy, record it in CHANGELOG.md and\n" +

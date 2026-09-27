@@ -9,6 +9,8 @@
  */
 import { dirname, posix } from "node:path";
 
+import { conditionTarget } from "./bundle-contract.mjs";
+
 const SPECIFIER_PATTERNS = [
   /\bfrom\s+["']([^"']+)["']/g,
   /\bimport\s+["']([^"']+)["']/g,
@@ -20,34 +22,33 @@ const SPECIFIER_PATTERNS = [
 export function collectRelativeSpecifiers(source) {
   const specifiers = [];
   for (const pattern of SPECIFIER_PATTERNS) {
-    for (const match of source.matchAll(pattern)) {
-      const specifier = match[1];
-      if (specifier?.startsWith(".")) specifiers.push(specifier);
+    for (const [, specifier] of source.matchAll(pattern)) {
+      if (specifier.startsWith(".")) specifiers.push(specifier);
     }
   }
   return specifiers;
 }
 
+/** An emitted declaration file of any module kind. */
+export const DECLARATION_FILE = /\.d\.[cm]?ts$/;
+
+/** A JavaScript extension, with the module-kind letter its declaration keeps. */
+const JAVASCRIPT_EXTENSION = /\.([cm]?)js$/;
+
 /** Maps an emitted JavaScript specifier onto the declaration file beside it. */
 export function declarationPathFor(fromFile, specifier) {
   const target = posix.join(dirname(fromFile), specifier);
-  if (/\.d\.[cm]?ts$/.test(target)) return target;
-  if (target.endsWith(".mjs")) return target.replace(/\.mjs$/, ".d.mts");
-  if (target.endsWith(".cjs")) return target.replace(/\.cjs$/, ".d.cts");
-  if (target.endsWith(".js")) return target.replace(/\.js$/, ".d.ts");
-  return `${target}.d.ts`;
+  if (DECLARATION_FILE.test(target)) return target;
+  return JAVASCRIPT_EXTENSION.test(target)
+    ? target.replace(JAVASCRIPT_EXTENSION, ".d.$1ts")
+    : `${target}.d.ts`;
 }
 
 /** Declaration entry files named by the exports map, relative to dist. */
 export function entryDeclarationFiles(exportsMap) {
   const entries = new Set();
   for (const declaration of Object.values(exportsMap)) {
-    const types =
-      declaration !== null &&
-      typeof declaration === "object" &&
-      typeof declaration.types === "string"
-        ? declaration.types
-        : undefined;
+    const types = conditionTarget(declaration, "types");
     if (types === undefined) continue;
     const match = /^\.\/dist\/(.+)$/.exec(types);
     if (match === null) {
@@ -95,18 +96,19 @@ export function renderDeclarationSnapshot(files, readSource) {
     .join("\n");
 }
 
+const SECTION_HEADER = /^=== (.+) ===$/;
+
 function parseSnapshotSections(snapshot) {
   // Split on the header lines rather than matching each body with one regular
   // expression: a multiline pattern ends a lazy body at the first line break,
   // which silently truncated every section to its first line and hid changes
   // below it.
   const sections = new Map();
-  const header = /^=== (.+) ===$/;
   let file = null;
   let body = [];
   for (const line of snapshot.split("\n")) {
-    const match = header.exec(line);
-    if (match?.[1] !== undefined) {
+    const match = SECTION_HEADER.exec(line);
+    if (match !== null) {
       if (file !== null) sections.set(file, body.join("\n"));
       file = match[1];
       body = [];
@@ -118,16 +120,19 @@ function parseSnapshotSections(snapshot) {
   return sections;
 }
 
-/** Names the reachable files that differ between the baseline and now. */
-export function describeSnapshotDifference(baseline, snapshot) {
+/**
+ * The reachable files that differ between the baseline and now, sorted, each
+ * with its `change`: "added", "removed", or "changed".
+ */
+export function snapshotDifferences(baseline, snapshot) {
   const before = parseSnapshotSections(baseline);
   const after = parseSnapshotSections(snapshot);
   const differences = [];
   for (const file of [...new Set([...before.keys(), ...after.keys()])].sort()) {
-    if (!before.has(file)) differences.push(`${file} (added)`);
-    else if (!after.has(file)) differences.push(`${file} (removed)`);
+    if (!before.has(file)) differences.push({ change: "added", file });
+    else if (!after.has(file)) differences.push({ change: "removed", file });
     else if (before.get(file) !== after.get(file)) {
-      differences.push(`${file} (changed)`);
+      differences.push({ change: "changed", file });
     }
   }
   return differences;

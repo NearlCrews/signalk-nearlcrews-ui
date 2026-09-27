@@ -1,5 +1,7 @@
 import { isAbsolute, relative, resolve } from "node:path";
 
+import { bulletList } from "./text.mjs";
+
 export const COVERAGE_FLOORS = Object.freeze({
   branches: 65,
   functions: 85,
@@ -170,10 +172,9 @@ export function assertPerFileCoverage(
       if (metric.total === 0) {
         continue;
       }
-      const percentage = metric.pct;
-      if (percentage < floor) {
+      if (metric.pct < floor) {
         failures.push(
-          `${relativeName} ${metricName} ${percentage}% is below ${floor}%`,
+          `${relativeName} ${metricName} ${metric.pct}% is below ${floor}%`,
         );
       }
     }
@@ -181,9 +182,7 @@ export function assertPerFileCoverage(
 
   if (failures.length > 0) {
     throw new Error(
-      `Per-file coverage floors failed:\n${failures
-        .map((failure) => `- ${failure}`)
-        .join("\n")}`,
+      `Per-file coverage floors failed:\n${bulletList(failures)}`,
     );
   }
 

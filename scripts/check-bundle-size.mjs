@@ -1,12 +1,15 @@
 import { readFile } from "node:fs/promises";
-import { gzipSync } from "node:zlib";
 import { build } from "esbuild";
 
 import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";
-import { assertNoReactRuntime } from "../bin/lib/consumer-checks.mjs";
+import {
+  assertNoReactRuntime,
+  gzipBytesOf,
+} from "../bin/lib/consumer-checks.mjs";
 import {
   assertPublicBundleBudgets,
   assertPublicCssExport,
+  BUNDLED_REACT_MODULE,
 } from "./lib/bundle-contract.mjs";
 import { SIGNALK_HOST_SHARED_MODULES } from "./lib/federation-share.mjs";
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
@@ -61,35 +64,43 @@ const entryBudgets = Object.fromEntries(
 
 const publicEntries = assertPublicBundleBudgets(manifest.exports, entryBudgets);
 
+/** How every bundle is built, the stylesheet included, as a consumer would ship it. */
+const BUILD_OPTIONS = Object.freeze({
+  bundle: true,
+  metafile: true,
+  minify: true,
+  platform: "browser",
+  target: "es2022",
+  write: false,
+});
+
+/**
+ * The one output file of a bundle. A sidecar output, a stylesheet from a
+ * future asset import for example, would leave its bytes out of the
+ * measurement and out of the React scan.
+ */
+function onlyOutputFile(result, label) {
+  if (result.outputFiles.length !== 1) {
+    throw new Error(
+      `esbuild produced ${String(result.outputFiles.length)} output files for the ${label} bundle; expected exactly one.`,
+    );
+  }
+  return result.outputFiles[0];
+}
+
 /** One measured entry, gzipped and checked against everything it must satisfy. */
 async function measureEntry(entry, entryTarget) {
   const result = await build({
+    ...BUILD_OPTIONS,
     entryPoints: [repositoryPath(entryTarget)],
-    bundle: true,
-    format: "esm",
-    minify: true,
-    platform: "browser",
-    target: "es2022",
-    treeShaking: true,
-    write: false,
-    metafile: true,
     external: hostExternals,
+    format: "esm",
+    treeShaking: true,
   });
-
-  // A sidecar output, a stylesheet from a future asset import for example,
-  // would leave its bytes out of the measurement and out of the React scan.
-  if (result.outputFiles.length !== 1) {
-    throw new Error(
-      `esbuild produced ${String(result.outputFiles.length)} output files for the ${entry} bundle; expected exactly one.`,
-    );
-  }
-  const [outputFile] = result.outputFiles;
-  if (outputFile === undefined) {
-    throw new Error(`esbuild did not produce the ${entry} bundle.`);
-  }
+  const outputFile = onlyOutputFile(result, entry);
 
   const bundledReactInputs = Object.keys(result.metafile.inputs).filter(
-    (input) => /node_modules[\\/]react(?:-dom)?[\\/]/.test(input),
+    (input) => BUNDLED_REACT_MODULE.test(input),
   );
   if (bundledReactInputs.length > 0) {
     throw new Error(
@@ -99,7 +110,23 @@ async function measureEntry(entry, entryTarget) {
 
   assertNoReactRuntime(outputFile.text, `The ${entry} entry`);
 
-  return gzipSync(outputFile.contents, { level: 9 }).byteLength;
+  return gzipBytesOf([outputFile.contents]);
+}
+
+const tableRows = [];
+
+/**
+ * Holds one measurement to its budget and, outside `--table`, to the recorded
+ * size, then adds its row to the table a release prints.
+ */
+function checkMeasurement(entry, recorded, gzipBytes) {
+  if (gzipBytes > recorded.budgetBytes) {
+    throw new Error(
+      `${entry} is ${String(gzipBytes)} gzip bytes, above the ${String(recorded.budgetBytes)} byte budget.`,
+    );
+  }
+  if (!printTable) assertRecordedSize(entry, recorded.gzipBytes, gzipBytes);
+  tableRows.push({ budgetBytes: budgetFor(gzipBytes), entry, gzipBytes });
 }
 
 // The public token stylesheet must stay framework-neutral. Bundling the public
@@ -124,44 +151,17 @@ const [measuredEntries, tokensResult] = await Promise.all([
       gzipBytes: await measureEntry(entry, entryTarget),
     })),
   ),
-  build({
-    entryPoints: [repositoryPath(tokensTarget)],
-    bundle: true,
-    minify: true,
-    platform: "browser",
-    target: "es2022",
-    write: false,
-    metafile: true,
-  }),
+  build({ ...BUILD_OPTIONS, entryPoints: [repositoryPath(tokensTarget)] }),
 ]);
 
-const tableRows = [];
+// assertPublicBundleBudgets matched every public entry to a budget row, so each
+// one has a recorded size.
 for (const { entry, gzipBytes } of measuredEntries) {
-  const recorded = recordedSizes.get(entry);
-  if (recorded === undefined) {
-    throw new Error(`${SIZE_TABLE_DOCUMENT} records no size for ${entry}.`);
-  }
-
-  if (gzipBytes > recorded.budgetBytes) {
-    throw new Error(
-      `${entry} is ${String(gzipBytes)} gzip bytes, above the ${String(recorded.budgetBytes)} byte budget.`,
-    );
-  }
-  if (!printTable) assertRecordedSize(entry, recorded.gzipBytes, gzipBytes);
-
-  tableRows.push({ budgetBytes: budgetFor(gzipBytes), entry, gzipBytes });
+  checkMeasurement(entry, recordedSizes.get(entry), gzipBytes);
   process.stdout.write(`${entry} bundle is ${String(gzipBytes)} gzip bytes.\n`);
 }
 
-if (tokensResult.outputFiles.length !== 1) {
-  throw new Error(
-    `esbuild produced ${String(tokensResult.outputFiles.length)} output files for the tokens.css bundle; expected exactly one.`,
-  );
-}
-const [tokensOutputFile] = tokensResult.outputFiles;
-if (tokensOutputFile === undefined) {
-  throw new Error("esbuild did not produce the tokens.css bundle.");
-}
+const tokensOutputFile = onlyOutputFile(tokensResult, TOKENS_CSS_ENTRY);
 
 const tokensScriptInputs = Object.keys(tokensResult.metafile.inputs).filter(
   (input) => /(?:^|[\\/])react(?:-dom)?(?:[\\/]|$)|\.[cm]?[jt]sx?$/.test(input),
@@ -172,28 +172,8 @@ if (tokensScriptInputs.length > 0) {
   );
 }
 
-const tokensGzipBytes = gzipSync(tokensOutputFile.contents, {
-  level: 9,
-}).byteLength;
-
-if (tokensGzipBytes > recordedTokens.budgetBytes) {
-  throw new Error(
-    `tokens.css is ${String(tokensGzipBytes)} gzip bytes, above the ${String(recordedTokens.budgetBytes)} byte budget.`,
-  );
-}
-if (!printTable) {
-  assertRecordedSize(
-    TOKENS_CSS_ENTRY,
-    recordedTokens.gzipBytes,
-    tokensGzipBytes,
-  );
-}
-
-tableRows.push({
-  budgetBytes: budgetFor(tokensGzipBytes),
-  entry: TOKENS_CSS_ENTRY,
-  gzipBytes: tokensGzipBytes,
-});
+const tokensGzipBytes = gzipBytesOf([tokensOutputFile.contents]);
+checkMeasurement(TOKENS_CSS_ENTRY, recordedTokens, tokensGzipBytes);
 process.stdout.write(`tokens.css is ${String(tokensGzipBytes)} gzip bytes.\n`);
 
 if (printTable) {

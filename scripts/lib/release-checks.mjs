@@ -1,5 +1,13 @@
-const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
-const CODEQL_WORKFLOW_PATH = "dynamic/github-code-scanning/codeql";
+import { bulletList } from "./text.mjs";
+
+export const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
+export const CODEQL_WORKFLOW_PATH = "dynamic/github-code-scanning/codeql";
+
+/** A full Git commit SHA, the only form a release commit is named by. */
+export const COMMIT_SHA = /^[0-9a-f]{40}$/i;
+
+/** An owner and repository, as GITHUB_REPOSITORY names them. */
+export const REPOSITORY_NAME = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
 
 /**
  * The checks a release commit must carry, each with the workflow that is
@@ -98,9 +106,14 @@ function newerWorkflowRun(left, right) {
   return left.run_attempt >= right.run_attempt ? left : right;
 }
 
+/** A run's status and conclusion, as the failure lines print them. */
+function stateOf({ conclusion, status }) {
+  return `${status}/${conclusion ?? "none"}`;
+}
+
 function describeCheck(check) {
   if (check === undefined) return "missing";
-  return `${check.status}/${check.conclusion ?? "none"} from ${check.app.slug}`;
+  return `${stateOf(check)} from ${check.app.slug}`;
 }
 
 export function assertSuccessfulReleaseChecks(
@@ -116,20 +129,20 @@ export function assertSuccessfulReleaseChecks(
   if (!Array.isArray(workflowRuns)) {
     throw new Error("GitHub returned an invalid workflow-runs collection.");
   }
-  if (typeof expectedSha !== "string" || !/^[0-9a-f]{40}$/i.test(expectedSha)) {
+  if (typeof expectedSha !== "string" || !COMMIT_SHA.test(expectedSha)) {
     throw new Error("A full Git commit SHA is required.");
   }
-  if (
-    typeof repository !== "string" ||
-    !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository)
-  ) {
+  if (typeof repository !== "string" || !REPOSITORY_NAME.test(repository)) {
     throw new Error("A valid owner and repository is required.");
   }
 
   const checks = checkRuns.map(requireCheckRun);
   const workflows = workflowRuns.map(requireWorkflowRun);
   const newestRuns = new Map();
-  for (const { workflowPath } of requiredChecks) {
+  const workflowPaths = new Set(
+    requiredChecks.map(({ workflowPath }) => workflowPath),
+  );
+  for (const workflowPath of workflowPaths) {
     const candidates = workflows.filter(
       (run) => run.head_sha === expectedSha && run.path === workflowPath,
     );
@@ -152,7 +165,7 @@ export function assertSuccessfulReleaseChecks(
     }
     if (workflow.status !== "completed" || workflow.conclusion !== "success") {
       failures.push(
-        `${name}: newest ${workflowPath} run ${workflow.id} is ${workflow.status}/${workflow.conclusion ?? "none"}`,
+        `${name}: newest ${workflowPath} run ${workflow.id} is ${stateOf(workflow)}`,
       );
       continue;
     }
@@ -181,15 +194,13 @@ export function assertSuccessfulReleaseChecks(
 
   if (failures.length > 0) {
     throw new Error(
-      `Release commit ${expectedSha} lacks required successful checks from the newest trusted workflow runs:\n${failures
-        .map((failure) => `- ${failure}`)
-        .join("\n")}`,
+      `Release commit ${expectedSha} lacks required successful checks from the newest trusted workflow runs:\n${bulletList(failures)}`,
     );
   }
 }
 
 /** A paged GitHub list response: a total plus the array named by `arrayKey`. */
-function parsePage(value, arrayKey, label) {
+export function parsePage(value, arrayKey, label) {
   if (
     value === null ||
     typeof value !== "object" ||
@@ -199,14 +210,6 @@ function parsePage(value, arrayKey, label) {
     throw new Error(`GitHub returned an invalid ${label} response.`);
   }
   return value;
-}
-
-export function parseCheckRunsPage(value) {
-  return parsePage(value, "check_runs", "check-runs");
-}
-
-export function parseWorkflowRunsPage(value) {
-  return parsePage(value, "workflow_runs", "workflow-runs");
 }
 
 const STABLE_VERSION = /^(\d+)\.(\d+)\.(\d+)$/;
@@ -268,7 +271,6 @@ const GITHUB_MAXIMUM_PAGES = 20;
 export async function fetchAllPages({
   url,
   searchParams = {},
-  parse,
   arrayKey,
   token,
   label,
@@ -301,7 +303,7 @@ export async function fetchAllPages({
       );
     }
 
-    const result = parse(await response.json());
+    const result = parsePage(await response.json(), arrayKey, label);
     expectedTotal ??= result.total_count;
     const items = result[arrayKey];
     collected.push(...items);

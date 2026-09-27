@@ -5,13 +5,18 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
+import { PACKAGE_NAME } from "../bin/lib/consumer-checks.mjs";
 import { parseNpmPackResult, runNpmPack } from "./lib/npm-pack.mjs";
 import {
-  PACKAGE_NAME,
   validatePackageMetadata,
   validatePackedFiles,
 } from "./lib/package-contract.mjs";
-import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
+import {
+  packageBinaryEntry,
+  readJson,
+  readPackageJson,
+  repositoryPath,
+} from "./lib/paths.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -28,7 +33,7 @@ const [
   designContract,
 ] = await Promise.all([
   readPackageJson(),
-  readRepositoryFile("package-lock.json").then(JSON.parse),
+  readJson(repositoryPath("package-lock.json")),
   readRepositoryFile("src", "version.ts"),
   readRepositoryFile("CHANGELOG.md"),
   readRepositoryFile("README.md"),
@@ -65,11 +70,14 @@ try {
   const files = new Set(packResult.files.map((file) => file.path));
   validatePackedFiles(files, packageJson.exports, packageJson.bin);
 
-  for (const file of files) {
-    if (!file.endsWith(".map")) continue;
-
-    // The emitted file on disk, which npm copies into the tarball unchanged.
-    const sourceMap = JSON.parse(await readRepositoryFile(file));
+  // The emitted files on disk, which npm copies into the tarball unchanged.
+  // They are read together; the checks below still report in file order.
+  const sourceMapFiles = [...files].filter((file) => file.endsWith(".map"));
+  const sourceMaps = await Promise.all(
+    sourceMapFiles.map((file) => readJson(repositoryPath(file))),
+  );
+  for (const [index, file] of sourceMapFiles.entries()) {
+    const sourceMap = sourceMaps[index];
     if (
       !Array.isArray(sourceMap.sources) ||
       !Array.isArray(sourceMap.sourcesContent) ||
@@ -86,21 +94,10 @@ try {
     `Packed artifact contains ${String(files.size)} files and ${String(packResult.size)} bytes.\n`,
   );
 
-  const attwPackageJsonPath = require.resolve(
-    "@arethetypeswrong/cli/package.json",
+  const attwEntryPoint = packageBinaryEntry(
+    require.resolve("@arethetypeswrong/cli/package.json"),
+    "attw",
   );
-  const attwPackageJson = JSON.parse(
-    await readFile(attwPackageJsonPath, "utf8"),
-  );
-  const attwBin = attwPackageJson.bin?.attw;
-
-  if (typeof attwBin !== "string" || attwBin.length === 0) {
-    throw new Error(
-      "@arethetypeswrong/cli package.json does not declare bin.attw.",
-    );
-  }
-
-  const attwEntryPoint = resolve(dirname(attwPackageJsonPath), attwBin);
 
   // publint packs by spawning a bare `npm`, which resolves to whatever npm the
   // PATH offers. A runner whose bundled npm predates this package's

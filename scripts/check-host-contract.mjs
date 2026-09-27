@@ -23,16 +23,14 @@ import { readFile, writeFile } from "node:fs/promises";
 import { subset } from "semver";
 
 import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";
-import {
-  createFederationShared,
-  SIGNALK_HOST_SHARED_MODULES,
-} from "./lib/federation-share.mjs";
+import { SIGNALK_HOST_SHARED_MODULES } from "./lib/federation-share.mjs";
 import {
   contractsMatch,
   fetchRegistryContract,
   formatContractDiff,
+  isRangeMap,
 } from "./lib/host-contract.mjs";
-import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
+import { readJson, readPackageJson, repositoryPath } from "./lib/paths.mjs";
 import { escapeRegExp } from "./lib/regexp.mjs";
 
 const OPTIONS = ["--check-registry", "--update"];
@@ -48,19 +46,17 @@ if (shouldUpdate && shouldCheckRegistry) {
   throw new Error("Choose either --update or --check-registry, not both.");
 }
 
-/** Both the registry result and the committed baseline carry this shape. */
+/**
+ * The shape the registry reader builds, which a committed baseline read back
+ * from disk has to carry too.
+ */
 function assertContractShape(value, source) {
   if (
     value === null ||
     typeof value !== "object" ||
     typeof value.package !== "string" ||
     typeof value.version !== "string" ||
-    value.peerDependencies === null ||
-    typeof value.peerDependencies !== "object" ||
-    Array.isArray(value.peerDependencies) ||
-    Object.values(value.peerDependencies).some(
-      (range) => typeof range !== "string",
-    )
+    !isRangeMap(value.peerDependencies)
   ) {
     throw new Error(
       `${source} does not describe ${contractPackage} peer dependencies. Run \`npm run host-contract:update\`.`,
@@ -85,7 +81,7 @@ async function refreshBaseline() {
 
 async function readBaseline() {
   try {
-    return JSON.parse(await readFile(baselinePath, "utf8"));
+    return await readJson(baselinePath);
   } catch {
     throw new Error(
       "Missing or unreadable host contract baseline. Run `npm run host-contract:update`.",
@@ -107,9 +103,6 @@ const [
 ]);
 
 assertContractShape(committedBaseline, "The committed host contract baseline");
-if (registryContract !== undefined) {
-  assertContractShape(registryContract, "The registry host contract");
-}
 
 if (
   registryContract !== undefined &&
@@ -126,23 +119,17 @@ if (baseline.package !== contractPackage) {
 }
 
 const hostRanges = baseline.peerDependencies;
-const FEDERATION_SHARED = createFederationShared(peerDependencies);
-const sharedNames = Object.keys(FEDERATION_SHARED).sort();
-const guaranteedHostShareNames = [...SIGNALK_HOST_SHARED_MODULES].sort();
+// The federation share map is built from this list, so the remotes share
+// exactly these modules.
+const sharedNames = [...SIGNALK_HOST_SHARED_MODULES].sort();
 const peerNames = Object.keys(peerDependencies).sort();
-
-if (sharedNames.join() !== guaranteedHostShareNames.join()) {
-  throw new Error(
-    `The federation remotes share ${sharedNames.join(", ")}, but the Signal K Admin loader guarantees ${guaranteedHostShareNames.join(", ")}.`,
-  );
-}
 
 // Every peer dependency is a runtime implementation this library expects its
 // host to provide. Keep that set equal to the explicit host-share allowlist so
 // a new peer cannot silently escape the range and federation checks below.
-if (peerNames.join() !== guaranteedHostShareNames.join()) {
+if (peerNames.join() !== sharedNames.join()) {
   throw new Error(
-    `The peer dependencies are ${peerNames.join(", ")}, but the Signal K Admin loader guarantees ${guaranteedHostShareNames.join(", ")}. Review any new peer against the host loader before changing this allowlist.`,
+    `The peer dependencies are ${peerNames.join(", ")}, but the Signal K Admin loader guarantees ${sharedNames.join(", ")}. Review any new peer against the host loader before changing this allowlist.`,
   );
 }
 
@@ -161,13 +148,6 @@ for (const name of sharedNames) {
       `The ${name} peer range ${ownRange} accepts versions outside the host contract ${hostRange}. ` +
         "Narrow the peer range, or refresh the baseline with `npm run host-contract:update` " +
         "once the Signal K Admin host widens the contract.",
-    );
-  }
-
-  const share = FEDERATION_SHARED[name];
-  if (share.singleton !== true || share.import !== false) {
-    throw new Error(
-      `The ${name} share must be a singleton with no fallback implementation in the remote.`,
     );
   }
 }

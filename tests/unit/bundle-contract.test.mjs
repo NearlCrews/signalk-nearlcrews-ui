@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   assertPublicBundleBudgets,
   assertPublicCssExport,
+  exportSpecifier,
 } from "../../scripts/lib/bundle-contract.mjs";
 
 const exportsField = {
@@ -33,6 +34,15 @@ describe("public bundle contract", () => {
       }),
     ).toThrow(
       "Bundle budgets cover forms, index, overlays, but public JavaScript exports are forms, index.",
+    );
+  });
+
+  it("names each export by the specifier a consumer imports it with", () => {
+    expect(exportSpecifier("signalk-nearlcrews-ui", ".")).toBe(
+      "signalk-nearlcrews-ui",
+    );
+    expect(exportSpecifier("signalk-nearlcrews-ui", "./forms")).toBe(
+      "signalk-nearlcrews-ui/forms",
     );
   });
 

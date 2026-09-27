@@ -11,7 +11,7 @@ const ENTRY = join(SOURCE_ROOT, "format.ts");
 /** Every specifier the module imports or re-exports from, bare ones included. */
 function specifiers(source) {
   return [...source.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(
-    (match) => match[1] ?? "",
+    ([, specifier]) => specifier,
   );
 }
 
@@ -38,21 +38,20 @@ async function resolveModule(fromFile, specifier) {
 async function walkGraph(entry) {
   const visited = new Set();
   const packages = new Set();
-  const queue = [entry];
+  // Each module travels with the source resolveModule already read for it.
+  const queue = [{ file: entry, source: await readFile(entry, "utf8") }];
 
   while (queue.length > 0) {
-    const file = queue.pop();
-    if (file === undefined || visited.has(file)) continue;
+    const { file, source } = queue.pop();
+    if (visited.has(file)) continue;
     visited.add(file);
 
-    const source = await readFile(file, "utf8");
     for (const specifier of specifiers(source)) {
       if (!specifier.startsWith(".")) {
         packages.add(specifier);
         continue;
       }
-      const resolved = await resolveModule(file, specifier);
-      queue.push(resolved.file);
+      queue.push(await resolveModule(file, specifier));
     }
   }
 

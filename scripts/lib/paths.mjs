@@ -50,8 +50,12 @@ export async function collectFiles(directory, options) {
   return found.flat();
 }
 
-export async function readPackageJson() {
-  return JSON.parse(await readFile(repositoryPath("package.json"), "utf8"));
+export async function readJson(path) {
+  return JSON.parse(await readFile(path, "utf8"));
+}
+
+export function readPackageJson() {
+  return readJson(repositoryPath("package.json"));
 }
 
 /**
