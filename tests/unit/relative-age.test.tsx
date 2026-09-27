@@ -15,6 +15,8 @@ const NARROW_EN = { ...RELATIVE_AGE_NARROW, ...EN } as const;
 const DAY_MS = 86_400_000;
 /** The instant every clock-driven spec measures from. */
 const NOW = Date.UTC(2026, 8, 5, 12, 0, 0);
+/** Finite, and past the 8.64e15 millisecond range a Date can hold. */
+const OUT_OF_DATE_RANGE_MS = 1e16;
 
 describe("formatRelativeAge defaults", () => {
   it("reads as words below a day and counts in numbers above one", () => {
@@ -147,6 +149,9 @@ describe("formatRelativeAgeSince", () => {
     expect(formatRelativeAgeSince(null, NOW)).toBe("Unknown");
     expect(formatRelativeAgeSince(undefined, NOW)).toBe("Unknown");
     expect(formatRelativeAgeSince("not a timestamp", NOW)).toBe("Unknown");
+    // Finite, but past the range a Date can hold, so it names no moment.
+    expect(formatRelativeAgeSince(-OUT_OF_DATE_RANGE_MS, NOW)).toBe("Unknown");
+    expect(formatRelativeAgeSince(OUT_OF_DATE_RANGE_MS, NOW)).toBe("Unknown");
   });
 
   it("treats a timestamp slightly ahead of now as now", () => {
@@ -306,6 +311,39 @@ describe("RelativeAge", () => {
     const stamp = screen.getByText("never");
     expect(stamp.tagName).toBe("SPAN");
     expect(stamp).not.toHaveAttribute("datetime");
+  });
+
+  it("renders a timestamp past the Date range like an unreadable one", () => {
+    render(
+      <>
+        <RelativeAge
+          since={OUT_OF_DATE_RANGE_MS}
+          options={{ fallback: "never" }}
+          data-testid="default"
+        />
+        <RelativeAge
+          as="time"
+          since={-OUT_OF_DATE_RANGE_MS}
+          options={{ fallback: "never" }}
+          data-testid="time"
+        />
+        <RelativeAge
+          as="span"
+          since={OUT_OF_DATE_RANGE_MS}
+          options={{ fallback: "never" }}
+          data-testid="span"
+        />
+      </>,
+    );
+
+    // A finite number past the Date range names no moment: no element can
+    // stamp it, and the words fall back exactly as for an unparsable string.
+    for (const id of ["default", "time", "span"]) {
+      const age = screen.getByTestId(id);
+      expect(age.tagName).toBe("SPAN");
+      expect(age).toHaveTextContent("never");
+      expect(age).not.toHaveAttribute("datetime");
+    }
   });
 
   it("declines an explicit time element it cannot stamp", () => {

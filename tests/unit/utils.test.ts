@@ -16,6 +16,8 @@ import {
   resolveDescriptionId,
 } from "../../src/utils/aria.js";
 import { classNames } from "../../src/utils/class-names.js";
+import { timestampToMs } from "../../src/utils/format-relative-age.js";
+import { resolveFreshness } from "../../src/utils/freshness.js";
 import {
   DEFAULT_DISMISS_LABEL,
   DEFAULT_LOADING_LABEL,
@@ -101,6 +103,27 @@ describe("joinIdReferences", () => {
   it("returns undefined when nothing usable remains", () => {
     expect(joinIdReferences()).toBeUndefined();
     expect(joinIdReferences(undefined, "")).toBeUndefined();
+  });
+});
+
+describe("timestampToMs", () => {
+  it("reads a number only inside the range a Date can hold", () => {
+    expect(timestampToMs(8.64e15)).toBe(8.64e15);
+    expect(timestampToMs(-8.64e15)).toBe(-8.64e15);
+    // Compared, not round-tripped through a Date, so nothing is truncated.
+    expect(timestampToMs(1_700_000_000_000.5)).toBe(1_700_000_000_000.5);
+    expect(timestampToMs(8.64e15 + 1)).toBeNaN();
+    expect(timestampToMs(-1e16)).toBeNaN();
+  });
+
+  it("gives a sample past the Date range no age rather than a huge one", () => {
+    const nowMs = Date.UTC(2026, 0, 1);
+    for (const sample of [1e16, -1e16]) {
+      expect(resolveFreshness(sample, nowMs, 10_000)).toEqual({
+        ageMs: undefined,
+        stale: false,
+      });
+    }
   });
 });
 

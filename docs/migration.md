@@ -82,6 +82,7 @@ Before moving panel content into a `CollapsibleSection`, read the `mountStrategy
 
 No consuming code requires modification. Check the behavior below.
 
+- A numeric timestamp outside the `Date` range now reads as unknown in `RelativeAge`, `formatRelativeAgeSince`, and `resolveFreshness`, the same as an unparsable string.
 - The emitted declarations change without changing any entry point: `components/Disclosure.d.ts`, `components/overlay-placement.d.ts`, and `utils/announcement.d.ts` differ, as the changelog describes. No import resolves differently.
 
 ## Changes in 0.12.0

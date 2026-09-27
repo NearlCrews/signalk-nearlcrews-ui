@@ -174,12 +174,20 @@ export function formatRelativeAge(
 /** A point in time: epoch milliseconds, a `Date`, or a parseable timestamp string. */
 export type RelativeAgeTimestamp = number | string | Date;
 
+/** The largest epoch millisecond a Date can hold, in either direction. */
+const MAX_DATE_MS = 8.64e15;
+
 /** Epoch milliseconds for a timestamp, or NaN when it cannot be read. */
 export function timestampToMs(
   timestamp: RelativeAgeTimestamp | null | undefined,
 ): number {
   if (timestamp === null || timestamp === undefined) return Number.NaN;
-  if (typeof timestamp === "number") return timestamp;
+  if (typeof timestamp === "number") {
+    // Finite yet past the Date range, a number names no moment. Compared
+    // rather than round-tripped through a Date, which would truncate a
+    // fractional millisecond inside the range.
+    return Math.abs(timestamp) <= MAX_DATE_MS ? timestamp : Number.NaN;
+  }
   if (typeof timestamp === "string") return Date.parse(timestamp);
   return timestamp.getTime();
 }
