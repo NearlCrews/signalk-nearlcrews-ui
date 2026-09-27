@@ -66,14 +66,16 @@ export function entryDeclarationFiles(exportsMap) {
  */
 export function reachableDeclarations(entryFiles, readSource) {
   const reachable = new Set();
-  const missing = [];
+  // A Set in first-seen order, because several emitted files can refer to the
+  // same missing one and the report names each file once.
+  const missing = new Set();
   const queue = [...entryFiles];
   while (queue.length > 0) {
     const file = queue.shift();
-    if (reachable.has(file)) continue;
+    if (reachable.has(file) || missing.has(file)) continue;
     const source = readSource(file);
     if (source === undefined) {
-      missing.push(file);
+      missing.add(file);
       continue;
     }
     reachable.add(file);
@@ -82,9 +84,9 @@ export function reachableDeclarations(entryFiles, readSource) {
       if (!reachable.has(target)) queue.push(target);
     }
   }
-  if (missing.length > 0) {
+  if (missing.size > 0) {
     throw new Error(
-      `Declaration graph refers to files that were not emitted: ${missing.join(", ")}.`,
+      `Declaration graph refers to files that were not emitted: ${[...missing].join(", ")}.`,
     );
   }
   return [...reachable].sort();

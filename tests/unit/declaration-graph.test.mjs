@@ -86,6 +86,22 @@ describe("declaration graph", () => {
     ]);
   });
 
+  it("names a missing file once however many emitted files refer to it", () => {
+    const sources = new Map([
+      [
+        "index.d.ts",
+        'export * from "./a.js";\nexport * from "./b.js";\nexport * from "./gone.js";\n',
+      ],
+      ["a.d.ts", 'export * from "./gone.js";\nexport * from "./lost.js";\n'],
+      ["b.d.ts", 'export * from "./gone.js";\nexport * from "./lost.js";\n'],
+    ]);
+    expect(() =>
+      reachableDeclarations(["index.d.ts"], (file) => sources.get(file)),
+    ).toThrow(
+      "Declaration graph refers to files that were not emitted: gone.d.ts, lost.d.ts.",
+    );
+  });
+
   it("reports a referenced file that was not emitted", () => {
     const broken = new Map(files);
     broken.delete("utils/node.d.ts");
