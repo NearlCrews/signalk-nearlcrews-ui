@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { PACKAGE_NAME } from "../../bin/lib/consumer-checks.mjs";
 import { parseNpmPackResult, runNpmPack } from "../../scripts/lib/npm-pack.mjs";
 
-const PACKAGE_NAME = "signalk-nearlcrews-ui";
 const PACK_RESULT = {
   filename: "signalk-nearlcrews-ui-0.5.0.tgz",
   files: [{ path: "dist/index.js" }],
@@ -40,10 +40,7 @@ describe("npm pack JSON compatibility", () => {
 });
 
 describe("npm executable resolution", () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
+  // tests/setup.ts restores every stubbed environment variable after each test.
   it("requires the package script npm executable", () => {
     vi.stubEnv("npm_execpath", undefined);
 

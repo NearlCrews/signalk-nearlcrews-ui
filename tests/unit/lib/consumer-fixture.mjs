@@ -28,6 +28,8 @@ import { repositoryPath } from "../../../scripts/lib/paths.mjs";
 
 export const manifest = createRequire(import.meta.url)("../../../package.json");
 const CLI = repositoryPath("bin", "snui-check-consumer.mjs");
+/** Where every consumer workspace's built remote entry sits, from its root. */
+const REMOTE_ENTRY = "public/remoteEntry.js";
 export const SHARED_NAMES = ["react", "react-dom"];
 export const FEDERATION_REQUEST = "signalk-nearlcrews-ui/federation";
 
@@ -106,7 +108,7 @@ export function createConsumer({
     }),
   );
 
-  const remoteDirectory = join(root, "public");
+  const remoteDirectory = join(root, dirname(REMOTE_ENTRY));
   mkdirSync(remoteDirectory);
   for (const [assetName, source] of Object.entries(assets)) {
     writeFileSync(join(remoteDirectory, assetName), source);
@@ -132,4 +134,9 @@ export function createConsumer({
 
 export function runCli(...args) {
   return spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8" });
+}
+
+/** Runs the check against a workspace's built remote, with any further options. */
+export function checkConsumer(root, ...args) {
+  return runCli("--root", root, "--remote", REMOTE_ENTRY, ...args);
 }

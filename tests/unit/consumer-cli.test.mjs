@@ -6,6 +6,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { gzipBytesOf } from "../../bin/lib/consumer-checks.mjs";
 import {
   CHUNK,
+  checkConsumer,
   createConsumer,
   FEDERATION_REQUEST,
   manifest,
@@ -49,14 +50,7 @@ describe("snui-check-consumer", () => {
       link: ["webpack"],
     });
 
-    const result = runCli(
-      "--root",
-      root,
-      "--remote",
-      "public/remoteEntry.js",
-      "--baseline",
-      "size-baseline.json",
-    );
+    const result = checkConsumer(root, "--baseline", "size-baseline.json");
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain(
@@ -81,11 +75,8 @@ describe("snui-check-consumer", () => {
       configName: join("build", "webpack.config.cjs"),
     });
 
-    const result = runCli(
-      "--root",
+    const result = checkConsumer(
       root,
-      "--remote",
-      "public/remoteEntry.js",
       "--webpack-config",
       join("build", "webpack.config.cjs"),
     );
@@ -116,7 +107,7 @@ describe("snui-check-consumer", () => {
   it("checks the built remote alone when the consumer ships no configuration", () => {
     const root = createConsumer();
 
-    const result = runCli("--root", root, "--remote", "public/remoteEntry.js");
+    const result = checkConsumer(root);
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).not.toContain("Webpack configuration");
@@ -129,7 +120,7 @@ describe("snui-check-consumer", () => {
       ),
     });
 
-    const result = runCli("--root", root, "--remote", "public/remoteEntry.js");
+    const result = checkConsumer(root);
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(

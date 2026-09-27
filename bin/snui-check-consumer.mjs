@@ -34,6 +34,7 @@ import {
   assertKnownOptions,
   formatCount,
   joinNames,
+  readFlag,
   readOption,
   readValues,
 } from "./lib/cli-arguments.mjs";
@@ -46,6 +47,7 @@ import {
   assertSizeBaseline,
   assertVersionStamp,
   gzipBytesOf,
+  PACKAGE_NAME,
 } from "./lib/consumer-checks.mjs";
 import {
   assertMarkupIncludes,
@@ -53,8 +55,6 @@ import {
   COMPATIBILITY_NOTICE_MARKER,
   renderPanelRemote,
 } from "./lib/panel-runtime.mjs";
-
-const PACKAGE_NAME = "signalk-nearlcrews-ui";
 
 const USAGE =
   "Usage: snui-check-consumer --root <consumerDir> --remote <builtRemoteEntry> [--asset <name>] [--baseline <json>] [--webpack-config <path>] [--runtime --expose <module>]. --root resolves against the working directory, and every other path resolves against --root.";
@@ -79,6 +79,12 @@ const OPTIONS = Object.freeze([
   "--webpack-config",
   ...RUNTIME_OPTIONS,
 ]);
+
+/** The JavaScript files of a remote, which the stamp and runtime scans read. */
+const SCRIPT_FILE = /\.[cm]?js$/;
+
+/** Every file a remote that owns its output directory is made of. */
+const REMOTE_ASSET_FILE = /\.(?:[cm]?js|css)$/;
 
 function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
@@ -157,9 +163,9 @@ async function main() {
   if (rootOption === undefined || remoteOption === undefined) {
     throw new Error(USAGE);
   }
-  const runtime = argv.includes("--runtime");
+  const runtime = readFlag(argv, "--runtime");
   if (!runtime) {
-    const stray = RUNTIME_OPTIONS.filter((option) => argv.includes(option));
+    const stray = RUNTIME_OPTIONS.filter((option) => readFlag(argv, option));
     if (stray.length > 0) {
       throw new Error(`${joinNames(stray)} need --runtime.`);
     }
@@ -190,10 +196,10 @@ async function main() {
     namedAssets.length > 0
       ? [...new Set([entryName, ...namedAssets])]
       : readdirSync(remoteDirectory).filter((name) =>
-          /\.(?:[cm]?js|css)$/.test(name),
+          REMOTE_ASSET_FILE.test(name),
         );
   const scripts = assetNames
-    .filter((name) => /\.[cm]?js$/.test(name))
+    .filter((name) => SCRIPT_FILE.test(name))
     .map((name) => ({
       name,
       source: readFileSync(join(remoteDirectory, name), "utf8"),
@@ -211,11 +217,12 @@ async function main() {
 
   // The installed package's own share map is the published one for this version.
   const { shared } = consumerRequire(`${PACKAGE_NAME}/federation`);
-  assertConsumedShares(
-    readFileSync(remoteEntry, "utf8"),
-    shared,
-    readParseRange(consumerRequire),
-  );
+  // The scripts above already hold the entry whenever it has a script
+  // extension; only an entry without one is read here.
+  const entrySource =
+    scripts.find(({ name }) => name === entryName)?.source ??
+    readFileSync(remoteEntry, "utf8");
+  assertConsumedShares(entrySource, shared, readParseRange(consumerRequire));
 
   const webpackConfigPath =
     webpackConfigOption === undefined
@@ -280,7 +287,7 @@ async function main() {
       props: readProps(argv),
       react,
       reactDom,
-      renderCompatibilityNotice: !argv.includes("--no-compatibility-render"),
+      renderCompatibilityNotice: !readFlag(argv, "--no-compatibility-render"),
       renderToStaticMarkup,
     });
 

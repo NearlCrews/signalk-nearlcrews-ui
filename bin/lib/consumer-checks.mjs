@@ -5,6 +5,11 @@
  */
 import { gzipSync } from "node:zlib";
 
+import { formatCount } from "./cli-arguments.mjs";
+
+/** The package whose installed release every check measures the consumer against. */
+export const PACKAGE_NAME = "signalk-nearlcrews-ui";
+
 /**
  * A bare version: three numeric parts, at most one prerelease suffix, and at
  * most one build suffix, with no range operator. The release policy publishes
@@ -29,7 +34,7 @@ export const REACT_RUNTIME_MARKERS = Object.freeze([
 ]);
 
 /** The attribute every PanelRoot stamps with the package version it renders. */
-const VERSION_STAMP_ATTRIBUTE = "data-snui-version";
+export const VERSION_STAMP_ATTRIBUTE = "data-snui-version";
 
 const VERSION_STAMP_PATTERNS = [
   // JSX prop literal after minification: "data-snui-version":"0.9.0"
@@ -45,7 +50,7 @@ const VERSION_STAMP_PATTERNS = [
 function assertExactVersion(version, source) {
   if (typeof version !== "string" || !EXACT_VERSION.test(version)) {
     throw new Error(
-      `signalk-nearlcrews-ui in ${source} must be pinned to an exact version such as 0.9.0, got ${String(version)}. A prerelease such as 0.11.0-rc.1 is exact too; a range is not. The package ships breaking changes in minor releases, so a range would let an unreviewed upgrade reach the panel.`,
+      `${PACKAGE_NAME} in ${source} must be pinned to an exact version such as 0.9.0, got ${String(version)}. A prerelease such as 0.11.0-rc.1 is exact too; a range is not. The package ships breaking changes in minor releases, so a range would let an unreviewed upgrade reach the panel.`,
     );
   }
   return version;
@@ -57,18 +62,18 @@ function assertExactVersion(version, source) {
  */
 export function assertExactPin(consumerManifest, installedManifest) {
   const pinned =
-    consumerManifest.devDependencies?.["signalk-nearlcrews-ui"] ??
-    consumerManifest.dependencies?.["signalk-nearlcrews-ui"];
+    consumerManifest.devDependencies?.[PACKAGE_NAME] ??
+    consumerManifest.dependencies?.[PACKAGE_NAME];
   if (pinned === undefined) {
     throw new Error(
-      "package.json does not declare signalk-nearlcrews-ui in devDependencies or dependencies.",
+      `package.json does not declare ${PACKAGE_NAME} in devDependencies or dependencies.`,
     );
   }
   assertExactVersion(pinned, "package.json");
   const installed = installedManifest?.version;
   if (installed !== pinned) {
     throw new Error(
-      `package.json pins signalk-nearlcrews-ui ${pinned}, but node_modules/signalk-nearlcrews-ui is ${String(installed)}. Run npm ci or update the pin.`,
+      `package.json pins ${PACKAGE_NAME} ${pinned}, but node_modules/${PACKAGE_NAME} is ${String(installed)}. Run npm ci or update the pin.`,
     );
   }
   return pinned;
@@ -94,7 +99,7 @@ export function assertVersionStamp(sources, expectedVersion) {
   const combined = sources.join("\n");
   if (!combined.includes(VERSION_STAMP_ATTRIBUTE)) {
     throw new Error(
-      `The built remote does not contain ${VERSION_STAMP_ATTRIBUTE}, so it did not bundle signalk-nearlcrews-ui.`,
+      `The built remote does not contain ${VERSION_STAMP_ATTRIBUTE}, so it did not bundle ${PACKAGE_NAME}.`,
     );
   }
   const stamps = findVersionStamps(combined);
@@ -114,10 +119,17 @@ export function assertVersionStamp(sources, expectedVersion) {
     }
     return;
   }
-  const unexpected = [...stamps].filter((stamp) => stamp !== expectedVersion);
-  if (unexpected.length > 0 || !stamps.has(expectedVersion)) {
+  assertOnlyVersionStamp(stamps, expectedVersion, "The built remote");
+}
+
+/**
+ * Asserts a non-empty set of found stamps holds the expected version and no
+ * other. `subject` names what carries them, for the message.
+ */
+export function assertOnlyVersionStamp(stamps, expectedVersion, subject) {
+  if ([...stamps].some((stamp) => stamp !== expectedVersion)) {
     throw new Error(
-      `The built remote stamps ${VERSION_STAMP_ATTRIBUTE} with ${[...stamps].join(", ")}; expected exactly ${expectedVersion}.`,
+      `${subject} stamps ${VERSION_STAMP_ATTRIBUTE} with ${[...stamps].join(", ")}; expected exactly ${expectedVersion}.`,
     );
   }
 }
@@ -135,23 +147,26 @@ export const DEVELOPMENT_JSX_MARKERS = Object.freeze([
  */
 export function assertProductionJsxRuntime(files, label = "The built remote") {
   for (const { name, source } of files) {
-    for (const marker of DEVELOPMENT_JSX_MARKERS) {
-      if (source.includes(marker)) {
-        throw new Error(
-          `${label} uses the React development JSX runtime: ${name} contains ${marker}. Build the panel with the automatic runtime in production mode.`,
-        );
-      }
+    const marker = firstMarkerIn(source, DEVELOPMENT_JSX_MARKERS);
+    if (marker !== undefined) {
+      throw new Error(
+        `${label} uses the React development JSX runtime: ${name} contains ${marker}. Build the panel with the automatic runtime in production mode.`,
+      );
     }
   }
 }
 
 /** Asserts no React runtime was bundled into the remote. */
 export function assertNoReactRuntime(source, label = "The built remote") {
-  for (const marker of REACT_RUNTIME_MARKERS) {
-    if (source.includes(marker)) {
-      throw new Error(`${label} bundled a React runtime marker: ${marker}.`);
-    }
+  const marker = firstMarkerIn(source, REACT_RUNTIME_MARKERS);
+  if (marker !== undefined) {
+    throw new Error(`${label} bundled a React runtime marker: ${marker}.`);
   }
+}
+
+/** The first of `markers`, in list order, that `source` contains. */
+function firstMarkerIn(source, markers) {
+  return markers.find((marker) => source.includes(marker));
 }
 
 /**
@@ -253,11 +268,6 @@ export function gzipBytesOf(buffers) {
   );
 }
 
-/** A byte count with the word the count needs. */
-function byteCount(bytes) {
-  return `${bytes} ${bytes === 1 ? "byte" : "bytes"}`;
-}
-
 /**
  * The growth over the baseline as a percentage, at the shortest precision that
  * still reads as more than the allowance. A build one byte over a 5% limit is
@@ -299,7 +309,7 @@ export function assertSizeBaseline(gzipBytes, baseline) {
     );
     const stale =
       gzipBytes < floor
-        ? `, and ${byteCount(baseline.gzipBytes - gzipBytes)} below it: record ${gzipBytes} so the allowance is measured from the current build`
+        ? `, and ${formatCount(baseline.gzipBytes - gzipBytes, "byte")} below it: record ${gzipBytes} so the allowance is measured from the current build`
         : "";
     return `${gzipBytes} gzip bytes, within ${baseline.maximumIncreasePercent}% of the ${baseline.gzipBytes}-byte baseline${stale}`;
   }
@@ -307,7 +317,7 @@ export function assertSizeBaseline(gzipBytes, baseline) {
   const ceiling = baseline.approvedCeilingGzipBytes;
   if (!Number.isInteger(ceiling)) {
     throw new Error(
-      `The remote is ${gzipBytes} gzip bytes, ${increase}% above the ${baseline.gzipBytes}-byte baseline and over the ${baseline.maximumIncreasePercent}% limit, with no approved ceiling. The limit is ${byteCount(limit)}, so the remote is ${byteCount(gzipBytes - limit)} over it.`,
+      `The remote is ${gzipBytes} gzip bytes, ${increase}% above the ${baseline.gzipBytes}-byte baseline and over the ${baseline.maximumIncreasePercent}% limit, with no approved ceiling. The limit is ${formatCount(limit, "byte")}, so the remote is ${formatCount(gzipBytes - limit, "byte")} over it.`,
     );
   }
   if (gzipBytes > ceiling) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { PACKAGE_NAME } from "../../bin/lib/consumer-checks.mjs";
 import {
   assertRecordedSize,
   budgetFor,
@@ -7,8 +8,6 @@ import {
   importPathFor,
   parseSizeTable,
 } from "../../scripts/lib/size-table.mjs";
-
-const PACKAGE_NAME = "signalk-nearlcrews-ui";
 
 function tableFor(rows) {
   return ["# Sizes", "", formatSizeTable(PACKAGE_NAME, rows), ""].join("\n");

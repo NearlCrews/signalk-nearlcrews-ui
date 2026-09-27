@@ -17,6 +17,12 @@
  */
 import vm from "node:vm";
 
+import {
+  assertOnlyVersionStamp,
+  PACKAGE_NAME,
+  VERSION_STAMP_ATTRIBUTE,
+} from "./consumer-checks.mjs";
+
 /**
  * Globals Node and the browser both provide, passed through unchanged. These
  * are real implementations rather than stubs: a bundle built for a browser
@@ -263,11 +269,11 @@ async function loadPanelModule({
   bundles,
   containerName,
   context,
-  entryName = "remoteEntry.js",
+  entryName,
   exposedModule,
   react,
   reactDom,
-  timeoutMs = DEFAULT_TIMEOUT_MS,
+  timeoutMs,
 }) {
   const remoteEntry = bundles.find(({ name }) => name === entryName);
   if (remoteEntry === undefined) {
@@ -358,15 +364,10 @@ export function assertMarkupVersionStamp(markup, expectedVersion) {
   const stamps = markupVersionStamps(markup);
   if (stamps.size === 0) {
     throw new Error(
-      `The rendered panel carries no data-snui-version stamp, so it rendered no PanelRoot of signalk-nearlcrews-ui ${expectedVersion}.`,
+      `The rendered panel carries no ${VERSION_STAMP_ATTRIBUTE} stamp, so it rendered no PanelRoot of ${PACKAGE_NAME} ${expectedVersion}.`,
     );
   }
-  const unexpected = [...stamps].filter((stamp) => stamp !== expectedVersion);
-  if (unexpected.length > 0) {
-    throw new Error(
-      `The rendered panel stamps data-snui-version with ${[...stamps].join(", ")}; expected exactly ${expectedVersion}.`,
-    );
-  }
+  assertOnlyVersionStamp(stamps, expectedVersion, "The rendered panel");
 }
 
 /** Asserts every expected string appears in the rendered markup. */
@@ -414,7 +415,7 @@ function failureOf(cause) {
 export async function renderPanelRemote({
   bundles,
   containerName,
-  entryName,
+  entryName = "remoteEntry.js",
   exposedModule,
   props,
   react,

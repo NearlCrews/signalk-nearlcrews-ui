@@ -1,19 +1,24 @@
 import vm from "node:vm";
 
+import * as React from "react";
+import * as ReactDOM from "react-dom";
+import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, describe, expect, it } from "vitest";
 
 import {
+  assertMarkupIncludes,
   assertMarkupVersionStamp,
   COMPATIBILITY_NOTICE_MARKER,
   createPanelContext,
   DEFAULT_SCRIPT_URL,
+  renderPanelRemote,
   setNativeCssScope,
 } from "../../bin/lib/panel-runtime.mjs";
 import {
+  checkConsumer,
   createConsumer,
   manifest,
   removeConsumers,
-  runCli,
   SHARE_REGISTRATIONS,
   STAMP,
 } from "./lib/consumer-fixture.mjs";
@@ -78,17 +83,42 @@ window.consumer_fixture = {
   };
 }
 
+/** A remote's files as the renderer takes them: a name and its source. */
+function bundlesOf(assets) {
+  return Object.entries(assets).map(([name, source]) => ({ name, source }));
+}
+
+/** The fixture remote with its chunk exposing `moduleSource` as the panel module. */
+function remoteExposing(moduleSource) {
+  return bundlesOf({
+    ...panelRemote(),
+    "main.chunk.js": `self.snuiFixtureModules["${EXPOSED_MODULE}"] = function (React) {
+  return ${moduleSource};
+};
+`,
+  });
+}
+
+/**
+ * Renders the fixture remote in this process, the way the CLI does after it
+ * spawns, so the renderer's own branches are measured rather than only
+ * exercised through a child process.
+ */
+function renderInProcess(options = {}) {
+  return renderPanelRemote({
+    bundles: bundlesOf(panelRemote()),
+    containerName: "consumer_fixture",
+    exposedModule: EXPOSED_MODULE,
+    props: { configuration: null },
+    react: React,
+    reactDom: ReactDOM,
+    renderToStaticMarkup,
+    ...options,
+  });
+}
+
 function runRuntimeCli(root, ...args) {
-  return runCli(
-    "--root",
-    root,
-    "--remote",
-    "public/remoteEntry.js",
-    "--runtime",
-    "--expose",
-    EXPOSED_MODULE,
-    ...args,
-  );
+  return checkConsumer(root, "--runtime", "--expose", EXPOSED_MODULE, ...args);
 }
 
 afterAll(removeConsumers);
@@ -118,12 +148,7 @@ describe("snui-check-consumer --runtime", () => {
       link: REACT_PACKAGES,
     });
 
-    const staticRun = runCli(
-      "--root",
-      root,
-      "--remote",
-      "public/remoteEntry.js",
-    );
+    const staticRun = checkConsumer(root);
     expect(staticRun.status, "the static mode catches it too").not.toBe(0);
     expect(staticRun.stderr).toContain(
       "uses the React development JSX runtime: main.chunk.js contains jsxDEV",
@@ -150,7 +175,7 @@ describe("snui-check-consumer --runtime", () => {
     });
 
     expect(
-      runCli("--root", root, "--remote", "public/remoteEntry.js").status,
+      checkConsumer(root).status,
       "the static mode passes the same build",
     ).toBe(0);
 
@@ -291,15 +316,7 @@ describe("snui-check-consumer --runtime", () => {
       link: REACT_PACKAGES,
     });
 
-    const result = runCli(
-      "--root",
-      root,
-      "--remote",
-      "public/remoteEntry.js",
-      "--runtime",
-      "--expose",
-      "./Missing",
-    );
+    const result = checkConsumer(root, "--runtime", "--expose", "./Missing");
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(
@@ -335,13 +352,7 @@ describe("snui-check-consumer --runtime", () => {
       link: REACT_PACKAGES,
     });
 
-    const result = runCli(
-      "--root",
-      root,
-      "--remote",
-      "public/remoteEntry.js",
-      "--runtime",
-    );
+    const result = checkConsumer(root, "--runtime");
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("--runtime needs --expose <module>");
@@ -350,11 +361,8 @@ describe("snui-check-consumer --runtime", () => {
   it("leaves the static mode alone and refuses its options without --runtime", () => {
     const root = createConsumer({ assets: panelRemote() });
 
-    const result = runCli(
-      "--root",
+    const result = checkConsumer(
       root,
-      "--remote",
-      "public/remoteEntry.js",
       "--expose",
       EXPOSED_MODULE,
       "--expect",
@@ -364,9 +372,7 @@ describe("snui-check-consumer --runtime", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("--expect and --expose need --runtime.");
     // Without them the same build passes with no React installed beside it.
-    expect(
-      runCli("--root", root, "--remote", "public/remoteEntry.js").status,
-    ).toBe(0);
+    expect(checkConsumer(root).status).toBe(0);
   });
 });
 
@@ -453,5 +459,127 @@ describe("rendered version stamps", () => {
     ).toThrow(
       "stamps data-snui-version with 0.10.0, 0.9.0; expected exactly 0.10.0.",
     );
+  });
+});
+
+describe("renderPanelRemote in process", () => {
+  it("renders the compatibility notice, then the panel, counting saves per render", async () => {
+    const result = await renderInProcess();
+
+    expect(result.compatibilityMarkup).toContain(COMPATIBILITY_NOTICE_MARKER);
+    expect(result.markup).toContain(`data-snui-version="${STAMP}"`);
+    expect(result.markup).toContain("Loading conversions");
+    expect(result.saveCalls).toEqual([0, 0]);
+  });
+
+  it("skips the compatibility render on request and counts a save in each render", async () => {
+    const skipped = await renderInProcess({ renderCompatibilityNotice: false });
+    expect(skipped.compatibilityMarkup).toBeUndefined();
+    expect(skipped.saveCalls).toEqual([0]);
+
+    const saving = await renderInProcess({
+      bundles: bundlesOf(panelRemote({ saveDuringRender: true })),
+    });
+    expect(saving.saveCalls).toEqual([1, 1]);
+  });
+
+  it("renders a module that is itself the component, as memo returns one", async () => {
+    const result = await renderInProcess({
+      bundles: remoteExposing(
+        `React.memo(function Panel() { return React.createElement("div", { "data-snui-version": "${STAMP}" }, "Memo panel"); })`,
+      ),
+      renderCompatibilityNotice: false,
+    });
+
+    expect(result.markup).toContain("Memo panel");
+  });
+
+  it("names each way a remote fails to load", async () => {
+    await expect(
+      renderInProcess({
+        bundles: bundlesOf({ "main.chunk.js": "void 0;" }),
+      }),
+    ).rejects.toThrow(
+      "The panel remote did not load: The panel build produced no remoteEntry.js.",
+    );
+    await expect(
+      renderInProcess({ containerName: "other_consumer" }),
+    ).rejects.toThrow(
+      "remoteEntry.js did not assign a container to window.other_consumer.",
+    );
+    await expect(
+      renderInProcess({ exposedModule: "./Missing" }),
+    ).rejects.toThrow("The panel remote did not load: no module ./Missing.");
+    await expect(
+      renderInProcess({
+        bundles: [{ name: "remoteEntry.js", source: "export default {};" }],
+      }),
+    ).rejects.toThrow("remoteEntry.js is an ES module.");
+    // A syntax error that is not module syntax is reported as it stands.
+    await expect(
+      renderInProcess({
+        bundles: [{ name: "remoteEntry.js", source: "var = ;" }],
+      }),
+    ).rejects.toThrow(/^The panel remote did not load: Unexpected token/);
+    await expect(
+      renderInProcess({
+        bundles: [
+          {
+            name: "remoteEntry.js",
+            source:
+              "window.consumer_fixture = { init: function () {}, get: function () { return Promise.resolve(42); } };",
+          },
+        ],
+      }),
+    ).rejects.toThrow(`The remote exposes no ${EXPOSED_MODULE} module.`);
+  });
+
+  it("refuses a module with nothing the host can render", async () => {
+    await expect(
+      renderInProcess({ bundles: remoteExposing("{ default: 42 }") }),
+    ).rejects.toThrow(
+      `${EXPOSED_MODULE} has no default export the host can render.`,
+    );
+  });
+
+  it("points only a missing member at the stubs when the panel fails to render", async () => {
+    const renderFailure = (body) =>
+      renderInProcess({
+        bundles: remoteExposing(`{ default: function Panel() { ${body} } }`),
+        renderCompatibilityNotice: false,
+      });
+
+    await expect(renderFailure("return undefinedGlobal();")).rejects.toThrow(
+      "The panel did not render: undefinedGlobal is not defined. A global the panel reached for at import time may be missing",
+    );
+    await expect(renderFailure("return null.member;")).rejects.toThrow(
+      "the DOM stubs in bin/lib/panel-runtime.mjs are where one goes.",
+    );
+    await expect(
+      renderFailure('throw new TypeError("Wrong kind of panel!");'),
+    ).rejects.toThrow(/^The panel did not render: Wrong kind of panel!$/);
+    await expect(renderFailure('throw new Error("Boom");')).rejects.toThrow(
+      /^The panel did not render: Boom\.$/,
+    );
+    await expect(renderFailure('throw "plain";')).rejects.toThrow(
+      /^The panel did not render: plain\.$/,
+    );
+  });
+});
+
+describe("rendered markup assertions", () => {
+  it("names a panel that rendered no stamp at all", () => {
+    expect(() => assertMarkupVersionStamp("<div></div>", "0.10.0")).toThrow(
+      `The rendered panel carries no data-snui-version stamp, so it rendered no PanelRoot of ${manifest.name} 0.10.0.`,
+    );
+  });
+
+  it("passes markup holding every expectation and names the first one missing", () => {
+    expect(() =>
+      assertMarkupIncludes("<p>Depth alarm</p>", ["Depth", "alarm"], "Panel"),
+    ).not.toThrow();
+    expect(() =>
+      assertMarkupIncludes("<p>Depth</p>", ["Depth", "Wind"], "The panel"),
+    ).toThrow("The panel does not contain Wind.");
   });
 });
