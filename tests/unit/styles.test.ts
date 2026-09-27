@@ -7,11 +7,15 @@ import {
 } from "../../src/styles/tokens.js";
 import { PACKAGE_VERSION, SPINNER_ANIMATION_NAME } from "../../src/version.js";
 
+/** The package version the way a keyframe name carries it. */
+const VERSION_MARKER = PACKAGE_VERSION.replaceAll(".", "-");
+
+/** A keyframe declaration, with its name captured. */
+const KEYFRAMES_PATTERN = /@keyframes\s+([A-Za-z0-9_-]+)/g;
+
 describe("versioned keyframes", () => {
   it("derives the spinner keyframe name from the package version", () => {
-    expect(SPINNER_ANIMATION_NAME).toBe(
-      `snui-v${PACKAGE_VERSION.replaceAll(".", "-")}-spin`,
-    );
+    expect(SPINNER_ANIMATION_NAME).toBe(`snui-v${VERSION_MARKER}-spin`);
   });
 
   it("defines every keyframe a module animates in that module or the root", () => {
@@ -40,14 +44,11 @@ describe("versioned keyframes", () => {
   });
 
   it("declares every keyframe outside the scope block under a versioned name", () => {
-    const versionMarker = PACKAGE_VERSION.replaceAll(".", "-");
     for (const module of STYLE_MODULES) {
-      for (const match of module.styles.matchAll(
-        /@keyframes\s+([A-Za-z0-9_-]+)/g,
-      )) {
+      for (const match of module.styles.matchAll(KEYFRAMES_PATTERN)) {
         const name = match[1] ?? "";
         expect(name, `${name} carries no package version`).toContain(
-          versionMarker,
+          VERSION_MARKER,
         );
         const before = module.styles.slice(0, match.index);
         const depth =
@@ -60,16 +61,12 @@ describe("versioned keyframes", () => {
 
   it("qualifies the spinner keyframe so two package versions cannot collide", () => {
     expect(defined(PANEL_STYLES)).toContain(SPINNER_ANIMATION_NAME);
-    expect(SPINNER_ANIMATION_NAME).toContain(
-      PACKAGE_VERSION.replaceAll(".", "-"),
-    );
+    expect(SPINNER_ANIMATION_NAME).toContain(VERSION_MARKER);
   });
 });
 
 function defined(styles: string): string[] {
-  return [...styles.matchAll(/@keyframes\s+([A-Za-z0-9_-]+)/g)].map(
-    (match) => match[1] ?? "",
-  );
+  return [...styles.matchAll(KEYFRAMES_PATTERN)].map((match) => match[1] ?? "");
 }
 
 /**
@@ -201,12 +198,8 @@ const BARE_ROOT_CLASS = /\.snui-root(?![\w\-[])/;
 
 describe("panel root selectors", () => {
   it("reaches the panel root through :scope rather than its class", () => {
-    const sheets: readonly (readonly [string, string])[] = [
-      ["root", PANEL_STYLES],
-      ...STYLE_MODULES.map((module) => [module.id, module.styles] as const),
-    ];
-    for (const [id, css] of sheets) {
-      for (const line of css.split("\n")) {
+    for (const { id, styles } of STYLE_MODULES) {
+      for (const line of styles.split("\n")) {
         // Declarations and prose mention the class; only a selector applies it.
         const trimmed = line.trim();
         if (trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;

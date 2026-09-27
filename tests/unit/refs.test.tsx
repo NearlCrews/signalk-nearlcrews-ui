@@ -17,7 +17,7 @@ import {
   Textarea,
   TextInput,
 } from "../../src/index.js";
-import { renderInPanel } from "../helpers.js";
+import { panel } from "../helpers.js";
 
 /**
  * Every component that exposes a ref, with the element type it must resolve to.
@@ -139,13 +139,40 @@ const REF_CASES: readonly {
   },
 ];
 
+/** The tree a case renders, inside a panel unless it is the panel itself. */
+function caseTree(
+  testCase: (typeof REF_CASES)[number],
+  ref: Ref<never>,
+): ReactElement {
+  const element = testCase.render(ref);
+  return testCase.standalone === true ? element : panel(element);
+}
+
 function renderCase(
   testCase: (typeof REF_CASES)[number],
   ref: Ref<never>,
 ): ReturnType<typeof render> {
-  const element = testCase.render(ref);
-  if (testCase.standalone === true) return render(element);
-  return renderInPanel(element);
+  return render(caseTree(testCase, ref));
+}
+
+/** A callback ref that records every node it receives and every cleanup run. */
+function trackingRef<T>(): {
+  readonly calls: (T | null)[];
+  readonly cleanupCalls: () => number;
+  readonly ref: (node: T | null) => () => void;
+} {
+  const calls: (T | null)[] = [];
+  let cleanups = 0;
+  return {
+    calls,
+    cleanupCalls: () => cleanups,
+    ref: (node) => {
+      calls.push(node);
+      return () => {
+        cleanups += 1;
+      };
+    },
+  };
 }
 
 describe("ref forwarding", () => {
@@ -199,13 +226,7 @@ describe("ref forwarding", () => {
         tagName: testCase.tagName,
       });
 
-      view.rerender(
-        testCase.standalone === true ? (
-          testCase.render(second as Ref<never>)
-        ) : (
-          <PanelRoot>{testCase.render(second as Ref<never>)}</PanelRoot>
-        ),
-      );
+      view.rerender(caseTree(testCase, second as Ref<never>));
 
       expect(first.mock.lastCall?.[0]).toBeNull();
       expect(second.mock.lastCall?.[0]).toMatchObject({
@@ -221,17 +242,16 @@ describe("named root refs", () => {
     const ref = (node: HTMLElement | null): void => {
       calls.push(node);
     };
-    const tree = (message: string): ReactElement => (
-      <PanelRoot>
+    const tree = (message: string): ReactElement =>
+      panel(
         <InlineConfirm
           ref={ref}
           open
           message={message}
           onCancel={() => undefined}
           onConfirm={() => undefined}
-        />
-      </PanelRoot>
-    );
+        />,
+      );
     const view = render(tree("Delete this source?"));
 
     expect(calls).toHaveLength(1);
@@ -246,29 +266,21 @@ describe("named root refs", () => {
 
   it("InlineConfirm releases its ref when it closes", () => {
     const ref = createRef<HTMLElement>();
-    const view = renderInPanel(
-      <InlineConfirm
-        ref={ref}
-        open
-        message="Delete this source?"
-        onCancel={() => undefined}
-        onConfirm={() => undefined}
-      />,
-    );
-
-    expect(ref.current).not.toBeNull();
-
-    view.rerender(
-      <PanelRoot>
+    const tree = (open: boolean): ReactElement =>
+      panel(
         <InlineConfirm
           ref={ref}
-          open={false}
+          open={open}
           message="Delete this source?"
           onCancel={() => undefined}
           onConfirm={() => undefined}
-        />
-      </PanelRoot>,
-    );
+        />,
+      );
+    const view = render(tree(true));
+
+    expect(ref.current).not.toBeNull();
+
+    view.rerender(tree(false));
 
     expect(ref.current).toBeNull();
   });
@@ -276,64 +288,48 @@ describe("named root refs", () => {
 
 describe("stateful input refs", () => {
   it("keeps the Checkbox ref attached while checked state changes", () => {
-    const calls: (HTMLInputElement | null)[] = [];
-    let cleanupCalls = 0;
-    const ref = (node: HTMLInputElement | null): (() => void) => {
-      calls.push(node);
-      return () => {
-        cleanupCalls += 1;
-      };
-    };
-    const tree = (checked: boolean, indeterminate: boolean): ReactElement => (
-      <PanelRoot>
+    const { calls, cleanupCalls, ref } = trackingRef<HTMLInputElement>();
+    const tree = (checked: boolean, indeterminate: boolean): ReactElement =>
+      panel(
         <Checkbox
           ref={ref}
           checked={checked}
           indeterminate={indeterminate}
           label="Enable provider"
           readOnly
-        />
-      </PanelRoot>
-    );
+        />,
+      );
     const view = render(tree(false, true));
 
     view.rerender(tree(true, false));
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).not.toBeNull();
-    expect(cleanupCalls).toBe(0);
+    expect(cleanupCalls()).toBe(0);
     view.unmount();
-    expect(cleanupCalls).toBe(1);
+    expect(cleanupCalls()).toBe(1);
   });
 
   it("keeps the SecretInput ref attached while reveal state changes", () => {
-    const calls: (HTMLInputElement | null)[] = [];
-    let cleanupCalls = 0;
-    const ref = (node: HTMLInputElement | null): (() => void) => {
-      calls.push(node);
-      return () => {
-        cleanupCalls += 1;
-      };
-    };
-    const tree = (revealed: boolean): ReactElement => (
-      <PanelRoot>
-        <SecretInput ref={ref} aria-label="API token" revealed={revealed} />
-      </PanelRoot>
-    );
+    const { calls, cleanupCalls, ref } = trackingRef<HTMLInputElement>();
+    const tree = (revealed: boolean): ReactElement =>
+      panel(
+        <SecretInput ref={ref} aria-label="API token" revealed={revealed} />,
+      );
     const view = render(tree(false));
 
     view.rerender(tree(true));
 
     expect(calls).toHaveLength(1);
     expect(calls[0]).not.toBeNull();
-    expect(cleanupCalls).toBe(0);
+    expect(cleanupCalls()).toBe(0);
     view.unmount();
-    expect(cleanupCalls).toBe(1);
+    expect(cleanupCalls()).toBe(1);
   });
 
-  it("resets Checkbox from the latest controlled props", () => {
-    const tree = (checked: boolean, indeterminate: boolean): ReactElement => (
-      <PanelRoot>
+  it("resets Checkbox from the latest controlled props", async () => {
+    const tree = (checked: boolean, indeterminate: boolean): ReactElement =>
+      panel(
         <form data-testid="settings-form">
           <Checkbox
             checked={checked}
@@ -341,9 +337,8 @@ describe("stateful input refs", () => {
             label="Enable provider"
             readOnly
           />
-        </form>
-      </PanelRoot>
-    );
+        </form>,
+      );
     const view = render(tree(false, false));
     const checkbox = view.getByRole("checkbox", {
       name: "Enable provider",
@@ -354,9 +349,8 @@ describe("stateful input refs", () => {
     checkbox.indeterminate = false;
     (view.getByTestId("settings-form") as HTMLFormElement).reset();
 
-    return Promise.resolve().then(() => {
-      expect(checkbox).toBeChecked();
-      expect(checkbox).toBePartiallyChecked();
-    });
+    await Promise.resolve();
+    expect(checkbox).toBeChecked();
+    expect(checkbox).toBePartiallyChecked();
   });
 });

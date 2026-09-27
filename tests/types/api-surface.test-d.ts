@@ -389,7 +389,7 @@ describe("relative age formatting", () => {
 });
 
 describe("unsupported browser notice", () => {
-  it("keeps the mandatory alert role out of consumer props", () => {
+  it("keeps its role out of consumer props", () => {
     expectTypeOf<"role">().not.toExtend<keyof UnsupportedBrowserNoticeProps>();
   });
 });

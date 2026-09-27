@@ -11,6 +11,7 @@ import {
   TOKEN_STYLES,
 } from "../../src/styles/tokens.js";
 import { ROOT_SELECTOR } from "../../src/version.js";
+import { ruleBody } from "../css-helpers.js";
 
 function channels(hex: string): [number, number, number] {
   const value = hex.replace("#", "");
@@ -33,9 +34,9 @@ function luminance(hex: string): number {
 }
 
 function contrastRatio(foreground: string, background: string): number {
-  const lighter = Math.max(luminance(foreground), luminance(background));
-  const darker = Math.min(luminance(foreground), luminance(background));
-  return (lighter + 0.05) / (darker + 0.05);
+  const first = luminance(foreground);
+  const second = luminance(background);
+  return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05);
 }
 
 /**
@@ -458,11 +459,7 @@ describe("Night red preservation", () => {
    * color with transparent cannot raise a channel above the cap.
    */
   function nightBlock(): string {
-    const opening = `${ROOT_SELECTOR}[data-snui-theme="night"] {`;
-    const start = TOKEN_STYLES.indexOf(opening);
-    expect(start, "no Night theme block").toBeGreaterThanOrEqual(0);
-    const end = TOKEN_STYLES.indexOf("\n}", start);
-    return TOKEN_STYLES.slice(start + opening.length, end);
+    return ruleBody(TOKEN_STYLES, `${ROOT_SELECTOR}[data-snui-theme="night"]`);
   }
 
   it("caps green and blue on every color the Night block emits", () => {

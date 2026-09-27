@@ -1,6 +1,7 @@
 import { createElement, type KeyboardEvent, type MouseEvent } from "react";
 import { describe, expect, it, type Mock, vi } from "vitest";
 import {
+  BLOCKED_SELECTOR,
   bodyEdgeMarginRules,
   CONTROL_LABEL_DECLARATIONS,
   CONTROL_ROW_DECLARATIONS,
@@ -8,11 +9,20 @@ import {
   FIELD_STACK_DECLARATIONS,
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
   FORCED_COLORS_INVALID_DECLARATIONS,
+  GROUP_LEGEND_DECLARATIONS,
+  RAISED_SURFACE_TOKEN_DECLARATIONS,
+  SAFE_AREA_PADDING_DECLARATIONS,
   SURFACE_DECLARATIONS,
+  TABLE_CAPTION_DECLARATIONS,
 } from "../../src/styles/fragments.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { PANEL_STYLES } from "../../src/styles/root-sheet.js";
-import { toneDescendantColorRules } from "../../src/styles/tone-rules.js";
+import {
+  toneAccentBar,
+  toneAccentBarRules,
+  toneBlockColorRules,
+  toneDescendantColorRules,
+} from "../../src/styles/tone-rules.js";
 import {
   BUTTON_ACTIVATION_KEYS,
   blockedActivationProps,
@@ -80,7 +90,6 @@ function moduleStyles(id: string): string {
   return module.styles;
 }
 
-/** A pointer event with only the two methods a guard touches. */
 /**
  * A stub event beside the two spies it carries, so a spec asserts on the
  * spies rather than on the event's own methods, which read as unbound.
@@ -91,32 +100,23 @@ interface EventStub<E> {
   readonly stopPropagation: Mock<() => void>;
 }
 
-function clickEvent(): EventStub<MouseEvent<HTMLButtonElement>> {
+/** An event with only the members a guard touches. */
+function eventStub<E>(members: object = {}): EventStub<E> {
   const preventDefault = vi.fn();
   const stopPropagation = vi.fn();
   return {
-    asEvent: {
-      preventDefault,
-      stopPropagation,
-    } as unknown as MouseEvent<HTMLButtonElement>,
+    asEvent: { ...members, preventDefault, stopPropagation } as unknown as E,
     preventDefault,
     stopPropagation,
   };
 }
 
-/** A key event with only the members a guard touches. */
+function clickEvent(): EventStub<MouseEvent<HTMLButtonElement>> {
+  return eventStub();
+}
+
 function keyEvent(key: string): EventStub<KeyboardEvent<HTMLButtonElement>> {
-  const preventDefault = vi.fn();
-  const stopPropagation = vi.fn();
-  return {
-    asEvent: {
-      key,
-      preventDefault,
-      stopPropagation,
-    } as unknown as KeyboardEvent<HTMLButtonElement>,
-    preventDefault,
-    stopPropagation,
-  };
+  return eventStub({ key });
 }
 
 describe("definedProps", () => {
@@ -591,7 +591,6 @@ describe("focusPanelRoot", () => {
       "blur",
       expect.any(Function),
     );
-    removeEventListener.mockRestore();
     root.remove();
   });
 
@@ -641,7 +640,6 @@ describe("revealElement", () => {
       behavior: "auto",
       block: "center",
     });
-    vi.unstubAllGlobals();
     element.remove();
   });
 
@@ -886,6 +884,24 @@ describe("style fragments", () => {
     expect(moduleStyles("range")).toContain(FORCED_COLORS_INVALID_DECLARATIONS);
   });
 
+  it("states the raised overlay remap and the safe-area gutter as the overlays do", () => {
+    for (const id of ["dialog", "popover", "toast"]) {
+      expect(moduleStyles(id)).toContain(RAISED_SURFACE_TOKEN_DECLARATIONS);
+    }
+    expect(moduleStyles("dialog")).toContain(SAFE_AREA_PADDING_DECLARATIONS);
+    expect(moduleStyles("toast")).toContain(SAFE_AREA_PADDING_DECLARATIONS);
+  });
+
+  it("states the table caption exactly as both tables do", () => {
+    expect(moduleStyles("table")).toContain(TABLE_CAPTION_DECLARATIONS);
+    expect(moduleStyles("simple-table")).toContain(TABLE_CAPTION_DECLARATIONS);
+  });
+
+  it("states the group legend and the blocked selector as the forms do", () => {
+    expect(PANEL_STYLES).toContain(GROUP_LEGEND_DECLARATIONS);
+    expect(PANEL_STYLES).toContain(BLOCKED_SELECTOR);
+  });
+
   it("writes the body margin reset for whichever block asks for it", () => {
     expect(PANEL_STYLES).toContain(bodyEdgeMarginRules("snui-banner__body"));
     expect(moduleStyles("dialog")).toContain(
@@ -901,19 +917,54 @@ describe("toneDescendantColorRules", () => {
     );
   });
 
-  it("covers every tone the toast paints by hand today", () => {
+  it("covers every tone the toast paints", () => {
     const rules = toneDescendantColorRules(
       "snui-toast",
       ":is(.snui-toast__tone, .snui-toast__tone-glyph)",
     );
     const toast = moduleStyles("toast");
-    for (const tone of ["success", "warning", "danger"]) {
+    for (const tone of ["info", "success", "warning", "danger"]) {
       expect(rules).toContain(`.snui-toast--${tone} `);
       expect(toast).toContain(
         `.snui-toast--${tone} :is(.snui-toast__tone, .snui-toast__tone-glyph) { color: var(--snui-color-${tone}); }`,
       );
     }
-    expect(rules).toContain(".snui-toast--info ");
+  });
+});
+
+describe("toneBlockColorRules", () => {
+  it("paints the toned block itself", () => {
+    expect(toneBlockColorRules("snui-badge")).toContain(
+      ".snui-badge--info { color: var(--snui-color-info); }",
+    );
+  });
+
+  it("builds the accent bar under a modifier prefix", () => {
+    expect(
+      toneBlockColorRules("snui-card", "border-inline-start-color", "accent-"),
+    ).toBe(toneAccentBarRules("snui-card", "accent-"));
+    expect(toneAccentBarRules("snui-card", "accent-")).toContain(
+      ".snui-card--accent-danger { border-inline-start-color: var(--snui-color-danger); }",
+    );
+  });
+
+  it("writes the whole tone bar a toned block ships", () => {
+    expect(PANEL_STYLES).toContain(toneAccentBar("snui-card"));
+    expect(PANEL_STYLES).toContain(toneAccentBar("snui-card", "accent-"));
+    expect(PANEL_STYLES).toContain(toneAccentBar("snui-collapsible"));
+  });
+
+  it("reaches a descendant through a prefixed modifier", () => {
+    expect(
+      toneDescendantColorRules(
+        "snui-progress",
+        ".snui-progress__fill",
+        "background",
+        "tone-",
+      ),
+    ).toContain(
+      ".snui-progress--tone-warning .snui-progress__fill { background: var(--snui-color-warning); }",
+    );
   });
 });
 

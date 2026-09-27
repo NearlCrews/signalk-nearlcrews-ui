@@ -9,8 +9,11 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
-  // Frozen time leaks into every later test in the same worker, which only
-  // ever fails in CI and only for whichever file happened to run next, so the
-  // clock is handed back here rather than in each file that borrows it.
+  // Frozen time, a stubbed global, and a stubbed environment variable all leak
+  // into every later test in the same worker, which only ever fails in CI and
+  // only for whichever file happened to run next, so each is handed back here
+  // rather than in each file that borrows it.
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });

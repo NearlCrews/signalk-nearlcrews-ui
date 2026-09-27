@@ -9,13 +9,10 @@ import type * as FormatRelativeAgeModule from "../../src/utils/format-relative-a
 const FORMATTER_CACHE_LIMIT = 32;
 const FIRST_LOCALE = "en-x-p0";
 const LAST_LOCALE = `en-x-p${String(FORMATTER_CACHE_LIMIT)}`;
-const LOCALES = [
-  FIRST_LOCALE,
-  ...Array.from(
-    { length: FORMATTER_CACHE_LIMIT },
-    (_, index) => `en-x-p${String(index + 1)}`,
-  ),
-];
+const LOCALES = Array.from(
+  { length: FORMATTER_CACHE_LIMIT + 1 },
+  (_, index) => `en-x-p${String(index)}`,
+);
 
 /**
  * A fresh module per test. The formatter cache is module state that lives as
@@ -28,18 +25,28 @@ async function loadFormatRelativeAge(): Promise<
   return import("../../src/utils/format-relative-age.js");
 }
 
-/** Counts every formatter the module builds, keeping the real behavior. */
-function countConstructors(): () => number {
+/**
+ * Runs `onConstruct` ahead of every formatter the module builds, keeping the
+ * real behavior for each one it lets through.
+ */
+function interceptConstructors(onConstruct: () => void): void {
   const Original = Intl.RelativeTimeFormat;
-  const constructed = vi.fn();
   vi.spyOn(Intl, "RelativeTimeFormat").mockImplementation(function (
     this: unknown,
     ...args: ConstructorParameters<typeof Intl.RelativeTimeFormat>
   ) {
-    constructed();
+    onConstruct();
     return new Original(...args);
   });
-  return () => constructed.mock.calls.length;
+}
+
+/** Counts every formatter the module builds. */
+function countConstructors(): () => number {
+  let constructed = 0;
+  interceptConstructors(() => {
+    constructed += 1;
+  });
+  return () => constructed;
 }
 
 describe("relative age formatter cache", () => {
@@ -76,17 +83,11 @@ describe("relative age formatter cache", () => {
 
   it("propagates a formatter failure that is not a locale problem", async () => {
     const { formatRelativeAge } = await loadFormatRelativeAge();
-    const Original = Intl.RelativeTimeFormat;
     let failed = false;
-    vi.spyOn(Intl, "RelativeTimeFormat").mockImplementation(function (
-      this: unknown,
-      ...args: ConstructorParameters<typeof Intl.RelativeTimeFormat>
-    ) {
-      if (!failed) {
-        failed = true;
-        throw new TypeError("Intl data is unavailable.");
-      }
-      return new Original(...args);
+    interceptConstructors(() => {
+      if (failed) return;
+      failed = true;
+      throw new TypeError("Intl data is unavailable.");
     });
 
     // Only a RangeError means "this tag is not usable". The retry with the

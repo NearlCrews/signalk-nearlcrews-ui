@@ -17,13 +17,7 @@ import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { TABLE_STYLES } from "../../src/styles/table.js";
 import { useModuleStyles } from "../../src/styles/use-module-styles.js";
 import { PACKAGE_VERSION } from "../../src/version.js";
-
-const ROOT_SHEET = "style[data-snui-styles]";
-const MODULE_SHEET = "style[data-snui-module-styles]";
-
-function headSheets(selector: string): HTMLStyleElement[] {
-  return [...document.head.querySelectorAll<HTMLStyleElement>(selector)];
-}
+import { headSheets, MODULE_SHEET, ROOT_SHEET } from "../helpers.js";
 
 function ModuleConsumer({
   module,
@@ -353,6 +347,23 @@ describe("supportsNativeCssScope", () => {
     stubScopeSupport(undefined);
     expect(supportsNativeCssScope()).toBe(false);
   });
+
+  it("reads the module's own window when the caller names none", () => {
+    expect(supportsNativeCssScope()).toBe(true);
+
+    // The default argument is what a non-browser evaluation reaches: a build
+    // step or a static render importing the entry point has no window, and
+    // the preflight answers no instead of throwing.
+    let withoutWindow: boolean | undefined;
+    vi.stubGlobal("window", undefined);
+    try {
+      withoutWindow = supportsNativeCssScope();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(withoutWindow).toBe(false);
+  });
 });
 
 describe("useModuleStyles", () => {
@@ -502,25 +513,6 @@ describe("useOptionalModuleStyles", () => {
     expect(() => render(<Switch label="Autopilot" />)).not.toThrow();
     expect(headSheets(MODULE_SHEET)).toHaveLength(0);
     expect(headSheets(ROOT_SHEET)).toHaveLength(0);
-  });
-});
-
-describe("supportsNativeCssScope", () => {
-  it("reads the module's own window when the caller names none", () => {
-    expect(supportsNativeCssScope()).toBe(true);
-
-    // The default argument is what a non-browser evaluation reaches: a build
-    // step or a static render importing the entry point has no window, and
-    // the preflight answers no instead of throwing.
-    let withoutWindow: boolean | undefined;
-    vi.stubGlobal("window", undefined);
-    try {
-      withoutWindow = supportsNativeCssScope();
-    } finally {
-      vi.unstubAllGlobals();
-    }
-
-    expect(withoutWindow).toBe(false);
   });
 });
 

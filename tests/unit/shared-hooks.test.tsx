@@ -6,7 +6,7 @@ import {
   useCallback,
   useRef,
 } from "react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   type FocusReturn,
@@ -27,10 +27,6 @@ import {
   HeadingLevelProvider,
   useResolvedHeading,
 } from "../../src/utils/heading-level.js";
-
-afterEach(() => {
-  vi.useRealTimers();
-});
 
 describe("useNodeRef", () => {
   interface NodeRefProbeProps {
@@ -202,7 +198,7 @@ describe("useFocusReturnOnClose", () => {
     const triggerRef = useRef<HTMLButtonElement | null>(null);
     focusReturn = useFocusReturnOnClose(containerRef, open, {
       capturePreviousFocus,
-      ...(withTrigger ? { returnFocusRef: triggerRef } : {}),
+      returnFocusRef: withTrigger ? triggerRef : undefined,
     });
     return (
       <>
@@ -365,7 +361,7 @@ describe("usePollFreshness", () => {
   }): React.JSX.Element {
     const { ageMs, stale } = usePollFreshness(lastUpdated, {
       staleAfterMs,
-      ...(tickMs === undefined ? {} : { tickMs }),
+      tickMs,
     });
     return (
       <span data-testid="freshness">

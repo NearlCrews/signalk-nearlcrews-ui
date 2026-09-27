@@ -1,64 +1,38 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   observePanelViewport,
   readViewportEdges,
   roundedLayoutValue,
 } from "../../src/utils/viewport.js";
-import { installVisualViewport, stubAnimationFrames } from "../helpers.js";
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
+import {
+  installVisualViewport,
+  replaceVisualViewport,
+  stubAnimationFrames,
+} from "../helpers.js";
 
 describe("readViewportEdges", () => {
-  it("falls back to the layout viewport without a visual viewport", () => {
-    const original = Object.getOwnPropertyDescriptor(window, "visualViewport");
-    Object.defineProperty(window, "visualViewport", {
-      configurable: true,
-      value: undefined,
-    });
-    vi.spyOn(window, "innerWidth", "get").mockReturnValue(640);
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(480);
+  // lib.dom declares visualViewport as nullable, and a document that is not
+  // fully active is where the null comes from.
+  it.each([
+    ["without a visual viewport", undefined, 640, 480],
+    ["for a document that is not fully active", null, 320, 240],
+  ] as const)(
+    "falls back to the layout viewport %s",
+    (_case, visualViewport, innerWidth, innerHeight) => {
+      const restore = replaceVisualViewport(visualViewport);
+      vi.spyOn(window, "innerWidth", "get").mockReturnValue(innerWidth);
+      vi.spyOn(window, "innerHeight", "get").mockReturnValue(innerHeight);
 
-    expect(readViewportEdges(window)).toEqual({
-      top: 0,
-      right: 640,
-      bottom: 480,
-      left: 0,
-    });
-
-    if (original === undefined) {
-      Reflect.deleteProperty(window, "visualViewport");
-    } else {
-      Object.defineProperty(window, "visualViewport", original);
-    }
-  });
-
-  it("falls back to the layout viewport for a document that is not fully active", () => {
-    const original = Object.getOwnPropertyDescriptor(window, "visualViewport");
-    // lib.dom declares visualViewport as nullable, and a document that is not
-    // fully active is where the null comes from.
-    Object.defineProperty(window, "visualViewport", {
-      configurable: true,
-      value: null,
-    });
-    vi.spyOn(window, "innerWidth", "get").mockReturnValue(320);
-    vi.spyOn(window, "innerHeight", "get").mockReturnValue(240);
-
-    expect(readViewportEdges(window)).toEqual({
-      top: 0,
-      right: 320,
-      bottom: 240,
-      left: 0,
-    });
-
-    if (original === undefined) {
-      Reflect.deleteProperty(window, "visualViewport");
-    } else {
-      Object.defineProperty(window, "visualViewport", original);
-    }
-  });
+      expect(readViewportEdges(window)).toEqual({
+        top: 0,
+        right: innerWidth,
+        bottom: innerHeight,
+        left: 0,
+      });
+      restore();
+    },
+  );
 
   it("reads the visual viewport offsets and size when present", () => {
     const { restore, visualViewport } = installVisualViewport({

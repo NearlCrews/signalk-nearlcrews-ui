@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { transform } from "lightningcss";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { PANEL_STYLES } from "../../src/styles/root-sheet.js";
 import {
@@ -11,13 +11,11 @@ import {
   TOKEN_STYLES,
 } from "../../src/styles/tokens.js";
 import { ROOT_SELECTOR } from "../../src/version.js";
+import { ALL_MODULE_STYLES, ruleBody } from "../css-helpers.js";
 
 // jsdom rewrites import.meta.url to an http URL, so resolve from the
 // project root (the vitest working directory) instead.
 const COMPONENTS_DIR = join(process.cwd(), "src", "components");
-
-/** Every module's CSS, root first, for checks that span the whole delivery. */
-const ALL_STYLES = STYLE_MODULES.map((module) => module.styles).join("\n");
 
 /**
  * Class tokens referenced by component TSX. The lookbehind keeps custom
@@ -28,27 +26,27 @@ const ALL_STYLES = STYLE_MODULES.map((module) => module.styles).join("\n");
 const CLASS_TOKEN_PATTERN = /(?<![-\w])snui-[a-z0-9_-]+/g;
 
 /** Classes the components reference without a matching rule, each by design. */
-const UNSTYLED_HOOK_CLASSES: Record<string, true> = {
+const UNSTYLED_HOOK_CLASSES: ReadonlySet<string> = new Set([
   // Outer react-aria field wrappers; the layout rules live on the __button
   // element rendered inside them.
-  "snui-radio": true,
-  "snui-switch": true,
+  "snui-radio",
+  "snui-switch",
   // Structural grouping inside the section header, sized by the header's own
   // child rules.
-  "snui-section__heading-group": true,
+  "snui-section__heading-group",
   // Inherits size, weight, and color from the surrounding snui-toast__tone rule.
-  "snui-toast__tone-glyph": true,
+  "snui-toast__tone-glyph",
   // Focus hook the toast region uses to find the dismiss control; the button
   // itself is styled by the shared snui-button rules.
-  "snui-toast__dismiss": true,
-};
+  "snui-toast__dismiss",
+]);
 
 /** Classes the stylesheet defines without a literal TSX reference. */
-const STYLESHEET_ONLY_CLASSES: Record<string, true> = {
+const STYLESHEET_ONLY_CLASSES: ReadonlySet<string> = new Set([
   // Applied through the ROOT_CLASS constant, so the literal never appears in
   // component source.
-  "snui-root": true,
-};
+  "snui-root",
+]);
 
 function componentClassTokens(): {
   literals: Set<string>;
@@ -76,7 +74,7 @@ function componentClassTokens(): {
   return { literals, prefixes };
 }
 
-function stylesheetClasses(css: string = ALL_STYLES): Set<string> {
+function stylesheetClasses(css: string = ALL_MODULE_STYLES): Set<string> {
   return new Set(
     [...css.matchAll(/\.(snui-[a-z0-9_-]+)/g)].map((match) => match[1] ?? ""),
   );
@@ -148,12 +146,19 @@ describe("root module", () => {
 });
 
 describe("class coverage", () => {
-  it("styles every class the components reference", () => {
-    const defined = stylesheetClasses();
-    const { literals, prefixes } = componentClassTokens();
+  // Both directions compare the same two sets, so the component sources are
+  // read once for the pair.
+  let defined = new Set<string>();
+  let literals = new Set<string>();
+  let prefixes = new Set<string>();
+  beforeAll(() => {
+    defined = stylesheetClasses();
+    ({ literals, prefixes } = componentClassTokens());
+  });
 
+  it("styles every class the components reference", () => {
     for (const literal of [...literals].sort()) {
-      if (UNSTYLED_HOOK_CLASSES[literal] === true) continue;
+      if (UNSTYLED_HOOK_CLASSES.has(literal)) continue;
       expect(
         defined.has(literal),
         `components reference .${literal} but the stylesheet never styles it`,
@@ -169,11 +174,8 @@ describe("class coverage", () => {
   });
 
   it("keeps every stylesheet class referenced by the components", () => {
-    const defined = stylesheetClasses();
-    const { literals, prefixes } = componentClassTokens();
-
     for (const name of [...defined].sort()) {
-      if (STYLESHEET_ONLY_CLASSES[name] === true) continue;
+      if (STYLESHEET_ONLY_CLASSES.has(name)) continue;
       const referenced =
         literals.has(name) ||
         [...prefixes].some((prefix) => name.startsWith(prefix));
@@ -184,29 +186,6 @@ describe("class coverage", () => {
     }
   });
 });
-
-/**
- * Extracts the body of the first rule whose selector exactly matches. The
- * opening brace is part of the search, because the base root selector is a
- * prefix of every qualified theme selector and a bare substring search would
- * read whichever of them came first.
- */
-function ruleBody(styles: string, selector: string): string {
-  const opening = `${selector} {`;
-  const start = styles.indexOf(opening);
-  expect(start, `no rule for ${selector}`).toBeGreaterThanOrEqual(0);
-  const open = styles.indexOf("{", start + selector.length);
-  let depth = 0;
-  for (let index = open; index < styles.length; index += 1) {
-    const char = styles[index];
-    if (char === "{") depth += 1;
-    if (char === "}") {
-      depth -= 1;
-      if (depth === 0) return styles.slice(open + 1, index);
-    }
-  }
-  throw new Error(`unterminated rule for ${selector}`);
-}
 
 function definedTokens(body: string): Set<string> {
   return new Set(

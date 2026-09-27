@@ -10,7 +10,7 @@ import {
   CONTAINER_BREAKPOINT_NARROW,
   PANEL_CONTAINER_NAME,
 } from "../../src/styles/tokens.js";
-import { announcementRole } from "../../src/utils/announcement.js";
+import { liveRegionProps } from "../../src/utils/announcement.js";
 import {
   joinIdReferences,
   resolveDescriptionId,
@@ -75,16 +75,16 @@ describe("resolveDescriptionId", () => {
   });
 });
 
-describe("announcementRole", () => {
+describe("liveRegionProps role", () => {
   it("maps assertive to alert and polite to status", () => {
-    expect(announcementRole("assertive")).toBe("alert");
-    expect(announcementRole("polite")).toBe("status");
+    expect(liveRegionProps("assertive").role).toBe("alert");
+    expect(liveRegionProps("polite").role).toBe("status");
   });
 
   it("returns no role when announcements are off", () => {
     // "off" must not produce a live-region role, or the element would still
     // announce despite the caller opting out.
-    expect(announcementRole("off")).toBeUndefined();
+    expect(liveRegionProps("off").role).toBeUndefined();
   });
 });
 

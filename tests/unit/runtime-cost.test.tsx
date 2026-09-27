@@ -10,8 +10,7 @@ import {
   Row,
   type RowProps,
 } from "../../src/data-grid.js";
-import { PanelRoot, RelativeAge } from "../../src/index.js";
-import { renderInPanel } from "../helpers.js";
+import { PanelRoot, RELATIVE_AGE_EN, RelativeAge } from "../../src/index.js";
 
 /**
  * What a scrolling panel costs is measured in the browser suite, where there
@@ -19,8 +18,6 @@ import { renderInPanel } from "../helpers.js";
  * number: renders committed per clock tick, and the state a grid throws away
  * when its row count moves.
  */
-
-const EN = { locale: "en" } as const;
 
 /** Stamps a panel might show at once in a fleet or an alarm list. */
 const STAMP_HOURS = Array.from({ length: 20 }, (_, index) => 3 + index);
@@ -85,7 +82,7 @@ describe("runtime cost", () => {
               <RelativeAge
                 since={now - hours * 3_600_000}
                 tickMs={1_000}
-                options={EN}
+                options={RELATIVE_AGE_EN}
               />
             </li>
           ))}
@@ -113,20 +110,7 @@ describe("runtime cost", () => {
     // with it. Pinning the mode is what a grid that grows, filters, or drains
     // while it is on screen does instead, and this is the promise that buys.
     const user = userEvent.setup();
-    const view = renderInPanel(
-      <DataGrid
-        aria-label="Fleet"
-        items={FLEET.slice(0, 8)}
-        renderRow={renderVesselRow}
-        selectionMode="multiple"
-        virtualize="never"
-        virtualizeThreshold={10}
-      >
-        <Column id="name" isRowHeader>
-          Vessel
-        </Column>
-      </DataGrid>,
-    );
+    const view = render(fleetGrid(FLEET.slice(0, 8)));
 
     const container = view.container;
     const target = container.querySelectorAll<HTMLElement>(

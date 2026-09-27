@@ -96,7 +96,6 @@ export function installVisualViewport(
   options: VisualViewportOptions,
 ): VisualViewportStub {
   const { height, innerHeight = 600, innerWidth = 800, width = 800 } = options;
-  const original = Object.getOwnPropertyDescriptor(window, "visualViewport");
   const visualViewport = Object.assign(new EventTarget(), {
     height,
     offsetLeft: 0,
@@ -106,23 +105,54 @@ export function installVisualViewport(
     scale: 1,
     width,
   }) as VisualViewport;
-  Object.defineProperty(window, "visualViewport", {
-    configurable: true,
-    value: visualViewport,
-  });
+  const restore = replaceVisualViewport(visualViewport);
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(innerHeight);
   vi.spyOn(window, "innerWidth", "get").mockReturnValue(innerWidth);
 
-  return {
-    restore: () => {
-      if (original === undefined) {
-        Reflect.deleteProperty(window, "visualViewport");
-        return;
-      }
-      Object.defineProperty(window, "visualViewport", original);
-    },
-    visualViewport,
+  return { restore, visualViewport };
+}
+
+/**
+ * Replaces `window.visualViewport`, which is null for a document that is not
+ * fully active and absent on an engine that implements none, and returns the
+ * restore its spec must run.
+ */
+export function replaceVisualViewport(
+  value: VisualViewport | null | undefined,
+): () => void {
+  const original = Object.getOwnPropertyDescriptor(window, "visualViewport");
+  Object.defineProperty(window, "visualViewport", {
+    configurable: true,
+    value,
+  });
+  return () => {
+    if (original === undefined) {
+      Reflect.deleteProperty(window, "visualViewport");
+      return;
+    }
+    Object.defineProperty(window, "visualViewport", original);
   };
+}
+
+/** The root sheet `PanelRoot` installs in the head. */
+export const ROOT_SHEET = "style[data-snui-styles]";
+
+/** The per-component module sheets installed beside the root sheet. */
+export const MODULE_SHEET = "style[data-snui-module-styles]";
+
+/** The style elements in a document's head that match `selector`. */
+export function headSheets(
+  selector: string,
+  ownerDocument: Document = document,
+): HTMLStyleElement[] {
+  return [...ownerDocument.head.querySelectorAll<HTMLStyleElement>(selector)];
+}
+
+/** Whether `second` comes after `first` in document order. */
+export function follows(first: Element, second: Element): boolean {
+  return Boolean(
+    first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING,
+  );
 }
 
 /** Returns the form a control joined, failing loudly when it joined none. */
