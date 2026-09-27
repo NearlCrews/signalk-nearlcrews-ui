@@ -158,13 +158,24 @@ function scrollFocusedTarget(
   }
 }
 
-function keepFocusedTargetVisible(
+/**
+ * Scrolls a focused panel control clear of the docked bar.
+ *
+ * A pointer press focuses its target before the release lands, so a clearance
+ * scroll during the press would move the control out from under the pointer and
+ * the resulting click would dispatch on an ancestor instead of the control. The
+ * clearance is skipped rather than deferred: a pointer user can already see the
+ * control they pressed, and a scroll that arrives after the click would move
+ * content under a pointer that is still there for a second press.
+ */
+function requestFocusClearance(
   target: HTMLElement,
   bar: HTMLElement,
   panelRoot: HTMLElement,
   ownerWindow: Window,
+  pointerPressed: boolean,
 ): void {
-  if (bar.contains(target)) return;
+  if (pointerPressed || bar.contains(target)) return;
   const panelContent = target.closest(".snui-root__content");
   if (panelContent?.parentElement !== panelRoot) return;
 
@@ -188,39 +199,40 @@ function keepFocusedTargetVisible(
 }
 
 /**
- * A pointer press focuses its target before the release lands, so a clearance
- * scroll during the press would move the control out from under the pointer and
- * the resulting click would dispatch on an ancestor instead of the control. The
- * clearance is skipped rather than deferred: a pointer user can already see the
- * control they pressed, and a scroll that arrives after the click would move
- * content under a pointer that is still there for a second press.
+ * The bar's props once `ActionBar` has resolved them. The variant arrives
+ * resolved rather than defaulted a second time, so the class name the bar
+ * builds always names one.
  */
-function requestFocusClearance(
-  target: HTMLElement,
-  bar: HTMLElement,
-  panelRoot: HTMLElement,
-  ownerWindow: Window,
-  pointerPressed: boolean,
-): void {
-  if (pointerPressed) return;
-  keepFocusedTargetVisible(target, bar, panelRoot, ownerWindow);
-}
+type ResolvedActionBarProps = ActionBarProps & {
+  readonly variant: ActionBarVariant;
+};
 
-interface ActionBarContentProps {
-  readonly actions: ReactNode;
-  readonly children: ReactNode;
-  readonly status: ReactNode;
-  readonly statusRef: Ref<HTMLDivElement> | undefined;
-}
-
-function ActionBarContent({
+/** The bar element and its three slots, shared by every placement. */
+function ActionBarSurface({
   actions,
   children,
+  className,
+  docked = false,
   status,
   statusRef,
-}: ActionBarContentProps): React.JSX.Element {
+  sticky,
+  variant,
+  ...props
+}: ResolvedActionBarProps & {
+  readonly docked?: boolean | undefined;
+}): React.JSX.Element {
   return (
-    <>
+    <div
+      {...props}
+      data-snui-action-bar=""
+      className={classNames(
+        "snui-action-bar",
+        `snui-action-bar--${variant}`,
+        sticky !== undefined && `snui-action-bar--sticky-${sticky}`,
+        docked && "snui-action-bar--viewport-docked",
+        className,
+      )}
+    >
       {hasReactContent(status) ? (
         <div
           ref={statusRef}
@@ -235,25 +247,14 @@ function ActionBarContent({
         <div className="snui-action-bar__content">{children}</div>
       ) : null}
       <div className="snui-action-bar__actions">{actions}</div>
-    </>
+    </div>
   );
 }
 
-// The variant arrives resolved from the caller below rather than defaulted a
-// second time here, so the class name this builds always names one.
 function ViewportBottomActionBar({
-  actions,
-  children,
-  className,
   ref,
-  status,
-  statusRef,
-  style,
-  variant,
   ...props
-}: Omit<ActionBarProps, "sticky"> & {
-  readonly variant: ActionBarVariant;
-}): React.JSX.Element {
+}: ResolvedActionBarProps): React.JSX.Element {
   const anchorRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const safeAreaProbeRef = useRef<HTMLSpanElement>(null);
@@ -372,12 +373,7 @@ function ViewportBottomActionBar({
     const keepFocusedContentVisible = (event: FocusEvent): void => {
       if (!placementRef.current.docked) return;
       const target = event.target;
-      if (
-        !(target instanceof ownerWindow.HTMLElement) ||
-        bar.contains(target)
-      ) {
-        return;
-      }
+      if (!(target instanceof ownerWindow.HTMLElement)) return;
       requestFocusClearance(
         target,
         bar,
@@ -479,27 +475,7 @@ function ViewportBottomActionBar({
         aria-hidden="true"
         className="snui-action-bar__safe-area-probe"
       />
-      <div
-        {...props}
-        ref={barRef}
-        style={style}
-        data-snui-action-bar=""
-        className={classNames(
-          "snui-action-bar",
-          `snui-action-bar--${variant}`,
-          "snui-action-bar--sticky-viewport-bottom",
-          placement.docked && "snui-action-bar--viewport-docked",
-          className,
-        )}
-      >
-        <ActionBarContent
-          actions={actions}
-          status={status}
-          statusRef={statusRef}
-        >
-          {children}
-        </ActionBarContent>
-      </div>
+      <ActionBarSurface {...props} ref={barRef} docked={placement.docked} />
     </div>
   );
 }
@@ -517,37 +493,20 @@ export function ActionBar({
 }: ActionBarProps): React.JSX.Element {
   requireContent(actions, "ActionBar requires at least one action.");
 
-  if (sticky === "viewport-bottom") {
-    return (
-      <ViewportBottomActionBar
-        {...props}
-        actions={actions}
-        className={className}
-        ref={ref}
-        status={status}
-        statusRef={statusRef}
-        variant={variant}
-      >
-        {children}
-      </ViewportBottomActionBar>
-    );
-  }
-
+  const Bar =
+    sticky === "viewport-bottom" ? ViewportBottomActionBar : ActionBarSurface;
   return (
-    <div
+    <Bar
       {...props}
+      actions={actions}
+      className={className}
       ref={ref}
-      data-snui-action-bar=""
-      className={classNames(
-        "snui-action-bar",
-        `snui-action-bar--${variant}`,
-        sticky !== undefined && `snui-action-bar--sticky-${sticky}`,
-        className,
-      )}
+      status={status}
+      statusRef={statusRef}
+      sticky={sticky}
+      variant={variant}
     >
-      <ActionBarContent actions={actions} status={status} statusRef={statusRef}>
-        {children}
-      </ActionBarContent>
-    </div>
+      {children}
+    </Bar>
   );
 }

@@ -1,18 +1,11 @@
-import {
-  type ReactNode,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 import type { AnnouncementMode } from "../utils/announcement.js";
 import { resolveBundledLabels, trimmedText } from "../utils/labels.js";
-import { type PanelLabels, usePanelLabels } from "../utils/panel-labels.js";
+import { usePanelLabels } from "../utils/panel-labels.js";
 import type { StatusTone } from "../utils/tone.js";
 import { ActionBar, type ActionBarProps } from "./ActionBar.js";
-import { Button } from "./Button.js";
+import { Button, type ButtonAsButtonProps } from "./Button.js";
 import { StatusIndicator } from "./StatusIndicator.js";
 
 export interface SaveActionBarLabels {
@@ -158,7 +151,36 @@ export type SaveActionBarStateInput = Pick<
 export function resolveSaveActionBarState(
   input: SaveActionBarStateInput,
 ): SaveActionBarState {
-  return resolveStateWithLabels(input, resolveLabels(input.labels));
+  return resolveStateWithLabels(
+    input,
+    resolveBundledLabels(DEFAULT_LABELS, input.labels, undefined),
+  );
+}
+
+/**
+ * One state of the bar. The live mode is filled in here rather than per
+ * state, because it is the one thing no state changes, and only validation
+ * blocks, so every other state leaves `blocked` out. The fields are written
+ * out in a fixed order, because a consumer that serializes the state or
+ * snapshots it sees that order.
+ */
+function saveState({
+  blocked = false,
+  discardDisabled,
+  message,
+  saveDisabled,
+  tone,
+}: Omit<SaveActionBarState, "blocked" | "live"> & {
+  readonly blocked?: boolean;
+}): SaveActionBarState {
+  return {
+    blocked,
+    discardDisabled,
+    live: SAVE_STATUS_LIVE,
+    message,
+    saveDisabled,
+    tone,
+  };
 }
 
 /**
@@ -177,73 +199,55 @@ function resolveStateWithLabels(
 ): SaveActionBarState {
   const validationMessage = trimmedText(invalidMessage ?? undefined);
   if (saving) {
-    return {
-      blocked: false,
+    return saveState({
       discardDisabled: true,
-      live: SAVE_STATUS_LIVE,
       message: labels.saving,
       saveDisabled: true,
       tone: "info",
-    };
+    });
   }
   if (validationMessage !== "") {
-    return {
+    return saveState({
       blocked: true,
       discardDisabled: !dirty,
-      live: SAVE_STATUS_LIVE,
       message: validationMessage,
       saveDisabled: true,
       tone: "danger",
-    };
+    });
   }
   if (dirty) {
-    return {
-      blocked: false,
+    return saveState({
       discardDisabled: false,
-      live: SAVE_STATUS_LIVE,
       message: labels.unsaved,
+      saveDisabled: false,
       // Edits waiting to be saved are the ordinary state of a panel being
       // used, so the status informs rather than cautioning; warning is kept
       // for a state that asks the operator to be careful.
-      saveDisabled: false,
       tone: "info",
-    };
+    });
   }
   if (saveRequestedAt !== null && saveRequestedAt !== undefined) {
-    return {
-      blocked: false,
+    return saveState({
       discardDisabled: true,
-      live: SAVE_STATUS_LIVE,
       message: labels.saved,
       saveDisabled: !unconfigured,
       tone: "info",
-    };
+    });
   }
   if (unconfigured) {
-    return {
-      blocked: false,
+    return saveState({
       discardDisabled: true,
-      live: SAVE_STATUS_LIVE,
       message: labels.unconfigured,
       saveDisabled: false,
       tone: "info",
-    };
+    });
   }
-  return {
-    blocked: false,
+  return saveState({
     discardDisabled: true,
-    live: SAVE_STATUS_LIVE,
     message: labels.clean,
     saveDisabled: true,
     tone: "neutral",
-  };
-}
-
-function resolveLabels(
-  overrides: Partial<SaveActionBarLabels> | undefined,
-  bundled?: PanelLabels["saveActionBar"],
-): SaveActionBarLabels {
-  return resolveBundledLabels(DEFAULT_LABELS, overrides, bundled);
+  });
 }
 
 /**
@@ -350,7 +354,7 @@ export function SaveActionBar({
   // Seven labels of which at most four ever render, re-resolved on every
   // dirty, saving, and saved transition otherwise.
   const labels = useMemo(
-    () => resolveLabels(labelOverrides, bundledLabels),
+    () => resolveBundledLabels(DEFAULT_LABELS, labelOverrides, bundledLabels),
     [bundledLabels, labelOverrides],
   );
   const savedWindowClosed = useSavedMessageWindowClosed(
@@ -376,31 +380,39 @@ export function SaveActionBar({
     action();
   };
 
-  const status: ReactNode = (
-    <StatusIndicator id={statusId} tone={state.tone} live={state.live}>
-      {state.message}
-    </StatusIndicator>
-  );
+  // A refusal keeps a button where the reader is standing and points at the
+  // status line for the reason. Native disabled is left for the states where
+  // there is genuinely nothing to do.
+  const availability = (
+    unavailable: boolean,
+  ): Pick<
+    ButtonAsButtonProps,
+    "aria-describedby" | "ariaDisabled" | "disabled"
+  > => ({
+    ariaDisabled: state.blocked && unavailable,
+    "aria-describedby": state.blocked ? statusId : undefined,
+    disabled: unavailable && !state.blocked,
+  });
 
   return (
     <ActionBar
       {...props}
       sticky={sticky}
       statusRef={statusRef}
-      status={status}
+      status={
+        <StatusIndicator id={statusId} tone={state.tone} live={state.live}>
+          {state.message}
+        </StatusIndicator>
+      }
       actions={
         <>
           <Button
             variant="primary"
             loading={saving}
             loadingLabel={labels.saving}
-            // A refusal keeps the button where the reader is standing and
-            // points at the status line for the reason, while saving blocks
-            // activation through Button's own busy state. Native disabled is
-            // left for the states where there is genuinely nothing to save.
-            ariaDisabled={state.blocked && state.saveDisabled}
-            aria-describedby={state.blocked ? statusId : undefined}
-            disabled={state.saveDisabled && !saving && !state.blocked}
+            // Saving blocks activation through Button's own busy state, so it
+            // never reaches native disabled.
+            {...availability(state.saveDisabled && !saving)}
             onClick={() => {
               runAction(onSave);
             }}
@@ -408,9 +420,7 @@ export function SaveActionBar({
             {labels.save}
           </Button>
           <Button
-            ariaDisabled={state.blocked && state.discardDisabled}
-            aria-describedby={state.blocked ? statusId : undefined}
-            disabled={state.discardDisabled && !state.blocked}
+            {...availability(state.discardDisabled)}
             onClick={() => {
               runAction(onDiscard);
             }}
