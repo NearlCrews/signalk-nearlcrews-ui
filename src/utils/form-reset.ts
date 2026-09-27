@@ -5,6 +5,19 @@ interface FormAssociated {
 }
 
 /**
+ * Runs `run` on the next microtask, after the platform or React has finished
+ * rewriting the node, and skips it for a node that left the document in the
+ * meantime, since nothing it did there could reach the user.
+ */
+export function afterMicrotaskIfConnected<
+  T extends { readonly isConnected: boolean },
+>(node: T, run: (node: T) => void): void {
+  queueMicrotask(() => {
+    if (node.isConnected) run(node);
+  });
+}
+
+/**
  * Runs `onReset` after the control's own form has been reset, and returns the
  * unsubscribe.
  *
@@ -27,9 +40,7 @@ export function observeFormReset<T extends FormAssociated>(
   }
 
   const handleReset = (): void => {
-    queueMicrotask(() => {
-      if (node.isConnected) onReset(node);
-    });
+    afterMicrotaskIfConnected(node, onReset);
   };
   form.addEventListener("reset", handleReset);
   return () => {

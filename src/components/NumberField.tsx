@@ -222,17 +222,14 @@ export function NumberField({
     onValidityChange,
     resetKey,
   });
-  const messageOverride =
-    draft.invalidReason === undefined
-      ? undefined
-      : messages?.[draft.invalidReason];
+  const { invalidReason } = draft;
   const draftMessage =
-    draft.invalidReason === undefined
+    invalidReason === undefined
       ? undefined
       : resolveBundledContent(
-          messageOverride,
-          bundledMessages?.[draft.invalidReason],
-          defaultMessage(draft.invalidReason, rules),
+          messages?.[invalidReason],
+          bundledMessages?.[invalidReason],
+          defaultMessage(invalidReason, rules),
         );
   const showUnit = hasReactContent(unit);
   // The keyboard hints are defaults a caller may replace, so they are applied

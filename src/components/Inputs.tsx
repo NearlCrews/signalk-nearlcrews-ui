@@ -7,6 +7,7 @@ import {
   type RefObject,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
+  useEffectEvent,
   useId,
   useLayoutEffect,
   useRef,
@@ -27,10 +28,14 @@ import { classNames } from "../utils/class-names.js";
 import { isDevelopment } from "../utils/environment.js";
 import { resolveFieldRegions } from "../utils/field-error.js";
 import { markForwardsFieldControlProps } from "../utils/field-forwarding.js";
-import { observeFormReset } from "../utils/form-reset.js";
+import {
+  afterMicrotaskIfConnected,
+  observeFormReset,
+} from "../utils/form-reset.js";
 import { requireContent } from "../utils/react-node.js";
 import type { Visibility } from "../utils/variants.js";
 import { warnOnce } from "../utils/warn-once.js";
+import { blurBeforeWheel } from "../utils/wheel-guard.js";
 import { FieldError } from "./FieldError.js";
 import { FieldMarker } from "./FieldMarker.js";
 
@@ -54,32 +59,46 @@ export interface MonospaceControlProps {
 }
 
 /**
+ * The class list every text entry control carries: the shared input look, the
+ * control's own modifiers, the monospace stack when asked for, and the
+ * caller's class last.
+ */
+function inputClassNames(
+  monospace: boolean,
+  className: string | undefined,
+  ...modifiers: readonly (string | undefined)[]
+): string {
+  return classNames(
+    "snui-input",
+    ...modifiers,
+    monospace && "snui-input--monospace",
+    className,
+  );
+}
+
+/**
  * Owns a control for a whole mount and puts it back after its own form has
  * been reset.
  *
  * A native reset restores a control from its `value` and `checked` content
  * attributes, which a React-controlled control does not carry, and React
  * neither re-renders nor fires a change afterwards, so each control says here
- * how to restore itself. The resync reads current props, so it is held in a
- * ref: rebuilding the callback ref every render would detach the node on
- * every commit, which an ordinary inline consumer ref would otherwise cause,
- * and the caller's own ref is composed separately for the same reason. The
- * registration is keyed on the `form` attribute, because a control moved to
- * another form has to listen to the form it now belongs to.
+ * how to restore itself. The resync is an effect event, so it reads current
+ * props without registering again. The caller's own ref is composed
+ * separately, because rebuilding the callback ref every render would detach
+ * the node on every commit, which an ordinary inline consumer ref would
+ * otherwise cause. The registration is keyed on the `form` attribute, because
+ * a control moved to another form has to listen to the form it now belongs to.
  */
 function useResettableControl<Control extends HTMLInputElement>(
-  nodeRef: RefObject<Control | null>,
   ref: Ref<Control> | undefined,
   formId: string | undefined,
   onReset: (node: Control) => void,
-): (node: Control) => () => void {
+): readonly [RefObject<Control | null>, (node: Control) => () => void] {
+  const nodeRef = useRef<Control | null>(null);
   const setNode = useNodeRef(nodeRef, undefined);
   useComposedRef(nodeRef, ref);
-
-  const resync = useRef(onReset);
-  useLayoutEffect(() => {
-    resync.current = onReset;
-  });
+  const resync = useEffectEvent(onReset);
 
   // The form id is a change signal rather than a value read here: the
   // registration resolves the control's own form, so a control moved to
@@ -88,12 +107,10 @@ function useResettableControl<Control extends HTMLInputElement>(
     const node = nodeRef.current;
     if (node === null) return undefined;
 
-    return observeFormReset(node, (target) => {
-      resync.current(target);
-    });
-  }, [formId, nodeRef]);
+    return observeFormReset(node, resync);
+  }, [formId]);
 
-  return setNode;
+  return [nodeRef, setNode];
 }
 
 /** Puts a controlled text or numeric value back after a native form reset. */
@@ -130,9 +147,7 @@ export const TextInput = /* @__PURE__ */ markForwardsFieldControlProps(
     value,
     ...props
   }: TextInputProps): React.JSX.Element {
-    const inputElement = useRef<HTMLInputElement | null>(null);
-    const attachInput = useResettableControl(
-      inputElement,
+    const [, attachInput] = useResettableControl(
       ref,
       props.form,
       restoreControlledValue(value),
@@ -144,11 +159,7 @@ export const TextInput = /* @__PURE__ */ markForwardsFieldControlProps(
         ref={attachInput}
         type={type}
         value={value}
-        className={classNames(
-          "snui-input",
-          monospace && "snui-input--monospace",
-          className,
-        )}
+        className={inputClassNames(monospace, className)}
       />
     );
   },
@@ -170,9 +181,7 @@ export const NumberInput = /* @__PURE__ */ markForwardsFieldControlProps(
     value,
     ...props
   }: NumberInputProps): React.JSX.Element {
-    const inputElement = useRef<HTMLInputElement | null>(null);
-    const attachInput = useResettableControl(
-      inputElement,
+    const [, attachInput] = useResettableControl(
       ref,
       props.form,
       restoreControlledValue(value),
@@ -184,18 +193,9 @@ export const NumberInput = /* @__PURE__ */ markForwardsFieldControlProps(
         ref={attachInput}
         type="number"
         value={value}
-        className={classNames(
-          "snui-input",
-          monospace && "snui-input--monospace",
-          className,
-        )}
+        className={inputClassNames(monospace, className)}
         onWheel={(event) => {
-          // A focused number input spins on a wheel or a trackpad, so scrolling
-          // past a field at a nav station would silently rewrite a configured
-          // threshold. An unfocused input never spins, so focus is dropped
-          // before the wheel applies.
-          const input = event.currentTarget;
-          if (input.ownerDocument.activeElement === input) input.blur();
+          blurBeforeWheel(event);
           onWheel?.(event);
         }}
       />
@@ -228,9 +228,7 @@ export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
   }: RangeInputProps): React.JSX.Element {
     useOptionalModuleStyles(RANGE_STYLES);
 
-    const inputElement = useRef<HTMLInputElement | null>(null);
-    const attachInput = useResettableControl(
-      inputElement,
+    const [inputRef, attachInput] = useResettableControl(
       ref,
       props.form,
       setRangeProgress,
@@ -241,7 +239,7 @@ export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
     // min, max, and value can each move the fill and any of them can change
     // without an input event.
     useLayoutEffect(() => {
-      if (inputElement.current !== null) setRangeProgress(inputElement.current);
+      if (inputRef.current !== null) setRangeProgress(inputRef.current);
     });
 
     return (
@@ -255,9 +253,7 @@ export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
           setRangeProgress(element);
           onInput?.(event);
           // Re-sync after React restores a rejected controlled value.
-          queueMicrotask(() => {
-            if (element.isConnected) setRangeProgress(element);
-          });
+          afterMicrotaskIfConnected(element, setRangeProgress);
         }}
       />
     );
@@ -279,12 +275,7 @@ export const Select = /* @__PURE__ */ markForwardsFieldControlProps(
       <select
         {...props}
         ref={ref}
-        className={classNames(
-          "snui-input",
-          "snui-select",
-          monospace && "snui-input--monospace",
-          className,
-        )}
+        className={inputClassNames(monospace, className, "snui-select")}
       />
     );
   },
@@ -319,16 +310,15 @@ export const Textarea = /* @__PURE__ */ markForwardsFieldControlProps(
         {...props}
         ref={ref}
         rows={rows ?? minRows}
-        className={classNames(
-          "snui-input",
+        className={inputClassNames(
+          monospace,
+          className,
           "snui-textarea",
           // Either prop states a row count, so either has to release the fixed
           // minimum height; otherwise a small count renders no smaller.
           rows === undefined && minRows === undefined
             ? undefined
             : "snui-textarea--rows",
-          monospace && "snui-input--monospace",
-          className,
         )}
       />
     );
@@ -412,8 +402,6 @@ export function Checkbox({
 }: CheckboxProps): React.JSX.Element {
   requireContent(label, "Checkbox requires a non-empty label.");
 
-  const inputElement = useRef<HTMLInputElement | null>(null);
-
   const generatedId = useId();
   // The id seeds the label, description, and error ids, so an id carrying a
   // space would point aria-describedby at ids that exist nowhere.
@@ -421,8 +409,7 @@ export function Checkbox({
     id === undefined ? generatedId : requireIdToken(id, "Checkbox id");
   const labelId = `${controlId}-label`;
 
-  const attachInput = useResettableControl(
-    inputElement,
+  const [inputRef, attachInput] = useResettableControl(
     ref,
     props.form,
     (node) => {
@@ -439,10 +426,10 @@ export function Checkbox({
   // re-asserting the prop on that render is what puts a controlled mixed box
   // back.
   useLayoutEffect(() => {
-    if (inputElement.current !== null) {
-      inputElement.current.indeterminate = indeterminate ?? false;
+    if (inputRef.current !== null) {
+      inputRef.current.indeterminate = indeterminate ?? false;
     }
-  }, [checked, indeterminate]);
+  }, [checked, indeterminate, inputRef]);
 
   // The message is built only in a development build: warnOnce discards it in
   // production, and JSON.stringify plus the template would otherwise run on
@@ -493,10 +480,9 @@ export function Checkbox({
       const input = event.currentTarget;
       const restoredChecked = checked ?? !input.checked;
       const restoredIndeterminate = indeterminate ?? false;
-      queueMicrotask(() => {
-        if (!input.isConnected) return;
-        input.checked = restoredChecked;
-        input.indeterminate = restoredIndeterminate;
+      afterMicrotaskIfConnected(input, (node) => {
+        node.checked = restoredChecked;
+        node.indeterminate = restoredIndeterminate;
       });
     }
     refusal.onClick(event);

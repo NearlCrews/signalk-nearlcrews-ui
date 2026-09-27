@@ -10,6 +10,7 @@ import {
 } from "react";
 import { isDevelopment } from "../utils/environment.js";
 import { warnOnce } from "../utils/warn-once.js";
+import { blurBeforeWheel } from "../utils/wheel-guard.js";
 
 /** Why a draft cannot be committed. Keys the per-reason validation messages. */
 export type NumberDraftInvalidReason =
@@ -126,6 +127,19 @@ function snapDownToStep(value: number, step: number, base: number): number {
   return roundToStepPrecision(snapped, step, base);
 }
 
+/**
+ * Whether a value breaks a minimum: it falls below the bound, or lands on it
+ * when the bound is exclusive.
+ */
+function breaksMin(value: number, min: number, exclusive: boolean): boolean {
+  return exclusive ? value <= min : value < min;
+}
+
+/** The same test against a maximum. */
+function breaksMax(value: number, max: number, exclusive: boolean): boolean {
+  return exclusive ? value >= max : value > max;
+}
+
 /** Reports one rules mistake once, in development only. */
 function warnRules(message: string): void {
   warnOnce(`number-draft-rules:${message}`, `resolveNumberDraft: ${message}`);
@@ -159,8 +173,8 @@ function warnUnsoundRules(
 
   const rejects =
     (integer && !Number.isInteger(fallback)) ||
-    (min !== undefined && (exclusiveMin ? fallback <= min : fallback < min)) ||
-    (max !== undefined && (exclusiveMax ? fallback >= max : fallback > max)) ||
+    (min !== undefined && breaksMin(fallback, min, exclusiveMin)) ||
+    (max !== undefined && breaksMax(fallback, max, exclusiveMax)) ||
     (stepSize !== undefined &&
       snapToStep(fallback, stepSize, stepBase) !== fallback);
   if (rejects) {
@@ -216,14 +230,14 @@ export function resolveNumberDraft(
     value = snapToStep(value, stepSize, stepBase);
   }
 
-  if (min !== undefined && (exclusiveMin ? value <= min : value < min)) {
+  if (min !== undefined && breaksMin(value, min, exclusiveMin)) {
     if (!clamps) return invalid("belowMin");
     // An exclusive bound has no nearest legal value to clamp to.
     if (exclusiveMin) return valid(fallback);
     // `min` is the step base, so clamping onto it is always step aligned.
     value = min;
   }
-  if (max !== undefined && (exclusiveMax ? value >= max : value > max)) {
+  if (max !== undefined && breaksMax(value, max, exclusiveMax)) {
     if (!clamps) return invalid("aboveMax");
     if (exclusiveMax) return valid(fallback);
     // A max that is not itself a multiple of the step would reintroduce the
@@ -231,7 +245,7 @@ export function resolveNumberDraft(
     // range rather than landing on the bound.
     value =
       stepSize === undefined ? max : snapDownToStep(max, stepSize, stepBase);
-    if (min !== undefined && (exclusiveMin ? value <= min : value < min)) {
+    if (min !== undefined && breaksMin(value, min, exclusiveMin)) {
       // The bounds are closer together than one step, so nothing inside the
       // range is step aligned and only the fallback is left.
       return valid(fallback);
@@ -382,12 +396,7 @@ export function useNumberDraft(
       onKeyDown: (event) => {
         if (event.key === "Enter") finishEdit();
       },
-      onWheel: (event) => {
-        // An unfocused number input never spins, so dropping focus before the
-        // wheel applies makes scrolling past the field safe.
-        const input = event.currentTarget;
-        if (input.ownerDocument.activeElement === input) input.blur();
-      },
+      onWheel: blurBeforeWheel,
       // Without an explicit step the browser treats fractions as a step
       // mismatch, so a non-integer field opts out of that constraint.
       step: rules.step ?? (rules.integer === true ? 1 : "any"),
