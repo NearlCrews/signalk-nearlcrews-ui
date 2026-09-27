@@ -42,10 +42,11 @@ export type CheckboxGroupLayout = "grid" | "stack";
 /**
  * A multi-select group.
  *
- * The group is a real `<fieldset>`, so it is named by the `legend` it
- * inherits from {@link FieldGroupProps} and not by the `label` the
- * single-choice groups take: `RadioGroup` and `SegmentedControl` are `div`
- * groups with no `<legend>` element to name them.
+ * The group is a real `<fieldset>`, so it is named the way
+ * {@link FieldGroupProps} names one: by `label`, or by the `legend` spelling a
+ * fieldset also takes, with `label` deciding when both are given.
+ * `RadioGroup` and `SegmentedControl` are `div` groups with no `<legend>`
+ * element to name them and take `label` alone.
  */
 export interface CheckboxGroupProps<Value extends string>
   extends Omit<FieldGroupProps, "children" | "defaultValue" | "name"> {
@@ -234,7 +235,8 @@ export function CheckboxGroup<Value extends string>({
     <FieldGroup
       {...groupProps}
       ref={attachFieldset}
-      legend={hasReactContent(legend) ? legend : label}
+      label={label}
+      legend={legend}
       className={classNames("snui-checkbox-group", className)}
       aria-describedby={joinIdReferences(
         ariaDescribedBy,

@@ -147,6 +147,24 @@ describe("CheckboxGroup selection", () => {
   });
 });
 
+describe("CheckboxGroup naming", () => {
+  it("names the group from label first, the way FieldGroup does", () => {
+    renderInPanel(
+      <>
+        <CheckboxGroup label="Sources" legend="Ignored" options={LAYERS} />
+        <CheckboxGroup legend="Providers" options={LAYERS} />
+        <CheckboxGroup label="Layers" options={LAYERS} />
+      </>,
+    );
+
+    // Both are fieldset groups, so the two spellings resolve by one rule.
+    expect(screen.getByRole("group", { name: "Sources" })).toBeTruthy();
+    expect(screen.queryByRole("group", { name: "Ignored" })).toBeNull();
+    expect(screen.getByRole("group", { name: "Providers" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Layers" })).toBeTruthy();
+  });
+});
+
 describe("CheckboxGroup select all", () => {
   function Group(): ReactElement {
     const [value, setValue] = useState<readonly string[]>(["buoys"]);
