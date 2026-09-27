@@ -234,6 +234,33 @@ describe("accordion coordination", () => {
     );
   });
 
+  it("keeps every section shut for an explicit null defaultOpenIndex", () => {
+    const sections = (defaultOpenIndex: number | null | undefined) => (
+      <Accordion defaultOpenIndex={defaultOpenIndex}>
+        <CollapsibleSection title="First">First content</CollapsibleSection>
+        <CollapsibleSection title="Second" defaultOpen>
+          Second content
+        </CollapsibleSection>
+      </Accordion>
+    );
+
+    const shut = renderInPanel(sections(null));
+    for (const name of ["First", "Second"]) {
+      expect(screen.getByRole("button", { name })).toHaveAttribute(
+        "aria-expanded",
+        "false",
+      );
+    }
+    shut.unmount();
+
+    // Only an absent index falls back to the child that opens by default.
+    renderInPanel(sections(undefined));
+    expect(screen.getByRole("button", { name: "Second" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+  });
+
   it("warns that it owns a child's open prop", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     renderInPanel(

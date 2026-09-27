@@ -72,7 +72,11 @@ export function Accordion({
 
   const [effectiveIndex, commitIndex] = useControllableState(
     openIndex,
-    defaultOpenIndex ?? initialOpenIndex(sections),
+    // Null is a choice of its own, all shut, so only an absent index falls
+    // back to the children.
+    defaultOpenIndex === undefined
+      ? initialOpenIndex(sections)
+      : defaultOpenIndex,
     onOpenIndexChange,
   );
 
