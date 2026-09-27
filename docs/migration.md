@@ -82,7 +82,7 @@ Before moving panel content into a `CollapsibleSection`, read the `mountStrategy
 
 No consuming code requires modification. Check the behavior below.
 
-- The emitted declarations change without changing any entry point: `components/overlay-placement.d.ts` and `utils/announcement.d.ts` differ, as the changelog describes. No import resolves differently.
+- The emitted declarations change without changing any entry point: `components/Disclosure.d.ts`, `components/overlay-placement.d.ts`, and `utils/announcement.d.ts` differ, as the changelog describes. No import resolves differently.
 
 ## Changes in 0.12.0
 

@@ -145,7 +145,11 @@ describe("Disclosure", () => {
     renderInPanel(
       <Disclosure>
         <DisclosureTrigger>Show reports</DisclosureTrigger>
-        <DisclosurePanel ref={panelRef} data-testid="panel">
+        <DisclosurePanel
+          ref={panelRef}
+          className="report-drawer"
+          data-testid="panel"
+        >
           <p>Report body</p>
         </DisclosurePanel>
       </Disclosure>,
@@ -153,6 +157,7 @@ describe("Disclosure", () => {
 
     const section = screen.getByTestId("panel");
     expect(section.tagName).toBe("SECTION");
+    expect(section).toHaveClass("report-drawer");
     expect(panelRef.current).toBe(section);
 
     await user.click(screen.getByRole("button", { name: "Show reports" }));

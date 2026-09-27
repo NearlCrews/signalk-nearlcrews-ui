@@ -292,7 +292,6 @@ export function DisclosurePanel({
   "aria-label": ariaLabel,
   "aria-labelledby": ariaLabelledBy,
   children,
-  className,
   disclosure,
   mountStrategy = "retain",
   ref,
@@ -328,7 +327,6 @@ export function DisclosurePanel({
       role={role}
       aria-label={ariaLabel}
       aria-labelledby={named ? ariaLabelledBy : regionProps["aria-labelledby"]}
-      className={className}
       ref={attachPanel}
     >
       {mountStrategy === "unmount" && !open ? null : children}

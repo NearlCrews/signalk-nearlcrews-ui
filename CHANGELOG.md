@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Changed
 
 - The emitted declarations no longer include the internal `OVERLAY_PLACEMENTS` map or the `announcementRole` helper, neither of which any package entry point exported, and the `overlayOpenProps` comment in `components/overlay-placement.d.ts` gives the actual reason an unset prop is left out.
+- `DisclosurePanel` passes `className` through with its other props, so its declared signature no longer names it separately. The class still lands on the panel section.
 
 ## [0.12.0] - 2026-09-14
 

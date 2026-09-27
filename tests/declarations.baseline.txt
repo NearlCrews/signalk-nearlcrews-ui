@@ -632,7 +632,7 @@ export interface DisclosurePanelProps extends Omit<HTMLAttributes<HTMLElement>, 
  * `aria-labelledby` is given, and it takes focus when opened through the
  * trigger so the reader arrives at the revealed content.
  */
-export declare function DisclosurePanel({ "aria-label": ariaLabel, "aria-labelledby": ariaLabelledBy, children, className, disclosure, mountStrategy, ref, ...props }: DisclosurePanelProps): React.JSX.Element;
+export declare function DisclosurePanel({ "aria-label": ariaLabel, "aria-labelledby": ariaLabelledBy, children, disclosure, mountStrategy, ref, ...props }: DisclosurePanelProps): React.JSX.Element;
 export {};
 
 === components/EmptyState.d.ts ===
