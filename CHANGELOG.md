@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Changed
+
+- The emitted declarations no longer include the internal `OVERLAY_PLACEMENTS` map or the `announcementRole` helper, neither of which any package entry point exported, and the `overlayOpenProps` comment in `components/overlay-placement.d.ts` gives the actual reason an unset prop is left out.
+
 ## [0.12.0] - 2026-09-14
 
 A documentation correction, two announcement fixes, and internal helpers the components now share instead of each writing their own. No entry point gained or lost an export, but the emitted declarations changed, and the release policy counts those as part of the public contract, so this ships as a minor rather than a patch.

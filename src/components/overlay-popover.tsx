@@ -1,12 +1,20 @@
 import { type CSSProperties, type ReactNode, type Ref, useMemo } from "react";
-import { Popover as RACPopover } from "react-aria-components";
+import {
+  type Placement as RACPlacement,
+  Popover as RACPopover,
+} from "react-aria-components";
 
 import { overlayZIndex, useOverlayLayer } from "../utils/overlay-layer.js";
 import { definedProps } from "../utils/props.js";
-import {
-  OVERLAY_PLACEMENTS,
-  type OverlayPlacement,
-} from "./overlay-placement.js";
+import type { OverlayPlacement } from "./overlay-placement.js";
+
+/** The react-aria placement behind each library {@link OverlayPlacement}. */
+const OVERLAY_PLACEMENTS: Readonly<Record<OverlayPlacement, RACPlacement>> = {
+  bottom: "bottom start",
+  end: "end",
+  start: "start",
+  top: "top start",
+};
 
 interface OverlayPopoverProps {
   /** Names the surface. react-aria forwards it to the element itself. */

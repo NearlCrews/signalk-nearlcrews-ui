@@ -1,6 +1,7 @@
 export type AnnouncementMode = "off" | "polite" | "assertive";
 
-export function announcementRole(
+/** The live-region role that speaks at a mode, and none for "off". */
+function announcementRole(
   mode: AnnouncementMode,
 ): "alert" | "status" | undefined {
   if (mode === "assertive") return "alert";

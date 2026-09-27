@@ -2200,7 +2200,6 @@ export declare function VisuallyHidden({ as, className, ...props }: VisuallyHidd
 export {};
 
 === components/overlay-placement.d.ts ===
-import type { Placement as RACPlacement } from "react-aria-components";
 /**
  * Logical overlay edge. The "top" and "bottom" edges align the overlay's
  * start edge with the trigger's start edge, matching menu conventions; the
@@ -2211,8 +2210,6 @@ import type { Placement as RACPlacement } from "react-aria-components";
  * placement automatically when the overlay collides with the viewport.
  */
 export type OverlayPlacement = "top" | "bottom" | "start" | "end";
-/** The react-aria placement behind each library {@link OverlayPlacement}. */
-export declare const OVERLAY_PLACEMENTS: Readonly<Record<OverlayPlacement, RACPlacement>>;
 /** Open-state props shared by every overlay component. */
 export interface OverlayOpenState {
     /** Sets the initial state only. Pass `open` to control the overlay. */
@@ -2230,8 +2227,10 @@ interface OverlayTriggerOpenProps {
 }
 /**
  * Maps the library open-state props onto the react-aria trigger props.
- * Controlled `open` becomes `isOpen`; an undefined prop is omitted entirely
- * so the trigger stays uncontrolled under exactOptionalPropertyTypes.
+ * Controlled `open` becomes `isOpen`. A prop the caller left unset is omitted
+ * rather than passed as undefined, because react-aria declares these props
+ * without `| undefined` and the package compiles under
+ * exactOptionalPropertyTypes. An absent `open` leaves the trigger uncontrolled.
  */
 export declare function overlayOpenProps({ open, defaultOpen, onOpenChange, }: OverlayOpenState): OverlayTriggerOpenProps;
 export {};
@@ -2683,7 +2682,6 @@ export declare function isThemeChoice(value: unknown): value is ThemeChoice;
 
 === utils/announcement.d.ts ===
 export type AnnouncementMode = "off" | "polite" | "assertive";
-export declare function announcementRole(mode: AnnouncementMode): "alert" | "status" | undefined;
 /**
  * The attribute pair an announcing element carries. Named for the attributes
  * rather than for the props, because `LiveRegionProps` is the public prop type

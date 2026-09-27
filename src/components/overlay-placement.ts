@@ -1,5 +1,3 @@
-import type { Placement as RACPlacement } from "react-aria-components";
-
 import { definedProps } from "../utils/props.js";
 
 /**
@@ -12,16 +10,6 @@ import { definedProps } from "../utils/props.js";
  * placement automatically when the overlay collides with the viewport.
  */
 export type OverlayPlacement = "top" | "bottom" | "start" | "end";
-
-/** The react-aria placement behind each library {@link OverlayPlacement}. */
-export const OVERLAY_PLACEMENTS: Readonly<
-  Record<OverlayPlacement, RACPlacement>
-> = {
-  bottom: "bottom start",
-  end: "end",
-  start: "start",
-  top: "top start",
-};
 
 /** Open-state props shared by every overlay component. */
 export interface OverlayOpenState {
@@ -42,8 +30,10 @@ interface OverlayTriggerOpenProps {
 
 /**
  * Maps the library open-state props onto the react-aria trigger props.
- * Controlled `open` becomes `isOpen`; an undefined prop is omitted entirely
- * so the trigger stays uncontrolled under exactOptionalPropertyTypes.
+ * Controlled `open` becomes `isOpen`. A prop the caller left unset is omitted
+ * rather than passed as undefined, because react-aria declares these props
+ * without `| undefined` and the package compiles under
+ * exactOptionalPropertyTypes. An absent `open` leaves the trigger uncontrolled.
  */
 export function overlayOpenProps({
   open,
