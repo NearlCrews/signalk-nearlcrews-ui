@@ -1,26 +1,18 @@
 import { CONTAINER_BREAKPOINT_NARROW } from "../../src/styles/tokens.js";
-import { expect, type Locator, type Page, test } from "./fixtures.js";
+import {
+  backgroundOf,
+  expect,
+  expectSolidOutline,
+  type Locator,
+  type Page,
+  selectTheme,
+  test,
+} from "./fixtures.js";
 
 /*
  * Rendered checks for the design tokens: the unit suite proves the declared
  * pairs, this file proves what the browser paints from them.
  */
-
-type ThemeName = "Light" | "Dark" | "Night";
-
-async function selectTheme(page: Page, theme: ThemeName): Promise<void> {
-  await page.getByRole("radio", { name: theme }).click();
-  await expect(page.locator("[data-snui-version]")).toHaveAttribute(
-    "data-snui-theme",
-    theme.toLowerCase(),
-  );
-}
-
-function backgroundOf(locator: Locator): Promise<string> {
-  return locator.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
-  );
-}
 
 /**
  * The color a token resolves to inside the panel, read from a probe so the
@@ -250,8 +242,7 @@ test("keeps the selected tab and its focus ring visible under forced colors", as
   await page.keyboard.press("ArrowRight");
   const sources = list.getByRole("tab", { name: "Sources" });
   await expect(sources).toBeFocused();
-  await expect(sources).toHaveCSS("outline-style", "solid");
-  await expect(sources).toHaveCSS("outline-width", "2px");
+  await expectSolidOutline(sources);
   await expect(sources).toHaveCSS("outline-color", colors.canvasText);
 });
 

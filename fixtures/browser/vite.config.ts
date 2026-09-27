@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig, type Plugin } from "vite";
-import { BROWSER_HOST, BROWSER_PORT } from "./browser-server.js";
+import {
+  BROWSER_HOST,
+  BROWSER_PORT,
+  CSP_FIXTURE_NONCE,
+} from "./browser-server.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const federationRoots = {
@@ -57,7 +61,6 @@ function packageEntryAliases(): PackageAlias[] {
   return [...subpathAliases, rootAlias];
 }
 
-const CSP_FIXTURE_NONCE = "snui-csp-fixture";
 const CSP_FIXTURE_MODULE_ID = "/csp-fixture.tsx";
 const RESOLVED_CSP_FIXTURE_MODULE_ID = `\0${CSP_FIXTURE_MODULE_ID}`;
 

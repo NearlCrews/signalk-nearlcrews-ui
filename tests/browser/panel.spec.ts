@@ -1,12 +1,15 @@
 import { existsSync } from "node:fs";
 
 import {
+  backgroundOf,
   controlTargetFloor,
   expect,
   expectNoAxeViolations,
+  expectSolidOutline,
   expectTargetFloor,
   type Locator,
   type Page,
+  selectTheme,
   type TestInfo,
   test,
 } from "./fixtures.js";
@@ -34,6 +37,9 @@ const ACTIONABILITY_TIMEOUT = 2_000;
 const ACTION_BAR_SELECTOR = ".snui-action-bar";
 const PANEL_ACTION_SELECTOR = '[data-testid="admin-host-focus-target"]';
 
+/** How every full-page visual baseline is captured. */
+const FULL_PAGE_SNAPSHOT = { animations: "disabled", fullPage: true } as const;
+
 interface DockedBarOverlap {
   readonly action: Locator;
   readonly bar: Locator;
@@ -45,6 +51,18 @@ interface StabilityProbe {
   readonly limit: number;
   /** Selector of the element whose box has to hold still. */
   readonly measure: string;
+}
+
+/** The computed CSS position of the first element the locator matches. */
+function positionOf(locator: Locator): Promise<string> {
+  return locator.evaluate((element) => getComputedStyle(element).position);
+}
+
+/** The computed outline width, in pixels, of the first element the locator matches. */
+async function outlineWidthOf(locator: Locator): Promise<number> {
+  return Number.parseFloat(
+    await locator.evaluate((element) => getComputedStyle(element).outlineWidth),
+  );
 }
 
 /** Resolves a color token inside the panel root, in the theme it currently shows. */
@@ -133,9 +151,7 @@ async function overlapDockedActionBar(
 
   const bar = page.locator(ACTION_BAR_SELECTOR);
   const action = page.getByTestId("admin-host-focus-target");
-  await expect
-    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
-    .toBe("fixed");
+  await expect.poll(() => positionOf(bar)).toBe("fixed");
 
   const [barBox, actionBox] = await Promise.all([
     bar.boundingBox(),
@@ -207,11 +223,7 @@ test("renders all themes and component states without axe violations", async ({
     ["Dark", "rgb(255, 139, 130)", "rgb(245, 247, 250)"],
     ["Night", "rgb(255, 48, 48)", "rgb(255, 64, 64)"],
   ] as const) {
-    await page.getByRole("radio", { name: theme }).click();
-    await expect(page.locator("[data-snui-version]")).toHaveAttribute(
-      "data-snui-theme",
-      theme.toLowerCase(),
-    );
+    await selectTheme(page, theme);
     await expect(page.locator("[data-snui-version]")).toHaveCSS(
       "color",
       textColor,
@@ -224,12 +236,7 @@ test("renders all themes and component states without axe violations", async ({
     await expect(
       page.getByRole("textbox", { name: "Invalid server URL" }),
     ).toHaveCSS("border-color", dangerColor);
-    await page.evaluate(
-      () =>
-        new Promise<void>((resolve) => {
-          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
-        }),
-    );
+    await settleFrames(page);
     await expectNoAxeViolations(page);
   }
 });
@@ -257,11 +264,7 @@ test("follows the host theme for a fresh Auto profile", async ({ page }) => {
 });
 
 test("persists explicit themes across reloads", async ({ page }) => {
-  await page.getByRole("radio", { name: "Night" }).click();
-  await expect(page.locator("[data-snui-version]")).toHaveAttribute(
-    "data-snui-theme",
-    "night",
-  );
+  await selectTheme(page, "Night");
 
   await page.reload();
   await expect(page.locator("[data-snui-version]")).toHaveAttribute(
@@ -613,30 +616,14 @@ test("provides hover and active feedback for raw action controls", async ({
     page.getByRole("button", { name: "Provider status and metrics" }),
     page.getByRole("button", { name: "Advanced settings" }),
   ]) {
-    const initialBackground = await control.evaluate(
-      (element) => getComputedStyle(element).backgroundColor,
-    );
+    const initialBackground = await backgroundOf(control);
     await control.hover();
-    await expect
-      .poll(() =>
-        control.evaluate(
-          (element) => getComputedStyle(element).backgroundColor,
-        ),
-      )
-      .not.toBe(initialBackground);
-    const hoverBackground = await control.evaluate(
-      (element) => getComputedStyle(element).backgroundColor,
-    );
+    await expect.poll(() => backgroundOf(control)).not.toBe(initialBackground);
+    const hoverBackground = await backgroundOf(control);
     expect(hoverBackground).toBe("rgb(238, 242, 247)");
 
     await page.mouse.down();
-    await expect
-      .poll(() =>
-        control.evaluate(
-          (element) => getComputedStyle(element).backgroundColor,
-        ),
-      )
-      .not.toBe(hoverBackground);
+    await expect.poll(() => backgroundOf(control)).not.toBe(hoverBackground);
     await page.mouse.up();
   }
 });
@@ -653,38 +640,18 @@ test("provides segmented hover and active feedback", async ({
   const selected = page.getByRole("radio", { name: "Normal" });
   const unselected = page.getByRole("radio", { name: "Minimal" });
 
-  const selectedBackground = await selected.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
-  );
+  const selectedBackground = await backgroundOf(selected);
   await selected.hover();
-  await expect
-    .poll(() =>
-      selected.evaluate((element) => getComputedStyle(element).backgroundColor),
-    )
-    .not.toBe(selectedBackground);
+  await expect.poll(() => backgroundOf(selected)).not.toBe(selectedBackground);
 
-  const unselectedBackground = await unselected.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
-  );
+  const unselectedBackground = await backgroundOf(unselected);
   await unselected.hover();
   await expect
-    .poll(() =>
-      unselected.evaluate(
-        (element) => getComputedStyle(element).backgroundColor,
-      ),
-    )
+    .poll(() => backgroundOf(unselected))
     .not.toBe(unselectedBackground);
-  const hoverBackground = await unselected.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
-  );
+  const hoverBackground = await backgroundOf(unselected);
   await page.mouse.down();
-  await expect
-    .poll(() =>
-      unselected.evaluate(
-        (element) => getComputedStyle(element).backgroundColor,
-      ),
-    )
-    .not.toBe(hoverBackground);
+  await expect.poll(() => backgroundOf(unselected)).not.toBe(hoverBackground);
   await page.mouse.up();
 });
 
@@ -699,28 +666,14 @@ test("keeps aria-disabled focus indicators fully opaque", async ({
     testInfo.project.name === "mobile-chromium" ? "12px" : "8px";
 
   const disabledText = await readTokenColor(page, "--snui-color-text-disabled");
+  const content = button.locator(".snui-button__content");
   await expect(button).toHaveCSS("opacity", "1");
   await expect(button).toHaveCSS("color", disabledText);
-  await expect(button.locator(".snui-button__content")).toHaveCSS(
-    "opacity",
-    "1",
-  );
-  await expect(button.locator(".snui-button__content")).toHaveCSS(
-    "display",
-    "flex",
-  );
-  await expect(button.locator(".snui-button__content")).toHaveCSS(
-    "column-gap",
-    expectedGap,
-  );
+  await expect(content).toHaveCSS("opacity", "1");
+  await expect(content).toHaveCSS("display", "flex");
+  await expect(content).toHaveCSS("column-gap", expectedGap);
   await button.focus();
-  expect(
-    Number.parseFloat(
-      await button.evaluate(
-        (element) => getComputedStyle(element).outlineWidth,
-      ),
-    ),
-  ).toBeGreaterThanOrEqual(2);
+  expect(await outlineWidthOf(button)).toBeGreaterThanOrEqual(2);
 
   const nativeDisabled = page.getByRole("button", { name: "Disabled" });
   await nativeDisabled.evaluate((element) =>
@@ -812,29 +765,24 @@ test("places the select indicator at the logical inline end", async ({
   page,
 }) => {
   const select = page.getByRole("combobox", { name: "Provider mode" });
+  const readIndicator = () =>
+    select.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      return {
+        paddingLeft: Number.parseFloat(styles.paddingLeft),
+        paddingRight: Number.parseFloat(styles.paddingRight),
+        positions: styles.backgroundPositionX.split(","),
+      };
+    });
 
-  const ltr = await select.evaluate((element) => {
-    const styles = getComputedStyle(element);
-    return {
-      paddingLeft: Number.parseFloat(styles.paddingLeft),
-      paddingRight: Number.parseFloat(styles.paddingRight),
-      positions: styles.backgroundPositionX.split(","),
-    };
-  });
+  const ltr = await readIndicator();
   expect(ltr.paddingRight).toBeGreaterThan(ltr.paddingLeft);
   expect(ltr.positions.every((position) => position.includes("100%"))).toBe(
     true,
   );
 
   await select.evaluate((element) => element.setAttribute("dir", "rtl"));
-  const rtl = await select.evaluate((element) => {
-    const styles = getComputedStyle(element);
-    return {
-      paddingLeft: Number.parseFloat(styles.paddingLeft),
-      paddingRight: Number.parseFloat(styles.paddingRight),
-      positions: styles.backgroundPositionX.split(","),
-    };
-  });
+  const rtl = await readIndicator();
   expect(rtl.paddingLeft).toBeGreaterThan(rtl.paddingRight);
   expect(rtl.positions.every((position) => !position.includes("100%"))).toBe(
     true,
@@ -1102,7 +1050,7 @@ test("docks the viewport action bar inside an unconstrained Admin host", async (
   const appBody = page.locator(".app-body");
   const panel = page.locator("[data-snui-root]");
   const anchor = page.locator(".snui-action-bar__viewport-anchor");
-  const bar = page.locator(".snui-action-bar");
+  const bar = page.locator(ACTION_BAR_SELECTOR);
 
   await expect(appBody).toHaveCSS("overflow-x", "hidden");
   await expect(appBody).toHaveCSS("overflow-y", "auto");
@@ -1111,9 +1059,7 @@ test("docks the viewport action bar inside an unconstrained Admin host", async (
     scrollHeight: element.scrollHeight,
   }));
   expect(appBodyMetrics.clientHeight).toBe(appBodyMetrics.scrollHeight);
-  await expect
-    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
-    .toBe("fixed");
+  await expect.poll(() => positionOf(bar)).toBe("fixed");
   await expect
     .poll(async () => {
       const [currentAnchor, currentBar] = await Promise.all([
@@ -1177,34 +1123,23 @@ test("docks the viewport action bar inside an unconstrained Admin host", async (
   }
 
   const focusTarget = page.getByTestId("admin-host-focus-target");
+  const focusTargetOverlap = { action: focusTarget, bar };
+  const focusWithoutScrolling = () =>
+    focusTarget.evaluate((element) => {
+      if (!(element instanceof HTMLElement)) {
+        throw new Error("Expected an HTML focus target.");
+      }
+      element.focus({ preventScroll: true });
+    });
   const focusTargetDocumentTop = await focusTarget.evaluate(
     (element) => element.getBoundingClientRect().top + window.scrollY,
   );
   await page.evaluate((documentTop) => {
     window.scrollTo(0, documentTop - (window.innerHeight - 40));
   }, focusTargetDocumentTop);
-  await expect
-    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
-    .toBe("fixed");
-  await focusTarget.evaluate((element) => {
-    if (!(element instanceof HTMLElement)) {
-      throw new Error("Expected an HTML focus target.");
-    }
-    element.focus({ preventScroll: true });
-  });
-  await expect
-    .poll(async () => {
-      const [targetBox, currentBarBox] = await Promise.all([
-        focusTarget.boundingBox(),
-        bar.boundingBox(),
-      ]);
-      return (
-        targetBox !== null &&
-        currentBarBox !== null &&
-        targetBox.y + targetBox.height <= currentBarBox.y
-      );
-    })
-    .toBe(true);
+  await expect.poll(() => positionOf(bar)).toBe("fixed");
+  await focusWithoutScrolling();
+  await expect.poll(() => actionClearsBar(focusTargetOverlap)).toBe(true);
 
   const anchorDocumentTop = await anchor.evaluate(
     (element) => element.getBoundingClientRect().top + window.scrollY,
@@ -1219,9 +1154,7 @@ test("docks the viewport action bar inside an unconstrained Admin host", async (
       margin: DOCK_RELEASE_MARGIN,
     },
   );
-  await expect
-    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
-    .not.toBe("fixed");
+  await expect.poll(() => positionOf(bar)).not.toBe("fixed");
   const naturalBoxes = await Promise.all([
     anchor.boundingBox(),
     bar.boundingBox(),
@@ -1232,34 +1165,13 @@ test("docks the viewport action bar inside an unconstrained Admin host", async (
     expect(naturalBoxes[1].y).toBeCloseTo(naturalBoxes[0].y, 1);
   }
 
-  await focusTarget.evaluate((element) => {
-    if (!(element instanceof HTMLElement)) {
-      throw new Error("Expected an HTML focus target.");
-    }
-    element.focus({ preventScroll: true });
-  });
+  await focusWithoutScrolling();
   await page.setViewportSize({ width: 760, height: 420 });
-  await expect
-    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
-    .toBe("fixed");
-  await expect
-    .poll(async () => {
-      const [targetBox, currentBarBox] = await Promise.all([
-        focusTarget.boundingBox(),
-        bar.boundingBox(),
-      ]);
-      return (
-        targetBox !== null &&
-        currentBarBox !== null &&
-        targetBox.y + targetBox.height <= currentBarBox.y
-      );
-    })
-    .toBe(true);
+  await expect.poll(() => positionOf(bar)).toBe("fixed");
+  await expect.poll(() => actionClearsBar(focusTargetOverlap)).toBe(true);
 
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-  await expect
-    .poll(() => bar.evaluate((element) => getComputedStyle(element).position))
-    .not.toBe("fixed");
+  await expect.poll(() => positionOf(bar)).not.toBe("fixed");
   await expect
     .poll(() =>
       bar.evaluate((element) => element.getBoundingClientRect().bottom),
@@ -1478,13 +1390,7 @@ test("keeps native controls and focus visible in forced colors", async ({
   const checked = page.getByRole("checkbox", { name: "Enable provider" });
   await checked.focus();
   await expect(checked).toHaveCSS("appearance", "auto");
-  expect(
-    Number.parseFloat(
-      await checked.evaluate(
-        (element) => getComputedStyle(element).outlineWidth,
-      ),
-    ),
-  ).toBeGreaterThanOrEqual(2);
+  expect(await outlineWidthOf(checked)).toBeGreaterThanOrEqual(2);
   await expect(
     page.getByRole("checkbox", { name: "Partially configured option" }),
   ).toHaveJSProperty("indeterminate", true);
@@ -1496,44 +1402,33 @@ test("keeps native controls and focus visible in forced colors", async ({
   ).toBeVisible();
   const selectedSegment = page.getByRole("radio", { name: "Normal" });
   const unselectedSegment = page.getByRole("radio", { name: "Minimal" });
+  const colorsOf = (segment: Locator) =>
+    segment.evaluate((element) => {
+      const styles = getComputedStyle(element);
+      return [styles.backgroundColor, styles.color];
+    });
   await expect(selectedSegment).toHaveCSS("forced-color-adjust", "none");
   const [selectedColors, unselectedColors] = await Promise.all([
-    selectedSegment.evaluate((element) => {
-      const styles = getComputedStyle(element);
-      return [styles.backgroundColor, styles.color];
-    }),
-    unselectedSegment.evaluate((element) => {
-      const styles = getComputedStyle(element);
-      return [styles.backgroundColor, styles.color];
-    }),
+    colorsOf(selectedSegment),
+    colorsOf(unselectedSegment),
   ]);
   expect(selectedColors).not.toEqual(unselectedColors);
   await selectedSegment.hover();
-  await expect
-    .poll(() =>
-      selectedSegment.evaluate((element) => {
-        const styles = getComputedStyle(element);
-        return [styles.backgroundColor, styles.color];
-      }),
-    )
-    .toEqual(selectedColors);
+  await expect.poll(() => colorsOf(selectedSegment)).toEqual(selectedColors);
   await selectedSegment.focus();
   await page.keyboard.press("Space");
-  await expect(selectedSegment).toHaveCSS("outline-style", "solid");
-  await expect(selectedSegment).toHaveCSS("outline-width", "2px");
+  await expectSolidOutline(selectedSegment);
 
   const primary = page.getByRole("button", { name: "Save" });
   await primary.focus();
   await expect(primary).toHaveCSS("forced-color-adjust", "none");
-  await expect(primary).toHaveCSS("outline-style", "solid");
-  await expect(primary).toHaveCSS("outline-width", "2px");
+  await expectSolidOutline(primary);
 
   const danger = page.getByRole("button", { name: "Reset", exact: true });
   await expect(danger).toHaveCSS("outline-style", "dashed");
   await danger.focus();
   await expect(danger).toHaveCSS("forced-color-adjust", "none");
-  await expect(danger).toHaveCSS("outline-style", "solid");
-  await expect(danger).toHaveCSS("outline-width", "3px");
+  await expectSolidOutline(danger, "3px");
 
   const systemColors = await page.evaluate(() => {
     const probe = document.createElement("span");
@@ -1598,30 +1493,21 @@ test("matches the light-theme visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
   skipWithoutBaseline(testInfo, "panel-light.png");
   await page.getByRole("radio", { name: "Light" }).click();
-  await expect(page).toHaveScreenshot("panel-light.png", {
-    fullPage: true,
-    animations: "disabled",
-  });
+  await expect(page).toHaveScreenshot("panel-light.png", FULL_PAGE_SNAPSHOT);
 });
 
 test("matches the night-theme visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
   skipWithoutBaseline(testInfo, "panel-night.png");
   await page.getByRole("radio", { name: "Night" }).click();
-  await expect(page).toHaveScreenshot("panel-night.png", {
-    fullPage: true,
-    animations: "disabled",
-  });
+  await expect(page).toHaveScreenshot("panel-night.png", FULL_PAGE_SNAPSHOT);
 });
 
 test("matches the dark-theme visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
   skipWithoutBaseline(testInfo, "panel-dark.png");
   await page.getByRole("radio", { name: "Dark" }).click();
-  await expect(page).toHaveScreenshot("panel-dark.png", {
-    fullPage: true,
-    animations: "disabled",
-  });
+  await expect(page).toHaveScreenshot("panel-dark.png", FULL_PAGE_SNAPSHOT);
 });
 
 test("matches the Night interaction-state visual baseline", async ({
@@ -1634,20 +1520,20 @@ test("matches the Night interaction-state visual baseline", async ({
   await page.getByRole("button", { name: "Advanced settings" }).click();
   await page.getByRole("button", { name: "Reset", exact: true }).last().click();
   await page.keyboard.press("Tab");
-  await expect(page).toHaveScreenshot("panel-night-states.png", {
-    fullPage: true,
-    animations: "disabled",
-  });
+  await expect(page).toHaveScreenshot(
+    "panel-night-states.png",
+    FULL_PAGE_SNAPSHOT,
+  );
 });
 
 test("matches the mobile visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "mobile-chromium");
   skipWithoutBaseline(testInfo, "panel-mobile-light.png");
   await page.getByRole("radio", { name: "Light" }).click();
-  await expect(page).toHaveScreenshot("panel-mobile-light.png", {
-    fullPage: true,
-    animations: "disabled",
-  });
+  await expect(page).toHaveScreenshot(
+    "panel-mobile-light.png",
+    FULL_PAGE_SNAPSHOT,
+  );
 });
 
 test("matches the WebKit native-control baseline", async ({
@@ -1661,8 +1547,7 @@ test("matches the WebKit native-control baseline", async ({
     .getByRole("checkbox", { name: "Partially configured option" })
     .focus();
   await expect(page).toHaveScreenshot("panel-native-controls-webkit.png", {
-    animations: "disabled",
-    fullPage: true,
+    ...FULL_PAGE_SNAPSHOT,
     timeout: 15_000,
   });
 });
@@ -1676,10 +1561,7 @@ async function withActiveSave(page: Page, snapshot: string): Promise<void> {
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   try {
-    await expect(page).toHaveScreenshot(snapshot, {
-      fullPage: true,
-      animations: "disabled",
-    });
+    await expect(page).toHaveScreenshot(snapshot, FULL_PAGE_SNAPSHOT);
   } finally {
     await page.mouse.up();
   }
@@ -1693,10 +1575,10 @@ test("matches the light hover and focus visual baseline", async ({
   await page.getByRole("radio", { name: "Light" }).click();
   await page.getByRole("textbox", { name: "Server URL" }).focus();
   await page.getByRole("button", { name: "Save" }).hover();
-  await expect(page).toHaveScreenshot("panel-light-hover-focus.png", {
-    fullPage: true,
-    animations: "disabled",
-  });
+  await expect(page).toHaveScreenshot(
+    "panel-light-hover-focus.png",
+    FULL_PAGE_SNAPSHOT,
+  );
 });
 
 test("matches the light active-state visual baseline", async ({
@@ -1716,10 +1598,10 @@ test("matches the dark hover and focus visual baseline", async ({
   await page.getByRole("radio", { name: "Dark" }).click();
   await page.getByRole("textbox", { name: "Server URL" }).focus();
   await page.getByRole("button", { name: "Save" }).hover();
-  await expect(page).toHaveScreenshot("panel-dark-hover-focus.png", {
-    fullPage: true,
-    animations: "disabled",
-  });
+  await expect(page).toHaveScreenshot(
+    "panel-dark-hover-focus.png",
+    FULL_PAGE_SNAPSHOT,
+  );
 });
 
 test("matches the dark active-state visual baseline", async ({
@@ -1739,10 +1621,10 @@ test("matches the 320 pixel reflow visual baseline", async ({
   await page.goto("/?states=1");
   await page.getByRole("radio", { name: "Light" }).click();
   await page.setViewportSize({ width: 320, height: 812 });
-  await expect(page).toHaveScreenshot("panel-reflow-320.png", {
-    fullPage: true,
-    animations: "disabled",
-  });
+  await expect(page).toHaveScreenshot(
+    "panel-reflow-320.png",
+    FULL_PAGE_SNAPSHOT,
+  );
 });
 
 test("matches the right-to-left visual baseline", async ({
@@ -1754,10 +1636,7 @@ test("matches the right-to-left visual baseline", async ({
   await page.evaluate(() => {
     document.documentElement.setAttribute("dir", "rtl");
   });
-  await expect(page).toHaveScreenshot("panel-rtl.png", {
-    fullPage: true,
-    animations: "disabled",
-  });
+  await expect(page).toHaveScreenshot("panel-rtl.png", FULL_PAGE_SNAPSHOT);
 });
 
 test("matches the open collapsible visual baseline", async ({
@@ -1770,8 +1649,8 @@ test("matches the open collapsible visual baseline", async ({
   await page
     .getByRole("button", { name: "Provider status and metrics" })
     .click();
-  await expect(page).toHaveScreenshot("panel-collapsible-open.png", {
-    fullPage: true,
-    animations: "disabled",
-  });
+  await expect(page).toHaveScreenshot(
+    "panel-collapsible-open.png",
+    FULL_PAGE_SNAPSHOT,
+  );
 });

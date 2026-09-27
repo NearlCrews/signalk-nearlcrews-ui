@@ -1,21 +1,17 @@
-import { expect, test } from "./fixtures.js";
-
-const CSP_NONCE = "snui-csp-fixture";
+import { CSP_FIXTURE_NONCE } from "../../fixtures/browser/browser-server.js";
+import { backgroundOf, expect, test } from "./fixtures.js";
 
 for (const fixture of [
-  { mode: "matching", stylesApply: true, styleNonce: CSP_NONCE },
+  { mode: "matching", stylesApply: true, styleNonce: CSP_FIXTURE_NONCE },
   { mode: "missing", stylesApply: false, styleNonce: null },
   { mode: "wrong", stylesApply: false, styleNonce: "wrong-nonce" },
 ] as const) {
   test(`${fixture.mode} style nonce`, async ({ page }) => {
     const response = await page.goto(`/csp.html?mode=${fixture.mode}`);
+    const policy = response?.headers()["content-security-policy"];
 
-    expect(response?.headers()["content-security-policy"]).toContain(
-      `style-src-elem 'nonce-${CSP_NONCE}'`,
-    );
-    expect(response?.headers()["content-security-policy"]).toContain(
-      "style-src-attr 'unsafe-inline'",
-    );
+    expect(policy).toContain(`style-src-elem 'nonce-${CSP_FIXTURE_NONCE}'`);
+    expect(policy).toContain("style-src-attr 'unsafe-inline'");
 
     const button = page.getByRole("button", { name: "CSP target" });
     const style = page.locator("style[data-snui-styles]");
@@ -31,11 +27,9 @@ for (const fixture of [
     await expect(moduleStyle).toHaveCount(1);
     await expect(progressFill).toHaveAttribute("style", /inline-size: 50%/);
 
-    await expect(style).toHaveJSProperty("nonce", fixture.styleNonce ?? "");
-    await expect(moduleStyle).toHaveJSProperty(
-      "nonce",
-      fixture.styleNonce ?? "",
-    );
+    const expectedNonce = fixture.styleNonce ?? "";
+    await expect(style).toHaveJSProperty("nonce", expectedNonce);
+    await expect(moduleStyle).toHaveJSProperty("nonce", expectedNonce);
 
     const display = await button.evaluate(
       (element) => getComputedStyle(element).display,
@@ -43,9 +37,7 @@ for (const fixture of [
     // The inline size above is a style attribute, which style-src-attr allows
     // in every case, so the fill's painted color is what says whether the
     // module sheet's own rules were applied.
-    const fillBackground = await progressFill.evaluate(
-      (element) => getComputedStyle(element).backgroundColor,
-    );
+    const fillBackground = await backgroundOf(progressFill);
     if (fixture.stylesApply) {
       expect(display).toBe("inline-flex");
       expect(fillBackground).not.toBe("rgba(0, 0, 0, 0)");

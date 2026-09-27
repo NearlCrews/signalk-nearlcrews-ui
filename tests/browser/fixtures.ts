@@ -31,6 +31,34 @@ export function controlTargetFloor(testInfo: TestInfo): number {
   return testInfo.project.name === "mobile-chromium" ? 44 : 40;
 }
 
+/** A theme option's accessible name in the panel's theme selector. */
+type ThemeName = "Light" | "Dark" | "Night";
+
+/** Picks a theme and waits until the panel root carries it. */
+export async function selectTheme(page: Page, theme: ThemeName): Promise<void> {
+  await page.getByRole("radio", { name: theme }).click();
+  await expect(page.locator("[data-snui-version]")).toHaveAttribute(
+    "data-snui-theme",
+    theme.toLowerCase(),
+  );
+}
+
+/** The computed background color of the first element the locator matches. */
+export function backgroundOf(locator: Locator): Promise<string> {
+  return locator.evaluate(
+    (element) => getComputedStyle(element).backgroundColor,
+  );
+}
+
+/** Fails unless the element draws a solid outline of the given width. */
+export async function expectSolidOutline(
+  target: Locator,
+  width = "2px",
+): Promise<void> {
+  await expect(target).toHaveCSS("outline-style", "solid");
+  await expect(target).toHaveCSS("outline-width", width);
+}
+
 /** Fails when a control's box is under the floor on either measured axis. */
 export async function expectTargetFloor(
   target: Locator,

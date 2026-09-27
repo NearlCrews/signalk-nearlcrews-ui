@@ -2,6 +2,7 @@ import {
   controlTargetFloor,
   expect,
   expectNoAxeViolations,
+  expectSolidOutline,
   expectTargetFloor,
   settleAnimations,
   settledScrollLeft,
@@ -33,15 +34,10 @@ test("renders the showcase", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Component showcase" }),
   ).toBeVisible();
-  await expect(page.getByRole("grid", { name: "Fleet" })).toBeVisible();
-  await expect(page.getByRole("grid", { name: "Fleet" })).toHaveAttribute(
-    "aria-rowcount",
-    "241",
-  );
-  const renderedRows = await page
-    .getByRole("grid", { name: "Fleet" })
-    .getByRole("row")
-    .count();
+  const grid = page.getByRole("grid", { name: "Fleet" });
+  await expect(grid).toBeVisible();
+  await expect(grid).toHaveAttribute("aria-rowcount", "241");
+  const renderedRows = await grid.getByRole("row").count();
   expect(renderedRows).toBeGreaterThan(1);
   expect(renderedRows).toBeLessThan(241);
 });
@@ -384,6 +380,12 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
   const row = (name: string) =>
     grid.getByRole("row").filter({ hasText: name }).first();
   const nameHeader = grid.getByRole("columnheader", { name: "Boat" });
+  /** Scrolls the grid to its top or its end the way a user's scroll does. */
+  const scrollGrid = (toEnd: boolean) =>
+    grid.evaluate((element, end) => {
+      element.scrollTop = end ? element.scrollHeight : 0;
+      element.dispatchEvent(new Event("scroll"));
+    }, toEnd);
 
   await nameHeader.click();
   await expect(nameHeader).toHaveAttribute("data-sort-direction", "descending");
@@ -435,26 +437,17 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
     grid.locator(`[role="row"][aria-rowindex="${String(activeRowIndex)}"]`),
   ).toHaveAttribute("aria-selected", "true");
 
-  await grid.evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-    element.dispatchEvent(new Event("scroll"));
-  });
+  await scrollGrid(true);
   const lastRow = row("Vessel 240");
   await expect(lastRow).toBeVisible();
   await expect(lastRow).toHaveAttribute("data-snui-zebra-odd", "true");
 
-  await grid.evaluate((element) => {
-    element.scrollTop = 0;
-    element.dispatchEvent(new Event("scroll"));
-  });
+  await scrollGrid(false);
   await expect(nameHeader).toBeVisible();
   await nameHeader.focus();
   await page.keyboard.press("Enter");
   await expect(nameHeader).toHaveAttribute("data-sort-direction", "descending");
-  await grid.evaluate((element) => {
-    element.scrollTop = 0;
-    element.dispatchEvent(new Event("scroll"));
-  });
+  await scrollGrid(false);
   await expect(lastRow).toBeVisible();
   await expect(lastRow).not.toHaveAttribute("data-snui-zebra-odd");
   await lastRow.click();
@@ -617,21 +610,15 @@ test("reconstructs every overlay module under forced colors", async ({
   await expect(toneDot).toHaveCSS("forced-color-adjust", "none");
 
   await page.getByRole("button", { name: "Panel actions" }).click();
-  const menuPopover = page.locator(".snui-menu-popover");
-  await expect(menuPopover).toHaveCSS("outline-style", "solid");
-  await expect(menuPopover).toHaveCSS("outline-width", "2px");
+  await expectSolidOutline(page.locator(".snui-menu-popover"));
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "About this anchorage" }).click();
-  const popover = page.locator(".snui-popover").first();
-  await expect(popover).toHaveCSS("outline-style", "solid");
-  await expect(popover).toHaveCSS("outline-width", "2px");
+  await expectSolidOutline(page.locator(".snui-popover").first());
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "Open dialog" }).click();
-  const dialog = page.locator(".snui-dialog");
-  await expect(dialog).toHaveCSS("outline-style", "solid");
-  await expect(dialog).toHaveCSS("outline-width", "2px");
+  await expectSolidOutline(page.locator(".snui-dialog"));
 
   await expectNoAxeViolations(page, {
     disableRules: [

@@ -12,6 +12,8 @@ test("loads classic and ESM remotes against host React and ReactDOM", async ({
   });
 
   await page.goto("/federation.html");
+  const classicRoot = page.locator("#classic-root");
+  const esmRoot = page.locator("#esm-root");
   await expect(page.locator("body")).toHaveAttribute(
     "data-federation-ready",
     "true",
@@ -25,12 +27,9 @@ test("loads classic and ESM remotes against host React and ReactDOM", async ({
   await expect(page.getByText("Saved 0 times")).toHaveCount(2);
   await expect(page.locator("style[data-snui-styles]")).toHaveCount(1);
 
-  await page
-    .locator("#classic-root")
-    .getByRole("button", { name: "Save configuration" })
-    .click();
-  await expect(page.locator("#classic-root")).toContainText("Saved 1 time");
-  await expect(page.locator("#esm-root")).toContainText("Saved 0 times");
+  await classicRoot.getByRole("button", { name: "Save configuration" }).click();
+  await expect(classicRoot).toContainText("Saved 1 time");
+  await expect(esmRoot).toContainText("Saved 0 times");
 
   const roots = page.locator("[data-snui-version]");
   const firstThemeGroup = page
@@ -41,8 +40,6 @@ test("loads classic and ESM remotes against host React and ReactDOM", async ({
   await expect(roots.nth(0)).toHaveAttribute("data-snui-theme", "night");
   await expect(roots.nth(1)).toHaveAttribute("data-snui-theme", "night");
 
-  const classicRoot = page.locator("#classic-root");
-  const esmRoot = page.locator("#esm-root");
   await classicRoot.getByRole("button", { name: "Notify" }).click();
   const classicPanelRoot = classicRoot.locator("[data-snui-root]");
   await expect(classicPanelRoot.getByText("Host portal ready")).toHaveCount(1);

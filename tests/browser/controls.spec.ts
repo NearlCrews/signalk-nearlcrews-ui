@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "./fixtures.js";
+import { expect, expectSolidOutline, type Page, test } from "./fixtures.js";
 
 /** Computed values of two system colors, read from a probe element. */
 async function systemColors(
@@ -48,8 +48,7 @@ test("paints the inline confirmation's Cancel button in system colors under forc
   // keyboard user rather than after a pointer press.
   await page.keyboard.press("Tab");
   await expect(cancel).toBeFocused();
-  await expect(cancel).toHaveCSS("outline-style", "solid");
-  await expect(cancel).toHaveCSS("outline-width", "2px");
+  await expectSolidOutline(cancel);
 });
 
 test("renders text controls at 16 pixels or more on a coarse pointer", async ({
