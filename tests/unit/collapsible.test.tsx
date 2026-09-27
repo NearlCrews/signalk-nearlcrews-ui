@@ -252,16 +252,16 @@ describe("accordion coordination", () => {
 });
 
 function stubMatchMedia(matches: boolean): void {
-  const implementation = (query: string): MediaQueryList =>
-    // Only `matches` and `media` are consumed by the component under test.
-    ({ matches, media: query }) as MediaQueryList;
-  window.matchMedia = vi.fn().mockImplementation(implementation);
+  // Only `matches` and `media` are consumed by the component under test.
+  vi.stubGlobal(
+    "matchMedia",
+    (query: string) => ({ matches, media: query }) as MediaQueryList,
+  );
 }
 
 describe("inline confirmation upgrades", () => {
   afterEach(() => {
     delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
-    delete (window as { matchMedia?: unknown }).matchMedia;
   });
 
   it("supports uncontrolled use through defaultOpen and closes on cancel", async () => {
@@ -493,72 +493,6 @@ describe("section landmark opt-out", () => {
     expect(screen.getByRole("heading", { name: "Connection" })).toBeVisible();
   });
 
-  it("pauses retained effects on collapse while keeping child state", async () => {
-    const user = userEvent.setup();
-    const lifecycle: string[] = [];
-
-    function Child(): React.JSX.Element {
-      const runs = useRef(0);
-      const [value, setValue] = useState("initial");
-      useEffect(() => {
-        runs.current += 1;
-        lifecycle.push(`run ${String(runs.current)}`);
-        return () => {
-          lifecycle.push("cleanup");
-        };
-      }, []);
-      return (
-        <input
-          aria-label="Draft"
-          value={value}
-          onChange={(event) => setValue(event.target.value)}
-        />
-      );
-    }
-
-    renderInPanel(
-      <CollapsibleSection title="Advanced settings" defaultOpen>
-        <Child />
-      </CollapsibleSection>,
-    );
-    const toggle = screen.getByRole("button", { name: "Advanced settings" });
-    await user.clear(screen.getByLabelText("Draft"));
-    await user.type(screen.getByLabelText("Draft"), "edited");
-    expect(lifecycle).toEqual(["run 1"]);
-
-    await user.click(toggle);
-    // Collapsing tears the subtree's effects down without unmounting it, so a
-    // cleanup that discards state the consumer expects to outlive the hidden
-    // period loses it. The API reference records the rules that follow.
-    expect(lifecycle).toEqual(["run 1", "cleanup"]);
-
-    await user.click(toggle);
-    expect(lifecycle).toEqual(["run 1", "cleanup", "run 2"]);
-    expect(screen.getByLabelText("Draft")).toHaveValue("edited");
-  });
-
-  it("discards child state under the unmounting strategy", async () => {
-    const user = userEvent.setup();
-    renderInPanel(
-      <CollapsibleSection
-        title="Advanced settings"
-        defaultOpen
-        mountStrategy="unmount"
-      >
-        <input aria-label="Draft" defaultValue="initial" />
-      </CollapsibleSection>,
-    );
-    const toggle = screen.getByRole("button", { name: "Advanced settings" });
-    await user.clear(screen.getByLabelText("Draft"));
-    await user.type(screen.getByLabelText("Draft"), "edited");
-
-    await user.click(toggle);
-    expect(screen.queryByLabelText("Draft")).toBeNull();
-
-    await user.click(toggle);
-    expect(screen.getByLabelText("Draft")).toHaveValue("initial");
-  });
-
   it("drops consumer label references when landmark is false", () => {
     const { container } = renderInPanel(
       <>
@@ -777,6 +711,74 @@ describe("collapsible tone, trigger, and ids", () => {
         </CollapsibleSection>,
       ),
     ).toThrow("CollapsibleSection idPrefix");
+  });
+});
+
+describe("collapsible mount strategies", () => {
+  it("pauses retained effects on collapse while keeping child state", async () => {
+    const user = userEvent.setup();
+    const lifecycle: string[] = [];
+
+    function Child(): React.JSX.Element {
+      const runs = useRef(0);
+      const [value, setValue] = useState("initial");
+      useEffect(() => {
+        runs.current += 1;
+        lifecycle.push(`run ${String(runs.current)}`);
+        return () => {
+          lifecycle.push("cleanup");
+        };
+      }, []);
+      return (
+        <input
+          aria-label="Draft"
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
+      );
+    }
+
+    renderInPanel(
+      <CollapsibleSection title="Advanced settings" defaultOpen>
+        <Child />
+      </CollapsibleSection>,
+    );
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    await user.clear(screen.getByLabelText("Draft"));
+    await user.type(screen.getByLabelText("Draft"), "edited");
+    expect(lifecycle).toEqual(["run 1"]);
+
+    await user.click(toggle);
+    // Collapsing tears the subtree's effects down without unmounting it, so a
+    // cleanup that discards state the consumer expects to outlive the hidden
+    // period loses it. The API reference records the rules that follow.
+    expect(lifecycle).toEqual(["run 1", "cleanup"]);
+
+    await user.click(toggle);
+    expect(lifecycle).toEqual(["run 1", "cleanup", "run 2"]);
+    expect(screen.getByLabelText("Draft")).toHaveValue("edited");
+  });
+
+  it("discards child state under the unmounting strategy", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <CollapsibleSection
+        title="Advanced settings"
+        defaultOpen
+        mountStrategy="unmount"
+      >
+        <input aria-label="Draft" defaultValue="initial" />
+      </CollapsibleSection>,
+    );
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    await user.clear(screen.getByLabelText("Draft"));
+    await user.type(screen.getByLabelText("Draft"), "edited");
+
+    await user.click(toggle);
+    expect(screen.queryByLabelText("Draft")).toBeNull();
+
+    await user.click(toggle);
+    expect(screen.getByLabelText("Draft")).toHaveValue("initial");
   });
 
   it("mounts lazily retained content only once it has been opened", async () => {

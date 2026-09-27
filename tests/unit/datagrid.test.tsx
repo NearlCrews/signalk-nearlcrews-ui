@@ -21,7 +21,7 @@ import {
 } from "../../src/data-grid.js";
 import { PanelRoot } from "../../src/index.js";
 import { TABLE_STYLES } from "../../src/styles/table.js";
-import { renderInPanel } from "../helpers.js";
+import { panel, renderInPanel } from "../helpers.js";
 
 interface Boat {
   readonly id: string;
@@ -35,6 +35,14 @@ const BOATS: readonly Boat[] = [
   { id: "c", name: "Coral", depth: 30 },
   { id: "d", name: "Drift", depth: 8 },
 ];
+
+/** Column entries for the specs that render the header or the cells dynamically. */
+const NAME_DEPTH_COLUMNS = [{ key: "name" }, { key: "depth" }] as const;
+
+/** A header column drawn through a consumer component rather than the package Column. */
+function WrappedColumn(props: DataGridColumnProps): ReactElement {
+  return <Column {...props} />;
+}
 
 function renderBoatRow(boat: Boat): ReactElement<RowProps<Boat>> {
   return (
@@ -62,8 +70,8 @@ function boatColumns(): ReactElement {
 // props that sit outside it.
 type GridOverrides = Partial<Omit<DataGridProps<Boat>, "children" | "columns">>;
 
-function renderGrid(props: GridOverrides = {}): RenderResult {
-  return renderInPanel(
+function boatGrid(props: GridOverrides = {}): ReactElement {
+  return (
     <DataGrid
       aria-label="Boats"
       items={BOATS}
@@ -71,8 +79,12 @@ function renderGrid(props: GridOverrides = {}): RenderResult {
       {...props}
     >
       {boatColumns()}
-    </DataGrid>,
+    </DataGrid>
   );
+}
+
+function renderGrid(props: GridOverrides = {}): RenderResult {
+  return renderInPanel(boatGrid(props));
 }
 
 function bodyRows(container: HTMLElement): NodeListOf<HTMLElement> {
@@ -417,17 +429,19 @@ describe("DataGrid", () => {
     });
 
     it("leaves rows untouched when no column asks for anything", () => {
-      const rows: ReactElement<RowProps<Boat>>[] = [];
-      renderGrid({
-        renderRow: (boat) => {
-          const row = renderBoatRow(boat);
-          rows.push(row);
-          return row;
-        },
-      });
+      const { container } = renderGrid();
 
-      // The exact elements the consumer returned reach React Aria.
-      expect(rows.length).toBeGreaterThan(0);
+      expect(bodyRows(container)).toHaveLength(BOATS.length);
+      for (const row of bodyRows(container)) {
+        for (const index of [0, 1]) {
+          const cell = cellAt(row, index);
+          expect(cell).not.toHaveAttribute("data-snui-numeric");
+          expect(cell).not.toHaveAttribute("data-snui-wrap");
+          expect(
+            cell.style.getPropertyValue("--snui-data-grid-column-min"),
+          ).toBe("");
+        }
+      }
     });
 
     it("applies column options through a dynamic header", () => {
@@ -494,10 +508,6 @@ describe("DataGrid", () => {
     });
 
     it("keeps later columns aligned when a header child is not the package Column", () => {
-      function WrappedColumn(props: DataGridColumnProps): ReactElement {
-        return <Column {...props} />;
-      }
-
       const { container } = renderInPanel(
         <DataGrid
           aria-label="Boats"
@@ -548,14 +558,13 @@ describe("DataGrid", () => {
     });
 
     it("applies column options to dynamic cells keyed by column", () => {
-      const columns = [{ key: "name" }, { key: "depth" }] as const;
       const { container } = renderInPanel(
         <DataGrid
           aria-label="Boats"
-          columns={columns}
+          columns={NAME_DEPTH_COLUMNS}
           items={BOATS}
           renderRow={(boat) => (
-            <Row columns={columns}>
+            <Row columns={NAME_DEPTH_COLUMNS}>
               {(column) => (
                 <Cell>{column.key === "name" ? boat.name : boat.depth}</Cell>
               )}
@@ -583,10 +592,6 @@ describe("DataGrid", () => {
       // A column the render function draws through its own component still
       // holds its slot, so the columns after it read their keys from the
       // entries they were rendered from.
-      function WrappedColumn(props: DataGridColumnProps): ReactElement {
-        return <Column {...props} />;
-      }
-
       const columns = [{ key: "name" }, { key: "note" }, { key: "depth" }];
       const { container } = renderInPanel(
         <DataGrid
@@ -638,27 +643,18 @@ describe("DataGrid", () => {
         column: "name",
         direction: "ascending",
       });
-      const sorted = [...BOATS].sort((a, b) => {
-        const left = sortDescriptor.column === "depth" ? a.depth : a.name;
-        const right = sortDescriptor.column === "depth" ? b.depth : b.name;
-        const order =
-          typeof left === "number" && typeof right === "number"
-            ? left - right
-            : String(left).localeCompare(String(right));
-        return sortDescriptor.direction === "ascending" ? order : -order;
-      });
-      return (
-        <PanelRoot>
-          <DataGrid
-            aria-label="Boats"
-            items={sorted}
-            onSortChange={setSortDescriptor}
-            renderRow={renderBoatRow}
-            sortDescriptor={sortDescriptor}
-          >
-            {boatColumns()}
-          </DataGrid>
-        </PanelRoot>
+      const byDepth = sortDescriptor.column === "depth";
+      const sign = sortDescriptor.direction === "ascending" ? 1 : -1;
+      const sorted = [...BOATS].sort(
+        (a, b) =>
+          sign * (byDepth ? a.depth - b.depth : a.name.localeCompare(b.name)),
+      );
+      return panel(
+        boatGrid({
+          items: sorted,
+          onSortChange: setSortDescriptor,
+          sortDescriptor,
+        }),
       );
     }
 
@@ -920,18 +916,14 @@ describe("DataGrid", () => {
       expect(rowAt(view.container, 1)).toHaveAttribute("aria-selected", "true");
 
       view.rerender(
-        <PanelRoot>
-          <DataGrid
-            aria-label="Boats"
-            items={fleet}
-            renderRow={renderBoatRow}
-            selectionMode="multiple"
-            virtualize="never"
-            virtualizeThreshold={2}
-          >
-            {boatColumns()}
-          </DataGrid>
-        </PanelRoot>,
+        panel(
+          boatGrid({
+            items: fleet,
+            selectionMode: "multiple",
+            virtualize: "never",
+            virtualizeThreshold: 2,
+          }),
+        ),
       );
 
       expect(screen.getByRole("grid")).toBe(grid);
@@ -942,22 +934,18 @@ describe("DataGrid", () => {
       // React Aria caches a rendered row against the wrapper it came from, so
       // a render that leaves the rows alone must not rebuild the collection.
       let rendered = 0;
-      const tree = (className: string): ReactElement => (
-        <PanelRoot>
-          <DataGrid
-            aria-label="Boats"
-            className={className}
-            items={fleet}
-            renderRow={(boat) => {
+      const tree = (className: string): ReactElement =>
+        panel(
+          boatGrid({
+            className,
+            items: fleet,
+            renderRow: (boat) => {
               rendered += 1;
               return renderBoatRow(boat);
-            }}
-            virtualizeThreshold={10}
-          >
-            {boatColumns()}
-          </DataGrid>
-        </PanelRoot>
-      );
+            },
+            virtualizeThreshold: 10,
+          }),
+        );
       const view = render(tree("first"));
       const afterMount = rendered;
 
@@ -979,17 +967,7 @@ describe("DataGrid", () => {
       expect(ref.current?.querySelector("[role='grid']")).toBeInTheDocument();
 
       view.rerender(
-        <PanelRoot>
-          <DataGrid
-            ref={ref}
-            aria-label="Boats"
-            items={fleet}
-            renderRow={renderBoatRow}
-            virtualizeThreshold={10}
-          >
-            {boatColumns()}
-          </DataGrid>
-        </PanelRoot>,
+        panel(boatGrid({ items: fleet, ref, virtualizeThreshold: 10 })),
       );
 
       expect(ref.current).toHaveClass(
