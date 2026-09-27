@@ -37,6 +37,15 @@ interface SelectionSnapshot {
   readonly start: number | null;
 }
 
+/** Where the field's caret or selection sits, and whether it holds focus. */
+function readSelection(input: HTMLInputElement | null): SelectionSnapshot {
+  return {
+    end: input?.selectionEnd ?? null,
+    focused: input?.ownerDocument.activeElement === input,
+    start: input?.selectionStart ?? null,
+  };
+}
+
 // The group's own props reach the inner input untouched, so a LabeledField can
 // take this control as an element child and still label the real input. The
 // mark is annotated pure so an unused control is still dropped from a bundle.
@@ -73,15 +82,7 @@ export const SecretInput = /* @__PURE__ */ markForwardsFieldControlProps(
     );
     const inputRef = useRef<HTMLInputElement | null>(null);
     const selectionRef = useRef<SelectionSnapshot | null>(null);
-
-    const captureSelection = (): SelectionSnapshot => {
-      const input = inputRef.current;
-      return {
-        end: input?.selectionEnd ?? null,
-        focused: input?.ownerDocument.activeElement === input,
-        start: input?.selectionStart ?? null,
-      };
-    };
+    const inputType = effectiveRevealed ? "text" : "password";
 
     useLayoutEffect(() => {
       const input = inputRef.current;
@@ -91,7 +92,7 @@ export const SecretInput = /* @__PURE__ */ markForwardsFieldControlProps(
         input === null ||
         selection === null ||
         !selection.focused ||
-        input.type !== (effectiveRevealed ? "text" : "password")
+        input.type !== inputType
       ) {
         return undefined;
       }
@@ -108,22 +109,12 @@ export const SecretInput = /* @__PURE__ */ markForwardsFieldControlProps(
       const ownerWindow = input.ownerDocument.defaultView;
       if (ownerWindow === null) return undefined;
       const frame = ownerWindow.requestAnimationFrame(() => {
-        if (
-          input.isConnected &&
-          input.type === (effectiveRevealed ? "text" : "password")
-        ) {
-          restoreSelection();
-        }
+        if (input.isConnected && input.type === inputType) restoreSelection();
       });
       return () => {
         ownerWindow.cancelAnimationFrame(frame);
       };
-    }, [effectiveRevealed]);
-
-    const setRevealed = (next: boolean): void => {
-      selectionRef.current ??= captureSelection();
-      commitRevealed(next);
-    };
+    }, [inputType]);
 
     const panelLabels = usePanelLabels()?.secretInput;
     const effectiveShowLabel = resolveBundledLabel(
@@ -150,7 +141,7 @@ export const SecretInput = /* @__PURE__ */ markForwardsFieldControlProps(
             id={inputId}
             ref={attachInput}
             spellCheck={spellCheck}
-            type={effectiveRevealed ? "text" : "password"}
+            type={inputType}
           />
         </InputGroupControl>
         {trailingContent}
@@ -163,7 +154,7 @@ export const SecretInput = /* @__PURE__ */ markForwardsFieldControlProps(
           aria-controls={inputId}
           disabled={disabled}
           onPointerDown={(event) => {
-            const selection = captureSelection();
+            const selection = readSelection(inputRef.current);
             selectionRef.current = selection;
             // A pointer press on the reveal control should not destroy the
             // input's caret or selected range. Keyboard activation keeps its
@@ -174,9 +165,12 @@ export const SecretInput = /* @__PURE__ */ markForwardsFieldControlProps(
             // A press released away from the button never becomes a click and
             // leaves its snapshot behind. Keyboard activation reports no click
             // count, so it takes a fresh reading rather than restoring a caret
-            // the user has already abandoned.
-            if (event.detail === 0) selectionRef.current = captureSelection();
-            setRevealed(!effectiveRevealed);
+            // the user has already abandoned, as does a click that arrived
+            // with no pointer press before it.
+            if (event.detail === 0 || selectionRef.current === null) {
+              selectionRef.current = readSelection(inputRef.current);
+            }
+            commitRevealed(!effectiveRevealed);
           }}
         >
           {effectiveRevealed ? effectiveHideLabel : effectiveShowLabel}
