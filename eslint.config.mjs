@@ -5,6 +5,9 @@ import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
 
+/** Every TypeScript source, the only files the type-aware rules can read. */
+const TYPESCRIPT_FILES = ["**/*.{ts,tsx}"];
+
 export default tseslint.config(
   {
     ignores: [
@@ -27,14 +30,14 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.{ts,tsx}"],
+    files: TYPESCRIPT_FILES,
   })),
   ...tseslint.configs.stylisticTypeChecked.map((config) => ({
     ...config,
-    files: ["**/*.{ts,tsx}"],
+    files: TYPESCRIPT_FILES,
   })),
   {
-    files: ["**/*.{ts,tsx}"],
+    files: TYPESCRIPT_FILES,
     languageOptions: {
       parserOptions: {
         projectService: true,
