@@ -82,14 +82,8 @@ const showcaseParameters = new URLSearchParams(window.location.search);
 /** Mirrors the Admin's fixed header and sidebar around the panel. */
 const showHostChrome = showcaseParameters.has("host-chrome");
 
-const BANNER_TONES = [
-  "neutral",
-  "info",
-  "success",
-  "warning",
-  "danger",
-] as const;
-const STATUS_TONES = [
+/** The tones banners, status indicators, and badges each render in turn. */
+const FEEDBACK_TONES = [
   "neutral",
   "info",
   "success",
@@ -98,7 +92,7 @@ const STATUS_TONES = [
 ] as const;
 const TOAST_TONES = ["info", "success", "warning", "danger"] as const;
 
-const BANNER_COPY: Readonly<Record<(typeof BANNER_TONES)[number], string>> = {
+const BANNER_COPY: Readonly<Record<(typeof FEEDBACK_TONES)[number], string>> = {
   neutral: "Daylight saving time shifts tide tables by one hour tomorrow.",
   info: "A chart update is available for the covered regions.",
   success: "All provider checks passed during the last sync.",
@@ -162,6 +156,12 @@ const DELTA_SAMPLE = `{
     { "source": { "label": "N2K", "type": "NMEA2000", "pgn": 128267 }, "timestamp": "2026-09-09T11:04:31.281Z", "values": [{ "path": "environment.depth.belowTransducer", "value": 3.1 }] }
   ]
 }`;
+
+/** A paragraph set flush inside a stack or dialog, which already spaces it. */
+const FLUSH_PARAGRAPH = { margin: 0 };
+
+/** A change or action handler for a control whose value the showcase ignores. */
+const ignore = (): undefined => undefined;
 
 /** Pinned at load, so the live age counts from one moment for the whole run. */
 const LAST_DELTA_AT = Date.now() - 90_000;
@@ -243,20 +243,20 @@ function Showcase(): React.JSX.Element {
           description="Banners, badges, and status indicators in every tone."
         >
           <Stack gap={3}>
-            {BANNER_TONES.map((tone) => (
+            {FEEDBACK_TONES.map((tone) => (
               <Banner key={tone} tone={tone} title={`${tone} banner`}>
                 {BANNER_COPY[tone]}
               </Banner>
             ))}
             <Cluster gap={3}>
-              {STATUS_TONES.map((tone) => (
+              {FEEDBACK_TONES.map((tone) => (
                 <StatusIndicator key={tone} tone={tone}>
                   {tone}
                 </StatusIndicator>
               ))}
             </Cluster>
             <Cluster gap={2}>
-              {STATUS_TONES.map((tone) => (
+              {FEEDBACK_TONES.map((tone) => (
                 <Badge key={tone} tone={tone}>
                   {tone}
                 </Badge>
@@ -430,7 +430,7 @@ function Showcase(): React.JSX.Element {
               labelVisibility="visible"
               name="log-detail"
               defaultValue="normal"
-              onValueChange={() => undefined}
+              onValueChange={ignore}
               options={[
                 { value: "minimal", label: "Minimal" },
                 { value: "normal", label: "Normal" },
@@ -441,7 +441,7 @@ function Showcase(): React.JSX.Element {
               label="Panel density"
               orientation="vertical"
               defaultValue="comfortable"
-              onValueChange={() => undefined}
+              onValueChange={ignore}
               options={[
                 { value: "comfortable", label: "Comfortable" },
                 { value: "compact", label: "Compact" },
@@ -607,7 +607,7 @@ function Showcase(): React.JSX.Element {
               }
               width={280}
             >
-              <p style={{ margin: 0 }}>
+              <p style={FLUSH_PARAGRAPH}>
                 Popovers anchor free-form content to a trigger and flip when
                 they collide with the viewport.
               </p>
@@ -615,7 +615,7 @@ function Showcase(): React.JSX.Element {
             <Menu
               label="Panel actions"
               triggerVariant="secondary"
-              onAction={() => undefined}
+              onAction={ignore}
             >
               <MenuItem id="refresh">Refresh data</MenuItem>
               <MenuItem id="columns">Choose columns</MenuItem>
@@ -706,7 +706,7 @@ function Showcase(): React.JSX.Element {
               Depth is read from <Code>environment.depth.belowTransducer</Code>{" "}
               on the primary sounder.
             </Text>
-            <p style={{ margin: 0 }}>
+            <p style={FLUSH_PARAGRAPH}>
               Last delta <RelativeAge since={LAST_DELTA_AT} />
               <VisuallyHidden> from the primary sounder</VisuallyHidden>
             </p>
@@ -796,7 +796,7 @@ function Showcase(): React.JSX.Element {
         }
       >
         <Stack gap={3}>
-          <p style={{ margin: 0 }}>
+          <p style={FLUSH_PARAGRAPH}>
             Sand over mud, good holding, swell wraps in from the southeast above
             fifteen knots.
           </p>

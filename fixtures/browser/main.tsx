@@ -44,6 +44,8 @@ const showHostResetFixture = fixtureParameters.has("host-reset");
 const showForcedColorActions = fixtureParameters.has("forced-color-actions");
 const engineToastQueue = createToastQueue();
 const networkToastQueue = createToastQueue();
+/** Author colors on the unclassed banner actions, which forced colors replaces. */
+const RAW_ACTION_STYLE = { background: "transparent", color: "#f5f7fa" };
 
 function Fixture(): React.JSX.Element {
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -110,16 +112,13 @@ function Fixture(): React.JSX.Element {
             actions={
               showForcedColorActions ? (
                 <>
-                  <button
-                    type="button"
-                    style={{ background: "transparent", color: "#f5f7fa" }}
-                  >
+                  <button type="button" style={RAW_ACTION_STYLE}>
                     Raw banner action
                   </button>
                   <input
                     type="button"
                     value="Raw input action"
-                    style={{ background: "transparent", color: "#f5f7fa" }}
+                    style={RAW_ACTION_STYLE}
                   />
                 </>
               ) : undefined

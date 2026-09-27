@@ -43,24 +43,20 @@ declare global {
  */
 const HOST_REPORTED_REACT_VERSION = "19.0.0";
 
+/** One host-provided module, already loaded, as a share scope entry holds it. */
+function hostShare<T>(module: T): SharedModule<T> {
+  return {
+    eager: true,
+    from: "fixture-host",
+    get: () => Promise.resolve(() => module),
+    loaded: true,
+  };
+}
+
 function createShareScope(reactVersion: string): ShareScope {
   return {
-    react: {
-      [reactVersion]: {
-        eager: true,
-        from: "fixture-host",
-        get: () => Promise.resolve(() => React),
-        loaded: true,
-      },
-    },
-    "react-dom": {
-      [reactVersion]: {
-        eager: true,
-        from: "fixture-host",
-        get: () => Promise.resolve(() => ReactDOM),
-        loaded: true,
-      },
-    },
+    react: { [reactVersion]: hostShare(React) },
+    "react-dom": { [reactVersion]: hostShare(ReactDOM) },
   };
 }
 
