@@ -2,6 +2,7 @@ import {
   FORCED_COLORS_OUTLINE_DECLARATIONS,
   OVERLAY_TRANSITION_DECLARATIONS,
   RAISED_OVERLAY_DECLARATIONS,
+  RAISED_SURFACE_TOKEN_DECLARATIONS,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
@@ -23,12 +24,7 @@ export const POPOVER_STYLES: StyleModule = {
 */
 
 .snui-popover {
-  /*
-   * The popover is a raised surface, so hover fills painted inside it (any
-   * control the consumer places there) use the raised hover step.
-   */
-  --snui-color-interactive-hover: var(--snui-color-hover-raised);
-  --snui-color-focus-ring-band: var(--snui-color-surface-raised);
+${RAISED_SURFACE_TOKEN_DECLARATIONS}
   width: var(--snui-popover-width, auto);
   max-width: min(24rem, 100%);
   padding: var(--snui-space-3);

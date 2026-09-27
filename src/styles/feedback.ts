@@ -8,7 +8,7 @@ import { scopeStyles } from "./scope.js";
 import {
   TONE_ACCENT_BAR_DECLARATIONS,
   toneAccentBarRules,
-  toneColorRules,
+  toneDescendantColorRules,
 } from "./tone-rules.js";
 
 /*
@@ -63,7 +63,7 @@ ${visuallyHiddenDeclarations()}
   font-weight: var(--snui-font-weight-heavy);
 }
 
-${toneColorRules((tone) => `.snui-banner--${tone} .snui-banner__tone-icon`, "color")}
+${toneDescendantColorRules("snui-banner", ".snui-banner__tone-icon")}
 
 ${bodyEdgeMarginRules("snui-banner__body")}
 

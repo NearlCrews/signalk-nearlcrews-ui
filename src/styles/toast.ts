@@ -1,5 +1,7 @@
 import { versionedAnimationName } from "../version.js";
 import {
+  RAISED_SURFACE_TOKEN_DECLARATIONS,
+  SAFE_AREA_PADDING_DECLARATIONS,
   TONE_DOT_DECLARATIONS,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
@@ -44,12 +46,7 @@ ${scopeStyles(`
   flex-direction: column;
   align-items: flex-end;
   gap: var(--snui-space-2);
-  /* Safe-area insets are physical edges, so this shorthand stays physical. */
-  padding:
-    max(var(--snui-space-4), env(safe-area-inset-top, 0px))
-    max(var(--snui-space-4), env(safe-area-inset-right, 0px))
-    max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))
-    max(var(--snui-space-4), env(safe-area-inset-left, 0px));
+${SAFE_AREA_PADDING_DECLARATIONS}
   overflow-y: auto;
   overscroll-behavior: contain;
   /* Clicks pass through the gaps between toasts to the panel below. */
@@ -85,13 +82,7 @@ ${visuallyHiddenDeclarations()}
 }
 
 .snui-toast {
-  /*
-   * The card is a raised surface, so every hover fill painted inside it (the
-   * dismiss button, consumer actions) needs the raised hover step to stay
-   * visible in Dark, where the flat hover fill equals the raised surface.
-   */
-  --snui-color-interactive-hover: var(--snui-color-hover-raised);
-  --snui-color-focus-ring-band: var(--snui-color-surface-raised);
+${RAISED_SURFACE_TOKEN_DECLARATIONS}
   display: flex;
   min-width: 0;
   align-items: flex-start;

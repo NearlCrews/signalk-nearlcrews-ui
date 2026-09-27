@@ -2,6 +2,8 @@ import {
   bodyEdgeMarginRules,
   FORCED_COLORS_OUTLINE_DECLARATIONS,
   NARROW_PANEL_QUERY,
+  RAISED_SURFACE_TOKEN_DECLARATIONS,
+  SAFE_AREA_PADDING_DECLARATIONS,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
@@ -25,11 +27,7 @@ export const DIALOG_STYLES: StyleModule = {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding:
-    max(var(--snui-space-4), env(safe-area-inset-top, 0px))
-    max(var(--snui-space-4), env(safe-area-inset-right, 0px))
-    max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))
-    max(var(--snui-space-4), env(safe-area-inset-left, 0px));
+${SAFE_AREA_PADDING_DECLARATIONS}
   background: var(--snui-color-scrim);
   inset: 0;
   opacity: 1;
@@ -74,12 +72,7 @@ export const DIALOG_STYLES: StyleModule = {
 }
 
 .snui-dialog {
-  /*
-   * The dialog is a raised surface, so hover fills painted inside it use the
-   * raised hover step; see the toast card for the same remap.
-   */
-  --snui-color-interactive-hover: var(--snui-color-hover-raised);
-  --snui-color-focus-ring-band: var(--snui-color-surface-raised);
+${RAISED_SURFACE_TOKEN_DECLARATIONS}
   display: flex;
   width: 100%;
   max-width: 100%;
