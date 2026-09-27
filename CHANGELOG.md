@@ -16,6 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - `Accordion` with `defaultOpenIndex={null}` starts with every section shut, as documented, instead of opening a child marked `defaultOpen`.
 - `DataGrid` rows follow a new `renderRow`, or a change to a column's `numeric`, `wrap`, or `width` option, over the same items, including the cells a `Row` renders from a function. Rows used to keep the cells React Aria had cached for each item, so a panel that switched units in `renderRow` went on showing the old unit. Pass a stable `renderRow`, from module scope or `useCallback`, to keep the row cache: an inline function rebuilds every rendered row on each render.
 - A `CheckboxGroup` given both `label` and `legend` is named by `label`, matching `FieldGroup`. It used to take its name from `legend`, the opposite of every other group.
+- On a coarse pointer, the `RangeInput` track in Chromium and Safari takes the thicker coarse-pointer height, so the thumb sits centered on it. The rule that raised the track shared a selector list with Firefox-only pseudo-elements, which those engines drop as a whole.
 - A numeric timestamp outside the range a `Date` can hold reads as unknown: `RelativeAge` shows its fallback instead of throwing a `RangeError` that took the panel down, and `formatRelativeAgeSince` and `resolveFreshness` report no age instead of one hundreds of thousands of years long.
 
 ## [0.12.0] - 2026-09-14

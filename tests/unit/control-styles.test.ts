@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 import { CONTROL_STYLES } from "../../src/styles/controls.js";
 import { FORM_STYLES } from "../../src/styles/forms.js";
+import { TRACK_THICKNESS_COARSE } from "../../src/styles/fragments.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { PROGRESS_STYLES } from "../../src/styles/progress.js";
 import { RADIO_STYLES } from "../../src/styles/radio.js";
@@ -19,19 +20,19 @@ const CONTROLS_SOURCE = readFileSync(
 );
 
 /**
- * Every `:hover` selector together with the at-rule preludes that enclose it,
- * found by tracking block nesting through the stylesheet text.
+ * Every style rule's selector list together with the at-rule preludes that
+ * enclose it, found by tracking block nesting through the stylesheet text.
+ * Whitespace inside a list is collapsed, so a list reads the same however the
+ * sheet wraps it.
  */
-function hoverSelectors(
-  css: string,
-): { selector: string; atRules: string[] }[] {
+function styleRules(css: string): { selector: string; atRules: string[] }[] {
   const found: { selector: string; atRules: string[] }[] = [];
   const stack: string[] = [];
   let prelude = "";
   for (const character of css) {
     if (character === "{") {
-      const trimmed = prelude.trim();
-      if (trimmed.includes(":hover")) {
+      const trimmed = prelude.trim().replace(/\s+/g, " ");
+      if (!trimmed.startsWith("@")) {
         found.push({
           selector: trimmed,
           atRules: stack.filter((entry) => entry.startsWith("@")),
@@ -85,7 +86,9 @@ describe("control and form stylesheets", () => {
   );
 
   it("gates every raw hover rule on a hover-capable pointer", () => {
-    const hovers = everySheet.flatMap((sheet) => hoverSelectors(sheet));
+    const hovers = everySheet
+      .flatMap((sheet) => styleRules(sheet))
+      .filter(({ selector }) => selector.includes(":hover"));
     expect(hovers.length).toBeGreaterThan(0);
     for (const { atRules, selector } of hovers) {
       const gated = atRules.some(
@@ -96,6 +99,38 @@ describe("control and form stylesheets", () => {
           rule.includes("(forced-colors: active)"),
       );
       expect(gated, `ungated hover rule: ${selector}`).toBe(true);
+    }
+  });
+
+  it("keeps each engine's pseudo-elements out of a shared selector list", () => {
+    // An engine drops a whole selector list that names a pseudo-element it
+    // does not know. Chromium and Safari know no ::-moz- one, so a list that
+    // mixes the two loses its WebKit half there without a word.
+    for (const { selector } of everySheet.flatMap((sheet) =>
+      styleRules(sheet),
+    )) {
+      expect(
+        selector.includes("::-webkit-") && selector.includes("::-moz-"),
+        selector,
+      ).toBe(false);
+    }
+  });
+
+  it("raises both engines' range tracks on a coarse pointer", () => {
+    const coarseRules = styleRules(range)
+      .filter(({ atRules }) =>
+        atRules.some((rule) => rule.includes("(any-pointer: coarse)")),
+      )
+      .map(({ selector }) => selector);
+    const flat = range.replace(/\s+/g, " ");
+    for (const selector of [
+      ".snui-range::-webkit-slider-runnable-track",
+      ".snui-range::-moz-range-track, .snui-range::-moz-range-progress",
+    ]) {
+      expect(coarseRules).toContain(selector);
+      expect(flat).toContain(
+        `${selector} { height: ${TRACK_THICKNESS_COARSE}; }`,
+      );
     }
   });
 

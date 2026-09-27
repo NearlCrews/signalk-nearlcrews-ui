@@ -141,7 +141,14 @@ ${DISABLED_DECLARATIONS}
  * line rather than as the length the value sits on.
  */
 @media (any-pointer: coarse) {
-  .snui-range::-webkit-slider-runnable-track,
+  /*
+   * One rule per engine: Chromium and Safari drop a whole selector list that
+   * names a ::-moz- pseudo-element, which would take the WebKit track with it.
+   */
+  .snui-range::-webkit-slider-runnable-track {
+    height: ${TRACK_THICKNESS_COARSE};
+  }
+
   .snui-range::-moz-range-track,
   .snui-range::-moz-range-progress {
     height: ${TRACK_THICKNESS_COARSE};
