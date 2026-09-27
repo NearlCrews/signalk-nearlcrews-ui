@@ -1,0 +1,19 @@
+name: Install Playwright browsers
+description: >-
+  Installs the Chromium, Firefox, and WebKit builds the browser suite runs,
+  with the system libraries they need. Runs after npm ci.
+
+runs:
+  using: composite
+  steps:
+    # `--with-deps` runs apt, and the runner image configures Google's Chrome
+    # repository, which Playwright does not need: it ships its own browser
+    # builds and takes only shared libraries from Ubuntu's archive. That
+    # third-party index has served a corrupt Packages.gz for long enough to
+    # block a release, so drop it before apt reads it.
+    - name: Install browsers and their system libraries
+      shell: bash
+      run: |
+        sudo rm -f /etc/apt/sources.list.d/google-chrome.list \
+          /etc/apt/sources.list.d/google-chrome.sources
+        npx --no-install playwright install --with-deps chromium firefox webkit
