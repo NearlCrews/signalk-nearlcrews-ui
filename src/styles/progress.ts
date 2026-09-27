@@ -7,7 +7,7 @@ import {
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
-import { toneColorRules } from "./tone-rules.js";
+import { toneDescendantColorRules } from "./tone-rules.js";
 
 /** Keyframe name for the indeterminate slide. */
 const PROGRESS_INDETERMINATE_ANIMATION =
@@ -94,7 +94,7 @@ ${CONTROL_LABEL_DECLARATIONS}
   transition: inline-size var(--snui-transition-fast);
 }
 
-${toneColorRules((tone) => `.snui-progress--tone-${tone} .snui-progress__fill`, "background")}
+${toneDescendantColorRules("snui-progress", ".snui-progress__fill", "background", "tone-")}
 
 .snui-progress--indeterminate .snui-progress__fill {
   position: absolute;

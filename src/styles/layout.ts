@@ -8,9 +8,9 @@ import {
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import {
-  TONE_ACCENT_BAR_DECLARATIONS,
-  toneAccentBarRules,
-  toneColorRules,
+  toneAccentBar,
+  toneBlockColorRules,
+  toneDescendantColorRules,
   toneSelectorList,
 } from "./tone-rules.js";
 
@@ -146,21 +146,13 @@ ${PROSE_MEASURE_DECLARATION}
 }
 
 /* A toned card paints the Banner accent bar and carries the tone glyph. */
-${toneSelectorList("snui-card")} {
-${TONE_ACCENT_BAR_DECLARATIONS}
-}
-
-${toneAccentBarRules("snui-card")}
+${toneAccentBar("snui-card")}
 
 /*
  * A card with a decorative accent paints the same bar without a glyph or an
  * announcement, for a row whose meaning another element already announces.
  */
-${toneSelectorList("snui-card", "accent-")} {
-${TONE_ACCENT_BAR_DECLARATIONS}
-}
-
-${toneAccentBarRules("snui-card", "accent-")}
+${toneAccentBar("snui-card", "accent-")}
 
 .snui-card__tone-glyph {
   vertical-align: middle;
@@ -245,7 +237,7 @@ ${visuallyHiddenDeclarations()}
   overflow-wrap: anywhere;
 }
 
-${toneColorRules((tone) => `.snui-metric--${tone} .snui-metric__value`, "color")}
+${toneDescendantColorRules("snui-metric", ".snui-metric__value")}
 
 /* One spacing decision for every glyph that sits in front of its own text. */
 .snui-card__tone-glyph,
@@ -272,7 +264,7 @@ ${toneColorRules((tone) => `.snui-metric--${tone} .snui-metric__value`, "color")
   overflow-wrap: anywhere;
 }
 
-${toneColorRules((tone) => `.snui-badge--${tone}`, "color")}
+${toneBlockColorRules("snui-badge")}
 
 /*
  * Text and code primitives: the hint, caption, identifier, and hidden-text
@@ -286,7 +278,7 @@ ${toneColorRules((tone) => `.snui-badge--${tone}`, "color")}
 
 .snui-text--neutral { color: var(--snui-color-text); }
 .snui-text--muted { color: var(--snui-color-text-muted); }
-${toneColorRules((tone) => `.snui-text--${tone}`, "color")}
+${toneBlockColorRules("snui-text")}
 .snui-text--size-base { font-size: var(--snui-font-size); }
 .snui-text--size-sm { font-size: var(--snui-font-size-sm); }
 .snui-text--size-xs { font-size: var(--snui-font-size-xs); }

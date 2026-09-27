@@ -9,7 +9,14 @@ import {
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { toneColorRules, toneDotShapeRules } from "./tone-rules.js";
+import { toneBlockColorRules, toneDotShapeRules } from "./tone-rules.js";
+
+/**
+ * The panel content a focus move can scroll to, which the scroll margins below
+ * keep clear of a sticky action bar. One list for all three bar placements.
+ */
+const STICKY_CLEARANCE_TARGETS =
+  ".snui-root__content :is(button, input, select, textarea, a[href], [tabindex])";
 
 export const COMPONENT_STYLES = scopeStyles(`
 /*
@@ -210,7 +217,7 @@ ${TONE_DOT_DECLARATIONS}
 }
 
 .snui-status--neutral { color: var(--snui-color-text-muted); }
-${toneColorRules((tone) => `.snui-status--${tone}`, "color")}
+${toneBlockColorRules("snui-status")}
 
 /*
  * Each tone also gets a distinct dot shape, so the state does not depend on
@@ -338,12 +345,12 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
   );
 }
 
-:scope:has(.snui-action-bar--sticky-bottom) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]),
-:scope:has(.snui-action-bar__viewport-anchor) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]) {
+:scope:has(.snui-action-bar--sticky-bottom) ${STICKY_CLEARANCE_TARGETS},
+:scope:has(.snui-action-bar__viewport-anchor) ${STICKY_CLEARANCE_TARGETS} {
   scroll-margin-block-end: var(--snui-sticky-clearance);
 }
 
-:scope:has(.snui-action-bar--sticky-top) .snui-root__content :is(button, input, select, textarea, a[href], [tabindex]) {
+:scope:has(.snui-action-bar--sticky-top) ${STICKY_CLEARANCE_TARGETS} {
   scroll-margin-block-start: var(--snui-sticky-clearance);
 }
 
