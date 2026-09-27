@@ -452,20 +452,31 @@ function decorateCells(
 }
 
 /**
- * A Row's type argument is the item its cells are rendered from, which is the
- * column for a row that renders cells through a function, so the callback here
- * reads a column rather than a row.
+ * Readies one rendered row for the body. A Row's type argument is the item its
+ * cells are rendered from, which is the column for a row that renders cells
+ * through a function, so the callback here reads a column rather than a row.
+ *
+ * Such a row keeps those cells against their columns and rebuilds them only
+ * when its own dependencies change, so the grid's row dependencies lead that
+ * list on every render, decorated or not. The cells then follow the renderer
+ * and the column options, and the list keeps one length whichever way the
+ * grid renders.
  */
-function decorateRow<TColumn>(
+function prepareRow<TColumn>(
   row: ReactElement<RowProps<TColumn>>,
-  decorations: readonly ColumnDecoration[],
-  decorationsByKey: ReadonlyMap<Key, ColumnDecoration>,
+  { decorations, decorationsByKey }: ResolvedDecorations,
+  decorating: boolean,
   virtualized: boolean,
+  dependencies: readonly unknown[],
 ): ReactElement<RowProps<TColumn>> {
   const cells = row.props.children;
   if (typeof cells === "function") {
-    return cloneElement(row, {
-      children: (column: TColumn) => {
+    const ownDependencies: readonly unknown[] = row.props.dependencies ?? [];
+    const props: Partial<RowProps<TColumn>> = {
+      dependencies: [...dependencies, ...ownDependencies],
+    };
+    if (decorating) {
+      props.children = (column: TColumn) => {
         const cell = cells(column);
         if (!isCellElement(cell)) return cell;
         const key = getItemKey(column);
@@ -474,9 +485,11 @@ function decorateRow<TColumn>(
           key === undefined ? undefined : decorationsByKey.get(key),
           virtualized,
         );
-      },
-    } as Partial<RowProps<TColumn>>);
+      };
+    }
+    return cloneElement(row, props);
   }
+  if (!decorating) return row;
   const decorated = decorateCells(cells, decorations, virtualized, {
     index: 0,
   });
@@ -495,6 +508,12 @@ interface ResolvedHeader<TColumn> {
   readonly decorationsByKey: ReadonlyMap<Key, ColumnDecoration>;
   readonly hasDecoration: boolean;
   readonly headerChildren: ReactNode | ((column: TColumn) => ReactElement);
+  /**
+   * The column keys and options as one string, so a rendered row can be
+   * invalidated by what the columns say rather than by the header object,
+   * which a static header rebuilds on every render of its parent.
+   */
+  readonly signature: string;
 }
 
 type ResolvedDecorations = Omit<ResolvedHeader<never>, "headerChildren">;
@@ -515,6 +534,7 @@ function resolvedDecorations(
       ? indexDecorations(keys, decorations)
       : NO_DECORATIONS_BY_KEY,
     hasDecoration,
+    signature: JSON.stringify([keys, decorations]),
   };
 }
 
@@ -695,16 +715,20 @@ export function DataGrid<TRow, TColumn = unknown>({
     [items, virtualized, zebra],
   );
 
+  // React Aria keeps each rendered row against its item and rebuilds it only
+  // when one of these changes: the renderer, compared by identity, and the
+  // column options, compared by value.
+  const rowDependencies = [renderRow, header.signature];
+
   const decorating = virtualized || header.hasDecoration;
-  const renderDecoratedRow = decorating
-    ? (item: TRow) =>
-        decorateRow(
-          renderRow(item),
-          header.decorations,
-          header.decorationsByKey,
-          virtualized,
-        )
-    : renderRow;
+  const renderGridRow = (item: TRow): ReactElement<RowProps<TRow>> =>
+    prepareRow(
+      renderRow(item),
+      header,
+      decorating,
+      virtualized,
+      rowDependencies,
+    );
 
   // Built where the body needs it, so a populated grid never pays for the
   // empty state it does not render.
@@ -721,11 +745,12 @@ export function DataGrid<TRow, TColumn = unknown>({
   const body = virtualized ? (
     <TableBody
       className="snui-data-grid__body"
+      dependencies={rowDependencies}
       items={virtualItems}
       renderEmptyState={renderEmpty}
     >
       {(entry) => {
-        const row = renderDecoratedRow(entry.value);
+        const row = renderGridRow(entry.value);
         const parityProps: ZebraRowProps<TRow> = {
           "data-snui-zebra-odd": entry.odd || undefined,
         };
@@ -744,10 +769,11 @@ export function DataGrid<TRow, TColumn = unknown>({
   ) : (
     <TableBody
       className="snui-data-grid__body"
+      dependencies={rowDependencies}
       items={items}
       renderEmptyState={renderEmpty}
     >
-      {renderDecoratedRow}
+      {renderGridRow}
     </TableBody>
   );
 

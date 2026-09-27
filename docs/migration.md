@@ -82,6 +82,7 @@ Before moving panel content into a `CollapsibleSection`, read the `mountStrategy
 
 No consuming code requires modification. Check the behavior below.
 
+- `DataGrid` rebuilds its rows when `renderRow` changes identity. A grid that passes an inline arrow keeps working and now shows fresh output, but it rebuilds every rendered row whenever the panel renders. Move `renderRow` to module scope, or wrap it in `useCallback` listing the values it reads besides the item, such as a unit preference, to keep React Aria's row cache.
 - `Accordion` with `defaultOpenIndex={null}` now opens nothing, even when a child carries `defaultOpen`. Leave `defaultOpenIndex` unset to keep the child's `defaultOpen`.
 - A numeric timestamp outside the `Date` range now reads as unknown in `RelativeAge`, `formatRelativeAgeSince`, and `resolveFreshness`, the same as an unparsable string.
 - The emitted declarations change without changing any entry point: `components/Disclosure.d.ts`, `components/overlay-placement.d.ts`, and `utils/announcement.d.ts` differ, as the changelog describes. No import resolves differently.

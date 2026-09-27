@@ -932,17 +932,19 @@ describe("DataGrid", () => {
 
     it("keeps the row wrappers a virtualized body renders from", () => {
       // React Aria caches a rendered row against the wrapper it came from, so
-      // a render that leaves the rows alone must not rebuild the collection.
+      // a render that leaves the rows and the row renderer alone must not
+      // rebuild the collection.
       let rendered = 0;
+      const renderRow = (boat: Boat): ReactElement<RowProps<Boat>> => {
+        rendered += 1;
+        return renderBoatRow(boat);
+      };
       const tree = (className: string): ReactElement =>
         panel(
           boatGrid({
             className,
             items: fleet,
-            renderRow: (boat) => {
-              rendered += 1;
-              return renderBoatRow(boat);
-            },
+            renderRow,
             virtualizeThreshold: 10,
           }),
         );
@@ -1168,6 +1170,243 @@ describe("DataGrid", () => {
         expect(row).not.toHaveAttribute("data-snui-zebra-odd");
       }
     });
+  });
+
+  describe("row cache", () => {
+    /** Renders the depth in the unit a panel's preference names. */
+    function depthRow(unit: string) {
+      return (boat: Boat): ReactElement<RowProps<Boat>> => (
+        <Row>
+          <Cell>{boat.name}</Cell>
+          <Cell>{`${String(boat.depth)} ${unit}`}</Cell>
+        </Row>
+      );
+    }
+
+    it.each(["never", "always"] as const)(
+      "rebuilds rows from a new renderRow over the same items (virtualize %s)",
+      (virtualize) => {
+        // The virtualizer decides which rows jsdom's empty viewport shows, so
+        // every rendered row is read rather than one by position.
+        const depths = (container: HTMLElement): string[] =>
+          [...bodyRows(container)].map((row) => cellAt(row, 1).textContent);
+        const view = renderGrid({ renderRow: depthRow("m"), virtualize });
+        expect(depths(view.container)).toContain("12 m");
+
+        view.rerender(
+          panel(boatGrid({ renderRow: depthRow("ft"), virtualize })),
+        );
+
+        const after = depths(view.container);
+        expect(after.length).toBeGreaterThan(0);
+        for (const depth of after) expect(depth).toMatch(/^\d+ ft$/);
+      },
+    );
+
+    it.each([
+      ["never", false],
+      ["never", true],
+      ["always", false],
+    ] as const)(
+      "rebuilds cells a row renders from a function when renderRow changes (virtualize %s, numeric %s)",
+      (virtualize, numeric) => {
+        const functionDepthRow =
+          (unit: string) =>
+          (boat: Boat): ReactElement<RowProps<Boat>> => (
+            <Row columns={NAME_DEPTH_COLUMNS}>
+              {(column) => (
+                <Cell>
+                  {column.key === "name"
+                    ? boat.name
+                    : `${String(boat.depth)} ${unit}`}
+                </Cell>
+              )}
+            </Row>
+          );
+        const tree = (unit: string): ReactElement =>
+          panel(
+            <DataGrid
+              aria-label="Boats"
+              columns={NAME_DEPTH_COLUMNS}
+              items={BOATS}
+              renderRow={functionDepthRow(unit)}
+              virtualize={virtualize}
+            >
+              {(column) => (
+                <Column
+                  id={column.key}
+                  numeric={numeric && column.key === "depth"}
+                >
+                  {column.key}
+                </Column>
+              )}
+            </DataGrid>,
+          );
+        const depths = (container: HTMLElement): string[] =>
+          [...bodyRows(container)].map((row) => cellAt(row, 1).textContent);
+        const view = render(tree("m"));
+        expect(depths(view.container)).toContain("12 m");
+
+        view.rerender(tree("ft"));
+
+        const after = depths(view.container);
+        expect(after.length).toBeGreaterThan(0);
+        for (const depth of after) expect(depth).toMatch(/^\d+ ft$/);
+      },
+    );
+
+    it("keeps a row's own dependency list one length as decoration comes and goes", () => {
+      // React compares a changed-size dependency list by its common prefix and
+      // reports the change, so the grid's entries must not come and go.
+      const error = vi
+        .spyOn(console, "error")
+        .mockImplementation(() => undefined);
+      const renderRow = (boat: Boat): ReactElement<RowProps<Boat>> => (
+        <Row columns={NAME_DEPTH_COLUMNS} dependencies={[boat.depth]}>
+          {(column) => (
+            <Cell>{column.key === "name" ? boat.name : boat.depth}</Cell>
+          )}
+        </Row>
+      );
+      const tree = (numeric: boolean): ReactElement =>
+        panel(
+          <DataGrid
+            aria-label="Boats"
+            columns={NAME_DEPTH_COLUMNS}
+            items={BOATS}
+            renderRow={renderRow}
+          >
+            {(column) => (
+              <Column
+                id={column.key}
+                numeric={numeric && column.key === "depth"}
+              >
+                {column.key}
+              </Column>
+            )}
+          </DataGrid>,
+        );
+      const view = render(tree(false));
+      view.rerender(tree(true));
+      view.rerender(tree(false));
+
+      const sizeChanges = error.mock.calls.filter((args) =>
+        args.some(
+          (arg) =>
+            typeof arg === "string" && arg.includes("changed size between"),
+        ),
+      );
+      expect(sizeChanges).toEqual([]);
+      expect(cellAt(rowAt(view.container, 0), 1)).not.toHaveAttribute(
+        "data-snui-numeric",
+      );
+    });
+
+    it("carries a column option change to cells over the same items", () => {
+      // The numeric column keeps the grid decorating on both renders, so the
+      // only change is the options themselves.
+      const tree = (nameWrap: boolean, depthWidth: number): ReactElement =>
+        panel(
+          <DataGrid aria-label="Boats" items={BOATS} renderRow={renderBoatRow}>
+            <Column id="name" wrap={nameWrap}>
+              Name
+            </Column>
+            <Column id="depth" numeric width={depthWidth}>
+              Depth
+            </Column>
+          </DataGrid>,
+        );
+      const view = render(tree(false, 48));
+      expect(cellAt(rowAt(view.container, 0), 0)).not.toHaveAttribute(
+        "data-snui-wrap",
+      );
+
+      view.rerender(tree(true, 64));
+
+      const firstRow = rowAt(view.container, 0);
+      expect(cellAt(firstRow, 0)).toHaveAttribute("data-snui-wrap", "");
+      expect(
+        cellAt(firstRow, 1).style.getPropertyValue(
+          "--snui-data-grid-column-min",
+        ),
+      ).toBe("64px");
+    });
+
+    it("carries a column option change to cells a row renders from a function", () => {
+      const renderRow = (boat: Boat): ReactElement<RowProps<Boat>> => (
+        <Row columns={NAME_DEPTH_COLUMNS}>
+          {(column) => (
+            <Cell>{column.key === "name" ? boat.name : boat.depth}</Cell>
+          )}
+        </Row>
+      );
+      const tree = (nameWrap: boolean): ReactElement =>
+        panel(
+          <DataGrid
+            aria-label="Boats"
+            columns={NAME_DEPTH_COLUMNS}
+            items={BOATS}
+            renderRow={renderRow}
+          >
+            {(column) => (
+              <Column
+                id={column.key}
+                numeric={column.key === "depth"}
+                wrap={column.key === "name" && nameWrap}
+              >
+                {column.key}
+              </Column>
+            )}
+          </DataGrid>,
+        );
+      const view = render(tree(false));
+      expect(cellAt(rowAt(view.container, 0), 0)).not.toHaveAttribute(
+        "data-snui-wrap",
+      );
+
+      view.rerender(tree(true));
+
+      expect(cellAt(rowAt(view.container, 0), 0)).toHaveAttribute(
+        "data-snui-wrap",
+        "",
+      );
+      expect(cellAt(rowAt(view.container, 0), 1)).toHaveAttribute(
+        "data-snui-numeric",
+        "",
+      );
+    });
+
+    it.each(["never", "always"] as const)(
+      "keeps cached rows for a stable renderRow and equal columns written afresh (virtualize %s)",
+      (virtualize) => {
+        const renderRow = vi.fn(renderBoatRow);
+        // A static header is new JSX on every parent render, so the grid must
+        // compare the options it carries rather than the elements.
+        const tree = (): ReactElement =>
+          panel(
+            <DataGrid
+              aria-label="Boats"
+              items={BOATS}
+              renderRow={renderRow}
+              virtualize={virtualize}
+            >
+              <Column id="name" wrap>
+                Name
+              </Column>
+              <Column id="depth" numeric width={64}>
+                Depth
+              </Column>
+            </DataGrid>,
+          );
+        const view = render(tree());
+        const afterMount = renderRow.mock.calls.length;
+        expect(afterMount).toBeGreaterThan(0);
+
+        view.rerender(tree());
+
+        expect(renderRow).toHaveBeenCalledTimes(afterMount);
+      },
+    );
   });
 
   describe("grid semantics", () => {
