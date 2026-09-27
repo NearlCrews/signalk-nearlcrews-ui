@@ -160,9 +160,8 @@ export function InputGroup({
         // Only the non-default step names itself: the default is what the
         // block class already paints, and a modifier no rule answers is a
         // hook the package never promised.
-        effectiveDensity === "default"
-          ? undefined
-          : `snui-input-group--${effectiveDensity}`,
+        effectiveDensity !== "default" &&
+          `snui-input-group--${effectiveDensity}`,
         className,
       )}
     />

@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import { usePanelAnnouncer } from "../utils/announcer.js";
-import { focusedElement } from "../utils/focus.js";
+import { focusedElement, focusIsOnBody } from "../utils/focus.js";
 import { useResolvedHeading } from "../utils/heading-level.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { reactNodeText } from "../utils/react-node.js";
@@ -81,14 +81,6 @@ interface PanelErrorFallbackProps {
   readonly title: ReactNode | undefined;
 }
 
-/** The failure as one spoken sentence, for a reader who cannot see it. */
-function spokenFailure(title: ReactNode, description: ReactNode): string {
-  // Each part closes its own sentence, so a title that already ends in one is
-  // not read as two and a title ending in "!" keeps the mark it was written
-  // with.
-  return joinSentences([reactNodeText(title), reactNodeText(description)]);
-}
-
 function PanelErrorFallback({
   description: suppliedDescription,
   onReload,
@@ -118,20 +110,27 @@ function PanelErrorFallback({
     const node = fallbackElement.current;
     if (node === null) return;
 
-    const { body } = node.ownerDocument;
-    const focused = focusedElement(node.ownerDocument);
+    const { ownerDocument } = node;
     // The crashed subtree took the focused control with it, so a keyboard
     // reader is left on the body, a whole Admin page away from the recovery
     // action. Focusing the fallback puts them on it and reads it out, which
     // also beats an alert that entered the DOM carrying its first message.
-    if (focused === null || focused === body) {
+    if (
+      focusedElement(ownerDocument) === null ||
+      focusIsOnBody(ownerDocument)
+    ) {
       node.focus();
       return;
     }
     // Focus is somewhere else entirely, and taking it would pull the operator
     // out of whatever they were doing, so the panel's announcer says what
     // happened through a region that was mounted long before this message.
-    const spoken = spokenFailure(title, description);
+    // Each part closes its own sentence, so a title that already ends in one
+    // is not read as two and a title ending in "!" keeps its own mark.
+    const spoken = joinSentences([
+      reactNodeText(title),
+      reactNodeText(description),
+    ]);
     if (spoken.length > 0) announce(spoken, { assertive: true });
   });
 

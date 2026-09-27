@@ -58,7 +58,7 @@ export function Text({
       `snui-text--size-${size}`,
       // Normal is what the block class already does, so only the two that
       // change something name themselves.
-      wrap === "normal" ? undefined : `snui-text--wrap-${wrap}`,
+      wrap !== "normal" && `snui-text--wrap-${wrap}`,
       className,
     ),
   });

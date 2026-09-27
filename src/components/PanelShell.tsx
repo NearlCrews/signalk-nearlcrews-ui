@@ -199,9 +199,10 @@ export function PanelShell({
       unsupported ?? (
         <UnsupportedBrowserNotice
           {...htmlProps}
-          {...(blocker === "react"
-            ? { children: reactFloorMessage(version) }
-            : {})}
+          {...definedProps({
+            children:
+              blocker === "react" ? reactFloorMessage(version) : undefined,
+          })}
           {...unsupportedLabels}
           className={className}
           headingLevel={headingLevel}
@@ -212,7 +213,7 @@ export function PanelShell({
 
   const hasTitle = hasReactContent(title);
   const hasDescription = hasReactContent(description);
-  const Heading = hasTitle ? HEADING_ELEMENTS[headingLevel] : undefined;
+  const Heading = HEADING_ELEMENTS[headingLevel];
   // "Between" has nothing to sit between without a title: the selector would
   // lead the panel and take its first tab stop, which no placement describes.
   // It resolves to the default trailing slot instead.
@@ -250,9 +251,9 @@ export function PanelShell({
           <Stack {...definedProps({ gap })}>
             {hasTitle || hasDescription ? (
               <div className="snui-panel-shell__header">
-                {Heading === undefined ? null : (
+                {hasTitle ? (
                   <Heading className="snui-panel-shell__title">{title}</Heading>
-                )}
+                ) : null}
                 {hasDescription ? (
                   <div className="snui-panel-shell__description">
                     {description}

@@ -81,9 +81,11 @@ export function RelativeAge({
   const ownsClock = since !== null && since !== undefined;
   const [nowMs, setNowMs] = useState(() => Date.now());
 
+  // Read once per render, so a string timestamp is not parsed again on every
+  // tick that checks whether the words changed.
   const sinceMs = timestampToMs(since);
   const text = ownsClock
-    ? formatRelativeAgeSince(since, nowMs, options)
+    ? formatRelativeAgeSince(sinceMs, nowMs, options)
     : formatRelativeAge(ageMs, options);
 
   const readClock = useEffectEvent((candidateMs: number): void => {
@@ -92,7 +94,7 @@ export function RelativeAge({
     // for five ticks out of six. One extra format is far cheaper than the
     // render it saves, and it also absorbs the millisecond of drift between
     // the initial state and the instant the subscription delivers at once.
-    if (formatRelativeAgeSince(since, candidateMs, options) !== text) {
+    if (formatRelativeAgeSince(sinceMs, candidateMs, options) !== text) {
       setNowMs(candidateMs);
     }
   });
@@ -114,14 +116,14 @@ export function RelativeAge({
   const stampable = Number.isFinite(sinceMs);
   const requested = as ?? (stampable ? "time" : "span");
   const element = requested === "time" && !stampable ? "span" : requested;
-  const dateTime = stampable ? new Date(sinceMs).toISOString() : undefined;
 
   return createPolymorphicElement(
     element,
     {
       ...props,
       className: classNames("snui-relative-age", className),
-      dateTime: element === "time" ? dateTime : undefined,
+      dateTime:
+        element === "time" ? new Date(sinceMs).toISOString() : undefined,
     },
     text,
   );

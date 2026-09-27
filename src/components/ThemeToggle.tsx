@@ -84,16 +84,14 @@ export function ThemeToggle({
       choices.length === 0 || choices.includes(theme)
         ? choices
         : [...choices, theme];
-    return offered.map((value) => {
-      return {
-        label: resolveBundledContent(
-          labels?.[value],
-          bundledChoiceLabels?.[value],
-          THEME_LABELS[value],
-        ),
-        value,
-      };
-    });
+    return offered.map((value) => ({
+      label: resolveBundledContent(
+        labels?.[value],
+        bundledChoiceLabels?.[value],
+        THEME_LABELS[value],
+      ),
+      value,
+    }));
   }, [bundledChoiceLabels, choices, labels, theme]);
 
   const handleValueChange = useCallback(

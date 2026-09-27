@@ -15,6 +15,7 @@ import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { hasText } from "../utils/labels.js";
 import { definedProps } from "../utils/props.js";
+import { racDomProps } from "../utils/react-aria.js";
 import { requireContent } from "../utils/react-node.js";
 import type { SemanticTone } from "../utils/tone.js";
 import { ToneMark } from "./ToneMark.js";
@@ -91,10 +92,8 @@ export function Progress({
   /*
    * The tone and the waiting text are a description rather than part of the
    * name: a bar is named for what it reports, and a name that changed with the
-   * tone would move under a panel looking the control up by it. React Aria
-   * emits aria-valuetext only beside a value, so an indeterminate bar would
-   * otherwise drop the panel's own explanation of what it is waiting for,
-   * which is exactly when the words matter.
+   * tone would move under a panel looking the control up by it. The waiting
+   * text lands here for the reason `valueText` gives.
    */
   const descriptionId = useId();
   const waiting = indeterminate && hasText(valueText);
@@ -103,8 +102,7 @@ export function Progress({
     ? joinIdReferences(props["aria-describedby"], descriptionId)
     : undefined;
 
-  // See RadioGroup for why the DOM prop spread needs a boundary assertion.
-  const domProps = props as RACProgressBarProps;
+  const domProps = racDomProps<RACProgressBarProps>(props);
 
   return (
     <ProgressBar
@@ -113,7 +111,7 @@ export function Progress({
       className={classNames(
         "snui-progress",
         indeterminate && "snui-progress--indeterminate",
-        tone === undefined ? undefined : `snui-progress--tone-${tone}`,
+        tone !== undefined && `snui-progress--tone-${tone}`,
         className,
       )}
       {...definedProps({ "aria-describedby": describedBy })}
