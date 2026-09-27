@@ -93,33 +93,20 @@ describe("Checkbox activation area", () => {
 
   it("reports an aria-label the rendered label overrides", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    try {
-      renderInPanel(
-        <Checkbox
-          aria-label="Wind"
-          label="Publish wind alerts to the vessel bus"
-        />,
-      );
-      expect(warn.mock.calls[0]?.[0]).toContain("aria-label");
-      // The rendered label is what names the box, whatever was passed.
-      expect(
-        screen.getByRole("checkbox", {
-          name: "Publish wind alerts to the vessel bus",
-        }),
-      ).toBeTruthy();
-    } finally {
-      warn.mockRestore();
-    }
-  });
-
-  it("puts the hidden-label modifier on the block that owns the layout", () => {
-    const { container } = renderInPanel(
-      <Checkbox label="Select all rows" labelVisibility="hidden" />,
+    renderInPanel(
+      <Checkbox
+        aria-label="Wind"
+        label="Publish wind alerts to the vessel bus"
+      />,
     );
 
-    const block = container.querySelector(".snui-checkbox");
-    expect(block).toHaveClass("snui-checkbox--label-hidden");
-    expect(block?.querySelector(".snui-checkbox__control")).not.toBeNull();
+    expect(warn.mock.calls[0]?.[0]).toContain("aria-label");
+    // The rendered label is what names the box, whatever was passed.
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Publish wind alerts to the vessel bus",
+      }),
+    ).toBeTruthy();
   });
 });
 

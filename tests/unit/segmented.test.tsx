@@ -20,14 +20,10 @@ const OPTIONS = [
   { label: "Nautical", value: "nautical" },
 ] as const;
 
-const noop = (): void => undefined;
-
 describe("SegmentedControl option validation", () => {
   it("rejects an empty option collection", () => {
     expect(() =>
-      render(
-        <SegmentedControl label="Units" options={[]} onValueChange={noop} />,
-      ),
+      render(<SegmentedControl label="Units" options={[]} />),
     ).toThrow("SegmentedControl requires at least one option.");
   });
 
@@ -37,7 +33,6 @@ describe("SegmentedControl option validation", () => {
         <SegmentedControl
           label="Units"
           options={[{ label: "  ", value: "metric" }]}
-          onValueChange={noop}
         />,
       ),
     ).toThrow("SegmentedControl options require non-empty labels.");
@@ -52,7 +47,6 @@ describe("SegmentedControl option validation", () => {
             { label: "Metric", value: "metric" },
             { label: "Meters", value: "metric" },
           ]}
-          onValueChange={noop}
         />,
       ),
     ).toThrow(
@@ -185,7 +179,6 @@ describe("SegmentedControl form participation", () => {
           label="Units"
           name="units"
           defaultValue="metric"
-          onValueChange={noop}
           options={OPTIONS}
         />
       </form>,
@@ -206,7 +199,6 @@ describe("SegmentedControl form participation", () => {
       <SegmentedControl
         label="Units"
         defaultValue="metric"
-        onValueChange={noop}
         options={OPTIONS}
       />,
     );
@@ -238,7 +230,6 @@ describe("SegmentedControl form participation", () => {
           label="Units"
           name="units"
           defaultValue="metric"
-          onValueChange={noop}
           options={OPTIONS}
         />
       </form>,
@@ -273,7 +264,6 @@ describe("SegmentedControl form participation", () => {
           label="Units"
           name="units"
           value="imperial"
-          onValueChange={noop}
           options={OPTIONS}
         />
       </form>,
@@ -302,7 +292,6 @@ describe("SegmentedControl form participation", () => {
             label="Units"
             name="units"
             defaultValue="metric"
-            onValueChange={noop}
             options={OPTIONS}
           />
         </CollapsibleSection>
@@ -328,7 +317,7 @@ describe("SegmentedControl form participation", () => {
   });
 });
 
-describe("SegmentedControl label and value callbacks", () => {
+describe("SegmentedControl label and controlled value", () => {
   it("names the group from its label", () => {
     render(<SegmentedControl label="Units" options={OPTIONS} />);
 
@@ -341,32 +330,6 @@ describe("SegmentedControl label and value callbacks", () => {
     ).toThrow("SegmentedControl requires a non-empty label.");
   });
 
-  it("reports the value through onValueChange", () => {
-    const onValueChange = vi.fn();
-    render(
-      <SegmentedControl
-        label="Units"
-        options={OPTIONS}
-        onValueChange={onValueChange}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole("radio", { name: "Nautical" }));
-    expect(onValueChange).toHaveBeenCalledWith("nautical");
-  });
-
-  it("shows the label through labelVisibility", () => {
-    render(
-      <SegmentedControl
-        label="Units"
-        labelVisibility="visible"
-        options={OPTIONS}
-      />,
-    );
-
-    expect(screen.getByText("Units")).toHaveClass("snui-segmented__legend");
-  });
-
   it("keeps the hidden input attached while the controlled value changes", () => {
     const addListener = vi.spyOn(HTMLFormElement.prototype, "addEventListener");
     const tree = (
@@ -377,7 +340,6 @@ describe("SegmentedControl label and value callbacks", () => {
           label="Units"
           name="units"
           value={value}
-          onValueChange={noop}
           options={OPTIONS}
         />
       </form>
@@ -401,14 +363,7 @@ describe("SegmentedControl label and value callbacks", () => {
 
 describe("SegmentedControl legend visibility", () => {
   it("keeps the legend visually hidden by default", () => {
-    render(
-      <SegmentedControl
-        label="Units"
-        value="metric"
-        onValueChange={noop}
-        options={OPTIONS}
-      />,
-    );
+    render(<SegmentedControl label="Units" value="metric" options={OPTIONS} />);
 
     const group = screen.getByRole("radiogroup", { name: "Units" });
     expect(group.querySelector(".snui-segmented__legend")).toBeNull();
@@ -417,13 +372,12 @@ describe("SegmentedControl legend visibility", () => {
     );
   });
 
-  it("shows the legend when legendVisibility is visible", () => {
+  it("shows the legend when labelVisibility is visible", () => {
     render(
       <SegmentedControl
         label="Units"
         labelVisibility="visible"
         value="metric"
-        onValueChange={noop}
         options={OPTIONS}
       />,
     );
@@ -652,7 +606,6 @@ describe("SegmentedControl focus-only movement", () => {
       vi.doUnmock("react");
       vi.doUnmock("react/jsx-runtime");
       vi.doUnmock("react/jsx-dev-runtime");
-      vi.unstubAllGlobals();
       vi.resetModules();
     }
   });
@@ -666,7 +619,6 @@ describe("SegmentedControl ref", () => {
         ref={ref}
         label="Units"
         value="metric"
-        onValueChange={noop}
         options={OPTIONS}
       />,
     );
@@ -682,7 +634,6 @@ describe("SegmentedControl description and error", () => {
         label="Units"
         description="Applies to every reading in this panel."
         error="Pick the units the crew reads."
-        onValueChange={noop}
         options={OPTIONS}
       />,
     );
@@ -697,12 +648,7 @@ describe("SegmentedControl description and error", () => {
 
   it("mounts an announcing error region before its content arrives", () => {
     const { container } = render(
-      <SegmentedControl
-        label="Units"
-        errorLive="polite"
-        onValueChange={noop}
-        options={OPTIONS}
-      />,
+      <SegmentedControl label="Units" errorLive="polite" options={OPTIONS} />,
     );
 
     // The region has to exist before the message so a screen reader observes

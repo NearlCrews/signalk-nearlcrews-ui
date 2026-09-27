@@ -246,7 +246,7 @@ describe("RadioGroup", () => {
     );
 
     expect(ref.current?.tagName).toBe("DIV");
-    expect(ref.current?.classList.contains("snui-radio-group")).toBe(true);
+    expect(ref.current).toHaveClass("snui-radio-group");
   });
 
   it("forwards the radio ref to its root element", () => {
@@ -260,7 +260,7 @@ describe("RadioGroup", () => {
     );
 
     expect(ref.current?.tagName).toBe("DIV");
-    expect(ref.current?.classList.contains("snui-radio")).toBe(true);
+    expect(ref.current).toHaveClass("snui-radio");
   });
 
   it("blocks a read-only selection while every radio stays reachable", async () => {
@@ -366,7 +366,7 @@ describe("Switch", () => {
     renderInPanel(<Switch ref={ref}>Autopilot</Switch>);
 
     expect(ref.current?.tagName).toBe("DIV");
-    expect(ref.current?.classList.contains("snui-switch")).toBe(true);
+    expect(ref.current).toHaveClass("snui-switch");
   });
 
   it("participates in native forms and resets to defaultChecked", async () => {
@@ -412,7 +412,6 @@ describe("Switch", () => {
     const form = document.querySelector<HTMLFormElement>(
       "#external-switch-form",
     );
-    expect(form).not.toBeNull();
     if (form === null) {
       throw new Error("Expected the external switch form to exist.");
     }
@@ -485,7 +484,7 @@ describe("Progress", () => {
 
     const bar = screen.getByRole("progressbar", { name: "Connecting" });
     expect(bar).not.toHaveAttribute("aria-valuenow");
-    expect(bar.classList.contains("snui-progress--indeterminate")).toBe(true);
+    expect(bar).toHaveClass("snui-progress--indeterminate");
     expect(bar.querySelector(".snui-progress__fill")).not.toHaveAttribute(
       "style",
     );
@@ -510,7 +509,7 @@ describe("Progress", () => {
     renderInPanel(<Progress label="Depth alarm" value={80} tone="danger" />);
 
     const bar = screen.getByRole("progressbar", { name: "Depth alarm" });
-    expect(bar.classList.contains("snui-progress--tone-danger")).toBe(true);
+    expect(bar).toHaveClass("snui-progress--tone-danger");
   });
 
   it("forwards the ref to the root element", () => {
@@ -632,10 +631,13 @@ describe("Checkbox label visibility", () => {
       <Checkbox label="Select all rows" labelVisibility="hidden" />,
     );
 
-    const checkbox = screen.getByRole("checkbox", { name: "Select all rows" });
-    expect(checkbox).toBeInTheDocument();
-    const root = container.querySelector(".snui-checkbox");
-    expect(root).toHaveClass("snui-checkbox--label-hidden");
+    expect(
+      screen.getByRole("checkbox", { name: "Select all rows" }),
+    ).toBeInTheDocument();
+    // The modifier sits on the block that owns the layout, around the control.
+    const block = container.querySelector(".snui-checkbox");
+    expect(block).toHaveClass("snui-checkbox--label-hidden");
+    expect(block?.querySelector(".snui-checkbox__control")).not.toBeNull();
     expect(container.querySelector(".snui-checkbox__label")).toHaveClass(
       "snui-visually-hidden",
     );
@@ -778,6 +780,6 @@ describe("EmptyState", () => {
     renderInPanel(<EmptyState title="Nothing here" ref={ref} />);
 
     expect(ref.current?.tagName).toBe("DIV");
-    expect(ref.current?.classList.contains("snui-empty-state")).toBe(true);
+    expect(ref.current).toHaveClass("snui-empty-state");
   });
 });

@@ -57,34 +57,22 @@ describe("Controlled text and numeric form reset", () => {
   });
 
   it("follows the control to the form its form attribute names", async () => {
-    const { rerender } = renderInPanel(
+    const tree = (form: string): React.JSX.Element => (
       <>
         <form id="first" />
         <form id="second" />
         <TextInput
           aria-label="Alarm label"
-          form="first"
+          form={form}
           value="Shallow"
           onChange={() => undefined}
         />
-      </>,
+      </>
     );
+    const { rerender } = renderInPanel(tree("first"));
 
     const input = screen.getByRole("textbox", { name: "Alarm label" });
-    rerender(
-      panel(
-        <>
-          <form id="first" />
-          <form id="second" />
-          <TextInput
-            aria-label="Alarm label"
-            form="second"
-            value="Shallow"
-            onChange={() => undefined}
-          />
-        </>,
-      ),
-    );
+    rerender(panel(tree("second")));
 
     fireEvent.change(input, { target: { value: "Deep" } });
     const second = document.getElementById("second");
@@ -148,48 +136,32 @@ describe("RangeInput form reset", () => {
 
 describe("Owned node and consumer refs", () => {
   it("registers the reset listener once whatever ref the caller passes", () => {
-    const seen: (HTMLInputElement | null)[] = [];
-    const { rerender } = renderInPanel(
+    // An inline ref is a new function on every render.
+    const tree = (): React.JSX.Element => (
       <form>
         <RangeInput
           aria-label="Depth alarm"
           min={0}
           max={100}
           defaultValue={50}
-          ref={(node) => {
-            seen.push(node);
-          }}
+          ref={() => undefined}
         />
-      </form>,
+      </form>
     );
+    const { rerender } = renderInPanel(tree());
 
     const range = screen.getByRole("slider", { name: "Depth alarm" });
     const form = formOf(range);
     const addListener = vi.spyOn(form, "addEventListener");
 
-    // An inline ref is a new function on every render. The node and its reset
-    // listener belong to the mount, so neither is torn down and rebuilt.
+    // The node and its reset listener belong to the mount, so neither is torn
+    // down and rebuilt.
     for (let pass = 0; pass < 3; pass += 1) {
-      rerender(
-        panel(
-          <form>
-            <RangeInput
-              aria-label="Depth alarm"
-              min={0}
-              max={100}
-              defaultValue={50}
-              ref={(node) => {
-                seen.push(node);
-              }}
-            />
-          </form>,
-        ),
-      );
+      rerender(panel(tree()));
     }
 
     expect(addListener).not.toHaveBeenCalled();
     expect(screen.getByRole("slider", { name: "Depth alarm" })).toBe(range);
-    addListener.mockRestore();
   });
 });
 
@@ -261,33 +233,25 @@ describe("Checkbox form reset", () => {
 });
 
 describe("Button blocked activation keys", () => {
-  it("suppresses consumer onKeyDown for activation keys while aria-disabled", () => {
-    const onKeyDown = vi.fn();
-    renderInPanel(
-      <Button ariaDisabled onKeyDown={onKeyDown}>
-        Save
-      </Button>,
-    );
+  it.each([
+    ["aria-disabled", { ariaDisabled: true }],
+    ["loading", { loading: true }],
+  ] as const)(
+    "suppresses consumer onKeyDown for activation keys while %s",
+    (_, blocking) => {
+      const onKeyDown = vi.fn();
+      renderInPanel(
+        <Button {...blocking} onKeyDown={onKeyDown}>
+          Save
+        </Button>,
+      );
 
-    const button = screen.getByRole("button", { name: "Save" });
-    fireEvent.keyDown(button, { key: "Enter" });
-    fireEvent.keyDown(button, { key: " " });
-    expect(onKeyDown).not.toHaveBeenCalled();
-  });
-
-  it("suppresses consumer onKeyDown for activation keys while loading", () => {
-    const onKeyDown = vi.fn();
-    renderInPanel(
-      <Button loading onKeyDown={onKeyDown}>
-        Save
-      </Button>,
-    );
-
-    const button = screen.getByRole("button", { name: "Save" });
-    fireEvent.keyDown(button, { key: "Enter" });
-    fireEvent.keyDown(button, { key: " " });
-    expect(onKeyDown).not.toHaveBeenCalled();
-  });
+      const button = screen.getByRole("button", { name: "Save" });
+      fireEvent.keyDown(button, { key: "Enter" });
+      fireEvent.keyDown(button, { key: " " });
+      expect(onKeyDown).not.toHaveBeenCalled();
+    },
+  );
 
   it("passes non-activation keys through while blocked", () => {
     const onKeyDown = vi.fn();

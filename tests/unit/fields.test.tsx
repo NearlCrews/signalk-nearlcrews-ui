@@ -79,25 +79,6 @@ describe("LabeledField control injection", () => {
       "type",
       "password",
     );
-    warn.mockRestore();
-  });
-
-  it("reports a consumer component that may swallow the injected props", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    function ConsumerControl(props: FieldControlProps): React.JSX.Element {
-      return <input {...props} />;
-    }
-
-    renderInPanel(
-      <LabeledField label="Chart source">
-        <ConsumerControl />
-      </LabeledField>,
-    );
-
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining("LabeledField received ConsumerControl"),
-    );
-    warn.mockRestore();
   });
 
   it("injects name, disabled, and required into an element child", () => {
@@ -354,23 +335,22 @@ describe("LabeledField control injection", () => {
     expect(bar).toHaveAttribute("id");
   });
 
-  it("reports a component child it cannot check", () => {
+  it("reports a consumer component that may swallow the injected props", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    function HostInput(props: FieldControlProps): React.JSX.Element {
+    function ConsumerControl(props: FieldControlProps): React.JSX.Element {
       return <input {...props} />;
     }
 
-    try {
-      renderInPanel(
-        <LabeledField label="Broker host">
-          <HostInput />
-        </LabeledField>,
-      );
-      expect(warn.mock.calls[0]?.[0]).toContain("HostInput");
-      expect(warn.mock.calls[0]?.[0]).toContain("render-prop form");
-    } finally {
-      warn.mockRestore();
-    }
+    renderInPanel(
+      <LabeledField label="Chart source">
+        <ConsumerControl />
+      </LabeledField>,
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("LabeledField received ConsumerControl"),
+    );
+    expect(warn.mock.calls[0]?.[0]).toContain("render-prop form");
   });
 
   it("merges a single caller id for an element child too", () => {

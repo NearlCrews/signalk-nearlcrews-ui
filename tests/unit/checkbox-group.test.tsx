@@ -8,7 +8,7 @@ import {
   toCheckboxGroupValue,
 } from "../../src/components/CheckboxGroup.js";
 import { CheckboxGroup } from "../../src/composites.js";
-import { formOf, renderInPanel } from "../helpers.js";
+import { formOf, panel, renderInPanel } from "../helpers.js";
 
 const LAYERS = [
   { label: "Depth areas", value: "depth" },
@@ -133,7 +133,13 @@ describe("CheckboxGroup selection", () => {
     expect(content?.firstElementChild).toHaveTextContent("Scale bands");
 
     rerender(
-      <CheckboxGroup legend="Import layers" options={LAYERS} layout="stack" />,
+      panel(
+        <CheckboxGroup
+          legend="Import layers"
+          options={LAYERS}
+          layout="stack"
+        />,
+      ),
     );
     expect(
       container.querySelector(".snui-checkbox-group__options--stack"),

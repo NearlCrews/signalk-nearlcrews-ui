@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, type ReactElement, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -8,11 +8,10 @@ import {
   NumberField,
   type NumberFieldProps,
   NumberInput,
-  PanelRoot,
   resolveNumberDraft,
   useNumberDraft,
 } from "../../src/index.js";
-import { formOf, panel, renderInPanel } from "../helpers.js";
+import { formOf, renderInPanel } from "../helpers.js";
 
 describe("resolveNumberDraft", () => {
   it.each([
@@ -486,12 +485,7 @@ describe("NumberField editing", () => {
       const [epoch, setEpoch] = useState(0);
       return (
         <>
-          <NumberField
-            label="Depth offset"
-            value={10}
-            onValueChange={() => undefined}
-            resetKey={epoch}
-          />
+          <NumberField label="Depth offset" value={10} resetKey={epoch} />
           <button type="button" onClick={() => setEpoch((n) => n + 1)}>
             Discard
           </button>
@@ -591,7 +585,6 @@ describe("NumberField editing", () => {
         max={65535}
         integer
         value={3000}
-        onValueChange={() => undefined}
         error="Port is already in use."
         messages={{ notAnInteger: "Ports are whole numbers." }}
       />,
@@ -612,7 +605,6 @@ describe("NumberField editing", () => {
         unit="m"
         controlWidth="fixed"
         value={1.5}
-        onValueChange={() => undefined}
       />,
     );
 
@@ -635,7 +627,6 @@ describe("NumberField editing", () => {
         integer
         min={0}
         value={3000}
-        onValueChange={() => undefined}
         inputProps={{ placeholder: "3000", autoComplete: "off" }}
         data-testid="port-field"
       />,
@@ -652,14 +643,7 @@ describe("NumberField editing", () => {
   });
 
   it("asks for the decimal keypad on a non-negative fractional field", () => {
-    renderInPanel(
-      <NumberField
-        label="Depth offset"
-        min={0}
-        value={1.5}
-        onValueChange={() => undefined}
-      />,
-    );
+    renderInPanel(<NumberField label="Depth offset" min={0} value={1.5} />);
 
     expect(
       screen.getByRole("spinbutton", { name: "Depth offset" }),
@@ -672,7 +656,6 @@ describe("NumberField editing", () => {
         label="Depth offset"
         min={0}
         value={1.5}
-        onValueChange={() => undefined}
         inputProps={{ enterKeyHint: "next", inputMode: "text" }}
       />,
     );
@@ -683,14 +666,7 @@ describe("NumberField editing", () => {
   });
 
   it("leaves the keypad alone where the rules allow a negative value", () => {
-    renderInPanel(
-      <NumberField
-        label="Trim"
-        value={-2}
-        onValueChange={() => undefined}
-        min={-10}
-      />,
-    );
+    renderInPanel(<NumberField label="Trim" value={-2} min={-10} />);
 
     // Both keypads omit the minus key on some platforms.
     expect(
@@ -703,12 +679,10 @@ describe("NumberField inside a retaining CollapsibleSection", () => {
   it("keeps an in-progress draft and its validity across collapse and reopen", async () => {
     const user = userEvent.setup();
     const onValidityChange = vi.fn();
-    render(
-      panel(
-        <CollapsibleSection title="Timing" defaultOpen>
-          <Harness onValidityChange={onValidityChange} />
-        </CollapsibleSection>,
-      ),
+    renderInPanel(
+      <CollapsibleSection title="Timing" defaultOpen>
+        <Harness onValidityChange={onValidityChange} />
+      </CollapsibleSection>,
     );
 
     const input = screen.getByRole("spinbutton", { name: "Refresh interval" });
@@ -818,11 +792,7 @@ describe("useNumberDraft standalone", () => {
         </>
       );
     }
-    render(
-      <PanelRoot>
-        <Bare />
-      </PanelRoot>,
-    );
+    renderInPanel(<Bare />);
 
     const input = screen.getByRole("spinbutton", { name: "Bare" });
     await user.clear(input);
@@ -841,11 +811,7 @@ describe("useNumberDraft standalone", () => {
       // so the draft text itself can be observed.
       return <input aria-label="Raw" type="text" {...draft.inputProps} />;
     }
-    render(
-      <PanelRoot>
-        <Raw />
-      </PanelRoot>,
-    );
+    renderInPanel(<Raw />);
 
     const input = screen.getByRole<HTMLInputElement>("textbox", {
       name: "Raw",
@@ -876,11 +842,7 @@ describe("useNumberDraft standalone", () => {
         </>
       );
     }
-    render(
-      <PanelRoot>
-        <Raw />
-      </PanelRoot>,
-    );
+    renderInPanel(<Raw />);
 
     const input = screen.getByRole("textbox", { name: "Raw" });
     await user.clear(input);
