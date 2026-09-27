@@ -4,6 +4,7 @@ import {
   githubSlug,
   localDestinations,
   markdownAnchors,
+  splitDestination,
 } from "../../scripts/lib/docs-links.mjs";
 
 describe("documentation link slugs", () => {
@@ -95,5 +96,31 @@ describe("documentation link destinations", () => {
         ].join("\n"),
       ),
     ).toEqual([{ destination: "docs/guide.md", image: false, line: 6 }]);
+  });
+});
+
+describe("documentation link targets", () => {
+  it("splits a destination into its decoded path and fragment", () => {
+    expect(
+      splitDestination("docs/api%20reference.md?plain=1#Entry%20points"),
+    ).toEqual({
+      fragment: "Entry points",
+      path: "docs/api reference.md",
+    });
+    expect(splitDestination("#entry-point-sizes")).toEqual({
+      fragment: "entry-point-sizes",
+      path: "",
+    });
+    expect(splitDestination("LICENSE")).toEqual({
+      fragment: "",
+      path: "LICENSE",
+    });
+  });
+
+  it("answers undefined for a malformed percent-escape rather than throwing", () => {
+    // decodeURIComponent throws a URIError on these, which used to stop the
+    // whole check instead of reporting the one link.
+    expect(splitDestination("docs/100%.md")).toBeUndefined();
+    expect(splitDestination("docs/guide.md#caf%E9")).toBeUndefined();
   });
 });

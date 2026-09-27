@@ -69,6 +69,26 @@ function isLocal(destination) {
 }
 
 /**
+ * A local destination's decoded path, without its query, and decoded fragment,
+ * each empty when absent. Answers undefined when either half carries a
+ * malformed percent-escape, so the caller reports that one link rather than
+ * the whole check failing on the URIError decodeURIComponent throws.
+ */
+export function splitDestination(destination) {
+  const [pathWithQuery, rawFragment = ""] = destination.split("#", 2);
+  const [rawPath] = pathWithQuery.split("?", 1);
+  try {
+    return {
+      fragment: decodeURIComponent(rawFragment),
+      path: decodeURIComponent(rawPath),
+    };
+  } catch (error) {
+    if (error instanceof URIError) return undefined;
+    throw error;
+  }
+}
+
+/**
  * Repository-local link destinations, with the line each one sits on and
  * whether it is an image target. Readers that care about the Signal K App
  * Store need the distinction: it rewrites image paths and nothing else.

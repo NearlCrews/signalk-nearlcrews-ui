@@ -7,7 +7,11 @@
 import { readFile, stat } from "node:fs/promises";
 import { dirname, extname, relative, resolve } from "node:path";
 
-import { localDestinations, markdownAnchors } from "./lib/docs-links.mjs";
+import {
+  localDestinations,
+  markdownAnchors,
+  splitDestination,
+} from "./lib/docs-links.mjs";
 import { collectFiles, repositoryPath } from "./lib/paths.mjs";
 
 const repositoryRoot = repositoryPath();
@@ -73,28 +77,33 @@ for (const [sourceFile, markdown] of sourceByFile) {
   const sourceName = relative(repositoryRoot, sourceFile);
 
   for (const { destination, line } of localDestinations(markdown)) {
-    const [pathWithQuery, rawFragment] = destination.split("#", 2);
-    const [pathPart] = pathWithQuery.split("?", 1);
+    const target = splitDestination(destination);
+    if (target === undefined) {
+      failures.push(
+        `${sourceName}:${line}: malformed percent-escape in local link ${destination}`,
+      );
+      continue;
+    }
     const targetFile =
-      pathPart.length === 0
+      target.path.length === 0
         ? sourceFile
-        : resolve(dirname(sourceFile), decodeURIComponent(pathPart));
+        : resolve(dirname(sourceFile), target.path);
 
-    const target = await cached(targetCache, targetFile, describeTarget);
-    if (target === "missing") {
+    const kind = await cached(targetCache, targetFile, describeTarget);
+    if (kind === "missing") {
       failures.push(
         `${sourceName}:${line}: missing local target ${destination}`,
       );
       continue;
     }
-    if (target === "directory") {
+    if (kind === "directory") {
       failures.push(
         `${sourceName}:${line}: local target is a directory ${destination}`,
       );
       continue;
     }
 
-    if (rawFragment === undefined || rawFragment.length === 0) continue;
+    if (target.fragment.length === 0) continue;
     if (extname(targetFile).toLowerCase() !== ".md") {
       failures.push(
         `${sourceName}:${line}: anchor target is not Markdown: ${destination}`,
@@ -103,8 +112,7 @@ for (const [sourceFile, markdown] of sourceByFile) {
     }
 
     const anchors = await cached(anchorCache, targetFile, readAnchors);
-    const fragment = decodeURIComponent(rawFragment).toLowerCase();
-    if (!anchors.has(fragment)) {
+    if (!anchors.has(target.fragment.toLowerCase())) {
       failures.push(
         `${sourceName}:${line}: missing local anchor ${destination}`,
       );
