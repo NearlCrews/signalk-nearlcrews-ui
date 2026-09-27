@@ -6,6 +6,20 @@ import {
 import { scopeStyles } from "./scope.js";
 import { PANEL_CONTAINER_NAME } from "./tokens.js";
 
+/**
+ * The content padding at one step of the space scale, for the default panel
+ * and the narrow one. The horizontal sides never shrink under a safe-area
+ * inset, and they stay physical for the reason given where the rule lives.
+ */
+function contentPaddingDeclarations(step: number, indent: string): string {
+  const space = `var(--snui-space-${String(step)})`;
+  return [
+    `${indent}padding-block: ${space};`,
+    `${indent}padding-left: max(${space}, env(safe-area-inset-left, 0px));`,
+    `${indent}padding-right: max(${space}, env(safe-area-inset-right, 0px));`,
+  ].join("\n");
+}
+
 export const FOUNDATION_STYLES = scopeStyles(`
 :scope,
 *,
@@ -71,9 +85,7 @@ export const FOUNDATION_STYLES = scopeStyles(`
  */
 .snui-root__content {
   min-width: 0;
-  padding-block: var(--snui-space-4);
-  padding-left: max(var(--snui-space-4), env(safe-area-inset-left, 0px));
-  padding-right: max(var(--snui-space-4), env(safe-area-inset-right, 0px));
+${contentPaddingDeclarations(4, "  ")}
 }
 
 :scope.snui-root--standard {
@@ -286,9 +298,7 @@ ${visuallyHiddenDeclarations(true)}
 
 ${NARROW_PANEL_QUERY} {
   .snui-root__content {
-    padding-block: var(--snui-space-3);
-    padding-left: max(var(--snui-space-3), env(safe-area-inset-left, 0px));
-    padding-right: max(var(--snui-space-3), env(safe-area-inset-right, 0px));
+${contentPaddingDeclarations(3, "    ")}
   }
 }
 

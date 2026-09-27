@@ -30,12 +30,7 @@ export function useModuleStyles(
   module: StyleModule,
   componentName: string,
 ): void {
-  const panelRoot = usePanelPortalContainer(componentName);
-
-  useLayoutEffect(() => {
-    if (panelRoot === null) return undefined;
-    return installModuleStylesForRoot(panelRoot.ownerDocument, module);
-  }, [module, panelRoot]);
+  useModuleStylesForRoot(module, usePanelPortalContainer(componentName));
 }
 
 /**
@@ -48,8 +43,14 @@ export function useModuleStyles(
  * this hook installs nothing and stays silent.
  */
 export function useOptionalModuleStyles(module: StyleModule): void {
-  const panelRoot = useOptionalPanelRoot();
+  useModuleStylesForRoot(module, useOptionalPanelRoot());
+}
 
+/** Installs the module into the owning root's document, once it resolves. */
+function useModuleStylesForRoot(
+  module: StyleModule,
+  panelRoot: HTMLElement | null,
+): void {
   useLayoutEffect(() => {
     if (panelRoot === null) return undefined;
     return installModuleStylesForRoot(panelRoot.ownerDocument, module);

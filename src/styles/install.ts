@@ -121,7 +121,7 @@ export function installStyleModule(
     }
   }
 
-  const key = [module.id, version, nonce ?? ""].join("\u0000");
+  const key = `${module.id}\u0000${version}\u0000${nonce ?? ""}`;
   styleRegistry.acquire(ownerDocument, key, () => {
     const element = ownerDocument.createElement("style");
     if (module.id === ROOT_STYLE_MODULE_ID) {

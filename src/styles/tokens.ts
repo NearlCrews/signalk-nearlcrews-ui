@@ -189,17 +189,17 @@ export const NIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
 });
 
 /*
- * An alias is emitted as a reference rather than a copy, so a consumer that
- * overrides the token it names, and the raised remap dialogs, popovers, and
- * toasts apply, reach both spellings of the same fill.
+ * One theme's palette followed by its elevation. An alias is emitted as a
+ * reference rather than a copy, so a consumer that overrides the token it
+ * names, and the raised remap dialogs, popovers, and toasts apply, reach both
+ * spellings of the same fill.
  */
-function renderTokenBlock(tokens: ThemeTokenSet): string {
-  return Object.entries(tokens)
-    .map(([name, value]) => {
-      const source = HOVER_ALIAS_SOURCES.get(name as HoverAliasTokenName);
-      return `  ${name}: ${source === undefined ? value : `var(${source})`};`;
-    })
-    .join("\n");
+function renderThemeBlock(tokens: ThemeTokenSet, elevation: string): string {
+  const colors = Object.entries(tokens).map(([name, value]) => {
+    const source = HOVER_ALIAS_SOURCES.get(name as HoverAliasTokenName);
+    return `  ${name}: ${source === undefined ? value : `var(${source})`};`;
+  });
+  return [...colors, elevation].join("\n");
 }
 
 /*
@@ -223,12 +223,9 @@ const NIGHT_SHADOW_BLOCK = `  --snui-shadow-flat: none;
   --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(90 0 0 / 42%);
   --snui-color-scrim: rgb(12 0 0 / 92%);`;
 
-const LIGHT_BLOCK = `${renderTokenBlock(LIGHT_TOKENS)}
-${LIGHT_SHADOW_BLOCK}`;
-const DARK_BLOCK = `${renderTokenBlock(DARK_TOKENS)}
-${DARK_SHADOW_BLOCK}`;
-const NIGHT_BLOCK = `${renderTokenBlock(NIGHT_TOKENS)}
-${NIGHT_SHADOW_BLOCK}`;
+const LIGHT_BLOCK = renderThemeBlock(LIGHT_TOKENS, LIGHT_SHADOW_BLOCK);
+const DARK_BLOCK = renderThemeBlock(DARK_TOKENS, DARK_SHADOW_BLOCK);
+const NIGHT_BLOCK = renderThemeBlock(NIGHT_TOKENS, NIGHT_SHADOW_BLOCK);
 
 /**
  * The `container-name` `PanelRoot` sets on itself, together with
