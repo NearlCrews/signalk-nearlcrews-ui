@@ -7,6 +7,13 @@ import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
 /**
+ * An enabled, unselected tab under the pointer, which the hover and
+ * forced-colors rules both paint.
+ */
+const UNSELECTED_TAB_HOVER =
+  '.snui-tab:not(:disabled):not([aria-selected="true"]):hover';
+
+/**
  * Tab styles. Installed by `Tabs` through `useOptionalModuleStyles`, so a panel
  * without tabs never injects them.
  */
@@ -74,7 +81,7 @@ export const TABS_STYLES: StyleModule = {
 }
 
 @media (hover: hover) {
-  .snui-tab:not(:disabled):not([aria-selected="true"]):hover {
+  ${UNSELECTED_TAB_HOVER} {
     background: var(--snui-color-interactive-hover);
     color: var(--snui-color-text);
   }
@@ -153,7 +160,7 @@ ${NARROW_PANEL_QUERY} {
    * painted exactly like its neighbors. Reconstruct it with a system
    * highlight, as the menu item does.
    */
-  .snui-tab:not(:disabled):not([aria-selected="true"]):hover {
+  ${UNSELECTED_TAB_HOVER} {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;

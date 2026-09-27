@@ -1,20 +1,28 @@
 import {
   focusRingDeclarations,
   SURFACE_DECLARATIONS,
+  TABLE_CAPTION_DECLARATIONS,
+  TONE_BAR_WIDTH,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
 /**
- * Cell selectors, written once. Each carries the role fallback the virtualized
- * grid needs, and each is long enough that a typo in one copy would silently
- * match nothing.
+ * Cell and row selectors, written once. Each carries the role fallback the
+ * virtualized grid needs, and each is long enough that a typo in one copy
+ * would silently match nothing.
  */
 const CELL_ROLES = ':is(td, [role="rowheader"], [role="gridcell"])';
 const HEADER_CELL = '.snui-data-grid__header :is(th, [role="columnheader"])';
 const BODY_CELL = `.snui-data-grid__body ${CELL_ROLES}`;
-const SELECTED_ROW = '.snui-data-grid__body [role="row"][data-selected]';
+const SORTABLE_HEADER = `${HEADER_CELL}[data-allows-sorting]`;
+const BODY_ROW = '.snui-data-grid__body [role="row"]';
+const SELECTABLE_ROW = `${BODY_ROW}[data-selection-mode]`;
+const SELECTED_ROW = `${BODY_ROW}[data-selected]`;
+const FOCUSED_ROW = `${BODY_ROW}[data-focus-visible]`;
+const VIRTUALIZED_BODY_CELL =
+  '.snui-data-grid--virtualized .snui-data-grid__body :is([role="rowheader"], [role="gridcell"])';
 
 /**
  * Floor a column may not shrink below, as a custom property so a column pinned
@@ -38,10 +46,7 @@ ${SURFACE_DECLARATIONS}
 
 .snui-data-grid__caption {
   padding: var(--snui-space-2) var(--snui-space-3);
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  text-align: start;
-  overflow-wrap: anywhere;
+${TABLE_CAPTION_DECLARATIONS}
 }
 
 .snui-data-grid__caption--hidden {
@@ -69,14 +74,14 @@ ${HEADER_CELL} {
   text-align: start;
 }
 
-${HEADER_CELL}[data-allows-sorting] {
+${SORTABLE_HEADER} {
   cursor: pointer;
 }
 
 /* Header cells sit on the raised surface, so the raised hover step keeps the
    hover and pressed fills visible in Dark. */
-${HEADER_CELL}[data-allows-sorting][data-hovered],
-${HEADER_CELL}[data-allows-sorting][data-pressed] {
+${SORTABLE_HEADER}[data-hovered],
+${SORTABLE_HEADER}[data-pressed] {
   background: var(--snui-color-hover-raised);
 }
 
@@ -91,7 +96,7 @@ ${focusRingDeclarations("-2px", true)}
  * than from the type scale so it tracks whatever size the header text takes,
  * including a panel that sets its own.
  */
-${HEADER_CELL}[data-allows-sorting]::after {
+${SORTABLE_HEADER}::after {
   content: "\\21C5" / "";
   margin-inline-start: var(--snui-space-2);
   color: var(--snui-color-text-muted);
@@ -126,7 +131,7 @@ ${BODY_CELL} {
   text-align: end;
 }
 
-.snui-data-grid__body [role="row"][data-selection-mode] {
+${SELECTABLE_ROW} {
   cursor: pointer;
 }
 
@@ -138,15 +143,15 @@ ${BODY_CELL} {
  * virtualizer measures them. Compact trades the floor for density, which the
  * design contract records as its one target-size exception.
  */
-.snui-data-grid:not(.snui-data-grid--virtualized) .snui-data-grid__body [role="row"][data-selection-mode] {
+.snui-data-grid:not(.snui-data-grid--virtualized) ${SELECTABLE_ROW} {
   height: var(--snui-control-min-height);
 }
 
-.snui-data-grid--compact:not(.snui-data-grid--virtualized) .snui-data-grid__body [role="row"][data-selection-mode] {
+.snui-data-grid--compact:not(.snui-data-grid--virtualized) ${SELECTABLE_ROW} {
   height: calc(var(--snui-control-min-height) - var(--snui-space-3));
 }
 
-.snui-data-grid__body [role="row"][data-selection-mode][data-hovered] {
+${SELECTABLE_ROW}[data-hovered] {
   background: var(--snui-color-interactive-hover);
 }
 
@@ -164,7 +169,7 @@ ${HEADER_CELL}:first-child,
 ${BODY_CELL}:first-child {
   /* The width the tone bar takes on Banner, Card, and Toast. The header
      reserves it too, so the first column measures the same in both. */
-  border-inline-start: 0.3rem solid transparent;
+  border-inline-start: ${TONE_BAR_WIDTH} solid transparent;
 }
 
 ${SELECTED_ROW} ${CELL_ROLES}:first-child {
@@ -175,12 +180,12 @@ ${SELECTED_ROW}[data-hovered] {
   background: var(--snui-color-row-selected-hover);
 }
 
-.snui-data-grid__body [role="row"][data-focus-visible] {
+${FOCUSED_ROW} {
 ${focusRingDeclarations("-2px", false)}
 }
 
 .snui-data-grid--zebra:not(.snui-data-grid--virtualized) .snui-data-grid__body > tr:nth-of-type(even):not([data-selected]):not([data-hovered]),
-.snui-data-grid--zebra.snui-data-grid--virtualized .snui-data-grid__body [role="row"][data-snui-zebra-odd]:not([data-selected]):not([data-hovered]) {
+.snui-data-grid--zebra.snui-data-grid--virtualized ${BODY_ROW}[data-snui-zebra-odd]:not([data-selected]):not([data-hovered]) {
   background: var(--snui-color-surface-stripe);
 }
 
@@ -230,12 +235,12 @@ ${focusRingDeclarations("-2px", false)}
   width: 100%;
 }
 
-.snui-data-grid--virtualized .snui-data-grid__body [role="row"] {
+.snui-data-grid--virtualized ${BODY_ROW} {
   width: 100%;
   min-height: var(--snui-control-min-height);
 }
 
-.snui-data-grid--compact.snui-data-grid--virtualized .snui-data-grid__body [role="row"] {
+.snui-data-grid--compact.snui-data-grid--virtualized ${BODY_ROW} {
   min-height: calc(var(--snui-control-min-height) - var(--snui-space-3));
 }
 
@@ -245,7 +250,7 @@ ${focusRingDeclarations("-2px", false)}
  * the ellipsis lives on that span because a flex container cannot truncate
  * its own anonymous text.
  */
-.snui-data-grid--virtualized .snui-data-grid__body :is([role="rowheader"], [role="gridcell"]) {
+${VIRTUALIZED_BODY_CELL} {
   display: flex;
   align-items: center;
   width: 100%;
@@ -268,7 +273,7 @@ ${focusRingDeclarations("-2px", false)}
 }
 
 /* A wrap column trades one-line rows for the whole value. */
-.snui-data-grid--virtualized .snui-data-grid__body :is([role="rowheader"], [role="gridcell"])[data-snui-wrap] {
+${VIRTUALIZED_BODY_CELL}[data-snui-wrap] {
   align-items: flex-start;
   overflow-wrap: anywhere;
   white-space: normal;
@@ -301,13 +306,13 @@ ${focusRingDeclarations("-2px", false)}
    * Reconstructed with the system pair, which also keeps the row's own text
    * readable against it.
    */
-  .snui-data-grid__body [role="row"][data-selection-mode][data-hovered] {
+  ${SELECTABLE_ROW}[data-hovered] {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
   }
 
-  .snui-data-grid__body [role="row"][data-focus-visible],
+  ${FOCUSED_ROW},
   .snui-data-grid__header [role="columnheader"][data-focus-visible] {
     outline-color: Highlight;
   }

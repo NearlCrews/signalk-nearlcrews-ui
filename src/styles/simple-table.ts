@@ -1,4 +1,7 @@
-import { visuallyHiddenDeclarations } from "./fragments.js";
+import {
+  TABLE_CAPTION_DECLARATIONS,
+  visuallyHiddenDeclarations,
+} from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
@@ -36,10 +39,7 @@ export const SIMPLE_TABLE_STYLES: StyleModule = {
 .snui-table__caption {
   text-wrap: balance;
   padding-block-end: var(--snui-space-2);
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  text-align: start;
-  overflow-wrap: anywhere;
+${TABLE_CAPTION_DECLARATIONS}
 }
 
 .snui-table__caption--hidden {

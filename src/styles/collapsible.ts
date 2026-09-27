@@ -5,11 +5,19 @@ import {
   SURFACE_DECLARATIONS,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import {
-  TONE_ACCENT_BAR_DECLARATIONS,
-  toneAccentBarRules,
-  toneSelectorList,
-} from "./tone-rules.js";
+import { toneAccentBar } from "./tone-rules.js";
+
+/**
+ * The toggle while it can be pressed, which the hover, pressed, and
+ * forced-colors rules all target.
+ */
+const ENABLED_TOGGLE = ".snui-collapsible__toggle:not(:disabled)";
+
+/**
+ * How far a narrow panel indents the rows that wrap under the heading, past
+ * the chevron's pinned 1em, so they start near the title's text edge.
+ */
+const NARROW_ROW_INDENT = "calc(var(--snui-space-3) + 1em)";
 
 export const COLLAPSIBLE_STYLES = scopeStyles(`
 .snui-accordion {
@@ -30,11 +38,7 @@ ${SURFACE_DECLARATIONS}
  * variant: an embedded section draws no chrome of its own, so its tone shows
  * as the glyph alone.
  */
-${toneSelectorList("snui-collapsible")} {
-${TONE_ACCENT_BAR_DECLARATIONS}
-}
-
-${toneAccentBarRules("snui-collapsible")}
+${toneAccentBar("snui-collapsible")}
 
 .snui-collapsible__tone-glyph {
   flex: none;
@@ -104,12 +108,12 @@ ${toneAccentBarRules("snui-collapsible")}
 }
 
 @media (hover: hover) {
-  .snui-collapsible__toggle:not(:disabled):hover {
+  ${ENABLED_TOGGLE}:hover {
     background: var(--snui-color-interactive-hover);
   }
 }
 
-.snui-collapsible__toggle:not(:disabled):active {
+${ENABLED_TOGGLE}:active {
 ${PRESSED_FILL_DECLARATION}
 }
 
@@ -187,10 +191,7 @@ ${DISABLED_DECLARATIONS}
   border-block-start: 1px solid var(--snui-color-border);
 }
 
-.snui-collapsible--embedded > .snui-collapsible__header {
-  padding-inline: 0;
-}
-
+.snui-collapsible--embedded > .snui-collapsible__header,
 .snui-collapsible--embedded > .snui-collapsible__content,
 .snui-collapsible--embedded > .snui-collapsible__summary--below {
   padding-inline: 0;
@@ -202,11 +203,11 @@ ${NARROW_PANEL_QUERY} {
   }
 
   .snui-collapsible__summary--header {
-    padding-inline-start: calc(var(--snui-space-3) + 1em);
+    padding-inline-start: ${NARROW_ROW_INDENT};
   }
 
   .snui-collapsible__actions {
-    padding-inline-start: calc(var(--snui-space-3) + 1em);
+    padding-inline-start: ${NARROW_ROW_INDENT};
   }
 }
 
@@ -216,8 +217,8 @@ ${NARROW_PANEL_QUERY} {
    * toggle painted exactly like the header around it. Reconstruct both states
    * with a system highlight, as the menu item does.
    */
-  .snui-collapsible__toggle:not(:disabled):hover,
-  .snui-collapsible__toggle:not(:disabled):active {
+  ${ENABLED_TOGGLE}:hover,
+  ${ENABLED_TOGGLE}:active {
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
