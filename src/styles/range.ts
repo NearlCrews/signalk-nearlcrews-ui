@@ -8,6 +8,52 @@ import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
 /**
+ * The WebKit track background: the filled portion up to the value, then the
+ * rest. Written once because right-to-left mirrors it and forced colors
+ * rebuilds both halves with system colors, each at its own indentation.
+ */
+function trackFill(
+  direction: "left" | "right",
+  [filled, rest]: readonly [filled: string, rest: string],
+  indent: string,
+): string {
+  return [
+    `${indent}background: linear-gradient(`,
+    `${indent}  to ${direction},`,
+    `${indent}  ${filled} 0 var(--snui-range-progress, 0%),`,
+    `${indent}  ${rest} var(--snui-range-progress, 0%)`,
+    `${indent});`,
+  ].join("\n");
+}
+
+/** The thumb's size, which follows the density contract in both engines. */
+const THUMB_SIZE_DECLARATIONS = [
+  "  width: var(--snui-range-thumb-size);",
+  "  height: var(--snui-range-thumb-size);",
+].join("\n");
+
+/** The thumb's face, painted the same in both engines. */
+const THUMB_FACE_DECLARATIONS = [
+  "  border: 2px solid var(--snui-color-surface);",
+  "  border-radius: 50%;",
+  "  background: var(--snui-color-accent-fill);",
+].join("\n");
+
+/** The thumb under forced colors, in both engines. */
+const FORCED_COLORS_THUMB_DECLARATIONS = [
+  "    forced-color-adjust: none;",
+  "    border-color: Canvas;",
+  "    background: Highlight;",
+].join("\n");
+
+/** The filled and remaining track colors, themed and forced. */
+const TRACK_COLORS = [
+  "var(--snui-range-progress-color)",
+  "var(--snui-range-track-color)",
+] as const;
+const FORCED_TRACK_COLORS = ["Highlight", "ButtonText"] as const;
+
+/**
  * Range slider styles. Installed by `RangeInput` through
  * `useOptionalModuleStyles`, so a panel without a slider never injects them.
  * The track and progress tokens stay in the root sheet, which owns every
@@ -30,19 +76,11 @@ export const RANGE_STYLES: StyleModule = {
   height: ${TRACK_THICKNESS};
   border: 0;
   border-radius: var(--snui-radius-pill);
-  background: linear-gradient(
-    to right,
-    var(--snui-range-progress-color) 0 var(--snui-range-progress, 0%),
-    var(--snui-range-track-color) var(--snui-range-progress, 0%)
-  );
+${trackFill("right", TRACK_COLORS, "  ")}
 }
 
 .snui-range:dir(rtl)::-webkit-slider-runnable-track {
-  background: linear-gradient(
-    to left,
-    var(--snui-range-progress-color) 0 var(--snui-range-progress, 0%),
-    var(--snui-range-track-color) var(--snui-range-progress, 0%)
-  );
+${trackFill("left", TRACK_COLORS, "  ")}
 }
 
 /*
@@ -52,12 +90,9 @@ export const RANGE_STYLES: StyleModule = {
  */
 .snui-range::-webkit-slider-thumb {
   appearance: none;
-  width: var(--snui-range-thumb-size);
-  height: var(--snui-range-thumb-size);
+${THUMB_SIZE_DECLARATIONS}
   margin-block-start: calc((${TRACK_THICKNESS} - var(--snui-range-thumb-size)) / 2);
-  border: 2px solid var(--snui-color-surface);
-  border-radius: 50%;
-  background: var(--snui-color-accent-fill);
+${THUMB_FACE_DECLARATIONS}
 }
 
 .snui-range::-moz-range-track {
@@ -74,11 +109,8 @@ export const RANGE_STYLES: StyleModule = {
 }
 
 .snui-range::-moz-range-thumb {
-  width: var(--snui-range-thumb-size);
-  height: var(--snui-range-thumb-size);
-  border: 2px solid var(--snui-color-surface);
-  border-radius: 50%;
-  background: var(--snui-color-accent-fill);
+${THUMB_SIZE_DECLARATIONS}
+${THUMB_FACE_DECLARATIONS}
 }
 
 /*
@@ -135,26 +167,16 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
    */
   .snui-range::-webkit-slider-runnable-track {
     forced-color-adjust: none;
-    background: linear-gradient(
-      to right,
-      Highlight 0 var(--snui-range-progress, 0%),
-      ButtonText var(--snui-range-progress, 0%)
-    );
+${trackFill("right", FORCED_TRACK_COLORS, "    ")}
   }
 
   .snui-range:dir(rtl)::-webkit-slider-runnable-track {
     forced-color-adjust: none;
-    background: linear-gradient(
-      to left,
-      Highlight 0 var(--snui-range-progress, 0%),
-      ButtonText var(--snui-range-progress, 0%)
-    );
+${trackFill("left", FORCED_TRACK_COLORS, "    ")}
   }
 
   .snui-range::-webkit-slider-thumb {
-    forced-color-adjust: none;
-    border-color: Canvas;
-    background: Highlight;
+${FORCED_COLORS_THUMB_DECLARATIONS}
   }
 
   .snui-range::-moz-range-track {
@@ -168,9 +190,7 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
   }
 
   .snui-range::-moz-range-thumb {
-    forced-color-adjust: none;
-    border-color: Canvas;
-    background: Highlight;
+${FORCED_COLORS_THUMB_DECLARATIONS}
   }
 }
 `),

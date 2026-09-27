@@ -1,5 +1,7 @@
 import {
+  BLOCKED_SELECTOR,
   FIELD_ERROR_DECLARATIONS,
+  GROUP_LEGEND_DECLARATIONS,
   NARROW_PANEL_QUERY,
   SURFACE_DECLARATIONS,
   visuallyHiddenDeclarations,
@@ -116,12 +118,7 @@ ${SURFACE_DECLARATIONS}
   text-wrap: balance;
   grid-column: 1;
   grid-row: 1;
-  max-width: 100%;
-  min-width: 0;
-  padding: 0;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-bold);
-  overflow-wrap: anywhere;
+${GROUP_LEGEND_DECLARATIONS}
 }
 
 .snui-field-group__actions {
@@ -170,7 +167,7 @@ ${FIELD_ERROR_DECLARATIONS}
  * is held either way reads as editable at a glance otherwise, while its input
  * is not, and the group and the checkbox beside it already say so.
  */
-.snui-field:has(> .snui-field__control :is(:disabled, [aria-disabled="true"]))
+.snui-field:has(> .snui-field__control ${BLOCKED_SELECTOR})
   > .snui-field__label {
   color: var(--snui-color-text-disabled);
 }
@@ -228,7 +225,7 @@ ${visuallyHiddenDeclarations()}
     color: GrayText;
   }
 
-  .snui-field:has(> .snui-field__control :is(:disabled, [aria-disabled="true"]))
+  .snui-field:has(> .snui-field__control ${BLOCKED_SELECTOR})
     > .snui-field__label {
     forced-color-adjust: none;
     color: GrayText;

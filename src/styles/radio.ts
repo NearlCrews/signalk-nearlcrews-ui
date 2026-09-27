@@ -8,6 +8,7 @@ import {
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
   FORCED_COLORS_INVALID_DECLARATIONS,
   focusRingDeclarations,
+  GLYPH_BASELINE_NUDGE,
   SELECTION_GLYPH_SIZE,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
@@ -76,7 +77,7 @@ ${CONTROL_ROW_DECLARATIONS}
   place-content: center;
   width: ${SELECTION_GLYPH_SIZE};
   height: ${SELECTION_GLYPH_SIZE};
-  margin: 0.125rem 0 0;
+  margin: ${GLYPH_BASELINE_NUDGE} 0 0;
   border: 2px solid var(--snui-color-border);
   border-radius: 50%;
   background: var(--snui-color-surface);

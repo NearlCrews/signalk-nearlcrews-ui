@@ -1,5 +1,6 @@
 import { SPINNER_ANIMATION_NAME } from "../version.js";
 import {
+  BLOCKED_SELECTOR,
   CONTROL_ROW_DECLARATIONS,
   DISABLED_DECLARATIONS,
   FIELD_DESCRIPTION_DECLARATIONS,
@@ -7,6 +8,7 @@ import {
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
   FORCED_COLORS_INVALID_DECLARATIONS,
   GLYPH_BASELINE_NUDGE,
+  GROUP_LEGEND_DECLARATIONS,
   NARROW_PANEL_QUERY,
   PRESSED_FILL_DECLARATION,
   SELECTION_GLYPH_SIZE,
@@ -21,20 +23,29 @@ import { scopeStyles } from "./scope.js";
 const SEGMENTED_INSET = "0.375rem";
 
 /*
- * A control blocked either way: natively disabled, or held focusable through
- * aria-disabled so closing it on a focused control cannot destroy that focus.
- * Both arguments weigh (0,1,0) and `:is()` takes the weight of its most
- * specific argument, so writing it this way changes no rule's specificity.
- */
-const BLOCKED = ':is(:disabled, [aria-disabled="true"])';
-
-/*
- * The inverse, for the live half of a hover, active, or forced-colors rule.
- * Two `:not()` arguments rather than one `:not(:is(...))`, because that form
- * weighs (0,1,0) where this one weighs (0,2,0) and every rule below was
- * written against the heavier form.
+ * The inverse of BLOCKED_SELECTOR, for the live half of a hover, active, or
+ * forced-colors rule. Two `:not()` arguments rather than one
+ * `:not(:is(...))`, because that form weighs (0,1,0) where this one weighs
+ * (0,2,0) and every rule below was written against the heavier form.
  */
 const NOT_BLOCKED = ':not(:disabled):not([aria-disabled="true"])';
+
+/*
+ * A button blocked either way while it is not busy. A busy button keeps its
+ * fill, so every disabled repaint of a button is written against this pair.
+ */
+function blockedIdle(button: string): string {
+  return `${button}:disabled,\n${button}[aria-disabled="true"]:not([aria-busy="true"])`;
+}
+
+/* A checkbox block whose box is blocked either way. */
+const BLOCKED_CHECKBOX = `.snui-checkbox:has(.snui-checkbox__input${BLOCKED_SELECTOR})`;
+
+/*
+ * Where a checkbox's description and error start: past the box and the gap
+ * the control row leaves after it, so the messages line up with the label.
+ */
+const CHECKBOX_MESSAGE_INSET = `calc(${SELECTION_GLYPH_SIZE} + var(--snui-space-3))`;
 
 export const CONTROL_STYLES = `
 @keyframes ${SPINNER_ANIMATION_NAME} {
@@ -350,12 +361,12 @@ ${CONTROL_ROW_DECLARATIONS}
 
 .snui-checkbox__description {
 ${FIELD_DESCRIPTION_DECLARATIONS}
-  padding-inline-start: calc(${SELECTION_GLYPH_SIZE} + var(--snui-space-3));
+  padding-inline-start: ${CHECKBOX_MESSAGE_INSET};
   text-wrap: pretty;
 }
 
 .snui-checkbox__error {
-  padding-inline-start: calc(${SELECTION_GLYPH_SIZE} + var(--snui-space-3));
+  padding-inline-start: ${CHECKBOX_MESSAGE_INSET};
 ${FIELD_ERROR_DECLARATIONS}
 }
 
@@ -378,13 +389,8 @@ ${FIELD_ERROR_DECLARATIONS}
 .snui-segmented__legend {
   text-wrap: balance;
   display: block;
-  max-width: 100%;
-  min-width: 0;
-  padding: 0;
   margin-block-end: var(--snui-space-2);
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-bold);
-  overflow-wrap: anywhere;
+${GROUP_LEGEND_DECLARATIONS}
 }
 
 .snui-segmented__description {
@@ -482,22 +488,18 @@ ${PRESSED_FILL_DECLARATION}
  * state repaints that fill in the same token. A busy button keeps its fill:
  * the spinner and description already say why it is unavailable.
  */
-.snui-button:disabled,
-.snui-button[aria-disabled="true"]:not([aria-busy="true"]),
+${blockedIdle(".snui-button")},
 .snui-input:disabled,
 .snui-segmented:not([aria-disabled="true"]) .snui-segmented__option:disabled {
 ${DISABLED_DECLARATIONS}
 }
 
-.snui-button--secondary:disabled,
-.snui-button--secondary[aria-disabled="true"]:not([aria-busy="true"]),
-.snui-button--danger:disabled,
-.snui-button--danger[aria-disabled="true"]:not([aria-busy="true"]) {
+${blockedIdle(".snui-button--secondary")},
+${blockedIdle(".snui-button--danger")} {
   border-color: var(--snui-color-text-disabled);
 }
 
-.snui-button--primary:disabled,
-.snui-button--primary[aria-disabled="true"]:not([aria-busy="true"]) {
+${blockedIdle(".snui-button--primary")} {
   background: var(--snui-color-text-disabled);
   color: var(--snui-color-surface);
 }
@@ -506,28 +508,28 @@ ${DISABLED_DECLARATIONS}
   cursor: not-allowed;
 }
 
-.snui-checkbox:has(.snui-checkbox__input${BLOCKED}),
+${BLOCKED_CHECKBOX},
 .snui-segmented[aria-disabled="true"] {
 ${DISABLED_DECLARATIONS}
 }
 
-.snui-checkbox:has(.snui-checkbox__input${BLOCKED}) > .snui-checkbox__control,
-.snui-checkbox:has(.snui-checkbox__input${BLOCKED}) .snui-checkbox__input,
+${BLOCKED_CHECKBOX} > .snui-checkbox__control,
+${BLOCKED_CHECKBOX} .snui-checkbox__input,
 .snui-segmented[aria-disabled="true"] .snui-segmented__option {
   cursor: not-allowed;
 }
 
-.snui-checkbox__input${BLOCKED} {
+.snui-checkbox__input${BLOCKED_SELECTOR} {
   border-color: var(--snui-color-text-disabled);
 }
 
-.snui-checkbox__input${BLOCKED}:checked,
-.snui-checkbox__input${BLOCKED}:indeterminate {
+.snui-checkbox__input${BLOCKED_SELECTOR}:checked,
+.snui-checkbox__input${BLOCKED_SELECTOR}:indeterminate {
   border-color: var(--snui-color-text-disabled);
   background: var(--snui-color-text-disabled);
 }
 
-.snui-checkbox__input${BLOCKED}::before {
+.snui-checkbox__input${BLOCKED_SELECTOR}::before {
   border-color: var(--snui-color-surface);
 }
 
