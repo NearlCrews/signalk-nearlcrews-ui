@@ -20,6 +20,7 @@ import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
 import { DEFAULT_DISMISS_LABEL, resolveBundledLabel } from "../utils/labels.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
+import { definedProps } from "../utils/props.js";
 import { hasReactContent } from "../utils/react-node.js";
 import { useRepeatAnnouncement } from "../utils/repeat-announcement.js";
 import type { StatusTone } from "../utils/tone.js";
@@ -138,9 +139,6 @@ export function Banner({
     !hasAccessibleName(props["aria-label"], props["aria-labelledby"])
       ? generatedTitleId
       : undefined;
-  // Spread rather than written out, so the name reaches the element only
-  // beside the role that needs one and a banner with no role stays a plain div.
-  const nameProps = titleId === undefined ? {} : { "aria-labelledby": titleId };
 
   const bannerRef = useRef<HTMLDivElement | null>(null);
   // One callback ref owns the node so a caller ref is attached and released
@@ -189,7 +187,10 @@ export function Banner({
   return (
     <div
       {...props}
-      {...nameProps}
+      // Spread rather than written out: an explicit undefined would erase an
+      // `aria-labelledby` the consumer passed, and a consumer who passed one
+      // always leaves the title id unset.
+      {...definedProps({ "aria-labelledby": titleId })}
       ref={attachBanner}
       className={classNames("snui-banner", `snui-banner--${tone}`, className)}
       role={attributes.role}

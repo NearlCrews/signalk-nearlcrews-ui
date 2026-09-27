@@ -79,15 +79,15 @@ export function LiveRegion({
   const [settled, markSettled] = useReducer(() => true, announceOnMount);
   // A region that announces nothing speaks for nobody, so there is nothing to
   // re-announce and nothing to hold back there.
-  const silent = !announcesUpdates(region);
+  const announcing = announcesUpdates(region);
   // The message is withheld for one beat so the region really empties before
   // it fills again. An empty message has nothing to re-announce, so it goes
   // straight through and no timer runs.
   const repeating = useRepeatAnnouncement(
     announceKey,
-    hasReactContent(message) && !silent,
+    announcing && hasReactContent(message),
   );
-  const withheld = !settled && !silent;
+  const withheld = announcing && !settled;
 
   useEffect(() => {
     if (settled) return undefined;

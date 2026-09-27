@@ -22,10 +22,9 @@ import {
 import { MENU_STYLES } from "../styles/menu.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
-import { resolveBundledLabel } from "../utils/labels.js";
+import { hasText, resolveBundledLabel } from "../utils/labels.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { usePanelPortalContainerReady } from "../utils/portal.js";
-import { definedProps } from "../utils/props.js";
 import { racDomProps } from "../utils/react-aria.js";
 import {
   hasReactContent,
@@ -149,7 +148,7 @@ export function Menu({
     label,
     "Menu requires a non-empty label to name its trigger button.",
   );
-  if (triggerLabel === undefined && reactNodeText(label).trim() === "") {
+  if (triggerLabel === undefined && !hasText(reactNodeText(label))) {
     throw new Error(
       "Menu requires a triggerLabel when its label renders no text, so the trigger button is not left unnamed.",
     );
@@ -173,11 +172,9 @@ export function Menu({
     <MenuTrigger {...overlayOpenProps({ open, defaultOpen, onOpenChange })}>
       <Pressable>
         <Button
-          {...definedProps({
-            "aria-label": triggerLabel,
-            size: triggerSize,
-            variant: triggerVariant,
-          })}
+          aria-label={triggerLabel}
+          size={triggerSize}
+          variant={triggerVariant}
         >
           {label}
         </Button>

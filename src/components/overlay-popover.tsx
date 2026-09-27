@@ -51,13 +51,9 @@ export function OverlayPopover({
 
   if (!ready) return null;
 
-  // `definedProps` drops what the caller left unset, and drops the `undefined`
-  // from the type with it, which react-aria's props do not admit.
-  const surfaceAttributes = definedProps(surfaceProps);
-
   return (
     <RACPopover
-      {...surfaceAttributes}
+      {...definedProps(surfaceProps)}
       ref={ref}
       className={className}
       placement={OVERLAY_PLACEMENTS[placement]}

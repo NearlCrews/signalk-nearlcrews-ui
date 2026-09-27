@@ -50,9 +50,6 @@ export function overlayOpenProps({
   defaultOpen,
   onOpenChange,
 }: OverlayOpenState): OverlayTriggerOpenProps {
-  // `definedProps` drops what the caller left unset, and drops the `undefined`
-  // from the type with it: react-aria reads an explicit undefined as a
-  // controlled prop rather than an absent one.
   return definedProps({
     defaultOpen,
     isOpen: open,

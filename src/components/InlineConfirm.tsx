@@ -17,7 +17,6 @@ import { revealElement } from "../utils/focus.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
 import { resolveBundledContent } from "../utils/labels.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
-import { definedProps } from "../utils/props.js";
 import { hasReactContent } from "../utils/react-node.js";
 import { warnOnce } from "../utils/warn-once.js";
 import { Button, type ButtonVariant } from "./Button.js";
@@ -221,7 +220,7 @@ export function InlineConfirm({
       </div>
       <div className="snui-inline-confirm__actions">
         <Button
-          {...definedProps({ variant: cancelVariant })}
+          variant={cancelVariant}
           onClick={() => {
             cancel("cancel");
           }}

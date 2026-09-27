@@ -250,28 +250,26 @@ function DialogSurface({
     keyboardDismissableRef.current = keyboardDismissable;
   }, [keyboardDismissable]);
 
-  // react-aria closes on Escape from the overlay above the dialog and reports
-  // no reason for the close, so the key is recorded here on the way up. A
-  // native listener on the dialog element sees it before React dispatches the
-  // synthetic event that closes, which is what makes the order reliable.
-  const recordEscape = useCallback((event: KeyboardEvent): void => {
-    if (keyboardDismissableRef.current && event.key === "Escape") {
-      cancelReasonRef.current = "escape";
-    }
+  // Built once and reading only refs, so the node keeps one listener and one
+  // measurement per mount.
+  const onDialogAttached = useCallback((node: HTMLElement): (() => void) => {
+    // react-aria closes on Escape from the overlay above the dialog and
+    // reports no reason for the close, so the key is recorded here on the way
+    // up. A native listener on the dialog element sees it before React
+    // dispatches the synthetic event that closes, which is what makes the
+    // order reliable.
+    const recordEscape = (event: KeyboardEvent): void => {
+      if (keyboardDismissableRef.current && event.key === "Escape") {
+        cancelReasonRef.current = "escape";
+      }
+    };
+    node.addEventListener("keydown", recordEscape);
+    const stopMeasuring = trackVisualViewportHeight(node);
+    return () => {
+      stopMeasuring();
+      node.removeEventListener("keydown", recordEscape);
+    };
   }, []);
-
-  const onDialogAttached = useCallback(
-    (node: HTMLElement): (() => void) => {
-      node.addEventListener("keydown", recordEscape);
-      const stopMeasuring = trackVisualViewportHeight(node);
-      return () => {
-        stopMeasuring();
-        node.removeEventListener("keydown", recordEscape);
-      };
-    },
-    // The listener is stable, so the node keeps one per mount.
-    [recordEscape],
-  );
 
   const attachDialog = useNodeRef(dialogRef, ref, onDialogAttached);
 
@@ -352,10 +350,7 @@ function DialogSurface({
                   </div>
                 ) : null}
                 {hasBody ? (
-                  <div
-                    {...definedProps({ id: bodyId })}
-                    className="snui-dialog__body"
-                  >
+                  <div id={bodyId} className="snui-dialog__body">
                     {children}
                   </div>
                 ) : null}
