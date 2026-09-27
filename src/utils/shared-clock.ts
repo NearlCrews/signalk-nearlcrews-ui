@@ -1,10 +1,10 @@
 /**
  * One interval per tick length, shared by everything reading that cadence.
  *
- * A panel showing twenty relative ages used to run twenty timers, each started
- * at its own mount and firing at its own offset, so the panel re-rendered
- * twenty times per tick window. They now share one timer per cadence and are
- * told the same instant, which React commits as a single update.
+ * A panel showing twenty relative ages would otherwise run twenty timers, each
+ * started at its own mount and firing at its own offset, and re-render twenty
+ * times per tick window. Sharing one timer per cadence tells every reader the
+ * same instant, which React commits as a single update.
  */
 
 import { createEmitter, type Emitter } from "./emitter.js";

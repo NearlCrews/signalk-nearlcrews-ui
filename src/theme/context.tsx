@@ -39,8 +39,8 @@ function withStorage<T>(operation: (storage: Storage) => T): T | undefined {
   }
 }
 
-function readStorage(key: string): StoredTheme {
-  const value = withStorage((storage) => storage.getItem(key));
+function readSharedTheme(): StoredTheme {
+  const value = withStorage((storage) => storage.getItem(THEME_STORAGE_KEY));
   // An absent key is a genuine clear, so the panel returns to its fallback. A
   // present but unrecognized value comes from a different library version
   // sharing the key and is ignored: resetting here would fight the theme the
@@ -99,7 +99,7 @@ function updateTheme(next: ThemeChoice): void {
 
 /** Adopts the shared value when it is readable and recognized. */
 function adoptSharedTheme(): void {
-  const shared = readStorage(THEME_STORAGE_KEY);
+  const shared = readSharedTheme();
   if (shared === undefined) return;
   updateTheme(shared ?? fallbackTheme());
 }
@@ -152,7 +152,7 @@ function getSnapshot(): ThemeChoice {
   // Unreadable or unrecognized storage starts at the fallback here, exactly as
   // a fresh panel always has; only a live panel keeps its theme through those.
   if (themeListeners.size() === 0) {
-    currentTheme = readStorage(THEME_STORAGE_KEY) ?? fallbackTheme();
+    currentTheme = readSharedTheme() ?? fallbackTheme();
   }
   return currentTheme;
 }

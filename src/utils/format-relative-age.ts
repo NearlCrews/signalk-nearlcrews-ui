@@ -49,21 +49,40 @@ const SECONDS_PER_DAY = 86_400;
 const SECONDS_PER_YEAR = 365 * SECONDS_PER_DAY;
 
 /**
- * A month is one twelfth of a year here, so twelve rounded months promote to
- * one year instead of stalling at "12 months ago".
+ * The units from the smallest up. A month is one twelfth of a year here, so
+ * twelve rounded months promote to one year instead of stalling at "12 months
+ * ago".
  */
-const RELATIVE_UNITS = [
-  ["year", SECONDS_PER_YEAR],
-  ["month", SECONDS_PER_YEAR / 12],
-  ["week", 7 * SECONDS_PER_DAY],
-  ["day", SECONDS_PER_DAY],
-  ["hour", 3_600],
-  ["minute", 60],
+const [SECOND_UNIT, ...LARGER_UNITS] = [
   ["second", 1],
+  ["minute", 60],
+  ["hour", 3_600],
+  ["day", SECONDS_PER_DAY],
+  ["week", 7 * SECONDS_PER_DAY],
+  ["month", SECONDS_PER_YEAR / 12],
+  ["year", SECONDS_PER_YEAR],
 ] as const satisfies readonly (readonly [
   Intl.RelativeTimeFormatUnit,
   number,
 ])[];
+
+type RelativeUnit = typeof SECOND_UNIT | (typeof LARGER_UNITS)[number];
+
+/**
+ * The unit an age is stated in: the largest unit it reaches, and past that
+ * each larger unit its count rounds up to.
+ */
+function selectUnit(ageSeconds: number): RelativeUnit {
+  let selected: RelativeUnit = SECOND_UNIT;
+  for (const larger of LARGER_UNITS) {
+    const [, selectedSeconds] = selected;
+    const [, largerSeconds] = larger;
+    const rounded = Math.round(ageSeconds / selectedSeconds) * selectedSeconds;
+    if (ageSeconds < largerSeconds && rounded < largerSeconds) break;
+    selected = larger;
+  }
+  return selected;
+}
 
 const FORMATTER_CACHE_LIMIT = 32;
 const formatters = new Map<string, Intl.RelativeTimeFormat>();
@@ -143,24 +162,7 @@ export function formatRelativeAge(
   }
 
   const ageSeconds = age / 1_000;
-  let unitIndex = RELATIVE_UNITS.findIndex(
-    ([, seconds]) => ageSeconds >= seconds,
-  );
-  if (unitIndex < 0) unitIndex = RELATIVE_UNITS.length - 1;
-
-  while (unitIndex > 0) {
-    const unit = RELATIVE_UNITS[unitIndex];
-    const largerUnit = RELATIVE_UNITS[unitIndex - 1];
-    // The index cannot leave the tuple, so this guard and the one below are
-    // the compiler's price for indexed access rather than reachable branches.
-    if (unit === undefined || largerUnit === undefined) break;
-    if (Math.round(ageSeconds / unit[1]) * unit[1] < largerUnit[1]) break;
-    unitIndex -= 1;
-  }
-
-  const selected = RELATIVE_UNITS[unitIndex];
-  if (selected === undefined) return fallback;
-  const [unit, unitSeconds] = selected;
+  const [unit, unitSeconds] = selectUnit(ageSeconds);
   const formatter = getFormatter(
     locale,
     numeric ?? (CALENDAR_WORDED_UNITS.has(unit) ? "always" : "auto"),

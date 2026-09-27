@@ -54,9 +54,11 @@ export function requireIdToken(id: string, option: string): string {
 export function joinIdReferences(
   ...ids: readonly (string | undefined)[]
 ): string | undefined {
-  const unique = new Set(ids.filter((id) => id !== undefined && id.length > 0));
-  const value = [...unique].join(" ");
-  return value.length > 0 ? value : undefined;
+  const unique = new Set<string>();
+  for (const id of ids) {
+    if (id !== undefined && id.length > 0) unique.add(id);
+  }
+  return unique.size > 0 ? [...unique].join(" ") : undefined;
 }
 
 /** Id of the description element a field renders, when it renders one. */

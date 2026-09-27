@@ -21,11 +21,9 @@ export function useFocusWithin<T extends Element>(
 
   useEffect(() => {
     const node = nodeRef.current;
-    const ownerDocument = node?.ownerDocument;
-    if (!active || node === null || ownerDocument === undefined) {
-      return undefined;
-    }
+    if (!active || node === null) return undefined;
 
+    const { ownerDocument } = node;
     holdsFocus.current = node.contains(ownerDocument.activeElement);
     const trackFocus = (event: FocusEvent): void => {
       // `focusin` reports the shadow host rather than the node inside it, so

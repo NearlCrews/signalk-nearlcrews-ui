@@ -29,13 +29,13 @@ export function hasReactContent(node: ReactNode): boolean {
     return node.type !== Fragment || hasReactContent(node.props.children);
   }
 
-  return Children.toArray(node).some((child) => {
-    if (typeof child === "string") return child.trim().length > 0;
-    if (isValidElement<{ children?: ReactNode }>(child)) {
-      return child.type !== Fragment || hasReactContent(child.props.children);
-    }
-    return true;
-  });
+  // Each flattened child is a single node answered above. Anything else the
+  // flattening yields, a portal for example, renders content of its own.
+  return Children.toArray(node).some(
+    (child) =>
+      (typeof child !== "string" && !isValidElement(child)) ||
+      hasReactContent(child),
+  );
 }
 
 /**

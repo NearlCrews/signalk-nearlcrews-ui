@@ -42,25 +42,15 @@ function ignoreActivation(): void {
   // Deliberately empty: the control is live and the caller wants no callback.
 }
 
-/** Withholds a click and its handler while the control is blocked. */
-function blockClick<Target>(
-  blocked: boolean,
-  onClick: MouseEventHandler<Target> | undefined,
-): MouseEventHandler<Target> | undefined {
-  return blocked ? refuseActivation : onClick;
-}
-
 /**
- * The same guard for keys, blocking only the ones that activate this control.
+ * The key guard of a blocked control, refusing only the keys that activate it.
  * Navigation and dismissal keys must still reach the consumer, and so must any
  * key that belongs to the surrounding form rather than to the control.
  */
-function blockActivationKeys<Target>(
-  blocked: boolean,
+function refuseActivationKeys<Target>(
   activationKeys: ReadonlySet<string>,
   onKeyDown: KeyboardEventHandler<Target> | undefined,
-): KeyboardEventHandler<Target> | undefined {
-  if (!blocked) return onKeyDown;
+): KeyboardEventHandler<Target> {
   return (event) => {
     if (activationKeys.has(event.key)) {
       refuseActivation(event);
@@ -155,13 +145,18 @@ export function blockedActivationProps<Target>({
   onClick,
   onKeyDown,
 }: BlockedActivationOptions<Target>): BlockedActivationProps<Target> {
+  if (blocked) {
+    return {
+      "aria-disabled": disabled ? undefined : true,
+      onClick: refuseActivation,
+      onKeyDown: refuseActivationKeys(activationKeys, onKeyDown),
+    };
+  }
+  // The pair travels as one object, so both handlers are always present: a
+  // live control with no handler of its own carries the shared no-op.
   return {
-    "aria-disabled": blocked && !disabled ? true : undefined,
-    // The pair travels as one object, so both handlers are always present: a
-    // live control with no handler of its own carries the shared no-op.
-    onClick: blockClick(blocked, onClick) ?? ignoreActivation,
-    onKeyDown:
-      blockActivationKeys(blocked, activationKeys, onKeyDown) ??
-      ignoreActivation,
+    "aria-disabled": undefined,
+    onClick: onClick ?? ignoreActivation,
+    onKeyDown: onKeyDown ?? ignoreActivation,
   };
 }

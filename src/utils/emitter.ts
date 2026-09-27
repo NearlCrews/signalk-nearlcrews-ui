@@ -12,9 +12,9 @@ export interface Emitter<Args extends readonly unknown[] = []> {
  * Creates a listener set.
  *
  * The theme store, the toast queue, and the shared clock all keep listeners
- * and notify them, and each one used to hand-write the add, the delete, and
- * the iteration. Set iteration tolerates a listener unsubscribing mid-emit,
- * which is what a subscriber that unmounts on its own notification does.
+ * and notify them, so the add, the delete, and the iteration are written once
+ * here. Set iteration tolerates a listener unsubscribing mid-emit, which is
+ * what a subscriber that unmounts on its own notification does.
  */
 export function createEmitter<
   Args extends readonly unknown[] = [],

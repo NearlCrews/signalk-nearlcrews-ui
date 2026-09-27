@@ -56,6 +56,10 @@ export function readViewportEdges(ownerWindow: Window): ViewportEdges {
 }
 
 /** Rounds a layout measurement to hundredths so equal geometry compares equal. */
+export function roundedLayoutValue(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 /**
  * Whether two measurements of the same geometry agree, member by member.
  *
@@ -70,10 +74,6 @@ export function layoutMatches<T extends object>(current: T, next: T): boolean {
     if (current[key] !== next[key]) return false;
   }
   return true;
-}
-
-export function roundedLayoutValue(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 export interface ObservePanelViewportOptions {
@@ -148,11 +148,7 @@ export function observePanelViewport(
       ? undefined
       : new ResizeObserverConstructor(scheduleMeasure);
   resizeObserver?.observe(panelRoot);
-  if (resizeTargets !== undefined) {
-    for (const target of resizeTargets) {
-      resizeObserver?.observe(target);
-    }
-  }
+  for (const target of resizeTargets ?? []) resizeObserver?.observe(target);
 
   ownerDocument.addEventListener("scroll", scheduleForScroll, true);
   ownerWindow.addEventListener("resize", scheduleMeasure);
