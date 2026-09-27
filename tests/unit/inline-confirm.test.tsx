@@ -5,6 +5,12 @@ import { describe, expect, it, vi } from "vitest";
 import { InlineConfirm } from "../../src/index.js";
 import { panel, renderInPanel } from "../helpers.js";
 
+/** The confirmation most cases ask, where the case varies something else. */
+const ROUTE_CONFIRM = {
+  confirmLabel: "Delete route",
+  message: "This removes the route.",
+} as const;
+
 // This block runs first on purpose: the generic-confirmation warning is
 // reported once per module, so a later test would find it already spent.
 describe("InlineConfirm destructive labeling", () => {
@@ -64,8 +70,7 @@ describe("InlineConfirm confirm action", () => {
       panel(
         <InlineConfirm
           open
-          confirmLabel="Delete route"
-          message="This removes the route."
+          {...ROUTE_CONFIRM}
           onCancel={vi.fn()}
           onConfirm={vi.fn()}
         />,
@@ -84,8 +89,7 @@ describe("InlineConfirm keyboard guards", () => {
     renderInPanel(
       <InlineConfirm
         defaultOpen
-        confirmLabel="Delete route"
-        message="This removes the route."
+        {...ROUTE_CONFIRM}
         onCancel={onCancel}
         onConfirm={vi.fn()}
       />,
@@ -102,8 +106,7 @@ describe("InlineConfirm keyboard guards", () => {
     renderInPanel(
       <InlineConfirm
         defaultOpen
-        confirmLabel="Delete route"
-        message="This removes the route."
+        {...ROUTE_CONFIRM}
         onCancel={onCancel}
         onConfirm={vi.fn()}
         onKeyDown={(event) => {
@@ -125,8 +128,7 @@ describe("InlineConfirm open state", () => {
     const { unmount } = renderInPanel(
       <InlineConfirm
         defaultOpen
-        confirmLabel="Delete route"
-        message="This removes the route."
+        {...ROUTE_CONFIRM}
         onCancel={vi.fn()}
         onConfirm={vi.fn()}
         onOpenChange={onOpenChange}
@@ -142,8 +144,7 @@ describe("InlineConfirm open state", () => {
     renderInPanel(
       <InlineConfirm
         defaultOpen
-        confirmLabel="Delete route"
-        message="This removes the route."
+        {...ROUTE_CONFIRM}
         onCancel={vi.fn()}
         onConfirm={vi.fn()}
         onOpenChange={onOpenChange}
@@ -161,8 +162,7 @@ describe("InlineConfirm open state", () => {
       <InlineConfirm
         open
         busy
-        confirmLabel="Delete route"
-        message="This removes the route."
+        {...ROUTE_CONFIRM}
         onCancel={vi.fn()}
         onConfirm={vi.fn()}
         onOpenChange={onOpenChange}

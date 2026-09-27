@@ -1,16 +1,23 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { type ComponentProps, createElement, createRef } from "react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Button } from "../../src/index.js";
 import {
   Menu,
   MenuItem,
   MenuSection,
   MenuSeparator,
-  Popover,
 } from "../../src/overlays.js";
 import { panel, renderInPanel } from "../helpers.js";
+
+/** Opens a menu from its trigger with the keyboard, landing on the first item. */
+async function openFromKeyboard(
+  user: UserEvent,
+  triggerName: string,
+): Promise<void> {
+  screen.getByRole("button", { name: triggerName }).focus();
+  await user.keyboard("{ArrowDown}");
+}
 
 describe("Menu", () => {
   it("rejects rendering outside PanelRoot", () => {
@@ -120,8 +127,7 @@ describe("Menu", () => {
       </Menu>,
     );
 
-    screen.getByRole("button", { name: "Edit" }).focus();
-    await user.keyboard("{ArrowDown}");
+    await openFromKeyboard(user, "Edit");
     expect(screen.getByRole("menuitem", { name: "Copy" })).toHaveFocus();
 
     await user.keyboard("{Enter}");
@@ -208,8 +214,7 @@ describe("Menu", () => {
       </Menu>,
     );
 
-    screen.getByRole("button", { name: "Go" }).focus();
-    await user.keyboard("{ArrowDown}");
+    await openFromKeyboard(user, "Go");
 
     const first = screen.getByRole("menuitem", { name: "First" });
     const second = screen.getByRole("menuitem", { name: "Second" });
@@ -233,8 +238,7 @@ describe("Menu", () => {
       </Menu>,
     );
 
-    screen.getByRole("button", { name: "Jump" }).focus();
-    await user.keyboard("{ArrowDown}");
+    await openFromKeyboard(user, "Jump");
     await user.keyboard("d");
 
     expect(screen.getByRole("menuitem", { name: "Delta" })).toHaveFocus();
@@ -254,8 +258,7 @@ describe("Menu", () => {
       </Menu>,
     );
 
-    screen.getByRole("button", { name: "Jump" }).focus();
-    await user.keyboard("{ArrowDown}");
+    await openFromKeyboard(user, "Jump");
     await user.keyboard("d");
 
     expect(screen.getByRole("menuitem", { name: "Delta" })).toHaveFocus();
@@ -273,8 +276,7 @@ describe("Menu", () => {
       </Menu>,
     );
 
-    screen.getByRole("button", { name: "Jump" }).focus();
-    await user.keyboard("{ArrowDown}");
+    await openFromKeyboard(user, "Jump");
     // Typeahead matches a prefix, so the space is the whole test: joined edge
     // to edge the two spans read "Deleteroute" and "delete r" matches nothing.
     await user.keyboard("delete r");
@@ -345,8 +347,7 @@ describe("Menu", () => {
       </Menu>,
     );
 
-    screen.getByRole("button", { name: "Jump" }).focus();
-    await user.keyboard("{ArrowDown}");
+    await openFromKeyboard(user, "Jump");
     await user.keyboard("d");
 
     expect(
@@ -486,8 +487,7 @@ describe("Menu", () => {
       </Menu>,
     );
 
-    screen.getByRole("button", { name: "Crew" }).focus();
-    await user.keyboard("{ArrowDown}");
+    await openFromKeyboard(user, "Crew");
     await user.keyboard("d");
 
     expect(
@@ -553,223 +553,5 @@ describe("Menu", () => {
 
     await user.click(screen.getByRole("button", { name: "File" }));
     expect(screen.getByRole("menu")).toHaveClass("snui-menu", "plugin-menu");
-  });
-});
-
-describe("Popover", () => {
-  it("rejects rendering outside PanelRoot", () => {
-    expect(() =>
-      render(
-        <Popover trigger={<Button>Details</Button>}>
-          <p>Depth details</p>
-        </Popover>,
-      ),
-    ).toThrow("Popover must be rendered inside PanelRoot.");
-  });
-
-  it("rejects a roleless trigger element", () => {
-    expect(() =>
-      renderInPanel(
-        <Popover trigger={<span>Details</span>}>
-          <p>Depth details</p>
-        </Popover>,
-      ),
-    ).toThrow(
-      "Popover trigger must render a semantic interactive element or an element with an interactive ARIA role.",
-    );
-  });
-
-  it("rejects an anchor without a link destination", () => {
-    expect(() =>
-      renderInPanel(
-        <Popover trigger={createElement("a", undefined, "Details")}>
-          <p>Depth details</p>
-        </Popover>,
-      ),
-    ).toThrow(
-      "Popover trigger must render a semantic interactive element or an element with an interactive ARIA role.",
-    );
-  });
-
-  it("supports a custom trigger that forwards native props and its ref", async () => {
-    const user = userEvent.setup();
-    function CustomTrigger(props: ComponentProps<"button">) {
-      return <button {...props} />;
-    }
-
-    renderInPanel(
-      <Popover trigger={<CustomTrigger>Details</CustomTrigger>}>
-        <p>Depth details</p>
-      </Popover>,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Details" }));
-    expect(screen.getByRole("dialog")).toHaveTextContent("Depth details");
-  });
-
-  it("opens on trigger click and forwards ref to the popover element", async () => {
-    const user = userEvent.setup();
-    const ref = createRef<HTMLDivElement>();
-    renderInPanel(
-      <Popover ref={ref} trigger={<Button>Details</Button>}>
-        <p>Depth details</p>
-      </Popover>,
-    );
-
-    const trigger = screen.getByRole("button", { name: "Details" });
-    await user.click(trigger);
-
-    const popover = screen.getByRole("dialog", { name: "Details" });
-    expect(popover).toHaveTextContent("Depth details");
-    expect(popover).toHaveClass("snui-popover");
-    expect(popover).toHaveStyle({ zIndex: "var(--snui-z-overlay)" });
-    expect(popover.closest(".snui-root")).not.toBeNull();
-    expect(ref.current).toBe(popover);
-  });
-
-  it("closes on Escape and restores focus to the trigger", async () => {
-    const user = userEvent.setup();
-    renderInPanel(
-      <Popover trigger={<Button>Details</Button>}>
-        <p>Depth details</p>
-      </Popover>,
-    );
-
-    const trigger = screen.getByRole("button", { name: "Details" });
-    await user.click(trigger);
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
-    expect(screen.queryByRole("dialog")).toBeNull();
-    // RAC restores focus from a requestAnimationFrame callback.
-    await waitFor(() => {
-      expect(trigger).toHaveFocus();
-    });
-  });
-
-  it("closes on outside press", async () => {
-    const user = userEvent.setup();
-    renderInPanel(
-      <>
-        <Popover trigger={<Button>Details</Button>}>
-          <p>Depth details</p>
-        </Popover>
-        <p>Outside content</p>
-      </>,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Details" }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
-    await user.click(screen.getByText("Outside content"));
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
-
-  it("opens from defaultOpen and reports close requests", async () => {
-    const user = userEvent.setup();
-    const onOpenChange = vi.fn();
-    renderInPanel(
-      <Popover
-        defaultOpen
-        onOpenChange={onOpenChange}
-        trigger={<Button>Info</Button>}
-      >
-        <p>Hint text</p>
-      </Popover>,
-    );
-
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-
-    await user.keyboard("{Escape}");
-    expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
-
-  it("supports controlled open state", async () => {
-    const user = userEvent.setup();
-    const onOpenChange = vi.fn();
-    const { rerender } = renderInPanel(
-      <Popover
-        onOpenChange={onOpenChange}
-        open={false}
-        trigger={<Button>Info</Button>}
-      >
-        <p>Hint text</p>
-      </Popover>,
-    );
-
-    expect(screen.queryByRole("dialog")).toBeNull();
-
-    await user.click(screen.getByRole("button", { name: "Info" }));
-    expect(onOpenChange).toHaveBeenCalledWith(true);
-    expect(screen.queryByRole("dialog")).toBeNull();
-
-    rerender(
-      panel(
-        <Popover
-          onOpenChange={onOpenChange}
-          open
-          trigger={<Button>Info</Button>}
-        >
-          <p>Hint text</p>
-        </Popover>,
-      ),
-    );
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
-  });
-
-  it("maps placement to the RAC placement axis", async () => {
-    const user = userEvent.setup();
-    renderInPanel(
-      <Popover placement="top" trigger={<Button>Info</Button>}>
-        <p>Hint text</p>
-      </Popover>,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Info" }));
-    expect(screen.getByRole("dialog")).toHaveAttribute("data-placement", "top");
-  });
-
-  it("applies a CSS length width through a CSS variable", async () => {
-    const user = userEvent.setup();
-    renderInPanel(
-      <Popover trigger={<Button>Info</Button>} width="18rem">
-        <p>Hint text</p>
-      </Popover>,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Info" }));
-    expect(
-      screen.getByRole("dialog").style.getPropertyValue("--snui-popover-width"),
-    ).toBe("18rem");
-  });
-
-  it("applies a fixed pixel width through a CSS variable", async () => {
-    const user = userEvent.setup();
-    renderInPanel(
-      <Popover trigger={<Button>Info</Button>} width={240}>
-        <p>Hint text</p>
-      </Popover>,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Info" }));
-    expect(
-      screen.getByRole("dialog").style.getPropertyValue("--snui-popover-width"),
-    ).toBe("240px");
-  });
-
-  it("merges a consumer className onto the popover", async () => {
-    const user = userEvent.setup();
-    renderInPanel(
-      <Popover className="plugin-popover" trigger={<Button>Info</Button>}>
-        <p>Hint text</p>
-      </Popover>,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Info" }));
-    expect(screen.getByRole("dialog")).toHaveClass(
-      "snui-popover",
-      "plugin-popover",
-    );
   });
 });

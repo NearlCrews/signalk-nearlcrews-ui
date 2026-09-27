@@ -22,7 +22,13 @@ import {
 import { visuallyHiddenDeclarations } from "../../src/styles/fragments.js";
 import { TOAST_STYLES } from "../../src/styles/toast.js";
 import { TRANSITION_FAST_MS } from "../../src/styles/tokens.js";
-import { installVisualViewport, renderInPanel } from "../helpers.js";
+import {
+  headSheets,
+  installVisualViewport,
+  MODULE_SHEET,
+  ROOT_SHEET,
+  renderInPanel,
+} from "../helpers.js";
 
 function at<T>(items: readonly T[], index: number): T {
   const item = items[index];
@@ -32,10 +38,14 @@ function at<T>(items: readonly T[], index: number): T {
   return item;
 }
 
-function flush(): void {
+function advance(ms: number): void {
   act(() => {
-    vi.advanceTimersByTime(0);
+    vi.advanceTimersByTime(ms);
   });
+}
+
+function flush(): void {
+  advance(0);
 }
 
 function renderToastRegion(
@@ -58,23 +68,20 @@ function enqueue(queue: ToastQueue, content: ToastContent): string {
   return key;
 }
 
-function advance(ms: number): void {
-  act(() => {
-    vi.advanceTimersByTime(ms);
-  });
-}
-
 // The exit timer outlives the fast transition by ten milliseconds.
 const EXIT_MS = TRANSITION_FAST_MS + 10;
+
+/** The toast card that wraps an element. */
+function cardAround(element: HTMLElement): HTMLElement {
+  const card = element.closest<HTMLElement>(".snui-toast");
+  if (card === null) throw new Error("expected a toast card");
+  return card;
+}
 
 // The live region is the text container; hover, focus, and exit state live
 // on the card that wraps it.
 function toastCards(role: "alert" | "status"): HTMLElement[] {
-  return screen.getAllByRole(role).map((region) => {
-    const card = region.closest(".snui-toast");
-    if (card === null) throw new Error("expected a toast card");
-    return card as HTMLElement;
-  });
+  return screen.getAllByRole(role).map(cardAround);
 }
 
 function toastCard(role: "alert" | "status"): HTMLElement {
@@ -83,9 +90,7 @@ function toastCard(role: "alert" | "status"): HTMLElement {
 
 /** The card whose title reads `title`. */
 function cardOf(title: string): HTMLElement {
-  const card = screen.getByText(title).closest(".snui-toast");
-  if (!(card instanceof HTMLElement)) throw new Error("expected a toast card");
-  return card;
+  return cardAround(screen.getByText(title));
 }
 
 beforeEach(() => {
@@ -93,8 +98,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
   toast.clear();
 });
 
@@ -173,11 +176,10 @@ describe("ToastRegion", () => {
     const queue = createToastQueue();
     const { container } = renderToastRegion(queue);
     // The overlay module sheet installs beside the root sheet on mount.
-    const styles = [
-      ...container.ownerDocument.head.querySelectorAll(
-        "style[data-snui-styles], style[data-snui-module-styles]",
-      ),
-    ]
+    const styles = headSheets(
+      `${ROOT_SHEET}, ${MODULE_SHEET}`,
+      container.ownerDocument,
+    )
       .map((element) => element.textContent)
       .join("\n");
 
@@ -271,16 +273,9 @@ describe("ToastRegion", () => {
     enqueue(queue, { title: "Saved", tone: "success" });
 
     advance(5000);
-    expect(
-      screen.getByText("Save failed").closest(".snui-toast"),
-    ).not.toHaveAttribute("data-exiting");
-    expect(
-      screen.getByText("Depth stale").closest(".snui-toast"),
-    ).not.toHaveAttribute("data-exiting");
-    expect(screen.getByText("Saved").closest(".snui-toast")).toHaveAttribute(
-      "data-exiting",
-      "true",
-    );
+    expect(cardOf("Save failed")).not.toHaveAttribute("data-exiting");
+    expect(cardOf("Depth stale")).not.toHaveAttribute("data-exiting");
+    expect(cardOf("Saved")).toHaveAttribute("data-exiting", "true");
     advance(60000);
     expect(screen.getByText("Save failed")).toBeInTheDocument();
     expect(screen.getByText("Depth stale")).toBeInTheDocument();
@@ -427,10 +422,7 @@ describe("ToastRegion", () => {
     for (const title of ["One", "Two", "Three", "Four", "Five"]) {
       enqueue(queue, { title, duration: 0 });
     }
-    const oldestCard = screen.getByText("One").closest(".snui-toast");
-    expect(oldestCard).not.toBeNull();
-    if (oldestCard === null) return;
-    const dismiss = within(oldestCard as HTMLElement).getByRole("button", {
+    const dismiss = within(cardOf("One")).getByRole("button", {
       name: "Dismiss",
     });
     dismiss.focus();

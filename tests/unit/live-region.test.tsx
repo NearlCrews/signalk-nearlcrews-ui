@@ -1,14 +1,11 @@
 import { act, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { LiveRegion } from "../../src/index.js";
+import { LIVE_REGION_BLANK_MS } from "../../src/utils/repeat-announcement.js";
 import { panel, renderInPanel } from "../helpers.js";
 
 describe("LiveRegion first message", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("announces a message it mounted with by default", () => {
     renderInPanel(<LiveRegion message="3 paths detected" />);
 
@@ -27,7 +24,7 @@ describe("LiveRegion first message", () => {
     expect(region).toBeEmptyDOMElement();
 
     act(() => {
-      vi.advanceTimersByTime(100);
+      vi.advanceTimersByTime(LIVE_REGION_BLANK_MS);
     });
     expect(screen.getByRole("status")).toBe(region);
     expect(region).toHaveTextContent("3 paths detected");
@@ -57,10 +54,6 @@ describe("LiveRegion announcement mode", () => {
 });
 
 describe("LiveRegion repeat announcements under pressure", () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("announces once at the end of a burst instead of staying blank", () => {
     vi.useFakeTimers();
     const { rerender } = renderInPanel(
@@ -68,16 +61,13 @@ describe("LiveRegion repeat announcements under pressure", () => {
     );
 
     const region = screen.getByRole("status");
-    for (const [index, message] of [
-      "Scanned 2 paths",
-      "Scanned 3 paths",
-      "Scanned 4 paths",
-    ].entries()) {
+    // Every scan carries its own key, so each rerender is a new announcement.
+    for (const count of [2, 3, 4]) {
       rerender(
         panel(
           <LiveRegion
-            message={message}
-            announceKey={`scan-${String(index)}`}
+            message={`Scanned ${String(count)} paths`}
+            announceKey={`scan-${String(count)}`}
           />,
         ),
       );
@@ -89,7 +79,7 @@ describe("LiveRegion repeat announcements under pressure", () => {
     // A source updating faster than the beat still finishes the beat it
     // started, and the words that arrive are the latest ones.
     act(() => {
-      vi.advanceTimersByTime(100);
+      vi.advanceTimersByTime(LIVE_REGION_BLANK_MS);
     });
     expect(region).toHaveTextContent("Scanned 4 paths");
     expect(vi.getTimerCount()).toBe(0);

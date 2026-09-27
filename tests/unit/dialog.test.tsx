@@ -13,6 +13,7 @@ import { describe, expect, it, vi } from "vitest";
 import { Button, PanelRoot, type PanelRootProps } from "../../src/index.js";
 import {
   AlertDialog,
+  type AlertDialogProps,
   Dialog,
   type DialogProps,
   Popover,
@@ -34,6 +35,25 @@ function renderDialog(
     panelProps,
   );
 }
+
+/** Renders an open alert dialog; every alert dialog case starts open. */
+function renderAlertDialog(
+  props: Omit<AlertDialogProps, "cancelLabel" | "children" | "title"> = {},
+): RenderResult {
+  return renderInPanel(
+    <AlertDialog
+      title="Discard route?"
+      cancelLabel="Keep route"
+      defaultOpen
+      {...props}
+    >
+      <p>This cannot be undone.</p>
+    </AlertDialog>,
+  );
+}
+
+/** The destructive action most alert dialog cases offer beside cancel. */
+const DISCARD_ACTION = <Button variant="danger">Discard</Button>;
 
 function getScrim(container: HTMLElement): Element {
   const scrim = container.querySelector(".snui-scrim");
@@ -538,16 +558,7 @@ describe("Dialog", () => {
 
 describe("AlertDialog", () => {
   it("renders with the alertdialog role", () => {
-    renderInPanel(
-      <AlertDialog
-        title="Discard route?"
-        defaultOpen
-        cancelLabel="Keep route"
-        actions={<Button variant="danger">Discard</Button>}
-      >
-        <p>This cannot be undone.</p>
-      </AlertDialog>,
-    );
+    renderAlertDialog({ actions: DISCARD_ACTION });
 
     expect(
       screen.getByRole("alertdialog", { name: "Discard route?" }),
@@ -555,11 +566,7 @@ describe("AlertDialog", () => {
   });
 
   it("describes itself with the consequence it renders", () => {
-    const { container, unmount } = renderInPanel(
-      <AlertDialog title="Discard route?" defaultOpen cancelLabel="Keep route">
-        <p>This cannot be undone.</p>
-      </AlertDialog>,
-    );
+    const { container, unmount } = renderAlertDialog();
 
     const alert = screen.getByRole("alertdialog");
     const body = container.querySelector(".snui-dialog__body");
@@ -568,16 +575,9 @@ describe("AlertDialog", () => {
     unmount();
 
     // An explicit description wins: the consumer named the summary already.
-    renderInPanel(
-      <AlertDialog
-        title="Discard route?"
-        defaultOpen
-        cancelLabel="Keep route"
-        description="Every unsaved leg is discarded."
-      >
-        <p>This cannot be undone.</p>
-      </AlertDialog>,
-    );
+    renderAlertDialog({
+      description: "Every unsaved leg is discarded.",
+    });
     const described = screen.getByRole("alertdialog");
     expect(described).toHaveAttribute(
       "aria-describedby",
@@ -588,17 +588,7 @@ describe("AlertDialog", () => {
   it("reports its cancel button as the route the user took, and closes", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
-    renderInPanel(
-      <AlertDialog
-        title="Discard route?"
-        defaultOpen
-        cancelLabel="Keep route"
-        onCancel={onCancel}
-        actions={<Button variant="danger">Discard</Button>}
-      >
-        <p>This cannot be undone.</p>
-      </AlertDialog>,
-    );
+    renderAlertDialog({ actions: DISCARD_ACTION, onCancel });
 
     // The cancel button is the leading action every alert dialog renders, and
     // it closes the dialog through the same route Escape reports.
@@ -629,18 +619,11 @@ describe("AlertDialog", () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
     const onOpenChange = vi.fn();
-    const { container } = renderInPanel(
-      <AlertDialog
-        title="Discard route?"
-        defaultOpen
-        cancelLabel="Keep route"
-        onCancel={onCancel}
-        onOpenChange={onOpenChange}
-        actions={<Button variant="danger">Discard</Button>}
-      >
-        <p>This cannot be undone.</p>
-      </AlertDialog>,
-    );
+    const { container } = renderAlertDialog({
+      actions: DISCARD_ACTION,
+      onCancel,
+      onOpenChange,
+    });
 
     await user.click(getScrim(container));
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -656,17 +639,10 @@ describe("AlertDialog", () => {
   it("keeps Escape disabled when keyboardDismissable is false", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    renderInPanel(
-      <AlertDialog
-        title="Discard route?"
-        defaultOpen
-        cancelLabel="Keep route"
-        keyboardDismissable={false}
-        onOpenChange={onOpenChange}
-      >
-        <p>This cannot be undone.</p>
-      </AlertDialog>,
-    );
+    renderAlertDialog({
+      keyboardDismissable: false,
+      onOpenChange,
+    });
 
     await user.keyboard("{Escape}");
     expect(onOpenChange).not.toHaveBeenCalled();
@@ -676,21 +652,14 @@ describe("AlertDialog", () => {
   it("closes from a supplemental action's close without canceling", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
-    renderInPanel(
-      <AlertDialog
-        title="Discard route?"
-        defaultOpen
-        cancelLabel="Keep route"
-        onCancel={onCancel}
-        actions={(close) => (
-          <Button variant="danger" onClick={close}>
-            Discard
-          </Button>
-        )}
-      >
-        <p>This cannot be undone.</p>
-      </AlertDialog>,
-    );
+    renderAlertDialog({
+      actions: (close) => (
+        <Button variant="danger" onClick={close}>
+          Discard
+        </Button>
+      ),
+      onCancel,
+    });
 
     await user.click(screen.getByRole("button", { name: "Discard" }));
     expect(screen.queryByRole("alertdialog")).toBeNull();
@@ -699,17 +668,7 @@ describe("AlertDialog", () => {
 
   it("forwards the ref to the alertdialog element", () => {
     const ref = createRef<HTMLElement>();
-    renderInPanel(
-      <AlertDialog
-        title="Discard route?"
-        defaultOpen
-        cancelLabel="Keep route"
-        ref={ref}
-        actions={<Button variant="danger">Discard</Button>}
-      >
-        <p>This cannot be undone.</p>
-      </AlertDialog>,
-    );
+    renderAlertDialog({ actions: DISCARD_ACTION, ref });
 
     expect(ref.current).toBe(screen.getByRole("alertdialog"));
   });
@@ -718,22 +677,15 @@ describe("AlertDialog", () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
     const onOpenChange = vi.fn();
-    renderInPanel(
-      <AlertDialog
-        title="Discard route?"
-        defaultOpen
-        cancelLabel="Keep route"
-        onCancel={onCancel}
-        onOpenChange={onOpenChange}
-        actions={
-          <Button disabled variant="danger">
-            Discard
-          </Button>
-        }
-      >
-        <p>This cannot be undone.</p>
-      </AlertDialog>,
-    );
+    renderAlertDialog({
+      actions: (
+        <Button disabled variant="danger">
+          Discard
+        </Button>
+      ),
+      onCancel,
+      onOpenChange,
+    });
 
     const cancel = screen.getByRole("button", { name: "Keep route" });
     expect(cancel).toBeEnabled();
