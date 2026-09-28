@@ -59,6 +59,11 @@
       "import": "./dist/forms.js",
       "default": "./dist/forms.js"
     },
+    "./host-harness": {
+      "types": "./dist/host-harness.d.ts",
+      "import": "./dist/host-harness.js",
+      "default": "./dist/host-harness.js"
+    },
     "./overlays": {
       "types": "./dist/overlays.d.ts",
       "import": "./dist/overlays.js",

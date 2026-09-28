@@ -1,11 +1,12 @@
 {
-  "$schema": "https://unpkg.com/knip@6.35.1/schema.json",
+  "$schema": "./node_modules/knip/schema.json",
   "entry": [
     "src/index.ts",
     "src/composites.ts",
     "src/data-grid.ts",
     "src/format.ts",
     "src/forms.ts",
+    "src/host-harness.ts",
     "src/overlays.ts",
     "scripts/*.mjs",
     "bin/*.mjs",
@@ -14,6 +15,7 @@
     "fixtures/browser/federation.tsx",
     "fixtures/browser/vite.config.ts",
     "fixtures/consumer/consumer.tsx",
+    "fixtures/consumer/harness.tsx",
     "fixtures/federation/PluginConfigurationPanel.tsx",
     "tests/types/**/*.test-d.ts",
     "tests/unit/**/*.test.{ts,tsx,mjs}"

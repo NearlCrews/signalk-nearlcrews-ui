@@ -17,14 +17,21 @@ interface PluginConfigurationPanelProps {
 const queue = createToastQueue();
 const gridRows = [{ id: "entry", label: "Data-grid entry ready" }] as const;
 
+const DEFAULT_CONFIGURATION: FixtureConfiguration = { saveCount: 0 };
+
+/**
+ * The configuration the host holds, with the plugin's defaults filled in. The
+ * Signal K Admin passes undefined for a plugin nobody has configured and `{}`
+ * for a package enabled by default before its first save, so both open on the
+ * defaults rather than failing; only a value this panel could not have saved
+ * is an error.
+ */
 function readConfiguration(value: unknown): FixtureConfiguration {
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    "saveCount" in value &&
-    typeof value.saveCount === "number"
-  ) {
-    return { saveCount: value.saveCount };
+  if (value === undefined) return DEFAULT_CONFIGURATION;
+  if (typeof value === "object" && value !== null) {
+    const saveCount =
+      "saveCount" in value ? value.saveCount : DEFAULT_CONFIGURATION.saveCount;
+    if (typeof saveCount === "number") return { saveCount };
   }
   throw new Error("Federation fixture received an invalid configuration prop.");
 }
