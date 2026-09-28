@@ -1,7 +1,8 @@
 /**
  * Keeps the values that GitHub, npm, and the release scripts each read from a
  * different file in step: the CI Node matrix, the required release checks,
- * the devEngines floors, and the hosted visual-baseline families.
+ * the devEngines floors, the hosted visual-baseline families, and the npm
+ * bootstrap every workflow repeats.
  */
 import { readdirSync, readFileSync } from "node:fs";
 
@@ -16,14 +17,18 @@ import {
   hostedSnapshotVariants,
   missingSnapshotFiles,
   orphanSnapshotFiles,
-  PANEL_SNAPSHOT_DIRECTORY,
-  PANEL_SPEC,
+  readSnapshotSpecs,
+  SNAPSHOT_SPECS,
+  snapshotDirectory,
+  takesScreenshots,
 } from "../../scripts/lib/snapshot-families.mjs";
 import {
   expandMatrixName,
   readInlineList,
   readJobNames,
   readScalarValues,
+  readSteps,
+  stepBody,
 } from "../../scripts/lib/workflow-matrix.mjs";
 
 const ciWorkflow = readFileSync(repositoryPath(CI_WORKFLOW_PATH), "utf8");
@@ -31,7 +36,7 @@ const refreshWorkflow = readFileSync(
   repositoryPath(".github", "workflows", "update-baselines.yml"),
   "utf8",
 );
-const panelSpec = readFileSync(repositoryPath(PANEL_SPEC), "utf8");
+const snapshotSpecs = await readSnapshotSpecs(repositoryPath);
 const packageJson = await readPackageJson();
 
 /** The devEngines Node floors, as bare versions. */
@@ -140,23 +145,118 @@ describe("hosted visual-baseline families", () => {
     );
   });
 
+  it("lists every browser spec that takes screenshots as a snapshot spec", () => {
+    // Found by reading the specs, not the list, so a new spec that compares
+    // screenshots cannot miss the family checks, the refresh upload, and
+    // baselines:fetch.
+    const takingScreenshots = readdirSync(repositoryPath("tests", "browser"))
+      .filter((name) => name.endsWith(".spec.ts"))
+      .map((name) => `tests/browser/${name}`)
+      .filter((spec) =>
+        takesScreenshots(readFileSync(repositoryPath(spec), "utf8")),
+      )
+      .sort();
+    expect(
+      takingScreenshots,
+      "Add the spec to SNAPSHOT_SPECS in scripts/lib/snapshot-families.mjs.",
+    ).toEqual([...SNAPSHOT_SPECS].sort());
+  });
+
   it("has a committed baseline for every screenshot in every family", () => {
-    const present = readdirSync(repositoryPath(PANEL_SNAPSHOT_DIRECTORY));
-    for (const variant of ciVariants) {
-      expect(
-        missingSnapshotFiles(panelSpec, variant, present),
-        `Refresh the ${variant} family through the Update visual baselines workflow.`,
-      ).toEqual([]);
+    for (const { present, source, spec } of snapshotSpecs) {
+      for (const variant of ciVariants) {
+        expect(
+          missingSnapshotFiles(source, variant, present),
+          `Refresh the ${variant} family of ${spec} through the Update visual baselines workflow, then run npm run baselines:fetch.`,
+        ).toEqual([]);
+      }
     }
   });
 
   it("keeps no baseline a renamed or deleted screenshot left behind", () => {
-    const present = readdirSync(repositoryPath(PANEL_SNAPSHOT_DIRECTORY));
-    for (const variant of ciVariants) {
+    for (const { present, source, spec } of snapshotSpecs) {
+      for (const variant of ciVariants) {
+        expect(
+          orphanSnapshotFiles(source, variant, present),
+          `Delete the ${variant} images in ${snapshotDirectory(spec)} that no screenshot in ${spec} asks for.`,
+        ).toEqual([]);
+      }
+    }
+  });
+
+  it("uploads every snapshot directory from the refresh workflow", () => {
+    for (const spec of SNAPSHOT_SPECS) {
+      expect(refreshWorkflow).toContain(`${snapshotDirectory(spec)}/`);
+    }
+  });
+});
+
+/*
+ * The npm bootstrap is written inline in every job that installs
+ * dependencies. A local composite action would hold it once, but the workflow
+ * security audit reports a GITHUB_PATH write inside one at high severity, and
+ * the write has to happen: nested `npm run` calls resolve npm from PATH. So
+ * the copies stay, and this holds every copy to one canonical body, so the
+ * pin policy cannot change in one workflow and silently not in another.
+ */
+const NPM_BOOTSTRAP_BODIES = new Map([
+  [
+    "Set up npm",
+    `env:
+  NPM_CONFIG_PREFIX: \${{ runner.temp }}/npm-global
+run: |
+  npm install --global "npm@$(node -p "require('./package.json').devEngines.packageManager.version")"
+  echo "\${NPM_CONFIG_PREFIX}/bin" >> "$GITHUB_PATH"
+  "\${NPM_CONFIG_PREFIX}/bin/npm" --version`,
+  ],
+  [
+    "Set up npm on Windows",
+    `shell: pwsh
+run: |
+  $npmPrefix = Join-Path $env:RUNNER_TEMP "npm-global"
+  $npmRange = node -p "require('./package.json').devEngines.packageManager.version"
+  npm install --global "npm@$npmRange" --prefix $npmPrefix
+  $npmPrefix | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+  & (Join-Path $npmPrefix "npm.cmd") --version`,
+  ],
+]);
+
+describe("npm bootstrap steps", () => {
+  const steps = readdirSync(repositoryPath(".github", "workflows"))
+    .filter((name) => name.endsWith(".yml"))
+    .flatMap((workflow) =>
+      readSteps(
+        readFileSync(repositoryPath(".github", "workflows", workflow), "utf8"),
+      ).map((step) => ({ ...step, workflow })),
+    );
+  const bootstrapSteps = steps.filter((step) =>
+    step.lines.some((line) =>
+      line.includes("devEngines.packageManager.version"),
+    ),
+  );
+
+  it("installs the pinned npm only in steps named for it", () => {
+    expect(bootstrapSteps.length).toBeGreaterThan(0);
+    for (const step of bootstrapSteps) {
       expect(
-        orphanSnapshotFiles(panelSpec, variant, present),
-        `Delete the ${variant} images no screenshot in ${PANEL_SPEC} asks for.`,
-      ).toEqual([]);
+        [...NPM_BOOTSTRAP_BODIES.keys()],
+        `${step.workflow} installs npm in a step named ${String(step.name)}`,
+      ).toContain(step.name);
+    }
+  });
+
+  it("writes every copy of the bootstrap exactly as the canonical body", () => {
+    for (const [name, body] of NPM_BOOTSTRAP_BODIES) {
+      const copies = steps.filter((step) => step.name === name);
+      expect(copies.length, `no workflow has a ${name} step`).toBeGreaterThan(
+        0,
+      );
+      for (const copy of copies) {
+        expect(
+          stepBody(copy),
+          `${copy.workflow} has a ${name} step that differs from the canonical body; change every copy together`,
+        ).toBe(body);
+      }
     }
   });
 });

@@ -80,3 +80,85 @@ export function expandMatrixName(template, key, values) {
   // otherwise be read as a replacement pattern rather than as literal text.
   return values.map((value) => template.replace(placeholder, () => value));
 }
+
+/** A `steps:` key, whose list items are the job's steps. */
+const STEPS_KEY = /^( *)steps:\s*$/;
+
+/** The first line of a list item: its indentation and what follows the dash. */
+const LIST_ITEM = /^( *)- (.*)$/;
+
+/** The number of leading spaces on a line. */
+function indentationOf(line) {
+  return line.length - line.trimStart().length;
+}
+
+/**
+ * Reads every step of every job, in file order. Each step carries its display
+ * `name` (undefined when it has none) and its `lines`: the step's own text,
+ * with the step's indentation removed so its keys sit at column zero, and
+ * the list dash dropped. Blank lines inside a step are kept; trailing ones
+ * are not, because they separate the step from whatever follows.
+ */
+export function readSteps(source) {
+  const steps = [];
+  let itemIndent;
+  let current;
+
+  const finish = () => {
+    if (current === undefined) return;
+    while (current.lines.at(-1) === "") current.lines.pop();
+    steps.push(current);
+    current = undefined;
+  };
+
+  for (const line of source.split(/\r?\n/)) {
+    const stepsKey = STEPS_KEY.exec(line);
+    if (stepsKey !== null) {
+      finish();
+      itemIndent = stepsKey[1].length + 2;
+      continue;
+    }
+    if (itemIndent === undefined) continue;
+
+    const blank = line.trim().length === 0;
+    const indent = indentationOf(line);
+    const item = LIST_ITEM.exec(line);
+    if (item !== null && item[1].length === itemIndent) {
+      finish();
+      current = { lines: [item[2]], name: undefined };
+    } else if (blank) {
+      current?.lines.push("");
+      continue;
+    } else if (indent <= itemIndent && line.trimStart().startsWith("#")) {
+      // A comment between two steps belongs to neither.
+      continue;
+    } else if (indent <= itemIndent) {
+      // Anything at or left of the dash column ends the list: a sibling key
+      // of `steps:`, the next job, or a top-level key.
+      finish();
+      itemIndent = undefined;
+      continue;
+    } else if (current !== undefined) {
+      current.lines.push(line.slice(itemIndent + 2));
+    }
+
+    const name =
+      current === undefined
+        ? undefined
+        : /^name:\s*(.+?)\s*$/.exec(current.lines.at(-1) ?? "")?.[1];
+    if (name !== undefined && current.name === undefined) {
+      current.name = unquote(name);
+    }
+  }
+  finish();
+  return steps;
+}
+
+/**
+ * What a step does, for comparing copies of one step across jobs: its lines
+ * without the top-level `name` and `if` keys, which say where a copy runs
+ * rather than what it runs.
+ */
+export function stepBody(step) {
+  return step.lines.filter((line) => !/^(?:name|if):/.test(line)).join("\n");
+}

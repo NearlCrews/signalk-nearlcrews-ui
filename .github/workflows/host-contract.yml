@@ -1,10 +1,19 @@
 name: Host contract drift
 
 # npm run host-contract compares the package against a committed baseline, which
-# cannot notice that the Signal K Admin host itself has moved on. This job
+# cannot notice that the Signal K Admin host itself has moved on. The drift job
 # compares the baseline with the registry on a schedule and fails when the
 # result differs from what is committed, so a host that changes its supplied
 # libraries or its React range surfaces here rather than in a consumer's panel.
+#
+# The drift job also hashes the Admin loader functions this package builds on
+# (scripts/check-host-loader.mjs) and fails when one moved, naming the facts to
+# recheck.
+#
+# The pinned-tools job does the same for the workflow tools pinned in
+# .github/pinned-tools.json, which no dependency updater can see: it fails
+# when one has a newer release and prints the version and archive checksum to
+# pin. Neither job is a required check.
 
 on:
   schedule:
@@ -47,18 +56,60 @@ jobs:
         id: registry
         continue-on-error: true
         run: npm run host-contract:drift
+      - name: Compare the Admin loader with the recorded hashes
+        id: loader
+        continue-on-error: true
+        env:
+          # Read-only token, so the release lookup is not rate limited as an
+          # anonymous API request.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run host-contract:loader
       - name: Show baseline worktree diagnostics
         if: ${{ always() }}
         run: |
-          if ! git diff --quiet -- tests/host-contract.baseline.json; then
-            echo "The drift check unexpectedly changed the committed baseline:"
-            git --no-pager diff -- tests/host-contract.baseline.json
-            exit 1
-          fi
-          echo "The registry comparison did not mutate the committed baseline."
-      - name: Fail when the registry comparison failed
-        if: ${{ steps.registry.outcome != 'success' }}
+          for baseline in tests/host-contract.baseline.json tests/host-loader.baseline.json; do
+            if ! git diff --quiet -- "$baseline"; then
+              echo "A comparison unexpectedly changed the committed baseline $baseline:"
+              git --no-pager diff -- "$baseline"
+              exit 1
+            fi
+          done
+          echo "Neither comparison mutated a committed baseline."
+      - name: Fail when a comparison failed
+        if: ${{ steps.registry.outcome != 'success' || steps.loader.outcome != 'success' }}
+        env:
+          REGISTRY_OUTCOME: ${{ steps.registry.outcome }}
+          LOADER_OUTCOME: ${{ steps.loader.outcome }}
         run: |
-          echo "The Signal K Admin host dependency declaration could not be verified."
-          echo "Review the comparison diagnostics above. If it drifted, run \`npm run host-contract:update\` and commit the result."
+          if [ "$REGISTRY_OUTCOME" != "success" ]; then
+            echo "The Signal K Admin host dependency declaration could not be verified."
+            echo "Review the comparison diagnostics above. If it drifted, run \`npm run host-contract:update\` and commit the result."
+          fi
+          if [ "$LOADER_OUTCOME" != "success" ]; then
+            echo "The Signal K Admin loader could not be verified against the recorded hashes."
+            echo "If the Admin loader moved, recheck the facts the script names and run \`npm run host-contract:loader:update\`."
+          fi
           exit 1
+
+  pinned-tools:
+    name: Compare the pinned workflow tools with their releases
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          # Floating on the active LTS line; see the pin policy in ci.yml.
+          node-version: 24
+          package-manager-cache: false
+      # The check imports only Node itself, so it needs no dependency install.
+      - name: Check for newer releases
+        env:
+          # Read-only token, so the release lookups are not rate limited as
+          # anonymous API requests.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/check-pinned-tools.mjs

@@ -4,19 +4,18 @@
  * The refresh workflow runs this after regenerating one family so an
  * incomplete artifact fails there, where the missing image can still be
  * produced, rather than in the contract test on the next pull request.
- * Without `--variant` it checks every family the CI browser matrix names.
+ * Without `--variant` it checks every family the CI browser matrix names,
+ * across every spec that takes screenshots.
  */
-import { readdir, readFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 
 import { assertKnownOptions, readValues } from "../bin/lib/cli-arguments.mjs";
 import { repositoryPath } from "./lib/paths.mjs";
 import { CI_WORKFLOW_PATH } from "./lib/release-checks.mjs";
 import {
+  familyFailures,
   hostedSnapshotVariants,
-  missingSnapshotFiles,
-  orphanSnapshotFiles,
-  PANEL_SNAPSHOT_DIRECTORY,
-  PANEL_SPEC,
+  readSnapshotSpecs,
 } from "./lib/snapshot-families.mjs";
 import { bulletList } from "./lib/text.mjs";
 
@@ -24,9 +23,8 @@ const OPTIONS = ["--variant"];
 const argv = process.argv.slice(2);
 assertKnownOptions(argv, OPTIONS);
 
-const [specSource, presentFiles, ciWorkflow] = await Promise.all([
-  readFile(repositoryPath(PANEL_SPEC), "utf8"),
-  readdir(repositoryPath(PANEL_SNAPSHOT_DIRECTORY)),
+const [specs, ciWorkflow] = await Promise.all([
+  readSnapshotSpecs(repositoryPath),
   readFile(repositoryPath(CI_WORKFLOW_PATH), "utf8"),
 ]);
 
@@ -40,21 +38,17 @@ const variants =
     ? explicitVariants
     : hostedSnapshotVariants(ciWorkflow);
 
-const failures = variants.flatMap((variant) => [
-  ...missingSnapshotFiles(specSource, variant, presentFiles).map(
-    (file) => `${variant}: ${file} is missing`,
-  ),
-  ...orphanSnapshotFiles(specSource, variant, presentFiles).map(
-    (file) => `${variant}: ${file} is committed but no screenshot asks for it`,
-  ),
-]);
-
+const failures = familyFailures(specs, variants);
 if (failures.length > 0) {
   throw new Error(
-    `Visual baseline families do not match the browser spec:\n${bulletList(failures)}`,
+    `Visual baseline families do not match the browser specs:\n${bulletList(failures)}`,
   );
 }
 
+const fileCount = specs.reduce(
+  (total, { present }) => total + present.length,
+  0,
+);
 process.stdout.write(
-  `Visual baseline families complete: ${variants.join(", ")} (${String(presentFiles.length)} files).\n`,
+  `Visual baseline families complete: ${variants.join(", ")} (${String(fileCount)} files across ${String(specs.length)} specs).\n`,
 );

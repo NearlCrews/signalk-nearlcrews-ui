@@ -5,6 +5,8 @@ import {
   readInlineList,
   readJobNames,
   readScalarValues,
+  readSteps,
+  stepBody,
 } from "../../scripts/lib/workflow-matrix.mjs";
 
 const WORKFLOW = `name: Example
@@ -92,5 +94,81 @@ describe("workflow readers", () => {
     expect(
       expandMatrixName(`Node \${{ matrix.node.js }}`, "node.js", ["22.22.2"]),
     ).toEqual(["Node 22.22.2"]);
+  });
+});
+
+describe("step reader", () => {
+  const STEPS = `jobs:
+  first:
+    name: First
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+      # A comment between two steps belongs to neither.
+      - uses: actions/setup-node@v7
+        name: "Set up Node"
+        with:
+          node-version: 24
+
+      - name: Run
+        if: runner.os != 'Windows'
+        env:
+          VALUE: one
+        run: |
+          echo one
+
+          echo two
+  second:
+    steps:
+      - run: echo unnamed
+    timeout-minutes: 5
+top: level
+`;
+
+  it("reads every step with its name and dedented lines", () => {
+    expect(readSteps(STEPS)).toEqual([
+      {
+        lines: ["name: Check out", "uses: actions/checkout@v7"],
+        name: "Check out",
+      },
+      {
+        lines: [
+          "uses: actions/setup-node@v7",
+          'name: "Set up Node"',
+          "with:",
+          "  node-version: 24",
+        ],
+        name: "Set up Node",
+      },
+      {
+        lines: [
+          "name: Run",
+          "if: runner.os != 'Windows'",
+          "env:",
+          "  VALUE: one",
+          "run: |",
+          "  echo one",
+          "",
+          "  echo two",
+        ],
+        name: "Run",
+      },
+      { lines: ["run: echo unnamed"], name: undefined },
+    ]);
+  });
+
+  it("compares steps by what they run, not where they run", () => {
+    const [, , run] = readSteps(STEPS);
+    expect(stepBody(run)).toBe(
+      ["env:", "  VALUE: one", "run: |", "  echo one", "", "  echo two"].join(
+        "\n",
+      ),
+    );
+    const edited = readSteps(STEPS.replace("echo two", "echo three"))[2];
+    expect(stepBody(edited)).not.toBe(stepBody(run));
+  });
+
+  it("reads nothing from a file without steps", () => {
+    expect(readSteps("name: Empty\non:\n  push:\n")).toEqual([]);
   });
 });

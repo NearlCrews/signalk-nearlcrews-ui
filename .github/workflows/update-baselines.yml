@@ -2,9 +2,11 @@ name: Update visual baselines
 
 # Generates the hosted visual-baseline families. Each family is one runner
 # image and architecture, matched to a browser job in ci.yml, and the workflow
-# contract test requires every screenshot in tests/browser/panel.spec.ts to
-# exist for every family. A local run writes `linux-local-<arch>` images, which
-# are ignored, so only this workflow produces images that can be committed.
+# contract test requires every screenshot in the snapshot specs
+# (SNAPSHOT_SPECS in scripts/lib/snapshot-families.mjs) to exist for every
+# family. A local run writes `linux-local-<arch>` images, which are ignored, so
+# only this workflow produces images that can be committed. Bring a finished
+# run's images into the checkout with `npm run baselines:fetch -- <run-id>`.
 
 on:
   workflow_dispatch:
@@ -69,6 +71,8 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: baselines-${{ matrix.snapshot_variant }}
-          path: tests/browser/panel.spec.ts-snapshots/
+          path: |
+            tests/browser/panel.spec.ts-snapshots/
+            tests/browser/showcase.spec.ts-snapshots/
           retention-days: 3
           if-no-files-found: error
