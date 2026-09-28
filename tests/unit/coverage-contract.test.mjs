@@ -99,23 +99,24 @@ describe("per-file coverage contract", () => {
   });
 
   it("reports every metric below its per-file floor", () => {
+    const below = Object.fromEntries(
+      Object.entries(COVERAGE_FLOORS).map(([metric, floor]) => [
+        metric,
+        floor - 1,
+      ]),
+    );
     const summary = {
       total: record(),
-      "src/components/Untested.tsx": record({
-        branches: 64,
-        functions: 84,
-        lines: 81,
-        statements: 79,
-      }),
+      "src/components/Untested.tsx": record(below),
     };
 
     expect(() => assertPerFileCoverage(summary, { repositoryRoot })).toThrow(
       [
         "Per-file coverage floors failed:",
-        "- src/components/Untested.tsx branches 64% is below 65%",
-        "- src/components/Untested.tsx functions 84% is below 85%",
-        "- src/components/Untested.tsx lines 81% is below 82%",
-        "- src/components/Untested.tsx statements 79% is below 80%",
+        ...["branches", "functions", "lines", "statements"].map(
+          (metric) =>
+            `- src/components/Untested.tsx ${metric} ${String(below[metric])}% is below ${String(COVERAGE_FLOORS[metric])}%`,
+        ),
       ].join("\n"),
     );
   });

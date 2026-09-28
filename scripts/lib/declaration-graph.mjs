@@ -1,11 +1,11 @@
 /**
- * Walks the emitted declaration files from the package entry points.
+ * Walks the emitted declaration files from the package entry points, and
+ * renders and compares the declaration baseline.
  *
- * The published contract is what a consumer can reach through the exports
- * map: the entry `.d.ts` files and every declaration they import or
- * re-export, transitively. Declaration files that nothing reachable refers to
- * are private modules that happen to be emitted, and a change to one of them
- * is not a public API change.
+ * The files an entry `.d.ts` imports or re-exports, transitively, are the
+ * ones a consumer's compiler reads. What in them is public API is decided by
+ * scripts/lib/public-surface.mjs; this walk decides which files it reads, and
+ * which exported names the companion check holds to account.
  */
 import { dirname, posix } from "node:path";
 
@@ -92,9 +92,14 @@ export function reachableDeclarations(entryFiles, readSource) {
   return [...reachable].sort();
 }
 
-export function renderDeclarationSnapshot(files, readSource) {
-  return files
-    .map((file) => `=== ${file} ===\n${readSource(file).trimEnd()}\n`)
+/**
+ * The baseline text for a set of snapshot sections: a Map of section title to
+ * body, rendered in title order so the file diffs cleanly across releases.
+ */
+export function renderSnapshot(sections) {
+  return [...sections.keys()]
+    .sort()
+    .map((title) => `=== ${title} ===\n${sections.get(title).trimEnd()}\n`)
     .join("\n");
 }
 
@@ -123,8 +128,9 @@ function parseSnapshotSections(snapshot) {
 }
 
 /**
- * The reachable files that differ between the baseline and now, sorted, each
- * with its `change`: "added", "removed", or "changed".
+ * The snapshot sections that differ between the baseline and now, sorted,
+ * each with its `change`: "added", "removed", or "changed". A section is one
+ * entry point's export list or one file's public declarations.
  */
 export function snapshotDifferences(baseline, snapshot) {
   const before = parseSnapshotSections(baseline);

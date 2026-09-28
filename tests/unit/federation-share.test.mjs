@@ -66,8 +66,30 @@ describe("federation share map", () => {
   });
 
   it("explains the non-strict singleton decision", () => {
-    expect(HOST_NOTES).toContain("2.24.0");
     expect(HOST_NOTES).toContain("React.version");
     expect(HOST_NOTES).toContain("strictVersion");
+  });
+
+  it("bounds the hosts that under-report React to the releases that did", () => {
+    // Read from the Admin loader source at the release tags: 2.24.0 and
+    // 2.25.0 register 19.0.0, and 2.26.0 onward registers React.version.
+    expect(HOST_NOTES).toContain(
+      "Signal K Admin 2.24.0 and 2.25.0 register their React share as 19.0.0 while shipping a newer React; every release from 2.26.0 registers React.version.",
+    );
+    expect(HOST_NOTES).toContain(
+      "A strictVersion check would therefore refuse to mount on those two supported hosts",
+    );
+    expect(HOST_NOTES).not.toContain("up to at least");
+    expect(HOST_NOTES).not.toContain("current master");
+  });
+
+  it("says what a host with an older React shows, with and without the shell", () => {
+    // PanelShell checks the host's React before it renders and shows its
+    // compatibility notice; only a panel composed without it reaches the
+    // error boundary.
+    expect(HOST_NOTES).toContain(
+      "on a host whose React really is older the share resolves, and PanelShell renders its compatibility notice naming both versions; a panel composed without the shell fails inside its error boundary.",
+    );
+    expect(HOST_NOTES).not.toContain("the panel then fails");
   });
 });

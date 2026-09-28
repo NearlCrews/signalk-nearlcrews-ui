@@ -4,6 +4,8 @@ import {
   assertPublicBundleBudgets,
   assertPublicCssExport,
   exportSpecifier,
+  panelJavaScriptEntries,
+  TOOLING_ENTRIES,
 } from "../../scripts/lib/bundle-contract.mjs";
 
 const exportsField = {
@@ -96,5 +98,21 @@ describe("public bundle contract", () => {
         new: 3,
       }),
     ]).toContainEqual(["new", "./dist/new.js"]);
+  });
+
+  it("keeps the test tooling entries out of what a panel may bundle", () => {
+    expect(TOOLING_ENTRIES).toEqual(["host-harness"]);
+    expect([
+      ...panelJavaScriptEntries({
+        ...exportsField,
+        "./host-harness": {
+          import: "./dist/host-harness.js",
+          types: "./dist/host-harness.d.ts",
+        },
+      }),
+    ]).toEqual([
+      ["index", "./dist/index.js"],
+      ["forms", "./dist/forms.js"],
+    ]);
   });
 });

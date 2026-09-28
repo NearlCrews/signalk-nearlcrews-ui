@@ -1,13 +1,22 @@
 /**
- * Compares the emitted public declarations against a committed baseline.
+ * Compares the public type surface against a committed baseline.
  *
- * The published contract of this package is the `.d.ts` output a consumer can
- * reach: the entry declaration named by each `exports` target and everything
- * those files import or re-export, transitively. A change to any of them is a
- * public API change even when no source signature looks different, so the
- * diff has to be visible in review rather than reconstructed by hand. Emitted
- * declaration files that no entry reaches are private modules; they are
- * counted but not compared.
+ * The published contract is what a consumer can name through the exports
+ * map: each entry point's exported names, and every declaration those names
+ * reach through the types they use. scripts/lib/public-surface.mjs reads that
+ * from the emitted declarations, printed without doc comment prose and with
+ * destructured parameters given plain names, keeping only the `@deprecated`
+ * and `@default` tags, which change what a consumer's tools do. Any reachable
+ * file that augments a global or another module is compared whole. A change
+ * to the surface is a public API change, so its diff has to be visible in
+ * review rather than reconstructed by hand.
+ *
+ * A companion check fails when a file an entry reaches exports a name that no
+ * entry exports and no public declaration uses: such a name is importable by
+ * nobody, so it is either marked `@internal`, which the build strips, or
+ * exported from an entry on purpose. A second one fails when a reachable
+ * declaration file does not compile, which is what an `@internal` tag on a
+ * type a public declaration still uses leaves behind.
  *
  * Run `npm run declarations:update` to accept an intended change.
  */
@@ -20,7 +29,7 @@ import {
   DECLARATION_FILE,
   entryDeclarationFiles,
   reachableDeclarations,
-  renderDeclarationSnapshot,
+  renderSnapshot,
   snapshotDifferences,
 } from "./lib/declaration-graph.mjs";
 import {
@@ -29,6 +38,7 @@ import {
   readPackageJson,
   repositoryPath,
 } from "./lib/paths.mjs";
+import { readPublicSurface } from "./lib/public-surface.mjs";
 import { bulletList } from "./lib/text.mjs";
 
 const OPTIONS = ["--update"];
@@ -38,25 +48,16 @@ assertKnownOptions(argv, OPTIONS);
 const baselinePath = repositoryPath("tests", "declarations.baseline.txt");
 const shouldUpdate = readFlag(argv, "--update");
 
-// The graph walk and the snapshot ask for the same files, so each one is read
-// from disk once rather than once per reader.
-const declarations = new Map();
-
 function readDeclaration(file) {
-  if (declarations.has(file)) return declarations.get(file);
   const path = join(distDirectory, ...file.split("/"));
-  const source = existsSync(path) ? readFileSync(path, "utf8") : undefined;
-  declarations.set(file, source);
-  return source;
+  return existsSync(path) ? readFileSync(path, "utf8") : undefined;
 }
 
 const emitted = (
   await collectFiles(distDirectory, {
     matches: (name) => DECLARATION_FILE.test(name),
   })
-)
-  .map((file) => relative(distDirectory, file).split(sep).join("/"))
-  .sort();
+).map((file) => relative(distDirectory, file).split(sep).join("/"));
 if (emitted.length === 0) {
   throw new Error("No declarations found. Run the build first.");
 }
@@ -64,15 +65,35 @@ if (emitted.length === 0) {
 const { exports: exportsMap } = await readPackageJson();
 const entries = entryDeclarationFiles(exportsMap);
 const reachable = reachableDeclarations(entries, readDeclaration);
-const reachableFiles = new Set(reachable);
-const emittedFiles = new Set(emitted);
-const privateCount = emitted.filter((file) => !reachableFiles.has(file)).length;
-const snapshot = renderDeclarationSnapshot(reachable, readDeclaration);
-const summary = `${String(reachable.length)} public declaration files reachable from ${String(entries.length)} entry points (${String(privateCount)} private files not compared)`;
+const { augmentations, declarationErrors, sections, unaccountedExports } =
+  readPublicSurface(distDirectory, entries, reachable);
+const snapshot = renderSnapshot(sections);
+const summary = `${String(sections.size)} sections from ${String(entries.length)} entry points and ${String(reachable.length)} reachable declaration files (${String(augmentations.length)} compared whole, ${String(emitted.length - reachable.length)} private files not read)`;
+
+const declarationFailure =
+  declarationErrors.length === 0
+    ? undefined
+    : "The emitted declarations an entry point reaches do not compile:\n" +
+      `${bulletList(declarationErrors)}\n` +
+      "A consumer type checking the package's own declarations would see these,\n" +
+      "and one that skips that check would get `any` in their place.";
+
+const accountingFailure =
+  unaccountedExports.length === 0
+    ? undefined
+    : "These reachable declaration files export names that no entry point exports\n" +
+      "and no public declaration uses, so no consumer can import them:\n" +
+      `${bulletList(unaccountedExports)}\n` +
+      "Mark each one `@internal` in its source (the build strips those), or\n" +
+      "export it from an entry point deliberately.";
 
 if (shouldUpdate) {
   writeFileSync(baselinePath, snapshot);
   process.stdout.write(`Declaration baseline updated: ${summary}.\n`);
+  const updateFailures = [declarationFailure, accountingFailure].filter(
+    (failure) => failure !== undefined,
+  );
+  if (updateFailures.length > 0) throw new Error(updateFailures.join("\n\n"));
 } else {
   let baseline;
   try {
@@ -83,32 +104,23 @@ if (shouldUpdate) {
     );
   }
 
+  const failures = [];
   if (baseline !== snapshot) {
-    const differences = snapshotDifferences(baseline, snapshot);
-    // A file the baseline held that is still emitted but no longer reachable
-    // left the public contract without disappearing: a private change.
-    const leftContract = ({ change, file }) =>
-      change === "removed" && emittedFiles.has(file);
-    const publicChange = differences.some(
-      (difference) => !leftContract(difference),
+    const lines = snapshotDifferences(baseline, snapshot).map(
+      ({ change, file }) => `${file} (${change})`,
     );
-    const lines = differences.map((difference) =>
-      leftContract(difference)
-        ? `${difference.file} (left the public contract: still emitted, no longer reachable from an entry)`
-        : `${difference.file} (${difference.change})`,
-    );
-    throw new Error(
-      "Emitted public declarations differ from the committed baseline.\n" +
-        (publicChange
-          ? "These files are reachable from the package entry points, so this is a\npublic API change:\n"
-          : "No reachable file changed; the baseline only stops covering files that\nbecame private:\n") +
+    failures.push(
+      "The public type surface differs from the committed baseline:\n" +
         `${bulletList(lines)}\n` +
-        `Private declaration files (${String(privateCount)} not reachable from any entry) are not\n` +
-        "part of the contract and are not compared. Classify any public change\n" +
-        "under the semantic-versioning policy, record it in CHANGELOG.md and\n" +
-        "docs/migration.md, then run `npm run declarations:update` to accept it.",
+        "Classify the change under the semantic-versioning policy, record it in\n" +
+        "CHANGELOG.md and docs/migration.md, then run `npm run declarations:update`\n" +
+        "to accept it. Doc comment prose and destructured parameter names are not\n" +
+        "compared, so a change here is one a consumer's compiler or tools can see.",
     );
   }
+  if (declarationFailure !== undefined) failures.push(declarationFailure);
+  if (accountingFailure !== undefined) failures.push(accountingFailure);
+  if (failures.length > 0) throw new Error(failures.join("\n\n"));
 
   process.stdout.write(`Declarations match the baseline: ${summary}.\n`);
 }

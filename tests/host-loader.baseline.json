@@ -1,0 +1,13 @@
+{
+  "hashes": {
+    "getShareScope": "af17ea0a5e91e4bf29d77d4509e4117a12f748ddaf789ea4c499e7a88533eb1e",
+    "toLazyDynamicComponent script type branch": "273c70bf67ca46b935515b8cc133a759c462c27061f7031a6f6213f335f4a397",
+    "toSafeModuleId": "954f83212ad7a09b42778d6f4014ea5faf0602fd118581caf11e950d97218275",
+    "findRemoteEntryScript": "b6856090b912975dd862792f18d0081cd2752f790bd2af1a3376836b5cd39129",
+    "%ADDONSCRIPTS% replacement": "541871610fde8c16dd01963597dd4c4babb8deaedd154dbe7443212f010161a7",
+    "mountWebModules": "3bd264208b049e0b88aaf04c297b01fa8d30f05578dd138f266ca72563c62ce4",
+    "EmbeddedPluginConfigurationForm": "3f0f0fc55f91ee3cdbe8902366baba9d59797cb4ff0b31a28db589103a3d4d42"
+  },
+  "repository": "SignalK/signalk-server",
+  "tag": "v2.33.0"
+}

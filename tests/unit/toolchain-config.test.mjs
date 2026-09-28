@@ -1,14 +1,17 @@
 /**
  * Keeps the toolchain settings that are stated in one file and relied on in
- * another honest: the checksum-pinned workflow tools, the editor schema pins
- * that track an installed version, the CI cancellation rule the release gate
- * depends on, and the corpus each documentation gate reads.
+ * another honest: the checksum-pinned workflow tools, the editor schemas read
+ * from the installed tools, the CI cancellation rule the release gate
+ * depends on, the corpus each documentation gate reads, and the split of the
+ * unit suite between a Node and a DOM environment.
  */
 import { readdirSync, readFileSync } from "node:fs";
+import { matchesGlob } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { repositoryPath } from "../../scripts/lib/paths.mjs";
+import vitestConfig from "../../vitest.config.js";
 
 /** Read from the directory, so a new workflow is held to these rules too. */
 const WORKFLOW_NAMES = readdirSync(
@@ -85,14 +88,16 @@ describe("CI cancellation", () => {
 });
 
 describe("editor schema pins", () => {
-  it("pins the knip schema to the installed knip", () => {
-    const installed = readJson("node_modules", "knip", "package.json").version;
+  // Each schema is read from the installed package, so an editor validates
+  // against the tool that runs and a dependency update edits no second file.
+  it("points the knip schema at the installed knip", () => {
     expect(readJson("knip.json").$schema).toBe(
-      `https://unpkg.com/knip@${installed}/schema.json`,
+      "./node_modules/knip/schema.json",
     );
+    expect(() => readJson("node_modules", "knip", "schema.json")).not.toThrow();
   });
 
-  it("pins the Biome schema to the installed Biome", () => {
+  it("points the Biome schema at the installed Biome", () => {
     const installed = readJson(
       "node_modules",
       "@biomejs",
@@ -101,8 +106,16 @@ describe("editor schema pins", () => {
     ).version;
     expect(packageJson.devDependencies["@biomejs/biome"]).toBe(installed);
     expect(readJson("biome.json").$schema).toBe(
-      `https://biomejs.dev/schemas/${installed}/schema.json`,
+      "./node_modules/@biomejs/biome/configuration_schema.json",
     );
+    expect(() =>
+      readJson(
+        "node_modules",
+        "@biomejs",
+        "biome",
+        "configuration_schema.json",
+      ),
+    ).not.toThrow();
   });
 });
 
@@ -124,6 +137,48 @@ describe("documentation gates", () => {
       '"bin/**/*.mjs"',
     ]) {
       expect(packageJson.scripts.spellcheck).toContain(glob);
+    }
+  });
+});
+
+describe("unit test projects", () => {
+  const projects = new Map(
+    (vitestConfig.test?.projects ?? []).map((project) => [
+      project.test?.name,
+      project.test,
+    ]),
+  );
+  const unitFiles = readdirSync(repositoryPath("tests", "unit")).filter(
+    (name) => /\.test\.(?:ts|tsx|mjs)$/.test(name),
+  );
+
+  function projectsOf(file) {
+    return [...projects]
+      .filter(([, test]) =>
+        (test?.include ?? []).some((glob) =>
+          matchesGlob(`tests/unit/${file}`, glob),
+        ),
+      )
+      .map(([name]) => name);
+  }
+
+  it("runs the tooling specs under Node, without the DOM setup", () => {
+    const tooling = projects.get("tooling");
+    expect(tooling?.environment).toBe("node");
+    expect(tooling?.setupFiles ?? []).toEqual([]);
+  });
+
+  it("runs the component specs under jsdom with the DOM setup", () => {
+    const components = projects.get("components");
+    expect(components?.environment).toBe("jsdom");
+    expect(components?.setupFiles).toEqual(["./tests/setup.ts"]);
+  });
+
+  it("puts every unit spec in exactly one project", () => {
+    expect(unitFiles.length).toBeGreaterThan(0);
+    for (const file of unitFiles) {
+      const expected = file.endsWith(".mjs") ? "tooling" : "components";
+      expect(projectsOf(file), file).toEqual([expected]);
     }
   });
 });

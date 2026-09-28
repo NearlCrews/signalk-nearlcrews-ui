@@ -5,7 +5,7 @@ import {
   declarationPathFor,
   entryDeclarationFiles,
   reachableDeclarations,
-  renderDeclarationSnapshot,
+  renderSnapshot,
   snapshotDifferences,
 } from "../../scripts/lib/declaration-graph.mjs";
 
@@ -110,20 +110,29 @@ describe("declaration graph", () => {
     ).toThrow("refers to files that were not emitted: utils/node.d.ts.");
   });
 
-  it("renders a snapshot and names the files that differ", () => {
-    const before = renderDeclarationSnapshot(
-      ["index.d.ts", "utils/tone.d.ts"],
-      readSource,
+  it("renders sections in title order and names the ones that differ", () => {
+    const before = renderSnapshot(
+      new Map([
+        ["utils/tone.d.ts", 'export type Tone = "info" | "danger";\n'],
+        ["exports of index.d.ts", "Button: value from components/Button.d.ts"],
+      ]),
     );
     expect(before).toBe(
-      `=== index.d.ts ===\n${files.get("index.d.ts").trimEnd()}\n\n=== utils/tone.d.ts ===\n${files.get("utils/tone.d.ts").trimEnd()}\n`,
+      [
+        "=== exports of index.d.ts ===",
+        "Button: value from components/Button.d.ts",
+        "",
+        "=== utils/tone.d.ts ===",
+        'export type Tone = "info" | "danger";',
+        "",
+      ].join("\n"),
     );
-    const after = renderDeclarationSnapshot(
-      ["index.d.ts", "utils/node.d.ts", "utils/tone.d.ts"],
-      (file) =>
-        file === "utils/tone.d.ts"
-          ? 'export type Tone = "info";\n'
-          : readSource(file),
+    const after = renderSnapshot(
+      new Map([
+        ["exports of index.d.ts", "Button: value from components/Button.d.ts"],
+        ["utils/node.d.ts", "export type Node = object;"],
+        ["utils/tone.d.ts", 'export type Tone = "info";'],
+      ]),
     );
     expect(snapshotDifferences(before, after)).toEqual([
       { change: "added", file: "utils/node.d.ts" },
@@ -136,19 +145,20 @@ describe("declaration graph", () => {
     expect(snapshotDifferences(before, before)).toEqual([]);
   });
 
-  it("names a file whose change sits below its first line", () => {
-    // Declarations carry doc comments, so most real changes land well below
-    // line one. A parser that ends a section at the first line break reports
-    // no difference at all, which reads as "nothing public changed".
+  it("names a section whose change sits below its first line", () => {
+    // A parser that ends a section at the first line break reports no
+    // difference at all, which reads as "nothing public changed".
     const render = (tone) =>
-      renderDeclarationSnapshot(["overlays.d.ts"], () =>
-        [
-          "/**",
-          " * Overlay surfaces.",
-          " */",
-          `export type Tone = "${tone}";`,
-          "",
-        ].join("\n"),
+      renderSnapshot(
+        new Map([
+          [
+            "overlays.d.ts",
+            [
+              'export type Placement = "top";',
+              `export type Tone = "${tone}";`,
+            ].join("\n"),
+          ],
+        ]),
       );
 
     expect(snapshotDifferences(render("info"), render("danger"))).toEqual([

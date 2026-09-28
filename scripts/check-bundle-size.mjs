@@ -10,15 +10,20 @@ import {
   assertPublicBundleBudgets,
   assertPublicCssExport,
   BUNDLED_REACT_MODULE,
+  exportSpecifier,
+  publicJavaScriptEntries,
 } from "./lib/bundle-contract.mjs";
 import { SIGNALK_HOST_SHARED_MODULES } from "./lib/federation-share.mjs";
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 import {
   assertRecordedSize,
-  budgetFor,
+  assertWithinBudget,
+  CONSUMER_PANEL_ENTRY,
+  CONSUMER_PANEL_FIXTURE,
   formatSizeTable,
   parseSizeTable,
   SIZE_TABLE_DOCUMENT,
+  tableBudget,
 } from "./lib/size-table.mjs";
 
 /** Host-shared modules and their subpaths stay outside every bundle. */
@@ -29,25 +34,35 @@ const hostExternals = SIGNALK_HOST_SHARED_MODULES.flatMap((name) => [
 
 /**
  * `--table` prints the Markdown table docs/api-reference.md carries, for a
- * release that refreshes it. It measures and reports rather than enforcing,
- * because the numbers it prints are the ones the enforcing run compares
- * against, and the release diff is where the new numbers get reviewed.
+ * release that refreshes it. It measures and reports rather than comparing
+ * with the recorded sizes, because the numbers it prints become the recorded
+ * ones, and the release diff is where they get reviewed. It carries every
+ * budget forward unchanged and still fails a row over its budget: a budget is
+ * raised by hand. `--tighten` additionally lowers each budget a shrunken
+ * measurement leaves slack under, and never raises one.
  */
-const OPTIONS = ["--table"];
+const OPTIONS = ["--table", "--tighten"];
 const argv = process.argv.slice(2);
 assertKnownOptions(argv, OPTIONS);
 
 const printTable = readFlag(argv, "--table");
+const tighten = readFlag(argv, "--tighten");
+if (tighten && !printTable) {
+  throw new Error(
+    "--tighten only changes the table --table prints; pass both.",
+  );
+}
 
 /*
  * Each entry is measured bundled alone, so a component's own style module
  * counts against the entry that exports it, and the install machinery counts
  * against every entry that reaches it. A consumer bundles the root entry
- * beside its focused ones and pays for both once.
+ * beside its focused ones and pays for both once, which the consumer-shaped
+ * panel row measures directly.
  *
- * The recorded sizes and the budgets they imply are the committed table in
+ * The recorded sizes and their budgets are the committed table in
  * docs/api-reference.md, so the documented numbers cannot drift away from the
- * measured ones and no budget is written by hand.
+ * measured ones.
  */
 const manifest = await readPackageJson();
 const recordedSizes = parseSizeTable(
@@ -56,13 +71,40 @@ const recordedSizes = parseSizeTable(
 );
 
 const TOKENS_CSS_ENTRY = "tokens.css";
+/** Rows that measure something other than one JavaScript entry point. */
+const NON_ENTRY_ROWS = new Set([TOKENS_CSS_ENTRY, CONSUMER_PANEL_ENTRY]);
 const entryBudgets = Object.fromEntries(
   [...recordedSizes]
-    .filter(([entry]) => entry !== TOKENS_CSS_ENTRY)
+    .filter(([entry]) => !NON_ENTRY_ROWS.has(entry))
     .map(([entry, { budgetBytes }]) => [entry, budgetBytes]),
 );
 
-const publicEntries = assertPublicBundleBudgets(manifest.exports, entryBudgets);
+// A refreshed table may add the row of an entry point the release adds, so
+// only the enforcing run requires a budget row for every public entry.
+const publicEntries = printTable
+  ? publicJavaScriptEntries(manifest.exports)
+  : assertPublicBundleBudgets(manifest.exports, entryBudgets);
+
+/**
+ * Resolves the package's own specifiers to the built entry files the exports
+ * map names, so the consumer-shaped fixture imports the package exactly as a
+ * consumer does and measures `dist`, not `src`.
+ */
+const packageSelfReference = {
+  name: "package-self-reference",
+  setup(pluginBuild) {
+    const targets = new Map(
+      [...publicEntries].map(([entry, target]) => [
+        exportSpecifier(manifest.name, entry === "index" ? "." : `./${entry}`),
+        repositoryPath(target),
+      ]),
+    );
+    pluginBuild.onResolve({ filter: /^[^./]/ }, ({ path }) => {
+      const target = targets.get(path);
+      return target === undefined ? undefined : { path: target };
+    });
+  },
+};
 
 /** How every bundle is built, the stylesheet included, as a consumer would ship it. */
 const BUILD_OPTIONS = Object.freeze({
@@ -88,13 +130,14 @@ function onlyOutputFile(result, label) {
   return result.outputFiles[0];
 }
 
-/** One measured entry, gzipped and checked against everything it must satisfy. */
-async function measureEntry(entry, entryTarget) {
+/** One measured bundle, gzipped and checked against everything it must satisfy. */
+async function measureEntry(entry, entryTarget, plugins = []) {
   const result = await build({
     ...BUILD_OPTIONS,
     entryPoints: [repositoryPath(entryTarget)],
     external: hostExternals,
     format: "esm",
+    plugins,
     treeShaking: true,
   });
   const outputFile = onlyOutputFile(result, entry);
@@ -119,45 +162,46 @@ const tableRows = [];
  * Holds one measurement to its budget and, outside `--table`, to the recorded
  * size, then adds its row to the table a release prints.
  */
-function checkMeasurement(entry, recorded, gzipBytes) {
-  if (gzipBytes > recorded.budgetBytes) {
-    throw new Error(
-      `${entry} is ${String(gzipBytes)} gzip bytes, above the ${String(recorded.budgetBytes)} byte budget.`,
-    );
-  }
+function checkMeasurement(entry, gzipBytes) {
+  const recorded = recordedSizes.get(entry);
+  const budgetBytes = printTable
+    ? tableBudget(recorded, gzipBytes, { tighten })
+    : recorded.budgetBytes;
+  assertWithinBudget(entry, budgetBytes, gzipBytes);
   if (!printTable) assertRecordedSize(entry, recorded.gzipBytes, gzipBytes);
-  tableRows.push({ budgetBytes: budgetFor(gzipBytes), entry, gzipBytes });
+  tableRows.push({ budgetBytes, entry, gzipBytes });
 }
 
 // The public token stylesheet must stay framework-neutral. Bundling the public
 // export catches imported script or React inputs in addition to measuring its
 // actual standalone consumer output.
 const tokensTarget = "./dist/tokens.css";
-const recordedTokens = recordedSizes.get(TOKENS_CSS_ENTRY);
-if (recordedTokens === undefined) {
-  throw new Error(
-    `${SIZE_TABLE_DOCUMENT} records no size for ${TOKENS_CSS_ENTRY}.`,
-  );
+for (const entry of NON_ENTRY_ROWS) {
+  if (!printTable && !recordedSizes.has(entry)) {
+    throw new Error(`${SIZE_TABLE_DOCUMENT} records no size for ${entry}.`);
+  }
 }
 assertPublicCssExport(manifest.exports, tokensTarget);
 
 // Every bundle is independent of every other, the stylesheet included, so they
 // build together rather than one after another; Promise.all keeps the table in
 // the order the entries were listed.
-const [measuredEntries, tokensResult] = await Promise.all([
-  Promise.all(
-    [...publicEntries].map(async ([entry, entryTarget]) => ({
-      entry,
-      gzipBytes: await measureEntry(entry, entryTarget),
-    })),
-  ),
-  build({ ...BUILD_OPTIONS, entryPoints: [repositoryPath(tokensTarget)] }),
-]);
+const [measuredEntries, consumerPanelGzipBytes, tokensResult] =
+  await Promise.all([
+    Promise.all(
+      [...publicEntries].map(async ([entry, entryTarget]) => ({
+        entry,
+        gzipBytes: await measureEntry(entry, entryTarget),
+      })),
+    ),
+    measureEntry(CONSUMER_PANEL_ENTRY, CONSUMER_PANEL_FIXTURE, [
+      packageSelfReference,
+    ]),
+    build({ ...BUILD_OPTIONS, entryPoints: [repositoryPath(tokensTarget)] }),
+  ]);
 
-// assertPublicBundleBudgets matched every public entry to a budget row, so each
-// one has a recorded size.
 for (const { entry, gzipBytes } of measuredEntries) {
-  checkMeasurement(entry, recordedSizes.get(entry), gzipBytes);
+  checkMeasurement(entry, gzipBytes);
   process.stdout.write(`${entry} bundle is ${String(gzipBytes)} gzip bytes.\n`);
 }
 
@@ -173,8 +217,13 @@ if (tokensScriptInputs.length > 0) {
 }
 
 const tokensGzipBytes = gzipBytesOf([tokensOutputFile.contents]);
-checkMeasurement(TOKENS_CSS_ENTRY, recordedTokens, tokensGzipBytes);
+checkMeasurement(TOKENS_CSS_ENTRY, tokensGzipBytes);
 process.stdout.write(`tokens.css is ${String(tokensGzipBytes)} gzip bytes.\n`);
+
+checkMeasurement(CONSUMER_PANEL_ENTRY, consumerPanelGzipBytes);
+process.stdout.write(
+  `The consumer-shaped panel (${CONSUMER_PANEL_FIXTURE}) is ${String(consumerPanelGzipBytes)} gzip bytes.\n`,
+);
 
 if (printTable) {
   process.stdout.write(`\n${formatSizeTable(manifest.name, tableRows)}\n`);

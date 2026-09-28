@@ -56,6 +56,25 @@ export function publicJavaScriptEntries(exportsField) {
   return exportedEntries;
 }
 
+/**
+ * Entry points that are test tooling rather than panel code: a consumer's
+ * browser fixture imports them to load its built remote the way the Admin
+ * does, and no panel remote may contain them.
+ */
+export const TOOLING_ENTRIES = Object.freeze(["host-harness"]);
+
+/**
+ * The public JavaScript entry points a panel remote may bundle: every one but
+ * the test tooling, as entry name to target.
+ */
+export function panelJavaScriptEntries(exportsField) {
+  return new Map(
+    [...publicJavaScriptEntries(exportsField)].filter(
+      ([entry]) => !TOOLING_ENTRIES.includes(entry),
+    ),
+  );
+}
+
 export function assertPublicBundleBudgets(exportsField, entryBudgets) {
   const exportedEntries = publicJavaScriptEntries(exportsField);
 

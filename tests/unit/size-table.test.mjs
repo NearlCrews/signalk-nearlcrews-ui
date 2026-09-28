@@ -3,10 +3,14 @@ import { describe, expect, it } from "vitest";
 import { PACKAGE_NAME } from "../../bin/lib/consumer-checks.mjs";
 import {
   assertRecordedSize,
+  assertWithinBudget,
   budgetFor,
+  CONSUMER_PANEL_ENTRY,
+  CONSUMER_PANEL_FIXTURE,
   formatSizeTable,
   importPathFor,
   parseSizeTable,
+  tableBudget,
 } from "../../scripts/lib/size-table.mjs";
 
 function tableFor(rows) {
@@ -68,12 +72,72 @@ describe("bundle size table", () => {
     );
   });
 
-  it("rejects a budget column that the recorded size does not imply", () => {
+  it("carries a budget that is not the one the recorded size implies", () => {
+    // A budget is a reviewed decision, so a raised or tightened one is read as
+    // written rather than recomputed from the measurement it guards.
     const markdown = tableFor([
-      { budgetBytes: 24576, entry: "index", gzipBytes: 24470 },
+      { budgetBytes: 30720, entry: "index", gzipBytes: 24470 },
+    ]);
+    expect([...parseSizeTable(PACKAGE_NAME, markdown)]).toEqual([
+      ["index", { budgetBytes: 30720, gzipBytes: 24470 }],
+    ]);
+  });
+
+  it("rejects a budget below the size recorded beside it", () => {
+    const markdown = tableFor([
+      { budgetBytes: 24000, entry: "index", gzipBytes: 24470 },
     ]);
     expect(() => parseSizeTable(PACKAGE_NAME, markdown)).toThrow(
-      /budgets signalk-nearlcrews-ui at 24576 bytes; 24470 recorded gzip bytes imply 26624/,
+      /budgets signalk-nearlcrews-ui at 24000 bytes, below the 24470 gzip bytes it records/,
+    );
+  });
+
+  it("reads the consumer-shaped panel row by its fixture path", () => {
+    expect(importPathFor(PACKAGE_NAME, CONSUMER_PANEL_ENTRY)).toBe(
+      CONSUMER_PANEL_FIXTURE,
+    );
+    const markdown = tableFor([
+      { budgetBytes: 31744, entry: CONSUMER_PANEL_ENTRY, gzipBytes: 29168 },
+    ]);
+    expect(markdown).toContain(`| \`${CONSUMER_PANEL_FIXTURE}\` | 29168 |`);
+    expect([...parseSizeTable(PACKAGE_NAME, markdown)]).toEqual([
+      [CONSUMER_PANEL_ENTRY, { budgetBytes: 31744, gzipBytes: 29168 }],
+    ]);
+  });
+
+  it("carries the committed budget into a refreshed table", () => {
+    const recorded = { budgetBytes: 44032, gzipBytes: 40675 };
+    expect(tableBudget(recorded, 32000, { tighten: false })).toBe(44032);
+    expect(tableBudget(recorded, 44000, { tighten: false })).toBe(44032);
+  });
+
+  it("derives a first budget for a row the table does not have yet", () => {
+    expect(tableBudget(undefined, 29168, { tighten: false })).toBe(
+      budgetFor(29168),
+    );
+    expect(tableBudget(undefined, 29168, { tighten: true })).toBe(
+      budgetFor(29168),
+    );
+  });
+
+  it("only ever lowers a budget when tightening", () => {
+    const recorded = { budgetBytes: 44032, gzipBytes: 40675 };
+    expect(tableBudget(recorded, 32000, { tighten: true })).toBe(
+      budgetFor(32000),
+    );
+    // Headroom over a grown measurement would raise the ceiling, which only a
+    // hand edit may do.
+    expect(tableBudget(recorded, 43000, { tighten: true })).toBe(44032);
+  });
+
+  it("fails a measurement over its budget and says how a budget is raised", () => {
+    expect(() => {
+      assertWithinBudget("index", 44032, 44032);
+    }).not.toThrow();
+    expect(() => {
+      assertWithinBudget("index", 44032, 44100);
+    }).toThrow(
+      /index is 44100 gzip bytes, above the 44032 byte budget\. Raise a budget by hand in docs\/api-reference\.md and record the reason in the CHANGELOG\.md entry for the release/,
     );
   });
 

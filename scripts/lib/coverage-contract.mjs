@@ -2,11 +2,19 @@ import { isAbsolute, relative, resolve } from "node:path";
 
 import { bulletList } from "./text.mjs";
 
+/**
+ * Per-file floors for the package source, so a component that loses tests
+ * fails its own floor instead of hiding under the aggregate. Each sits one
+ * point under the lowest file the suite measured when it was last raised
+ * (Accordion: 75 branches, 84 lines, 82.14 statements; functions are held at
+ * 90, under HostPanelFrame's 91.66). The point is margin for the Node 22 and
+ * 26 CI lanes, whose V8 coverage was not measured when the floors were set.
+ */
 export const COVERAGE_FLOORS = Object.freeze({
-  branches: 65,
-  functions: 85,
-  lines: 82,
-  statements: 80,
+  branches: 74,
+  functions: 90,
+  lines: 83,
+  statements: 81,
 });
 
 /**
