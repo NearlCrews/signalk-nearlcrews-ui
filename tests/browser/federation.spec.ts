@@ -18,6 +18,14 @@ test("loads classic and ESM remotes against host React and ReactDOM", async ({
     "data-federation-ready",
     "true",
   );
+  // Each remote opens through the published host harness, in a state the
+  // Admin opens a panel in before its first save: configuration unset for the
+  // classic remote and {} for the module remote.
+  for (const root of [classicRoot, esmRoot]) {
+    await expect(root.locator(":scope > [data-snui-host-harness]")).toHaveCount(
+      1,
+    );
+  }
   await expect(page.getByText("Fixture ready")).toHaveCount(2);
   await expect(page.getByText("Composite entry ready")).toHaveCount(2);
   await expect(page.getByText("Data-grid entry ready")).toHaveCount(2);
@@ -42,7 +50,11 @@ test("loads classic and ESM remotes against host React and ReactDOM", async ({
 
   await classicRoot.getByRole("button", { name: "Notify" }).click();
   const classicPanelRoot = classicRoot.locator("[data-snui-root]");
-  await expect(classicPanelRoot.getByText("Host portal ready")).toHaveCount(1);
+  // The toast itself, not the panel's announcement of it, which carries the
+  // same words.
+  await expect(
+    classicPanelRoot.locator(".snui-toast").getByText("Host portal ready"),
+  ).toHaveCount(1);
   await expect(
     classicPanelRoot.locator(":scope > .snui-toast-region-host"),
   ).toHaveCount(1);

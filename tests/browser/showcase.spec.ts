@@ -4,8 +4,17 @@ import {
   expectNoAxeViolations,
   expectSolidOutline,
   expectTargetFloor,
+  hasCommittedBaseline,
+  type Locator,
+  missingBaselineReason,
+  movePointerOffPanel,
+  type Page,
+  type PageAssertionsToHaveScreenshotOptions,
+  selectTheme,
   settleAnimations,
   settledScrollLeft,
+  type TestInfo,
+  type ThemeName,
   test,
 } from "./fixtures.js";
 
@@ -540,7 +549,14 @@ test("keeps toasts reachable while a dialog is open", async ({ page }) => {
   await expect(page.locator(".snui-toast-region-host")).toHaveAttribute(
     "data-react-aria-top-layer",
   );
-  await expect(region.getByRole("alert")).toBeVisible();
+  // The card is not a live region: the failure is spoken from the host's
+  // persistent assertive region, which stays exposed beside the modal.
+  await expect(
+    region.locator(".snui-toast").filter({ hasText: "danger toast" }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".snui-toast-region-host").getByRole("alert"),
+  ).toContainText("danger toast");
   await dismiss.focus();
   await expect(dismiss).toBeFocused();
   await expectNoAxeViolations(page);
@@ -630,3 +646,208 @@ test("reconstructs every overlay module under forced colors", async ({
     ],
   });
 });
+
+/**
+ * The pixel baselines the showcase takes in each theme: the whole page, where
+ * the grid, table, tabs, form controls, badges, status indicators, and banners
+ * all render, the dialog with its nested popover open, and the open menu.
+ * Between them they paint every per-component style module the panel page
+ * never renders. The names are literals, so the family check can read them.
+ */
+const SHOWCASE_BASELINES = [
+  {
+    dialog: "showcase-light-dialog.png",
+    menu: "showcase-light-menu.png",
+    page: "showcase-light.png",
+    theme: "Light",
+  },
+  {
+    dialog: "showcase-dark-dialog.png",
+    menu: "showcase-dark-menu.png",
+    page: "showcase-dark.png",
+    theme: "Dark",
+  },
+  {
+    dialog: "showcase-night-dialog.png",
+    menu: "showcase-night-menu.png",
+    page: "showcase-night.png",
+    theme: "Night",
+  },
+] as const satisfies readonly {
+  readonly dialog: string;
+  readonly menu: string;
+  readonly page: string;
+  readonly theme: ThemeName;
+}[];
+
+/**
+ * The moment the showcase's clock is pinned to, so every relative age reads
+ * the same in every capture.
+ */
+const SHOWCASE_NOW = new Date("2026-09-01T12:00:00Z");
+
+/** Pixels of page kept around an anchored overlay's clipped capture. */
+const OVERLAY_CLIP_MARGIN = 16;
+
+/**
+ * Compares one capture with its baseline, or records why it was skipped. The
+ * other checks in the same test still run, which a test-level skip would stop.
+ */
+async function matchShowcaseBaseline(
+  target: Page,
+  testInfo: TestInfo,
+  snapshot: string,
+  options: PageAssertionsToHaveScreenshotOptions,
+): Promise<void> {
+  if (!hasCommittedBaseline(testInfo, snapshot)) {
+    testInfo.annotations.push({
+      description: missingBaselineReason(snapshot),
+      type: "skip",
+    });
+    return;
+  }
+  await expect(target).toHaveScreenshot(snapshot, options);
+}
+
+/**
+ * Fails when the sticky action bar overlaps the table's caption or header
+ * row, which a full-page capture would then show covered.
+ */
+async function expectTableClearOfActionBar(page: Page): Promise<void> {
+  const table = page.getByRole("table", { name: "Signal K paths" });
+  const [bar, head] = await Promise.all([
+    page.locator(".snui-action-bar").last().boundingBox(),
+    table.evaluate((element) => {
+      const caption = element.querySelector("caption");
+      const header = element.querySelector("thead");
+      if (caption === null || header === null) return null;
+      const top = caption.getBoundingClientRect().top;
+      const bottom = header.getBoundingClientRect().bottom;
+      return { bottom, top };
+    }),
+  ]);
+  expect(bar, "The showcase renders no action bar.").not.toBeNull();
+  expect(head, "The table has no caption and header row.").not.toBeNull();
+  if (bar === null || head === null) return;
+  const overlaps = bar.y < head.bottom && bar.y + bar.height > head.top;
+  expect(
+    overlaps,
+    "The action bar covers the table's caption or header row.",
+  ).toBe(false);
+}
+
+/** The page region covering a trigger and the overlay anchored to it. */
+async function clipAround(
+  page: Page,
+  ...locators: readonly Locator[]
+): Promise<{ height: number; width: number; x: number; y: number }> {
+  const boxes = await Promise.all(
+    locators.map((locator) => locator.boundingBox()),
+  );
+  const present = boxes.filter((box) => box !== null);
+  expect(present).toHaveLength(locators.length);
+  const viewport = page.viewportSize();
+  const left = Math.max(
+    0,
+    Math.min(...present.map((box) => box.x)) - OVERLAY_CLIP_MARGIN,
+  );
+  const top = Math.max(
+    0,
+    Math.min(...present.map((box) => box.y)) - OVERLAY_CLIP_MARGIN,
+  );
+  const right = Math.min(
+    viewport?.width ?? Number.POSITIVE_INFINITY,
+    Math.max(...present.map((box) => box.x + box.width)) + OVERLAY_CLIP_MARGIN,
+  );
+  const bottom = Math.min(
+    viewport?.height ?? Number.POSITIVE_INFINITY,
+    Math.max(...present.map((box) => box.y + box.height)) + OVERLAY_CLIP_MARGIN,
+  );
+  return {
+    height: Math.round(bottom - top),
+    width: Math.round(right - left),
+    x: Math.round(left),
+    y: Math.round(top),
+  };
+}
+
+/*
+ * One pass per theme selects and settles the theme once, then compares the
+ * page and its overlays with their baselines, so a token or selector change
+ * that repaints a grid, a dialog, or a menu in Dark or Night fails here even
+ * when no assertion names it. The axe audit of the same pages in each theme
+ * lives in theme-accessibility.spec.ts. Chromium only, like every desktop
+ * baseline.
+ */
+for (const baseline of SHOWCASE_BASELINES) {
+  test(`matches the showcase baselines in ${baseline.theme}`, async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "chromium");
+    test.slow();
+    await page.clock.setFixedTime(SHOWCASE_NOW);
+    await page.goto("/showcase.html");
+    // Transitions and animations both: a capture taken mid-flight paints
+    // colors composited against what is behind the element.
+    await page.addStyleTag({
+      content: "* { transition: none !important; animation: none !important; }",
+    });
+    await selectTheme(page, baseline.theme);
+    // A selected grid row puts the selected fill, a row state nothing else on
+    // the page shows, into the capture: its rest fill, so the pointer leaves
+    // the row it clicked.
+    const selectedRow = page
+      .getByRole("grid", { name: "Fleet" })
+      .getByRole("row")
+      .filter({ hasText: "Vessel 002" })
+      .first();
+    await selectedRow.click();
+    await expect(selectedRow).toHaveAttribute("aria-selected", "true");
+    // The page is captured in a viewport as tall as the page. A full-page
+    // capture of a shorter one paints the bottom-sticky action bar at the
+    // bottom of whatever viewport the click left, over the table's caption
+    // and header row, and a scroll to the end instead moves the grid out of
+    // view, where its virtualizer renders no rows. In a viewport holding the
+    // whole page the bar rests in its own slot and every grid row renders.
+    const viewport = page.viewportSize();
+    const pageHeight = await page.evaluate(
+      () => document.documentElement.scrollHeight,
+    );
+    await page.setViewportSize({
+      height: pageHeight,
+      width: viewport?.width ?? 1280,
+    });
+    await movePointerOffPanel(page);
+    await expect(selectedRow).not.toHaveAttribute("data-hovered");
+    await expectTableClearOfActionBar(page);
+    await settleAnimations(page);
+    await matchShowcaseBaseline(page, testInfo, baseline.page, {
+      animations: "disabled",
+      fullPage: true,
+    });
+    if (viewport !== null) await page.setViewportSize(viewport);
+
+    const menuTrigger = page.getByRole("button", { name: "Panel actions" });
+    await menuTrigger.click();
+    const menu = page.getByRole("menu");
+    await expect(menu).toBeVisible();
+    await settleAnimations(page);
+    await matchShowcaseBaseline(page, testInfo, baseline.menu, {
+      animations: "disabled",
+      clip: await clipAround(page, menuTrigger, menu),
+    });
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+
+    await page.getByRole("button", { name: "Open dialog" }).click();
+    const dialog = page.getByRole("dialog", { name: "Anchorage details" });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole("button", { name: "Show approach note" }).click();
+    const note = page.getByRole("dialog", { name: "Show approach note" });
+    await expect(note).toBeVisible();
+    await settleAnimations(page);
+    await matchShowcaseBaseline(page, testInfo, baseline.dialog, {
+      animations: "disabled",
+    });
+  });
+}

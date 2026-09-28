@@ -214,6 +214,9 @@ export default defineConfig({
       input: {
         main: resolve(import.meta.dirname, "index.html"),
         showcase: resolve(import.meta.dirname, "showcase.html"),
+        "live-regions": resolve(import.meta.dirname, "live-regions.html"),
+        "data-grid": resolve(import.meta.dirname, "data-grid.html"),
+        geometry: resolve(import.meta.dirname, "geometry.html"),
       },
     },
   },

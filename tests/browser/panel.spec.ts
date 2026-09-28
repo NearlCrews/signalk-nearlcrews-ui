@@ -1,17 +1,23 @@
-import { existsSync } from "node:fs";
-
 import {
   backgroundOf,
   controlTargetFloor,
   expect,
   expectNoAxeViolations,
+  expectProjectPointer,
   expectSolidOutline,
   expectTargetFloor,
+  hasCommittedBaseline,
   type Locator,
+  MOBILE_PROJECT,
+  missingBaselineReason,
+  movePointerOffPanel,
   type Page,
   selectTheme,
+  settleFrames,
+  systemColors,
   type TestInfo,
   test,
+  tokenColor,
 } from "./fixtures.js";
 
 /** Pixels of the last panel action the docked bar is scrolled to cover. */
@@ -65,18 +71,6 @@ async function outlineWidthOf(locator: Locator): Promise<number> {
   );
 }
 
-/** Resolves a color token inside the panel root, in the theme it currently shows. */
-async function readTokenColor(page: Page, token: string): Promise<string> {
-  return page.evaluate((name) => {
-    const probe = document.createElement("span");
-    document.querySelector("[data-snui-version]")?.append(probe);
-    probe.style.color = `var(${name})`;
-    const color = getComputedStyle(probe).color;
-    probe.remove();
-    return color;
-  }, token);
-}
-
 /**
  * Counts the frames an element's box takes to hold still, or reports null when
  * it never does. Playwright dispatches a click only after two consecutive
@@ -122,17 +116,6 @@ async function framesUntilStable(
     }
     return null;
   }, probe);
-}
-
-/** Waits two frames, which is longer than any scroll the bar schedules. */
-async function settleFrames(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => resolve());
-      });
-    });
-  });
 }
 
 /**
@@ -182,15 +165,13 @@ async function actionClearsBar({
 
 /**
  * Skips a screenshot spec when the current project, platform, and snapshot
- * variant have no committed baseline. Baselines are generated on x64/ubuntu24
- * through the manual refresh workflow, so other machines skip with a clear
- * reason instead of failing on a missing snapshot.
+ * variant have no committed baseline, with a reason rather than a failure on
+ * a missing snapshot.
  */
 function skipWithoutBaseline(testInfo: TestInfo, snapshot: string): void {
-  const updatingBaselines = process.env.SNUI_UPDATE_BASELINES === "true";
   test.skip(
-    !updatingBaselines && !existsSync(testInfo.snapshotPath(snapshot)),
-    `No committed ${snapshot} baseline for this project, platform, and snapshot variant; refresh baselines through the manual CI workflow.`,
+    !hasCommittedBaseline(testInfo, snapshot),
+    missingBaselineReason(snapshot),
   );
 }
 
@@ -379,8 +360,7 @@ test("keeps library styling inside the panel root", async ({
 }, testInfo) => {
   const outside = page.locator("#outside-button");
   const inside = page.getByRole("button", { name: "Save" });
-  const expectedHeight =
-    testInfo.project.name === "mobile-chromium" ? "44px" : "40px";
+  const expectedHeight = `${String(controlTargetFloor(testInfo))}px`;
 
   await expect(inside).toHaveCSS("min-height", expectedHeight);
   await expect(outside).not.toHaveCSS("min-height", expectedHeight);
@@ -479,7 +459,15 @@ test("uses right-to-left keyboard order and mirrored collapsible carets", async 
 
   await collapsible.evaluate((element) => element.setAttribute("dir", "rtl"));
   await expect(chevron).toHaveCSS("transform", "matrix(-1, 0, 0, 1, 0, 0)");
+  // U+203A is bidi mirrored, so the glyph is isolated left to right and the
+  // transforms alone decide where it points: toward the title while
+  // collapsed, down once open. Without the isolation the browser mirrors it
+  // too, and the two flips cancel.
+  await expect(chevron).toHaveCSS("direction", "ltr");
+  await expect(chevron).toHaveCSS("unicode-bidi", "isolate");
   await collapsible.getByRole("button", { name: "Advanced settings" }).click();
+  // scaleX(-1) rotate(90deg): the right-pointing glyph drawn pointing down.
+  await expect(chevron).toHaveCSS("transform", "matrix(0, 1, 1, 0, 0, 0)");
 
   const normal = page.getByRole("radio", { name: "Normal" });
   const minimal = page.getByRole("radio", { name: "Minimal" });
@@ -606,7 +594,7 @@ test("provides hover and active feedback for raw action controls", async ({
   page,
 }, testInfo) => {
   test.skip(
-    testInfo.project.name === "mobile-chromium",
+    testInfo.project.name === MOBILE_PROJECT,
     "Hover feedback is gated on hover-capable pointers, which a touch device lacks.",
   );
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -632,7 +620,7 @@ test("provides segmented hover and active feedback", async ({
   page,
 }, testInfo) => {
   test.skip(
-    testInfo.project.name === "mobile-chromium",
+    testInfo.project.name === MOBILE_PROJECT,
     "Hover feedback is gated on hover-capable pointers, which a touch device lacks.",
   );
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -662,10 +650,12 @@ test("keeps aria-disabled focus indicators fully opaque", async ({
   const button = page.getByRole("button", { name: "Unavailable here" });
   // A coarse pointer raises the second spacing step, and the gap between a
   // button's glyph and its label rides on that step.
-  const expectedGap =
-    testInfo.project.name === "mobile-chromium" ? "12px" : "8px";
+  const expectedGap = testInfo.project.name === MOBILE_PROJECT ? "12px" : "8px";
 
-  const disabledText = await readTokenColor(page, "--snui-color-text-disabled");
+  const disabledText = await tokenColor(
+    page.locator("[data-snui-version]").first(),
+    "--snui-color-text-disabled",
+  );
   const content = button.locator(".snui-button__content");
   await expect(button).toHaveCSS("opacity", "1");
   await expect(button).toHaveCSS("color", disabledText);
@@ -712,7 +702,7 @@ test("retains loading-button focus and suppresses repeat activation", async ({
 test("keeps field-group actions in a compact desktop header", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name === "mobile-chromium");
+  test.skip(testInfo.project.name === MOBILE_PROJECT);
   const fieldset = page.getByRole("group", { name: "Provider behavior" });
   const actions = fieldset.locator(".snui-field-group__actions");
 
@@ -725,8 +715,8 @@ test("styles native text controls and links in Night mode", async ({
   page,
 }) => {
   await page.getByRole("radio", { name: "Night" }).click();
-  const nightDisabledText = await readTokenColor(
-    page,
+  const nightDisabledText = await tokenColor(
+    page.locator("[data-snui-version]").first(),
     "--snui-color-text-disabled",
   );
 
@@ -917,7 +907,7 @@ test("renders compliant placeholders and a red-preserving Night accent", async (
   const night = page.getByRole("radio", { name: "Night" });
   await night.click();
   // Park the pointer so the selected option shows its rest fill, not hover.
-  await page.mouse.move(0, 0);
+  await movePointerOffPanel(page);
   await expect(night).toHaveCSS("background-color", "rgb(236, 56, 56)");
   await expect(night).toHaveCSS("color", "rgb(16, 0, 0)");
 
@@ -938,6 +928,13 @@ test("renders compliant placeholders and a red-preserving Night accent", async (
   ).toBe(true);
 });
 
+/**
+ * Consumer text with no break opportunity in it. A hyphen is one, so a
+ * hyphenated string wraps whether or not the component lets it.
+ */
+const UNBROKEN_TEXT =
+  "consumer_defined_content_with_a_deliberately_unbroken_value";
+
 test("reflows state-heavy content at a 320 pixel viewport", async ({
   page,
 }) => {
@@ -949,41 +946,87 @@ test("reflows state-heavy content at a 320 pixel viewport", async ({
     .locator(".snui-collapsible__title", { hasText: "Advanced settings" })
     .evaluate((title) => {
       title.textContent =
-        "Advanced-settings-with-a-deliberately-unbroken-consumer-defined-title";
+        "Advanced_settings_with_a_deliberately_unbroken_consumer_defined_title";
     });
   await page
     .locator(".snui-collapsible__summary--header")
     .evaluate((summary) => {
       summary.textContent =
-        "consumer-status-summary-with-a-deliberately-unbroken-value";
+        "consumer_status_summary_with_a_deliberately_unbroken_value";
     });
   await page
-    .locator(".snui-collapsible__actions .snui-button")
+    .locator(".snui-collapsible__actions .snui-button__content")
     .evaluate((action) => {
-      action.textContent = "consumer-action-with-a-deliberately-unbroken-label";
+      action.textContent = "consumer_action_with_a_deliberately_unbroken_label";
     });
+  // Each target holds the consumer's own text, and only its first text node
+  // changes, so the markup a component builds around that text (a required
+  // marker, the error glyph row, a button's content span) stays in the layout
+  // being measured.
   for (const selector of [
     ".snui-section__description",
     ".snui-field__label",
     ".snui-field__description",
-    ".snui-field__error",
+    ".snui-field-error__text",
     ".snui-field-group__description",
     ".snui-checkbox__label",
     ".snui-checkbox__description",
-    ".snui-banner__actions .snui-button",
-    ".snui-action-bar__status",
-    ".snui-action-bar .snui-button",
+    ".snui-banner__actions .snui-button__content",
+    ".snui-action-bar .snui-button__content",
     ".snui-inline-confirm__title",
     ".snui-inline-confirm__message",
   ]) {
     await page
       .locator(selector)
       .first()
-      .evaluate((element) => {
-        element.textContent =
-          "consumer-defined-content-with-a-deliberately-unbroken-value";
-      });
+      .evaluate(
+        (element, { name, text }) => {
+          const node = document
+            .createTreeWalker(element, NodeFilter.SHOW_TEXT)
+            .nextNode();
+          if (node === null) throw new Error(`${name} holds no text.`);
+          node.textContent = text;
+        },
+        { name: selector, text: UNBROKEN_TEXT },
+      );
   }
+  // The status slot takes any node, and a bare string is the one shape that
+  // brings no wrapping rule of its own, so the slot is left holding one.
+  await page
+    .locator(".snui-action-bar__status")
+    .first()
+    .evaluate((status, text) => {
+      status.textContent = text;
+    }, UNBROKEN_TEXT);
+
+  // The unbroken message wraps inside its own row beside the glyph. A message
+  // that kept its width would run past the field even where an ancestor clips
+  // it, so the row is measured as well as the page.
+  const errorRow = await page
+    .locator(".snui-field-error__text")
+    .first()
+    .evaluate((text) => {
+      const row = text.closest(".snui-field-error__row");
+      const glyph = row?.querySelector(".snui-field-error__tone-glyph") ?? null;
+      const region = row?.parentElement ?? null;
+      if (glyph === null || region === null) {
+        throw new Error("The field error lost its glyph and message row.");
+      }
+      return {
+        glyphRight: glyph.getBoundingClientRect().right,
+        regionRight: region.getBoundingClientRect().right,
+        textLeft: text.getBoundingClientRect().left,
+        textRight: text.getBoundingClientRect().right,
+      };
+    });
+  expect(
+    errorRow.textLeft,
+    "The field error message starts under its glyph.",
+  ).toBeGreaterThanOrEqual(errorRow.glyphRight);
+  expect(
+    errorRow.textRight,
+    "The field error message runs past its field.",
+  ).toBeLessThanOrEqual(errorRow.regionRight + 0.5);
 
   const exactInput = page.getByRole("spinbutton", {
     name: "Confidence threshold exact value",
@@ -1018,7 +1061,10 @@ test("reflows state-heavy content at a 320 pixel viewport", async ({
     scrollWidth: document.documentElement.scrollWidth,
   }));
 
-  expect(sizes.scrollWidth).toBeLessThanOrEqual(sizes.clientWidth);
+  expect(
+    sizes.scrollWidth,
+    "The page scrolls sideways at a 320 pixel viewport.",
+  ).toBeLessThanOrEqual(sizes.clientWidth);
 
   // The theme options wrap rather than scroll here: a sideways scroller inside
   // the group carries no affordance, so a hidden last option would be a theme
@@ -1430,16 +1476,7 @@ test("keeps native controls and focus visible in forced colors", async ({
   await expect(danger).toHaveCSS("forced-color-adjust", "none");
   await expectSolidOutline(danger, "3px");
 
-  const systemColors = await page.evaluate(() => {
-    const probe = document.createElement("span");
-    probe.style.color = "LinkText";
-    document.body.append(probe);
-    const link = getComputedStyle(probe).color;
-    probe.style.color = "ButtonText";
-    const button = getComputedStyle(probe).color;
-    probe.remove();
-    return { button, link };
-  });
+  const colors = await systemColors(page, ["ButtonText", "LinkText"]);
   const banner = page.locator(".snui-banner");
   const bannerLink = banner.getByRole("link", {
     name: "Read the Signal K documentation",
@@ -1452,15 +1489,15 @@ test("keeps native controls and focus visible in forced colors", async ({
     name: "Raw input action",
   });
   await expect(bannerLink).toHaveCSS("forced-color-adjust", "auto");
-  await expect(bannerLink).toHaveCSS("color", systemColors.link);
+  await expect(bannerLink).toHaveCSS("color", colors.LinkText);
   // Library buttons reconstruct themselves in system colors under forced
   // colors, so the dismiss control opts out of adjustment and paints ButtonText.
   await expect(bannerDismiss).toHaveCSS("forced-color-adjust", "none");
-  await expect(bannerDismiss).toHaveCSS("color", systemColors.button);
+  await expect(bannerDismiss).toHaveCSS("color", colors.ButtonText);
   await expect(rawBannerAction).toHaveCSS("forced-color-adjust", "auto");
-  await expect(rawBannerAction).toHaveCSS("color", systemColors.button);
+  await expect(rawBannerAction).toHaveCSS("color", colors.ButtonText);
   await expect(rawInputAction).toHaveCSS("forced-color-adjust", "auto");
-  await expect(rawInputAction).toHaveCSS("color", systemColors.button);
+  await expect(rawInputAction).toHaveCSS("color", colors.ButtonText);
 
   for (const control of [
     page.getByLabel("API token"),
@@ -1493,6 +1530,7 @@ test("matches the light-theme visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
   skipWithoutBaseline(testInfo, "panel-light.png");
   await page.getByRole("radio", { name: "Light" }).click();
+  await movePointerOffPanel(page);
   await expect(page).toHaveScreenshot("panel-light.png", FULL_PAGE_SNAPSHOT);
 });
 
@@ -1500,6 +1538,7 @@ test("matches the night-theme visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
   skipWithoutBaseline(testInfo, "panel-night.png");
   await page.getByRole("radio", { name: "Night" }).click();
+  await movePointerOffPanel(page);
   await expect(page).toHaveScreenshot("panel-night.png", FULL_PAGE_SNAPSHOT);
 });
 
@@ -1507,6 +1546,7 @@ test("matches the dark-theme visual baseline", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium");
   skipWithoutBaseline(testInfo, "panel-dark.png");
   await page.getByRole("radio", { name: "Dark" }).click();
+  await movePointerOffPanel(page);
   await expect(page).toHaveScreenshot("panel-dark.png", FULL_PAGE_SNAPSHOT);
 });
 
@@ -1526,14 +1566,44 @@ test("matches the Night interaction-state visual baseline", async ({
   );
 });
 
-test("matches the mobile visual baseline", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium");
-  skipWithoutBaseline(testInfo, "panel-mobile-light.png");
-  await page.getByRole("radio", { name: "Light" }).click();
-  await expect(page).toHaveScreenshot(
-    "panel-mobile-light.png",
-    FULL_PAGE_SNAPSHOT,
-  );
+/**
+ * The height, in CSS pixels, of the viewport the mobile baseline is captured
+ * in: taller than the whole panel on the mobile project, which measured 2191
+ * pixels with the coarse layout, so one viewport capture holds all of it.
+ */
+const MOBILE_CAPTURE_HEIGHT = 2600;
+
+test.describe("mobile visual baseline", () => {
+  // A full-page capture on the mobile Chromium context turns its coarse
+  // pointer emulation off for the rest of the page's life and paints the fine
+  // pointer layout, so the baseline would never show the touch layout the
+  // coarse rules exist for. The context is made tall enough for the whole
+  // panel instead, and the capture is an ordinary viewport capture, with the
+  // coarse pointer asserted on both sides of it.
+  test.use({ viewport: { height: MOBILE_CAPTURE_HEIGHT, width: 375 } });
+
+  test("matches the mobile visual baseline", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== MOBILE_PROJECT);
+    skipWithoutBaseline(testInfo, "panel-mobile-coarse-light.png");
+    await page.getByRole("radio", { name: "Light" }).click();
+    await expectProjectPointer(page, testInfo);
+    // Captured beside the coarse layout's own proof: the Save button at the
+    // coarse control height.
+    await expectTargetFloor(
+      page.getByRole("button", { name: "Save" }),
+      controlTargetFloor(testInfo),
+    );
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollHeight <= window.innerHeight,
+      ),
+      `The panel outgrew the ${String(MOBILE_CAPTURE_HEIGHT)} pixel mobile capture; raise MOBILE_CAPTURE_HEIGHT.`,
+    ).toBe(true);
+    await expect(page).toHaveScreenshot("panel-mobile-coarse-light.png", {
+      animations: "disabled",
+    });
+    await expectProjectPointer(page, testInfo);
+  });
 });
 
 test("matches the WebKit native-control baseline", async ({
@@ -1543,9 +1613,20 @@ test("matches the WebKit native-control baseline", async ({
   skipWithoutBaseline(testInfo, "panel-native-controls-webkit.png");
   await page.goto("/?states=1");
   await page.getByRole("radio", { name: "Night" }).click();
-  await page
-    .getByRole("checkbox", { name: "Partially configured option" })
-    .focus();
+  // The capture is of the focused checkbox, and a programmatic focus after a
+  // mouse click draws no ring, so the checkbox is reached by keyboard: a step
+  // back and forward again, the way a keyboard user arrives at it.
+  const checkbox = page.getByRole("checkbox", {
+    name: "Partially configured option",
+  });
+  await checkbox.focus();
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Tab");
+  await expect(checkbox).toBeFocused();
+  expect(
+    await checkbox.evaluate((element) => element.matches(":focus-visible")),
+    "The checkbox shows no keyboard focus ring.",
+  ).toBe(true);
   await expect(page).toHaveScreenshot("panel-native-controls-webkit.png", {
     ...FULL_PAGE_SNAPSHOT,
     timeout: 15_000,
@@ -1555,12 +1636,21 @@ test("matches the WebKit native-control baseline", async ({
 /** Holds the primary action in its pressed state for one screenshot. */
 async function withActiveSave(page: Page, snapshot: string): Promise<void> {
   const save = page.getByRole("button", { name: "Save" });
+  // boundingBox() is relative to the viewport, and Save sits below the fold,
+  // so it is scrolled into view before the pointer is aimed at it.
+  await save.scrollIntoViewIfNeeded();
   const box = await save.boundingBox();
   expect(box).not.toBeNull();
   if (box === null) return;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   try {
+    // The capture is of the pressed button, so prove it is pressed first.
+    expect(
+      await save.evaluate((element) => element.matches(":active")),
+      "Save is not pressed.",
+    ).toBe(true);
+    await expect(save).toHaveCSS("transform", "matrix(1, 0, 0, 1, 0, 1)");
     await expect(page).toHaveScreenshot(snapshot, FULL_PAGE_SNAPSHOT);
   } finally {
     await page.mouse.up();
@@ -1649,6 +1739,7 @@ test("matches the open collapsible visual baseline", async ({
   await page
     .getByRole("button", { name: "Provider status and metrics" })
     .click();
+  await movePointerOffPanel(page);
   await expect(page).toHaveScreenshot(
     "panel-collapsible-open.png",
     FULL_PAGE_SNAPSHOT,

@@ -13,6 +13,7 @@
     "fixtures/browser/main.tsx",
     "fixtures/browser/showcase.tsx",
     "fixtures/browser/federation.tsx",
+    "fixtures/browser/live-regions.tsx",
     "fixtures/browser/vite.config.ts",
     "fixtures/consumer/consumer.tsx",
     "fixtures/consumer/harness.tsx",

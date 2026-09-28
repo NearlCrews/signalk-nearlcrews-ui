@@ -1,20 +1,10 @@
-import { expect, expectSolidOutline, type Page, test } from "./fixtures.js";
-
-/** Computed values of two system colors, read from a probe element. */
-async function systemColors(
-  page: Page,
-): Promise<{ buttonFace: string; buttonText: string }> {
-  return page.evaluate(() => {
-    const probe = document.createElement("span");
-    document.body.append(probe);
-    probe.style.color = "ButtonText";
-    const buttonText = getComputedStyle(probe).color;
-    probe.style.color = "ButtonFace";
-    const buttonFace = getComputedStyle(probe).color;
-    probe.remove();
-    return { buttonFace, buttonText };
-  });
-}
+import {
+  expect,
+  expectSolidOutline,
+  MOBILE_PROJECT,
+  systemColors,
+  test,
+} from "./fixtures.js";
 
 test("paints the inline confirmation's Cancel button in system colors under forced colors", async ({
   page,
@@ -37,11 +27,11 @@ test("paints the inline confirmation's Cancel button in system colors under forc
   await expect(confirmation).toHaveCSS("forced-color-adjust", "none");
 
   const cancel = confirmation.getByRole("button", { name: "Cancel" });
-  const colors = await systemColors(page);
+  const colors = await systemColors(page, ["ButtonFace", "ButtonText"]);
   await expect(cancel).toHaveCSS("forced-color-adjust", "none");
-  await expect(cancel).toHaveCSS("background-color", colors.buttonFace);
-  await expect(cancel).toHaveCSS("color", colors.buttonText);
-  await expect(cancel).toHaveCSS("border-top-color", colors.buttonText);
+  await expect(cancel).toHaveCSS("background-color", colors.ButtonFace);
+  await expect(cancel).toHaveCSS("color", colors.ButtonText);
+  await expect(cancel).toHaveCSS("border-top-color", colors.ButtonText);
 
   // The confirmation focuses its own container on open; one Tab reaches
   // Cancel through the keyboard, so :focus-visible applies as it would for a
@@ -54,7 +44,7 @@ test("paints the inline confirmation's Cancel button in system colors under forc
 test("renders text controls at 16 pixels or more on a coarse pointer", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "mobile-chromium");
+  test.skip(testInfo.project.name !== MOBILE_PROJECT);
   await page.goto("/");
 
   for (const control of [
