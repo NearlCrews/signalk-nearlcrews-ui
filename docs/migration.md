@@ -13,10 +13,12 @@ Adopt one plugin at a time. Wrap the panel in `PanelRoot`, replace local theme t
 - The package renders in the browser only and requires native CSS `@scope` support. `PanelShell` runs that preflight once and renders `UnsupportedBrowserNotice`, or a consumer `unsupported` element, when it fails. A consumer that composes `PanelRoot` directly calls `supportsNativeCssScope(window)` before mounting and renders `UnsupportedBrowserNotice` instead of `PanelRoot` after a failed preflight. Verify support in every supported kiosk and embedded WebView deployment.
 - `PanelRoot` installs the root stylesheet, and every other component installs its own style module from the owning root. `Dialog`, `AlertDialog`, `Popover`, `Menu`, `ToastRegion`, and `DataGrid` require a `PanelRoot` ancestor and throw without one, because they also portal into it. The in-flow controls that own a module (`RangeInput`, `Textarea`, `Switch`, `RadioGroup`, `Radio`, `Progress`, `Tabs`, `Table`, and `EmptyState`) do not: outside `PanelRoot` they render unstyled, as they always have. Consumer CSS that targets a package class at equal specificity loses to the scoped package rule even when it loads later. Prefer the documented props; where an override is unavoidable, raise specificity (for example `.my-panel.my-panel .snui-card`) and expect internal class names to change between releases. The design contract carries the example.
 - Every component with a density prop uses the shared `Density` vocabulary, `"default"` or `"compact"`; `Card` adds `"flush"`. The `"comfortable"` spelling is gone: pass `"default"`.
-- `label` is the accessible-name prop on every composed control (`LabeledField`, `Checkbox`, `Switch`, `Radio`, `RadioGroup`, `SegmentedControl`, and `ThemeToggle`); `legend` names the real `<legend>` of a fieldset (`FieldGroup` and `CheckboxGroup`). `SegmentedControl` and `ThemeToggle` take `label` and `labelVisibility` only; their `legend` and `legendVisibility` aliases are gone.
+- `label` is the accessible-name prop on every composed control (`LabeledField`, `Checkbox`, `Switch`, `Radio`, `RadioGroup`, `SegmentedControl`, and `ThemeToggle`). `FieldGroup` and `CheckboxGroup`, which render a real `<legend>`, take `label` and `legend` alike, and both are permanent: `label` decides when a group receives both. `SegmentedControl` and `ThemeToggle` take `label` and `labelVisibility` only.
 - Native wrappers (`Checkbox`, `TextInput`, `NumberInput`, `RangeInput`, `Select`, and `Textarea`) take the React `onChange` event handler. Composed controls report values through callbacks named for their payload: `onCheckedChange` on `Switch`, and `onValueChange` on `RadioGroup`, `SegmentedControl`, `ThemeToggle`, `CheckboxGroup`, `NumberField`, and `Tabs`. The `onChange` aliases on `Switch`, `RadioGroup`, `SegmentedControl`, and `ThemeToggle` are gone; move each to the callback named for its payload.
-- Prefer the standard Signal K schema-generated configuration form for simple fields whose schema behavior has been verified in every target Admin version. Give properties useful titles, descriptions, and defaults where appropriate, and use only `uiSchema` fields and widgets supported by the target host's React JSON Schema Form stack. The current host form does not preserve every root JSON Schema validation keyword. Adopt a custom panel when the interaction or validation requires behavior the target form does not provide. Expose its default component as `./PluginConfigurationPanel`, declare `signalk-plugin-configurator`, accept the host's `configuration` and `save` props, and keep configuration, Signal K access, units, validation, and save orchestration in the plugin. The host's `save` callback returns `void` and does not confirm persistence, so verified success, failure reporting, and retry behavior require a plugin-owned API.
-- Require Signal K 2.24 or newer for a React 19 Webpack configuration panel. Require Signal K 2.27 or newer for the documented ESM host-global React path. The dependency inventory's package version does not establish either minimum.
+- Prefer the standard Signal K schema-generated configuration form for simple fields whose schema behavior has been verified in every target Admin version. Give properties useful titles, descriptions, and defaults where appropriate, and use only `uiSchema` fields and widgets supported by the target host's React JSON Schema Form stack. The current host form does not preserve every root JSON Schema validation keyword. Adopt a custom panel when the interaction or validation requires behavior the target form does not provide. Expose its default component as `./PluginConfigurationPanel`, declare `signalk-plugin-configurator`, accept the host's `configuration` and `save` props, and keep configuration, Signal K access, units, validation, and save orchestration in the plugin. The host passes `configuration` undefined, `{}`, or the saved object, never `null`, and its `save` callback returns `void` and does not confirm persistence: confirming a save means reading the saved value back, from the host's plugin configuration route or a plugin-owned API, and failure reporting and retry stay with the plugin. The save recipe below puts the whole contract in one place.
+- Require the Signal K floor of the remote format the panel ships: 2.24 for a classic Webpack `var` remote, with 2.29 recommended because it fixes an intermittent load failure; 2.25 for a Webpack module remote in a `"type": "module"` package; and 2.27 for a Vite or other module remote on the host-global React shims. The [design contract](design-contract.md#signal-k-floor-by-remote-format) records why each floor sits where it does. The dependency inventory's package version does not establish any of them.
+- Units follow the Signal K server's unit preferences, resolved by the plugin in the four steps the API reference's "Units" section lists, never a panel-local switch or a guess from the browser locale. Configuration stays in SI; a `NamedUnit` lets a field draw the symbol and read its name.
+- A browser test finds a package control by role and accessible name, then by the documented `data-snui-*` test hooks, and reads the package's own words from `PANEL_LABEL_DEFAULTS` rather than retyping them. Class names are private and change between releases.
 - A panel states where the theme selector goes: `themeToggle="end"` on `PanelShell`, the foot of the panel, or `themeToggle="none"` with its own deliberately placed `ThemeToggle`. The [design contract](design-contract.md#where-the-theme-selector-goes) records why, and an operator moving between plugin panels is the reason.
 - Pin an exact version (`npm install --save-dev --save-exact signalk-nearlcrews-ui@<version>`). During `0.x`, minor releases carry breaking changes, and the [release policy](release-policy.md#versioning) records that rule and what each release type may contain. The shipped `snui-check-consumer` command asserts the pin against the installed package and the built remote; the README documents it. A published prerelease pin such as `0.12.0-rc.1`, which the release policy publishes under the `next` dist-tag, is accepted as a pin, so a consumer testing a candidate needs no carve-out.
 
@@ -78,16 +80,287 @@ Use `Accordion` only when at most one section may remain open and child order is
 
 Before moving panel content into a `CollapsibleSection`, read the `mountStrategy` rules in the API reference. Under the default retaining strategy the hidden subtree keeps its state while every effect in it runs its cleanup on collapse and runs again on expand, so an effect written to run once on mount runs once per expand. Two consumer panels have already lost work to that rule: a field that reported validity from an effect dropped its invalid state when the section collapsed and then discarded an in-progress edit on the next expand, and an abortable request left its control permanently `aria-busy` because the cleanup aborted the request while the completion path that clears the flag never ran. Audit any subtree that reports validity, starts abortable work, or registers a listener it expects to keep observing while hidden.
 
+### Host configuration and saving
+
+The Admin opens a panel in one of three states, and never passes `null`:
+
+- `configuration` is undefined for a plugin nobody has configured.
+- `configuration` is `{}` for a package that enables itself by default through `signalk-plugin-enabled-by-default`, until its first save. That plugin is already running.
+- After a save, `configuration` is the object the panel saved. The Admin hands it straight back without waiting for the server, so it is the panel's own value rather than a confirmation.
+
+These hold on every supported server. `save` returns nothing, and a failed request shows only the Admin's own alert. Build the panel on those three states:
+
+1. Normalize the prop through the plugin's own defaults, `{ ...DEFAULTS, ...configuration }`, which covers `undefined` and `{}` alike. Never read a field of the raw prop.
+2. Derive `SaveActionBar unconfigured` from an absent configuration only, `configuration === undefined`. A package enabled by default is already running with `{}`, where "Save to enable the plugin" would be false.
+3. Keep one edit buffer, seeded from the normalized configuration, and compare it with the configuration the host holds now rather than with a copy of it in state. After a save the host hands the saved object straight back, so the buffer matches it and the panel is clean again with no resync code, while an edit in progress stays in the buffer whatever the host passes.
+4. On Save, record the moment in `saveRequestedAt` and call `save` with the buffer: the bar reports "Save sent to the server" for `savedMessageDurationMs` and returns to the state underneath. To confirm that the save persisted, read the value back, from `GET /skServer/plugins/<id>/config` or a plugin-owned API, and report what came back through `outcome`, a danger tone for a request that failed. The read, its timing, and any retry stay in the plugin. Saving restarts the plugin, so a status poll that fails during that window is the restart, not an outage.
+5. On Discard, restore the buffer from the configuration the host holds and call `useResetDrafts()`, which drops the number drafts a restored value cannot reach: an invalid draft never committed, so restoring the value it was typed against changes nothing it is keyed on. `useResetDrafts` reads the draft scope `PanelShell` publishes, so call it from a component rendered inside the shell.
+
+```tsx
+import { useState } from "react";
+import {
+  NumberField,
+  PanelShell,
+  Section,
+  useFieldValidity,
+  useResetDrafts,
+  useUnsavedChangesGuard,
+} from "signalk-nearlcrews-ui";
+import { SaveActionBar } from "signalk-nearlcrews-ui/composites";
+
+interface Configuration {
+  readonly intervalSeconds: number;
+}
+
+const DEFAULTS: Configuration = { intervalSeconds: 30 };
+
+interface PanelProps {
+  readonly configuration?: Partial<Configuration> | undefined;
+  readonly save: (configuration: Configuration) => void;
+}
+
+export default function PluginConfigurationPanel(props: PanelProps) {
+  return (
+    <PanelShell themeToggle="end">
+      <PollingSettings {...props} />
+    </PanelShell>
+  );
+}
+
+function PollingSettings({ configuration, save }: PanelProps) {
+  // What the host holds now: its first configuration, or the object this
+  // panel saved, handed straight back.
+  const saved: Configuration = { ...DEFAULTS, ...configuration };
+  const [draft, setDraft] = useState(saved);
+  const [saveRequestedAt, setSaveRequestedAt] = useState<number | null>(null);
+  const validity = useFieldValidity();
+  const resetDrafts = useResetDrafts();
+  const dirty = draft.intervalSeconds !== saved.intervalSeconds;
+  useUnsavedChangesGuard(dirty);
+
+  return (
+    <>
+      <Section title="Polling">
+        <NumberField
+          {...validity.register("interval")}
+          label="Interval"
+          unit={{ symbol: "s", name: "seconds" }}
+          integer
+          min={5}
+          max={3600}
+          value={draft.intervalSeconds}
+          onValueChange={(intervalSeconds) =>
+            setDraft({ ...draft, intervalSeconds })
+          }
+        />
+      </Section>
+      <SaveActionBar
+        dirty={dirty}
+        unconfigured={configuration === undefined}
+        saveRequestedAt={saveRequestedAt}
+        invalidMessage={validity.valid ? null : "Fix the interval to save."}
+        onSave={() => {
+          setSaveRequestedAt(Date.now());
+          save(draft);
+        }}
+        onDiscard={() => {
+          setDraft(saved);
+          resetDrafts();
+        }}
+      />
+    </>
+  );
+}
+```
+
+`snui-check-consumer --runtime` renders the built panel with `configuration` undefined and then `{}` before any `--props` render, and `signalk-nearlcrews-ui/host-harness` does the same in a browser test, so a panel that reads a field of an absent configuration fails in the check rather than on a fresh install.
+
+### Sending focus to a control in a closed section
+
+A control inside a closed `CollapsibleSection` is hidden, and under the default retaining strategy its ref is detached, so it cannot take focus until the section's reveal has committed. Open the section inside `flushSync`, which commits the reveal before the next line runs, and then focus the control, or return it from the `SaveActionBar` handler, which focuses a returned target once the handler has run. Do not count animation frames to wait for the reveal, and do not find the section's toggle by querying the package's markup: `CollapsibleSection.triggerRef` names the toggle when that is the destination. A panel that validates on submit returns the refused field from `onSave` rather than moving focus itself, so the bar never has to be beaten with a deferred frame.
+
+```tsx
+import { useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import {
+  CollapsibleSection,
+  LabeledField,
+  TextInput,
+} from "signalk-nearlcrews-ui";
+import { SaveActionBar } from "signalk-nearlcrews-ui/composites";
+
+export function ProviderSettings() {
+  const [open, setOpen] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [savedKey, setSavedKey] = useState<string | undefined>(undefined);
+  const apiKeyRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <>
+      <CollapsibleSection
+        title="Weather provider"
+        open={open}
+        onOpenChange={setOpen}
+      >
+        <LabeledField label="API key">
+          <TextInput
+            ref={apiKeyRef}
+            value={apiKey}
+            onChange={(event) => setApiKey(event.target.value)}
+          />
+        </LabeledField>
+      </CollapsibleSection>
+      <SaveActionBar
+        dirty={apiKey !== (savedKey ?? "")}
+        unconfigured={savedKey === undefined}
+        onSave={() => {
+          if (apiKey.trim() === "") {
+            // Commit the reveal first, so the field returned below is
+            // connected and visible when the bar focuses it.
+            flushSync(() => setOpen(true));
+            return apiKeyRef;
+          }
+          setSavedKey(apiKey);
+        }}
+        onDiscard={() => setApiKey(savedKey ?? "")}
+      />
+    </>
+  );
+}
+```
+
+A panel with several validated fields registers each with `useFieldValidity` and returns `validity.firstInvalid()`, the control of the first invalid field on screen in document order. A field hidden in a closed section is released while hidden and does not block Save, so a check that must reach into closed sections is the panel's own, as above.
+
+## Re-pin checklist
+
+Each release adds primitives that replace code panels wrote for themselves, and the optional adoption lists below record them release by release. Apply them at a re-pin by searching the panel's source, styles, tests, and scripts for each pattern on the left. Every row is optional: the old code keeps working unless a release's required list says otherwise.
+
+### Panel shell and saving
+
+| Search for                                                                                                     | Replace with                                                                                |
+| -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `onReload` given a function that calls `window.location.reload`                                                | Nothing: `PanelShell` reloads the page from its error fallback by default                   |
+| A `setTimeout` that writes `saveRequestedAt` back to null                                                      | `saveRequestedAt` alone; `savedMessageDurationMs` closes the window                         |
+| `savedMessageDurationMs={0}` with runtime text in `labels.saved`, or a failure `Banner` beside `SaveActionBar` | `SaveActionBar.outcome`                                                                     |
+| `requestAnimationFrame` before focusing a refused field, or `focusOnAction="none"` beside a hand-moved focus   | Return the field, or `validity.firstInvalid()`, from `onSave`                               |
+| `querySelector("h3 button")`, or nested `requestAnimationFrame` calls, to reach a control in a closed section  | Open the section inside `flushSync`, then focus the control or `triggerRef.current`         |
+| A reset context, or a `resetKey` threaded into every `NumberField` for Discard                                 | `useResetDrafts()` called from `onDiscard`                                                  |
+| `unconfigured={configuration == null}`, or a read of a field of the raw `configuration` prop                   | `configuration === undefined`, and a configuration normalized through the plugin's defaults |
+| A comment or buffer that assumes the host never passes the configuration back after a save                     | The buffer comparison of the save recipe above                                              |
+| `padding-block-end` with `--snui-sticky-clearance` on the shell, for the theme selector                        | Nothing: a docked bar releases above the selector at maximum scroll                         |
+
+### Announcements and status
+
+| Search for                                                                | Replace with                                                                                                                  |
+| ------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `&& <Banner live`, `&& <StatusIndicator live`, or `&& <Metric live`       | The component rendered always, with its content going empty; `deferFirstMessage={false}` where the state at mount is not news |
+| A `LiveRegion` beside a conditional `StatusIndicator` or `Banner`         | An announcing `StatusIndicator` or `Banner` alone                                                                             |
+| A debounce around an announced count or status                            | `settleMs`                                                                                                                    |
+| `Checked` beside `<RelativeAge`, or a hand-built stale readout            | `FreshnessNote` with the `stale` flag from `usePollFreshness`                                                                 |
+| `tone="warning"` on a reachability probe still in progress                | `resolveReachability` and `REACHABILITY_STATUS`, which keep it neutral                                                        |
+| A visible confirmation paired with a `LiveRegion` for a transient success | A success toast                                                                                                               |
+
+### Fields and controls
+
+| Search for                                                                                              | Replace with                                               |
+| ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `aria-describedby` from an `ariaDisabled` button to a hint paragraph, or a hint hook of the panel's own | `disabledReason` with `disabledReasonVisibility="visible"` |
+| `ariaDisabled` with no `disabledReason` and no `aria-describedby`                                       | A `disabledReason`, which development now asks for         |
+| `aria-valuetext` built as a value plus a unit                                                           | `RangeInput unit`                                          |
+| A unit symbol a screen reader spells out, such as `unit="kn"`                                           | `unit={{ symbol: "kn", name: "knots" }}`                   |
+| `Object.fromEntries` turning a selection array into a record of booleans, or the reverse                | `applyCheckboxGroupValue` and `toCheckboxGroupValue`       |
+| A local serial-comma join, a plural suffix helper, or `toLocaleString()` around a count                 | `joinList`, and `formatCount` with `{ locale }`            |
+| `descriptionId` or `errorId` stripped from a render-prop argument by hand                               | `splitLabeledFieldControlProps`                            |
+
+### Layout and styles
+
+| Search for                                                                                         | Replace with                                                             |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `role="group"` beside `aria-labelledby` or `aria-label` on a `<Card`                               | The native attribute alone; the card adds the role                       |
+| `landmark={false}` on an embedded `CollapsibleSection` or a nested section                         | Nothing: that is the default                                             |
+| `headingLevel` computed by hand on `<InlineConfirm`                                                | Nothing: the level follows the enclosing section                         |
+| A flex wrapper holding an icon beside a `Section` title                                            | `Section leading`                                                        |
+| `border-block-start: 1px solid var(--snui-color-border)` with a first or last child reset          | `Stack divided`                                                          |
+| `--snui-color-border` on a decorative divider or a container outline                               | `--snui-color-border-subtle`                                             |
+| `--snui-color-surface-raised` or `--snui-color-background` as a quiet tile fill                    | `--snui-color-neutral-subtle`                                            |
+| A panel's own focus outline width, or a `prefers-contrast: more` rule of its own that thickens one | `--snui-focus-ring-width`                                                |
+| `gap: 0` on a `Card density="flush"`                                                               | Nothing: flush clears the gap                                            |
+| `position: sticky` on a panel toolbar with its own clearance                                       | `ActionBar sticky="top" variant="toolbar"` and `--snui-sticky-clearance` |
+| `padding-inline-start` on a panel's plain `ul` or `ol`                                             | Nothing: the panel indents lists on the package scale                    |
+| `snui-panel` written as a literal, or described as private                                         | `PANEL_CONTAINER_NAME` and `CONTAINER_BREAKPOINT_NARROW`                 |
+
+### Tests and checks
+
+| Search for                                                                             | Replace with                                                                                                 |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Package copy in an assertion, such as `"Nothing to save"` or `"Match Admin"`           | The string from `PANEL_LABEL_DEFAULTS`                                                                       |
+| A private class in a selector, such as `snui-action-bar--sticky-viewport-bottom`       | `data-snui-sticky` and `data-snui-docked`                                                                    |
+| `data-snui-docked` read from the action bar's parent element                           | The bar's own `data-snui-docked`; the parent no longer carries it                                            |
+| A panel's own action bar marker, or a `[tabindex="-1"]` probe for the save status      | `data-snui-action-bar` and `data-snui-action-bar-status`                                                     |
+| A theme radio found by its label                                                       | `data-snui-theme-choice`                                                                                     |
+| `remoteEntry.includes("export")`, or a check that the package is not in `dependencies` | Nothing: the default `snui-check-consumer` run checks the host loading contract and the dependency placement |
+| A walk over Webpack's stats for React modules or a second React Aria copy              | `snui-check-consumer --stats`                                                                                |
+| A list of `--snui-*` names checked against a built stylesheet                          | Nothing: the default run checks every CSS asset                                                              |
+| A test that requires doubled classes in CSS modules                                    | `snui-check-consumer --styles <dir>`                                                                         |
+| A `node:vm` script that renders the built remote                                       | `snui-check-consumer --runtime`, which renders module remotes too                                            |
+| A share scope and container loader written into the browser test fixture               | `signalk-nearlcrews-ui/host-harness`                                                                         |
+
 ## Unreleased
 
-No consuming code requires modification. Check the behavior below.
+This release renames or removes six props, moves focus and announcements to the timing the package's own rules call for, changes several defaults and strings, repaints sections, tone glyphs, borders, and Night, and makes `snui-check-consumer` check the Signal K host loading contract. Work through the required list first: each item is a compile error, a changed runtime contract, a changed test query, or a check that now fails. Then check the behavior below, refresh visual baselines, and apply the re-pin checklist above.
 
+### Required migration work
+
+1. Replace `LiveRegion announceOnMount={false}` with `deferFirstMessage`, and delete `announceOnMount` where it was `true` or bare, which is the new default. The old name read backwards: `true` rendered the first message at once, which is the arrangement a screen reader misses when the region mounts together with its message. Before: `<LiveRegion announceOnMount={false} message={count} />`. After: `<LiveRegion deferFirstMessage message={count} />`.
+2. Rename `ThemeToggle labels` to `choiceLabels`, including inside `PanelShell themeToggleProps`, and the bundle key `themeToggle.choices` to `themeToggle.choiceLabels`. `choices` still names the set of themes offered. Before: `<ThemeToggle labels={{ auto: "Follow Admin" }} />`. After: `<ThemeToggle choiceLabels={{ auto: "Follow Admin" }} />`.
+3. Replace `Card labelledBy` with the native `aria-labelledby`, which now names the card and, on the default div card, gives it the group role, and delete a hand-written `role="group"` beside a native `aria-labelledby` or `aria-label` on a `Card`. `label` is unchanged. Before: `<Card labelledBy={titleId}>`. After: `<Card aria-labelledby={titleId}>`.
+4. Move `PanelShell errorLabels` into `labels.panelError`, renaming `retryLabel` to `retry` and `reloadLabel` to `reload`, and write the explanation twice: `description` for a fallback that offers Try again alone, and `reloadDescription` for the fallback `PanelShell` shows by default, which also offers the page reload. Move `PanelShell unsupportedLabels` into `labels.unsupportedBrowser`, where `title` keeps its name and the `children` text becomes `description`. The group words the browser notice only: the notice for a host React below the floor stays in English, so a panel that needs it translated passes its own `unsupported` element. Delete imports of `PanelShellErrorLabels` and `PanelShellUnsupportedLabels`. Before: `<PanelShell errorLabels={{ retryLabel: "Retry" }}>`. After: `<PanelShell labels={{ panelError: { retry: "Retry" } }}>`.
+5. Pass `reloadDescription` beside a translated `description` on a `PanelErrorBoundary` that also takes `onReload`: `description` now shows only when the fallback offers Try again alone.
+6. Replace `InlineConfirm fallbackTitle` with a `title` that asks the question, or with `labels.inlineConfirm.fallbackTitle` on the panel.
+7. Write a `Popover width` number with its unit. A number is a type error and is no longer converted to pixels at runtime. Before: `width={240}`. After: `width="240px"`.
+8. Update the test queries and assertions the new semantics change:
+   - A toast card is no longer a live region. `getByRole("status")` and `getByRole("alert")` find the toast host's regions, which exist from the first `ToastRegion` mount, and a text match on a toast title finds both the card and the host's spoken line. Scope a card query to the notifications landmark, `getByRole("region", { name: "Notifications" })`, which holds the cards and not the spoken lines.
+   - A polite `Banner`, `StatusIndicator`, or `Metric` that mounts with content shows it 100 milliseconds later. Wait for it (`findByText`), advance fake timers, or pass `deferFirstMessage={false}` where the content at mount is not news.
+   - An embedded `CollapsibleSection`, and a section nested inside another package region, is no longer a `region`. Query its heading, or pass `landmark` where it should stay a landmark.
+   - An unnamed `Code` block is `getByRole("group", { name: "Code" })`, not a `region`.
+   - `data-snui-docked` sits on the action bar element alone: the viewport anchor around a docking bar no longer carries it, so a test that read it from the bar's parent reads the bar's own.
+   - A field error's message sits in an element of its own inside the error region, beside the danger mark, so `getByText` on the message finds that element. A test that asserted on the region itself, its role or its id, looks the region up rather than finding it by its text.
+   - `SegmentedControl readOnly` options no longer carry `aria-disabled`; assert `aria-readonly="true"` on the `radiogroup`.
+   - A `NumberField` sets `aria-invalid` and shows its message once the edit finishes, so press Enter or move focus before asserting either. `onValidityChange` still fires on the keystroke.
+   - Package copy changed: the clean save status reads "Nothing to save", bound messages read "Enter 5 or more." and "Enter 9 or less.", the theme selector's guidance names the Signal K Admin theme, and the panel error description begins "Try again reopens this panel". Read the words from `PANEL_LABEL_DEFAULTS` rather than retyping them.
+   - An `InlineConfirm` title, and the title of a `PanelErrorBoundary` fallback inside a section or a dialog, head one level below the section, or below the `Dialog` or `AlertDialog` title, that encloses them. Query such a title at the level below that heading: level 3 under a level 2 section or a dialog title at its default level, and level 4 under the level 3 sections of a titled `PanelShell`. An `InlineConfirm` outside any section or dialog heads at the level a section there would take, level 3 under a titled `PanelShell`. A `Section` or `CollapsibleSection` inside a `Dialog` or `AlertDialog` also heads one level below the dialog title: query it at level 3 under a dialog title at its default level, and an `InlineConfirm` inside it at level 4.
+   - Every error the package throws starts with `signalk-nearlcrews-ui:` and a space. A test that matches a package error with `toThrow("...")` keeps passing, because a string matches a substring. A test that compares `error.message` for equality, or matches a regular expression anchored with `^`, needs the prefix. A test that matched "must be a readonly array", "Conflicting signalk-nearlcrews-ui styles", "signalk-nearlcrews-ui 0.12.0 panel styles", or "requires a browser with native CSS @scope support" needs the new wording, which the changelog quotes in full; the `DataGrid` columns error now reads "DataGrid columns must be an array; received a Set. Pass a readonly array and replace it when the columns change.", naming what it received.
+   - The blank-name errors read "FieldGroup requires a non-empty label or legend." and "CheckboxGroup requires a non-empty label or legend." after the prefix.
+9. Rebuild, then fix what `snui-check-consumer` reports in its default run. It now fails this package in `dependencies`, `optionalDependencies`, or a required `peerDependencies` entry (pass `--runtime-dependency` only for plugin server code that imports `/format`; expect npm to install the React peers on the server then, and pin the same exact version in every field that declares the package), a package without the `signalk-plugin-configurator` keyword, a `--remote` that is not `public/remoteEntry.js` under `--root`, an entry without Webpack's container runtime or without the `./PluginConfigurationPanel` key, a `"type": "module"` package whose entry does not export `get` and `init`, a classic entry that leaves no such container on the global the Admin reads, the library's version stamp inside the entry, the host harness in any script, and an unknown, renamed, or misspelled `--snui-*` name or container name in any CSS asset. `--runtime` renders the panel with `configuration` undefined and `{}` first, and `--props` is now the object as given rather than merged over `{ configuration: null }`: a panel written against `null` fails until it handles `undefined`. `--container` is refused for a `"type": "module"` package, whose container comes from the module's exports. Add `--stats` and `--styles`, and `--runtime` for a module remote, then delete the checks they replace; the re-pin checklist lists them.
+
+### Behavior to check
+
+- `SaveActionBar` moves focus once, after the handler has run, instead of to its status before it. `onSave` and `onDiscard` are typed `SaveActionBarAction`, and every existing handler, async ones included, still compiles. A handler that returns an element or a ref sends focus there, a handler that moves focus itself keeps that destination, and a returned promise is not awaited, so an async handler gets the status. A handler that read the focused status inside `onSave` now finds the pressed button there.
+- `SaveActionBar` keeps Discard available while `invalidMessage` blocks a save with nothing else to discard. Call `useResetDrafts()` from `onDiscard` so the invalid draft goes with the discard.
+- `useFieldValidity` releases a field hidden in a retaining `CollapsibleSection` and restores its invalid state on reveal: an invalid field out of sight no longer blocks Save, and blocks it again once the section opens. A panel that must refuse a save for a field in a closed section checks that field itself and opens the section, as the recipe above shows.
+- The panel announcer reads two messages from one handler, announces a repeat of the same words again, drops each message after 7 seconds, ignores a blank message rather than clearing the region, and is heard while a dialog, menu, or modal popover is open. A panel that announced an empty string to clear stale text can stop.
+- A polite announcing component that mounts with content appears 100 milliseconds after mount, a visible delay as well as an announced one.
+- An `InlineConfirm` title takes the level below its section, or below the title of the `Dialog` or `AlertDialog` it sits in, and a `PanelErrorBoundary` fallback inside a section or a dialog does the same, while a `Section` or `CollapsibleSection` inside a dialog heads below the dialog's title. Delete a `headingLevel` a panel computed by hand for any of them.
+- `resolveFreshness` reads a sample more than 60 seconds in the future as stale with no age when a threshold is set, rather than fresh; `usePollFreshness` flips `stale` the moment the threshold passes and measures a new sample against the clock as it arrives; and `tickMs: 0` stops the clock between samples, so the age and the flag are measured when a sample arrives and not again until the next one.
+- `formatCount` groups its digits, "1,234 charts" rather than "1234 charts", for `options.locale` or the runtime default, and rounds a fractional count to three decimal places.
+- Development consoles show new warnings: a button, checkbox, or group option blocked with no reason, a reason beside native `disabled`, a select-all box blocked with no reason, a button whose `aria-label` does not contain its visible text, a dialog only Escape can close, an announcement from `usePanelAnnouncer`, `FreshnessNote`, or the `PanelErrorBoundary` fallback with no `PanelShell`, and `useResetDrafts` with no panel above it. Each names its fix.
+- The notice for a host React below the floor is headed "Signal K update required".
+- Under `prefers-contrast: more`, `DataGrid` rows and header cells, `Menu` items, radios, switches, and the picker of a date or time field thicken their focus rings to 3 pixels, as buttons and inputs already did outside forced colors; they kept 2 pixels before. Under forced colors the system-colored rings on tabs, primary, secondary, and ghost buttons, the selected segmented option, radios, and switches thicken too, and a danger button's to 4 pixels. The width is the new `--snui-focus-ring-width` token.
+- A `Card` footer holds its content in an inner element, `snui-card__footer-content`, which carries the prose measure while the ruled footer spans the card. Consumer CSS that reached the footer's children directly needs one more level; like every package class, that name is private, so prefer the documented props.
+- The header summary and actions of a `CollapsibleSection` sit in one inner element, `snui-collapsible__trailing`. Consumer CSS that reached them as direct children of the header needs one more level; like every package class, that name is private.
+- The tone glyph in a toned `CollapsibleSection` toggle sits in an inner slot, `snui-collapsible__tone`, and no longer carries the `snui-collapsible__tone-glyph` class that 0.12.0 put on it. Consumer CSS that targeted that class or reached the glyph as a direct child of the toggle needs updating; like every package class, these names are private.
+- Visual baselines change. `CollapsibleSection` takes the larger radius, the raised shadow, and the 16 pixel content inset of `Section`, an `ActionBar` pads its content by that same inset, and section titles are bold, with the first level under a titled shell at the large size. Tone glyphs take a shape per tone. Container outlines (cards, field groups, sections, and banners), card rules, and table, grid, menu, and tab dividers are fainter, painted with `--snui-color-border-subtle`. A `FieldGroup` legend sits inside the border on the actions' row in Chromium and Firefox; WebKit still draws it in the fieldset border, as before. Text inputs and selects are 44 pixels on a coarse pointer, level with the buttons. Night paints scrollbars, selection, option lists, autofill, the number and search buttons, the date and time picker icons and focus ring, the segment being edited in a date or time field, every date and time segment in the field's own color, and the textarea resize grip red, and the Light info tone and Night info and visited link colors moved. The theme selector's guidance reads differently. Fixed rendering moves pixels too: the card footer rule, field error rows, inline field labels, buttons in a card footer, anchor buttons, disabled checkbox labels, the optional marker, the required and optional markers of a blocked field or checkbox, toned `Progress` glyphs, banner actions, the `CollapsibleSection` chevron in a right-to-left panel and beside a wrapped title, toned `CollapsibleSection` glyphs, the rows that wrap under a narrow `CollapsibleSection` heading, and the first column of every data grid.
+- The shipped style text is compacted, which more than pays for this release's additions: a typical panel remote measures about 1.6 KB gzip smaller than on 0.12.0, so re-record a size baseline downward. `getPropertyValue` for `--snui-focus-ring` and `--snui-sticky-clearance` returns single-spaced text.
 - A `CheckboxGroup` that passes both `label` and `legend` is now named by `label`, the way `FieldGroup` already was. Check any group that passes both and keep the one word you mean.
 - `DataGrid` rebuilds its rows when `renderRow` changes identity. A grid that passes an inline arrow keeps working and now shows fresh output, but it rebuilds every rendered row whenever the panel renders. Move `renderRow` to module scope, or wrap it in `useCallback` listing the values it reads besides the item, such as a unit preference, to keep React Aria's row cache.
 - `Accordion` with `defaultOpenIndex={null}` now opens nothing, even when a child carries `defaultOpen`. Leave `defaultOpenIndex` unset to keep the child's `defaultOpen`.
 - A numeric timestamp outside the `Date` range now reads as unknown in `RelativeAge`, `formatRelativeAgeSince`, and `resolveFreshness`, the same as an unparsable string.
 - `RangeInput` draws a thicker track on a coarse pointer in Chromium and Safari. A consumer with visual baselines of a slider on a touch device should expect that image to change.
-- The emitted declarations change without changing any entry point: `components/CheckboxGroup.d.ts`, `components/Disclosure.d.ts`, `components/overlay-placement.d.ts`, and `utils/announcement.d.ts` differ, as the changelog describes. No import resolves differently.
+- Internal helpers that no entry point exports have left the emitted declarations, marked `@internal`. No import resolves differently.
+
+### Optional adoption
+
+Every item is in the re-pin checklist above with the pattern to search for. This release adds `FreshnessNote`, `useResetDrafts`, `PANEL_LABEL_DEFAULTS`, `SaveActionBar.outcome` and returned focus targets, `FieldValidity.firstInvalid()`, visible blocked reasons on `Button`, `Checkbox`, and `CheckboxGroup`, `SegmentedControlOption.ariaDisabled`, `Switch` descriptions and errors, `Section.leading`, `Stack divided`, `settleMs`, named units, `NumberField` message templates and functions, `Menu.triggerProps`, `formatCount` grouping, the `--snui-color-border-subtle`, `--snui-color-neutral-subtle`, and `--snui-focus-ring-width` tokens, the `data-snui-sticky`, `data-snui-docked`, and `data-snui-theme-choice` test hooks, `snui-check-consumer --stats`, `--styles`, and module remotes under `--runtime`, and `signalk-nearlcrews-ui/host-harness` for browser tests.
 
 ## Changes in 0.12.0
 
@@ -223,7 +496,7 @@ This release changes toast defaults, dialog dismissal, several prop types, relat
 - Translate the default error fallback with `PanelShell.errorLabels` (`title`, `description`, `retryLabel`, and `reloadLabel`) rather than replacing it through `errorFallback`.
 - `Visibility` from the package root names the `"hidden" | "visible"` vocabulary that `CheckboxLabelVisibility`, `SegmentedControlLabelVisibility`, and `TableCaptionVisibility` alias, alongside `Density`, `Orientation`, and `AnnouncementMode`.
 - Tests of the save rules can call `resolveSaveActionBarState({ dirty: true })` and let the shipped strings apply, instead of building a complete `labels` object and a `savedMessage` by hand.
-- Replace the copied panel frame (the `supportsNativeCssScope` preflight, `UnsupportedBrowserNotice`, `PanelRoot`, the outer `Stack`, the title heading, and `ThemeToggle`) with `<PanelShell title="..." headingLevel={2}>`. Panels that rendered an `h1` should drop to level 2 or lower: Signal K Admin already owns the page heading. Local error boundaries can go; `PanelShell` wraps the children in `PanelErrorBoundary`, `onReload` adds a page-reload action, and `errorFallback` keeps a custom fallback.
+- Replace the copied panel frame (the `supportsNativeCssScope` preflight, `UnsupportedBrowserNotice`, `PanelRoot`, the outer `Stack`, the title heading, and `ThemeToggle`) with `<PanelShell themeToggle="end">`. Leave `title` unset: above the panel Signal K Admin renders only its plugin card header, an `h5` holding the npm package name, and no `h1`, so the card header already names the plugin, and a panel that does pass a title keeps it at level 2 or lower. Local error boundaries can go; `PanelShell` wraps the children in `PanelErrorBoundary`, `onReload` adds a page-reload action, and `errorFallback` keeps a custom fallback.
 - Replace the copied `beforeunload` effect with `useUnsavedChangesGuard(dirty)`.
 - Replace local footer bars, save-status indicators, and their state helpers with `<SaveActionBar dirty unconfigured saving saveRequestedAt invalidMessage onSave onDiscard />` from `signalk-nearlcrews-ui/composites`. The status is a polite `StatusIndicator` whose tone follows the state, Save is disabled per the shared rule, and focus moves to the status after either action. Use `resolveSaveActionBarState` where a test asserted the pure rules.
 - Delete local number-draft hooks and integer or number field wrappers and render `NumberField` from the package root. Map the old options: `min`, `max`, `integer`, and `step` carry over; a wrapper that clamped and truncated on every keystroke passes `fallback` (the value it committed for an empty field, usually `min`); a wrapper that validated and reported an error message omits `fallback` and passes `onValidityChange`; a wrapper that emitted `undefined` for an empty field passes `allowEmpty`. Move a units suffix from the label text into `unit`, and pass `description`, `error`, `errorLive`, `layout`, or `density` straight through, since every `LabeledField` prop is accepted. A field inside a `CollapsibleSection` needs no ref guards: the draft survives collapse by construction. `useNumberDraft` gives a bare `NumberInput` the same buffer.

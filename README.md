@@ -49,14 +49,14 @@ The React peer range is the only column that has ever moved. Every released line
 
 - React and React DOM 19.2 or newer within the React 19 release line
 - Chromium or Edge 118 or newer, Firefox 146 or newer, or Safari 17.4 or newer
-- Signal K Server 2.24 or newer for React 19 Webpack configuration panels, or 2.27 or newer for the documented ESM host-global React path
+- Signal K Server 2.24 or newer, and a later release for some remote formats, as the floor table below sets out
 - A consumer build that bundles this package into its configuration-panel remote
 
-The browser floors come from native CSS `@scope`, which became available in Chromium and Edge 118, Firefox 146, and Safari 17.4. `PanelRoot` throws a clear compatibility error when `CSSScopeRule` is unavailable instead of silently rendering unstyled controls. Signal K installations that embed an older browser engine must update that engine before adopting this package. Right-to-left caret mirroring, select indicator placement, and the range fill direction additionally use `:dir()`, which Chromium added in 120; Chromium and Edge 118 and 119 skip those presentational rules while everything else renders correctly. Arrow-key movement no longer depends on the selector at all, because `Tabs` and `SegmentedControl` read the direction from the computed style.
+The browser floors come from native CSS `@scope`, which became available in Chromium and Edge 118, Firefox 146, and Safari 17.4. `PanelRoot` throws a clear compatibility error when `CSSScopeRule` is unavailable instead of silently rendering unstyled controls. Signal K installations that embed an older browser engine must update that engine before adopting this package. Right-to-left caret mirroring, select indicator placement, the range fill direction, the direction of an indeterminate progress bar, and the mirroring of the Night resize grip additionally use `:dir()`, which Chromium added in 120; Chromium and Edge 118 and 119 skip those presentational rules, drawing them left to right, while everything else renders correctly. Arrow-key movement does not depend on the selector, because `Tabs` and `SegmentedControl` read the direction from the computed style.
 
-The package renders in the browser only. Theme resolution reads `window` interfaces such as `localStorage` while mounting, so the package does not support hydrating into a server-rendered document. One `renderToStaticMarkup` pass is supported, because the shipped consumer check relies on it: the theme context supplies a server snapshot for exactly that path.
+The package renders in the browser only. Theme resolution reads `window` interfaces such as `localStorage` while mounting, so the package does not support hydrating into a server-rendered document. Static rendering with `renderToStaticMarkup` is supported, because the shipped consumer check relies on it: the theme context supplies a server snapshot for exactly that path.
 
-`PanelShell` runs that preflight once and renders `UnsupportedBrowserNotice`, or a consumer-supplied `unsupported` element, when it fails. Consumers that compose `PanelRoot` directly call `supportsNativeCssScope(window)` themselves and render `UnsupportedBrowserNotice` instead of `PanelRoot` when the check fails. The notice is standalone, renders as a section named by its heading, accepts custom title and body content and a `headingLevel`, and does not run the feature check itself. A failed `PanelRoot` installation still throws the exported `UnsupportedBrowserError`, whose `feature` property is `CSS @scope`. The package does not ship an unscoped fallback because that would weaken style isolation between independently bundled panels.
+`PanelShell` runs the native CSS `@scope` preflight once and renders `UnsupportedBrowserNotice`, worded from `labels.unsupportedBrowser`, or a consumer-supplied `unsupported` element, when it fails. The shell renders the same notice, headed "Signal K update required" and naming both versions, when the host supplies a React older than 19.2. Consumers that compose `PanelRoot` directly call `supportsNativeCssScope(window)` themselves and render `UnsupportedBrowserNotice` instead of `PanelRoot` when the check fails. The notice is standalone, renders as a section named by its heading, accepts custom title and body content and a `headingLevel`, and does not run the feature check itself. A failed `PanelRoot` installation still throws the exported `UnsupportedBrowserError`, whose `feature` property is `CSS @scope`. The package does not ship an unscoped fallback because that would weaken style isolation between independently bundled panels.
 
 React and React DOM are peer dependencies, and a consumer must always use the Signal K Admin host's React implementations. A Webpack Module Federation remote resolves React and React DOM from the host share scope as singletons; this repository's fixtures also set `import: false` so a missing host share fails instead of silently bundling a fallback. A Vite or other ESM consumer follows the current Signal K guidance by aliasing `react`, `react-dom`, `react-dom/client`, and `react/jsx-runtime` to shims for the host's `window.__SK_REACT__`, `window.__SK_REACT_DOM__`, `window.__SK_REACT_DOM_CLIENT__`, and `window.__SK_REACT_JSX_RUNTIME__` globals. Neither integration may embed a second React or React DOM implementation.
 
@@ -64,7 +64,19 @@ For a classic Webpack remote, derive the `var` library name from the consumer pa
 
 The consumer bundles this package and its React Aria dependencies into the remote rather than configuring this package as a shared runtime singleton. See the Signal K project's [embedded-component and React-sharing guidance](https://github.com/SignalK/signalk-server/blob/master/docs/develop/webapps.md#embedded-components-and-admin-ui--server-interfaces) for the host contract that each consumer build must follow.
 
-The repository builds real production classic `var` and output-module ESM Module Federation remotes. Its browser harness initializes those containers with a minimal host-equivalent React and React DOM share scope. It does not reproduce the complete Signal K Admin bootstrap or the ESM host-global shim path, so each consumer must retain a production remote-load check against its supported Signal K host.
+### Signal K floor by remote format
+
+The floors were read from the server source at each release tag, with the loader facts current at 2.33.0.
+
+| Remote format                                                                                        | Minimum Signal K       | Why                                                                                                                                                                                             |
+| ---------------------------------------------------------------------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Classic Webpack `var` remote                                                                         | 2.24, 2.29 recommended | 2.24 is the first Admin on React 19. From 2.24 through 2.28 a classic remote could intermittently report "Module ... is not available" until a reload; 2.29 loads each script once and fixed it |
+| Webpack module remote (`library.type: "module"`) with the published share map and `"type": "module"` | 2.25                   | 2.25 is the first server that writes a module script tag for a `"type": "module"` package, and the first loader that imports it                                                                 |
+| Vite or other module remote on the `window.__SK_REACT*__` globals                                    | 2.27                   | The host-global React shims arrived in 2.27                                                                                                                                                     |
+
+`npm run host-contract:loader`, described under the host contract below, reports when the loader code the table rests on changes.
+
+The repository builds real production classic `var` and output-module ESM Module Federation remotes. Its browser harness loads those containers through the published host harness, which mirrors the Signal K Admin loader's share scope, script routing, and configuration view. It does not reproduce the complete Signal K Admin bootstrap or the ESM host-global shim path, so each consumer must retain a production remote-load check against its supported Signal K host.
 
 ## Signal K Admin host dependencies
 
@@ -95,33 +107,61 @@ new ModuleFederationPlugin({
 });
 ```
 
-`shared` declares `react` and `react-dom` as singletons with `requiredVersion` set to this package's peer range and `import: false`, and no `strictVersion`. `hostNotes` explains why: Signal K Admin releases up to at least 2.24.0 register their React share as 19.0.0 while shipping a newer React, and current master registers `React.version`, so a strict check would refuse a compatible host. The entry is CommonJS and carries its own declarations, and the repository's own fixtures build from it, so the map a consumer spreads is the map the package was verified with.
+`shared` declares `react` and `react-dom` as singletons with `requiredVersion` set to this package's peer range and `import: false`, and no `strictVersion`. `hostNotes` records why, and begins: "Signal K Admin 2.24.0 and 2.25.0 register their React share as 19.0.0 while shipping a newer React; every release from 2.26.0 registers React.version." A strict check would therefore refuse to mount on those two supported hosts. The entry is CommonJS and carries its own declarations, and the repository's own fixtures build from it, so the map a consumer spreads is the map the package was verified with.
 
 ### Checking a consumer build
 
-The package ships `snui-check-consumer`, which asserts that a consumer's build matches the release it installed:
+The package ships `snui-check-consumer`, which asserts that a consumer's build matches the release it installed and loads the way the Signal K Admin will load it:
 
 ```sh
 npx snui-check-consumer --root . --remote public/remoteEntry.js --baseline scripts/panel-size-baseline.json
 ```
 
-`--root` resolves against the working directory, and every other path resolves against `--root`. The command runs the consumer's own code: it loads the installed package's federation entry, requires and calls the webpack configuration it finds beside `--root`, and with `--runtime` evaluates the built remote in a context that answers browser globals but is not a security boundary. Point it only at a build and a working tree the operator trusts.
+`--root` resolves against the working directory, and every other path resolves against `--root`. Run the command after the panel build in the consumer's own check script.
 
-It checks, in order, that `package.json` pins an exact version equal to the installed `node_modules/signalk-nearlcrews-ui`, that every JavaScript file beside the remote entry carries that version's `data-snui-version` stamp and no other, that the build carries no development JSX runtime, that no React runtime was bundled, that the remote consumes exactly the published share map (and that a `webpack.config.cjs` or `webpack.config.js` beside `--root` declares it, when one exists; pass `--webpack-config` to name another file), and, with `--baseline`, that the gzip size of the remote's JavaScript and CSS assets stays within the recorded allowance. The baseline is a JSON object with `gzipBytes` (the recorded size), `maximumIncreasePercent` (the growth the check allows over it), and an optional `approvedCeilingGzipBytes` (an explicitly approved size above that allowance). Run it after the panel build in the consumer's own check script. Without `--asset`, every JavaScript and CSS file beside the remote entry counts as part of the remote, which inflates the size baseline and can trip the React runtime scan for a plugin that serves other bundles from the same directory; the repeatable `--asset <name>` names the remote's own files, and the remote entry is always included.
+The command checks remotes built with Webpack's `ModuleFederationPlugin`. A Vite or other module remote on the Admin's React globals is an integration the package supports and this command does not check: the entry check fails with a sentence that says so, rather than as a share map mismatch.
+
+The command runs the consumer's own code. It loads the installed package's federation entry, requires and calls the Webpack configuration it finds beside `--root`, and evaluates a classic remote entry; with `--runtime` it evaluates the whole built remote. The contexts it evaluates in answer browser globals but are not a security boundary, so point the command only at a build and a working tree the operator trusts.
+
+It checks, in this order, and stops at the first failure:
+
+1. `package.json` pins an exact version in `devDependencies`, and the installed `node_modules/signalk-nearlcrews-ui` is that version. A pin in `dependencies`, `optionalDependencies`, or `peerDependencies` (unless `peerDependenciesMeta` marks it optional, since npm installs a required peer too) fails: the remote bundles the package, and a runtime entry makes every App Store install fetch this package, React Aria, and, because npm installs peer dependencies, React and React DOM into the server's `node_modules`. Pass `--runtime-dependency` only when the plugin's server code imports the package itself, such as `signalk-nearlcrews-ui/format`; the report still names that cost. Every field that declares the package must then pin the same exact version, because the remote bundles one and the server installs the other.
+2. `keywords` include `signalk-plugin-configurator`, without which the server mounts no panel, and `--remote` is `public/remoteEntry.js`, the directory the server serves and the file name the Admin finds the script by.
+3. The entry is a Webpack container that exposes `./PluginConfigurationPanel` and carries none of the library itself. The server writes every configurator's entry into the head of every Admin page whether or not its panel opens, so a library inside the entry would load for every Admin user.
+4. The entry matches the script tag the server writes for the package's `type`. With `"type": "module"` it must export `get` and `init`. Otherwise the entry, evaluated alone, must leave a container with `get` and `init` on the global the Admin reads: the package name with `-`, `@`, and `/` replaced by underscores, or the name `--container` gives. `--container` works with or without `--runtime`, and is refused for a `"type": "module"` package, whose container comes from the module's exports.
+5. The remote's JavaScript files, taken together, carry this version's `data-snui-version` stamp and no other version's, and none of them bundles a React runtime, a development JSX runtime, or the host harness.
+6. The remote consumes exactly the published share map, and a `webpack.config.cjs` or `webpack.config.js` beside `--root` declares it; `--webpack-config` names another file.
+7. Every CSS file beside the entry names only the installed release's public tokens, the documented consumer hooks, and the `snui-panel` container, with no name a CSS modules pipeline has renamed. A renamed or misspelled token fails silently in the browser, where the panel loses its theme in Dark and Night.
+8. With `--stats <path>`, the Webpack stats record no build errors, and the module graph bundles nothing from React except the production JSX runtime, nothing from React DOM or `scheduler`, exactly one copy of this package, and at most one copy each of `react-aria`, `react-aria-components`, `react-stately`, and every `@internationalized` package. Emit the stats with `webpack --json`, or with `stats.toJson({ errors: true, modules: true, nestedModules: true })`.
+9. With `--styles <dir>`, no CSS module class used in the panel source under that directory lands on a package component through a single class selector. Such a rule loses to the package's scoped rules as soon as the package sets the same property; the doubled class the design contract names is the supported override. The check follows default, namespace, and named imports of a CSS module. A class it cannot check, because its module is imported through a bundler alias or a package path or does not exist, is reported rather than skipped, so import CSS modules by a path relative to the component. Point `--styles` at the directory that holds the panel's components and their CSS modules.
+10. With `--baseline <path>`, the gzip size of the remote's JavaScript and CSS stays within the recorded allowance. The baseline is a JSON object with `gzipBytes` (the recorded size), `maximumIncreasePercent` (the growth the check allows over it), and an optional `approvedCeilingGzipBytes` (an explicitly approved size above that allowance).
+
+The report always gives the entry's own gzip size, beside the total when there is a baseline, because the entry loads on every Admin page and the rest only when the panel opens. Without `--asset`, every JavaScript and CSS file beside the remote entry counts as part of the remote, which inflates the size baseline and can trip the React runtime scan for a plugin that serves other bundles from the same directory; the repeatable `--asset <name>` names the remote's own files, and the remote entry is always included.
 
 #### Rendering the panel the way the host loads it
 
-Those checks read the built files. `--runtime` evaluates them and renders the exposed component to static markup, which is what catches a chunk that throws as it evaluates, a panel that renders nothing, a panel that saves during render, the compatibility notice, and a stale copy of this package rendering under a current pin:
+Those checks read the built files. `--runtime` also evaluates them and renders the exposed component to static markup, which is what catches a chunk that throws as it evaluates, a panel that cannot open on a fresh install, a panel that renders nothing or saves during render, and a stale copy of this package rendering under a current pin:
 
 ```sh
 npx snui-check-consumer --root . --remote public/remoteEntry.js --runtime --expose ./PluginConfigurationPanel --expect "Loading conversions"
 ```
 
-It loads the remote entry as a classic script in a Node context that answers what a panel remote reads while it evaluates, so a remote built with a library type of `"module"` cannot be run this way: the command reports it as such, and the static checks cover that build without `--runtime`. It initializes the share scope with the consumer's own React and React DOM, registers the chunks beside the entry, gets the exposed module, and renders it twice. The first render takes the native CSS `@scope` interface away, which is what `supportsNativeCssScope` looks for, and asserts the compatibility notice a browser without it gets; the second renders the panel and asserts it carries `data-snui-version` of exactly the installed version and no other. The check owns the browser knowledge, so a consumer never maintains a list of the globals React Aria sets up on import.
+A classic remote runs in a Node context that answers what a panel remote reads while it evaluates. A module remote runs in a worker thread that imports the entry by file URL, so both formats the Admin loads can be rendered. Either way the check initializes the share scope with the consumer's own React and React DOM, gets the exposed module, and renders it in turn:
 
-Only `--expose` is required, naming the module the remote exposes. `--container` names the global the classic container assigns itself to, and defaults to the consumer package name with `-`, `@`, and `/` replaced by underscores, which is what a Webpack library name built from a package name comes to. `--props` takes a JSON object merged over `{ "configuration": null }` for a panel that needs configuration to render; the host's `save` callback comes from the check, and a panel that calls it while it renders is reported. `--expect` names text the rendered panel must contain and may be repeated. `--expect-unsupported` does the same for the compatibility render, and replaces the default assertion on this package's own notice for a panel that passes `PanelShell` an `unsupported` element of its own. `--no-compatibility-render` skips that render for a panel that deliberately renders no notice. Every runtime option needs `--runtime`, and passing one without it fails rather than checking less than the consumer asked for.
+1. Without the native CSS `@scope` interface, which is what `supportsNativeCssScope` looks for, asserting the compatibility notice a browser without it gets.
+2. With `configuration` undefined, which the Admin passes a plugin nobody has configured, asserting the `data-snui-version` stamp of exactly the installed version and no other.
+3. With `configuration` set to `{}`, which the Admin passes a package that enables itself by default, asserting only that the panel renders without calling `save`.
+4. With the `--props` object, when one is given, asserting the stamp again.
 
-The repository checks the declaration against that committed baseline rather than installing the contract package, for the reason recorded in `scripts/check-host-contract.mjs`. The baseline tracks the published npm inventory; it does not prove an installed Signal K version, React runtime, or share scope. Signal K 2.23 still used React 16 in its active Admin UI even though version 2.23.0 of the inventory declared a React 19 peer. This package therefore requires Signal K 2.24 or newer for a React 19 Webpack panel, while the documented ESM globals require Signal K 2.27 or newer. A review of Signal K `master` is a separate forward-compatibility check because unpublished host changes must not silently rewrite the package contract. `npm run host-contract` compares package metadata with the committed baseline. `npm run host-contract:drift` compares the baseline with the current registry declaration without changing files, and `npm run host-contract:update` refreshes and verifies the baseline when reviewed drift should be accepted.
+The check owns the browser knowledge, so a consumer never maintains a list of the globals React Aria sets up on import.
+
+Only `--expose` is required, naming the module the remote exposes. `--props` takes a JSON object passed to the panel as its props, `configuration` included, for a panel that needs a saved configuration to show what `--expect` looks for. The host's `save` callback always comes from the check, and a panel that calls it during any render is reported. `--expect` names text the rendered panel must contain and may be repeated; it applies to the `--props` render when there is one, and to the unconfigured render otherwise. `--expect-unsupported` does the same for the compatibility render, and replaces the default assertion on this package's own notice for a panel that passes `PanelShell` an `unsupported` element of its own. `--no-compatibility-render` skips that render for a panel that deliberately renders no notice. Every runtime option needs `--runtime`, and passing one without it fails rather than checking less than the consumer asked for.
+
+### Host contract tracking
+
+The repository checks the `@signalk/server-admin-ui-dependencies` declaration against the committed `tests/host-contract.baseline.json` rather than installing the contract package, for the reason recorded in `scripts/check-host-contract.mjs`. The baseline tracks the published npm inventory; it does not prove an installed Signal K version, React runtime, or share scope. Signal K 2.23 still used React 16 in its active Admin UI even though version 2.23.0 of the inventory declared a React 19 peer, which is why the floors above start at 2.24. `npm run host-contract` compares package metadata with the committed baseline. `npm run host-contract:drift` compares the baseline with the current registry declaration without changing files, and `npm run host-contract:update` refreshes and verifies the baseline when reviewed drift should be accepted.
+
+The inventory does not describe the loader, which has changed its share and script handling in releases that left the inventory alone. `npm run host-contract:loader` hashes the Signal K server and Admin loader functions this package and its consumers build on, at the latest Signal K release, and fails when one moves, naming the facts a reviewer must recheck. `tests/host-loader.baseline.json` records the hashes and the release they were reviewed at, currently v2.33.0, and `npm run host-contract:loader:update` accepts a reviewed change. Both comparisons need the network, so they run weekly in the host contract workflow rather than in `npm run validate`.
 
 `npm run dependency-contract` separately verifies that the locked React Aria packages remain deduplicated, mutually compatible, and compatible with their declared React peer ranges. It runs in `npm run validate` after the host contract check.
 
@@ -145,7 +185,7 @@ Do not configure this package as a runtime Module Federation share. Each plugin 
 
 ### Entry points
 
-The package root contains the panel shell and root, layout, text, field, feedback, theme, compatibility, and formatting primitives. Version 0.7.0 moved composites, data grids, form composites, and overlays to focused entry points so their ownership and bundle boundaries stay explicit:
+The package root contains the panel shell and root, layout, text, field, feedback, theme, compatibility, and formatting primitives. Composites, data grids, form composites, and overlays have focused entry points, so their ownership and bundle boundaries stay explicit:
 
 ```tsx
 import { Button, NumberField, PanelShell } from "signalk-nearlcrews-ui";
@@ -178,13 +218,13 @@ import {
 } from "signalk-nearlcrews-ui/overlays";
 ```
 
-`Accordion`, `CheckboxGroup`, `EmptyState`, `Progress`, `SaveActionBar`, `Disclosure`, `Tabs`, and `Table` are available only from `/composites`. `Radio`, `RadioGroup`, `SecretInput`, and `Switch` are available only from `/forms`. The complete data-grid collection API is available only from `/data-grid`, and dialogs, menus, popovers, and toasts are available only from `/overlays`. `Accordion`, `EmptyState`, and `Progress` moved out of the package root in 0.7.0, so a panel upgrading from 0.6.x must update those imports.
+`Accordion`, `CheckboxGroup`, `EmptyState`, `Progress`, `SaveActionBar`, `Disclosure`, `Tabs`, and `Table` are available only from `/composites`. `Radio`, `RadioGroup`, `SecretInput`, and `Switch` are available only from `/forms`. The complete data-grid collection API is available only from `/data-grid`, and dialogs, menus, popovers, and toasts are available only from `/overlays`.
 
-`signalk-nearlcrews-ui/format` publishes the formatting and state helpers (`formatRelativeAge`, `formatRelativeAgeSince`, `RELATIVE_AGE_EN`, `RELATIVE_AGE_NARROW`, `resolveFreshness`, `resolveReachability`, `REACHABILITY_STATUS`, `formatCount`, and `joinList`) with no React anywhere in its module graph, for a worker, a service worker, or a plain Node script; the package root exports the same helpers for panel code. `signalk-nearlcrews-ui/tokens.css` is the one stylesheet entry point. Importing the stylesheet does not import or execute React, so panels in other frameworks can use the tokens described under theme preference below. Installing the package still resolves its declared dependencies and React peer dependencies; the stylesheet is not a dependency-free package split.
+`signalk-nearlcrews-ui/format` publishes the formatting and state helpers (`formatRelativeAge`, `formatRelativeAgeSince`, `RELATIVE_AGE_EN`, `RELATIVE_AGE_NARROW`, `resolveFreshness`, `resolveReachability`, `REACHABILITY_STATUS`, `formatCount`, and `joinList`) with no React anywhere in its module graph, for a worker, a service worker, or a plain Node script; the package root exports the same helpers for panel code. A plugin whose server code imports it keeps the package in `dependencies` and passes `--runtime-dependency` to the consumer check. `signalk-nearlcrews-ui/tokens.css` is the one stylesheet entry point. Importing the stylesheet does not import or execute React, so panels in other frameworks can use the tokens described under theme preference below. Installing the package still resolves its declared dependencies and React peer dependencies; the stylesheet is not a dependency-free package split.
 
-Two entries serve build tooling rather than the browser: `signalk-nearlcrews-ui/federation` is the CommonJS Module Federation share map described under the host dependencies above, and `signalk-nearlcrews-ui/package.json` exposes the manifest so a build script can read the installed version through Node resolution. Every JavaScript entry also carries a `default` condition, so a CommonJS consumer such as a Node test runner can `require` it on Node 22.12 or newer.
+Three entries serve tooling rather than a panel. `signalk-nearlcrews-ui/federation` is the CommonJS Module Federation share map described under the host dependencies above, and `signalk-nearlcrews-ui/package.json` exposes the manifest so a build script can read the installed version through Node resolution. `signalk-nearlcrews-ui/host-harness` is browser test tooling: `createHostShareScope`, `loadPanelRemote`, and `HostPanelFrame` load a consumer's built remote the way the Signal K Admin loader does, from the fallback share scope and the script tag type through the configuration view around the panel, so a consumer's browser fixture does not rebuild the loader. It mirrors Signal K 2.33.0, opens the panel with `configuration` unset unless the fixture passes one, and replaces it with what the panel saves, as the Admin does. Import it from a test fixture only: `snui-check-consumer` fails a remote that bundles it. The API reference's [host harness section](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md#host-harness) lists its props and options. Every JavaScript entry also carries a `default` condition, so a CommonJS consumer such as a Node test runner can `require` it on Node 22.12 or newer.
 
-The [API reference](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md) lists the complete entry-point inventory, the gzip size of each entry, package-specific props, ref targets, public values, defaults, and localization hooks.
+The [API reference](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md) lists the complete entry-point inventory, the gzip size of each entry and of a typical tree-shaken panel, package-specific props, ref targets, public values, defaults, and localization hooks.
 
 ### Browser preflight
 
@@ -223,8 +263,12 @@ interface Configuration {
   serverUrl: string;
 }
 
+// The plugin owns its defaults. Signal K Admin passes no configuration for a
+// plugin nobody has saved, and {} for a package enabled by default.
+const DEFAULT_CONFIGURATION: Configuration = { serverUrl: "" };
+
 interface PluginConfigurationPanelProps {
-  configuration: Configuration;
+  configuration?: Partial<Configuration> | undefined;
   save: (configuration: Configuration) => void;
 }
 
@@ -232,12 +276,14 @@ export default function PluginConfigurationPanel({
   configuration,
   save,
 }: PluginConfigurationPanelProps) {
-  const [serverUrl, setServerUrl] = useState(configuration.serverUrl);
-  const dirty = serverUrl !== configuration.serverUrl;
+  const saved = { ...DEFAULT_CONFIGURATION, ...configuration };
+  const [serverUrl, setServerUrl] = useState(saved.serverUrl);
+  const [saveRequestedAt, setSaveRequestedAt] = useState<number | null>(null);
+  const dirty = serverUrl !== saved.serverUrl;
   useUnsavedChangesGuard(dirty);
 
   return (
-    <PanelShell title="Connection" themeToggle="end">
+    <PanelShell themeToggle="end">
       <Section title="Server">
         <LabeledField label="Server URL" required>
           <TextInput
@@ -249,15 +295,22 @@ export default function PluginConfigurationPanel({
       </Section>
       <SaveActionBar
         dirty={dirty}
-        onDiscard={() => setServerUrl(configuration.serverUrl)}
-        onSave={() => save({ ...configuration, serverUrl })}
+        unconfigured={configuration === undefined}
+        saveRequestedAt={saveRequestedAt}
+        onDiscard={() => setServerUrl(saved.serverUrl)}
+        onSave={() => {
+          setSaveRequestedAt(Date.now());
+          save({ ...saved, serverUrl });
+        }}
       />
     </PanelShell>
   );
 }
 ```
 
-`PanelShell` is the recommended frame. It runs the browser preflight once, then renders `PanelRoot`, an outer `Stack`, the optional title at `headingLevel` (default 2, because Signal K Admin owns the page heading), the optional `description`, which renders with or without a title, one polite and one assertive live region for the panel, a `ThemeToggle` placed by `themeToggle`, and a `PanelErrorBoundary` that offers "Try again" and a page reload when the panel content throws. State the placement rather than leaning on the default: `themeToggle="end"` is the convention every NearlCrews panel follows, and the reload action is now the default, which `onReload={null}` withholds. A titled shell also offers the level below its title to the `Section` and `CollapsibleSection` rendered inside it, so the example above heads the panel `h2` and its section `h3` without being told; an explicit `headingLevel` on a section still decides, a shell with no title passes its own level through, and the derived level stops at 6. Every other `PanelRoot` prop reaches the root; `title` and `children` belong to the shell, and `onError` goes to the error boundary rather than the root element.
+The example reads its configuration the way the Admin supplies it. `configuration` is undefined until the first save, so the panel fills it from its own defaults and passes `unconfigured` while it is absent, which offers Save with nothing edited. After a save the Admin hands the saved object straight back as `configuration`, which clears `dirty` with no resync code, and `saveRequestedAt` keeps "Save sent to the server" up for a moment. The package boundary below lists the three states the host opens a panel in.
+
+`PanelShell` is the recommended frame. It runs the browser preflight once, then renders `PanelRoot`, an outer `Stack`, the optional `title` and `description`, the panel's polite and assertive announcer regions, a `ThemeToggle` placed by `themeToggle`, and a `PanelErrorBoundary` that offers "Try again" and a page reload when the panel content throws; `onReload={null}` withholds the reload. State the placement rather than leaning on the default: `themeToggle="end"` is the convention every NearlCrews panel follows. Leaving out `title` is the convention too, because the Signal K Admin card header above the panel already names the plugin, by its npm package name, and a panel title would add a second name for the same plugin. That header is an `h5` and the Admin renders no `h1`, so `headingLevel` defaults to 2, the highest level a panel should take. A shell with no title passes that level to the `Section` and `CollapsibleSection` rendered inside it, and a titled shell offers them the level below its title; an explicit `headingLevel` on a section still decides, and the derived level stops at 6. Every other `PanelRoot` prop reaches the root; `title` and `children` belong to the shell, and `onError` goes to the error boundary rather than the root element.
 
 `PanelRoot` installs the root stylesheet as one deduplicated style element per package version and CSP nonce in its rendered root's owner document for the lifetime of its mounted roots. Every other component installs its own style module the same way on first mount, so a panel carries CSS only for what it renders: `Dialog`, `AlertDialog`, `Popover`, `Menu`, `ToastRegion`, `DataGrid`, `Table`, `Tabs`, `RangeInput`, `Textarea`, `Switch`, `RadioGroup`, `Radio`, `Progress`, and `EmptyState`. The overlays and `DataGrid` also portal into the root, so they require a `PanelRoot` ancestor and throw without one; the in-flow controls render unstyled outside one. Separately bundled remotes share the same document registry. Native CSS scopes limit styles to the nearest exact package-version root, including nested version re-entry. Styles are removed after the last root using that version and nonce unmounts and are never written to `:root`. Consumers do not need a CSS loader. Panels use full width by default so the themed surface covers data-dense administration content. Set `width="standard"` or `width="wide"` when a bounded reading width is appropriate.
 
@@ -271,38 +324,31 @@ The host must supply the nonce through its own trusted bootstrap. Do not read it
 
 ## Components
 
-- `PanelShell` composes the whole panel frame: the browser preflight, `PanelRoot`, an outer `Stack`, an optional `title` at `headingLevel` with an optional `description` below it, a `ThemeToggle` placed at the `"end"`, `"between"` the title and content, or nowhere, and a `PanelErrorBoundary` around the children. A panel states `themeToggle="end"` rather than relying on the default, and `"between"` on a shell with no `title` resolves to `"end"`, because there is nothing for it to sit between. The shell also mounts the panel announcer, the polite and assertive regions `usePanelAnnouncer` writes to, and takes `unsupportedLabels` for the compatibility notice. `PanelErrorBoundary` catches a render error inside the panel, offers "Try again" and a reload action that `onReload={null}` withholds, and accepts a `fallback` render prop and `onError`. `useUnsavedChangesGuard(dirty)` registers the browser's unload confirmation while a panel has unsaved changes.
-- `PanelRoot` provides scoped styles, theme state, and the in-root portal container used by overlays and notifications. It takes `defaultTheme` for a panel that expects night use and `locale` for the panel's formatters; an advanced integration may supply `ThemeProvider` directly and read the choice with `usePanelTheme`, though that provider installs no styles and creates no portal root. Overlays and notifications verify that the resolved target is their exact owning root, so a nested low-level React Aria portal provider cannot redirect them across the panel boundary. `UnsupportedBrowserNotice` is the standalone section, named by its heading, that consumers may render instead when their browser preflight rejects native CSS `@scope` support.
-- `ThemeToggle` selects Auto, System, Light, Dark, or Night and accepts a `label` and per-instance choice labels for localization. Auto follows an explicit host theme and otherwise uses Light. System follows `prefers-color-scheme`. `choices` limits the offered themes, and `onValueChange` reports each selection.
-- `Button` supplies primary, secondary, ghost, and danger presentation, plus compact and pill options. `as="a"` renders an anchor form with a required safe `href`: HTTP, HTTPS, mail, telephone, fragment, query, and relative destinations are supported, while dangerous or unknown schemes are made inert. `fullWidth` stretches the control to its container, and `iconOnly` squares it for icon content with a required accessible name. `ariaDisabled` keeps a control focusable while suppressing activation at a list boundary. A loading button uses the same focus-preserving behavior and accepts `loadingLabel` for its accessible busy-state description.
-- `SegmentedControl` implements a single-choice radio group with roving focus. All four arrow keys move within the group in either orientation, the horizontal pair mirroring in a right-to-left panel, Home and End reach the ends, and holding Ctrl, or Command on macOS, moves focus without changing the selection. `readOnly` blocks the selection while every option keeps its tab stop, and `description`, `error`, and `errorLive` match `RadioGroup`. It runs controlled through `value` or uncontrolled through `defaultValue`, lays out horizontally or vertically through `orientation`, takes its accessible name from `label` and shows or hides it through `labelVisibility`, reports the selection through `onValueChange`, and carries it into native form submission and reset through `name`.
-- `RadioGroup` and `Radio` provide a native radio group with label, description, validation messages with opt-in live announcement, and horizontal or vertical orientation. `onValueChange` reports the selected value, and `name` applies to every radio input so native form submission and reset work.
-- `Switch` toggles a single setting and mirrors the `Checkbox` naming: `checked` and `defaultChecked` map to the selected state, `label` names it, and `onCheckedChange` reports the next state. `name`, `value`, `form`, `disabled`, `readOnly`, and `required` participate in native form behavior.
-- `LabeledField`, `InputGroup`, `InputGroupControl`, `InputGroupAddon`, `TextInput`, `NumberInput`, `RangeInput`, `Select`, `Textarea`, and `Checkbox` provide accessible form structure. Render-prop fields identify the primary labeled control while allowing paired inputs, unit suffixes, and adjacent actions, and the render-prop control props carry `descriptionId` and `errorId` so paired controls can reference field text directly; `splitLabeledFieldControlProps` separates the two ids from the spreadable control props, and `controlDescribedBy` names text outside the field that also describes the control so the merged `aria-describedby` arrives ready to spread. Fields forward `name` and `disabled` to their control, `optionalLabel` marks optional fields beside the required marker, and `density` takes the shared `Density` vocabulary. Fields and checkboxes accept validation messages and opt-in live announcement modes. `TextInput` covers text, email, password, search, tel, url, date, time, datetime-local, month, and week entry, and text controls accept `monospace` for keys, paths, and identifiers. `Textarea.minRows` sets a visible row floor the control grows from where the browser supports it. `Checkbox` drives the native mixed state through `indeterminate` and hides a still-required label through `labelVisibility="hidden"`, and `RangeInput` shows a filled progress track in every supported engine.
-- `NumberField` is a labeled numeric field that keeps a draft while the user types and commits what the text resolves to on every keystroke. Without `fallback` it validates against `min`, `max`, `exclusiveMin`, `exclusiveMax`, and `integer`, shows a per-reason message, and reports `onValidityChange`; with `fallback` it clamps, truncates, and snaps to `step`. `allowEmpty` commits `undefined` for a cleared field, `unit` renders an addon, and a wheel over the focused input blurs it so scrolling cannot spin the value. `useNumberDraft` gives a bare `NumberInput` the same buffer.
-- `SecretInput` composes `TextInput`, `InputGroup`, and an explicit Show or Hide button. It supports controlled and uncontrolled reveal state, customizable labels, trailing content, and an input ref. Pointer activation preserves the input focus, caret, and selection, and the input defaults to `new-password` autocompletion with spelling, capitalization, and correction services off so a revealed secret is not captured. The consumer still owns the secret value, storage, redaction, and authorization policy.
-- `FieldGroup` provides a native fieldset and legend with description, action, validation error, and disabled support. `CheckboxGroup` builds on it: a grid or stacked list of `Checkbox` options with controlled or uncontrolled selection, `name` for native form data, a tri-state select-all checkbox in the legend row, and an `emptyWarning` announced politely while nothing is selected.
-- `Section` and `CollapsibleSection` provide semantic content grouping. `CollapsibleSection` renders a heading button and a named content region with controlled or uncontrolled state, summaries below the header or trailing within it that stay visible while open through `summaryVisibility`, a `leading` slot outside the toggle, sibling actions, retained, lazily retained, or unmounted content through `mountStrategy`, an `embedded` variant for nesting inside a `Card`, a `landmark` opt-out, and focus restoration. A retaining strategy keeps hidden state alive while pausing the subtree's effects, so an effect there runs its cleanup on collapse and runs again on expand. The [API reference](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md) records the rules that follow for validity reporting, abortable work, and one-time initialization.
-- `Accordion` coordinates `CollapsibleSection` children so at most one section stays open at a time. Its sections are not region landmarks unless a child passes `landmark`.
-- `Disclosure`, `DisclosureTrigger`, and `DisclosurePanel` provide a headless button-triggered disclosure that owns the ids, `aria-expanded`, `aria-controls`, and the focus handoff into the panel on open and back to the trigger on close; `useDisclosure` returns the same props for custom elements. `Tabs`, `TabList`, `Tab`, and `TabPanel` provide a tab list with roving tabindex, direction-aware arrow, Home, and End keys, automatic or manual activation, a `badge` slot per tab, and a `mountStrategy` per panel.
-- `Banner` and `StatusIndicator` provide text-backed feedback that does not rely on color alone. Banners span the neutral tone plus the semantic tones, and accept actions, dismissal, localized severity text, and consumer-selected roles such as `note`. `dismissFocusRef` names where focus goes every way the banner takes it away, not the Dismiss press alone: an action that unmounts the banner and an announcing banner whose actions go with its message hand focus to the same destination. `StatusIndicator` varies its dot shape per tone, renders the tone glyph beside the dot, and offers `size="compact"` for chips while keeping its text for assistive technology. Both accept `live` for opt-in announcements and `toneLabel` to localize the announced severity.
-- `Progress` reports determinate or indeterminate progress with a required label, an optional tone, and `valueText` for assistive technology. A non-finite value renders as indeterminate.
-- `Text`, `Code`, and `VisuallyHidden` are the hint, caption, identifier, and hidden-text primitives. `Text` takes a `tone`, a `size`, and an element `as`; `Code` wraps inline anywhere and takes `block` for preformatted text. `LiveRegion` is a visually hidden announcer that takes a `message` and an announcement mode and emits exactly one of `role` or `aria-live`; change `announceKey` to announce the same message again.
-- `RelativeAge` renders an elapsed age as words from `ageMs` or a `since` timestamp, owns its own tick when given a timestamp, and renders a `<time dateTime>` element for it.
-- `ToastRegion` renders queued toasts into the nearest `PanelRoot` portal container and throws when rendered outside one, because a body fallback would lose the scoped theme. `createToastQueue` builds a queue, the shared `toast` queue covers the common single-region setup, and each toast carries a tone, an auto-dismiss delay, and an announcement mode. Info and success toasts time out after five seconds; warning and danger toasts stay until dismissed, and only danger is assertive. Reach for a toast to report transient administrative feedback; a condition that persists until someone acts on it belongs in a `Banner` or a tone-marked `Card`, which stay on screen until the panel removes them. A queue holds at most five toasts. When full, it evicts the oldest toast that is neither focused nor more consequential than the arrival, and when nothing may be dropped the arrival itself is refused rather than an unread warning or danger toast being lost. `createToastQueue({ onEvict })` reports each drop or refusal, and `ToastRegion.defaultDuration` sets the auto-dismiss delay for that region's ordinary toasts. The region renders only while it has toasts, sits one Tab stop from the panel start, and answers F6 from anywhere in the panel. Toasts stay visible, announced, and dismissable while a dialog is open, dismissing one moves focus to the next toast or back to where it came from, auto-dismiss pauses during hover or focus, safe-area insets keep the region reachable, and exit removal follows the transition token with immediate reduced-motion behavior and a timer fallback.
-- `Stack`, `Cluster`, `Card`, `MetricGrid`, `Metric`, and `Badge` standardize rhythm and presentational status shells while leaving status interpretation local. `Stack`, `Cluster`, `Card`, and `MetricGrid` accept `as` to render a semantic element and type their attributes and ref by that element, so `<Stack as="form">` accepts form attributes. `Card` adds compact and flush density, a `tone` accent bar, and header and footer slots. Each metric is a named semantic group. `Metric` and `Badge` render a tone glyph for non-neutral tones and accept `toneLabel`. `Metric` also accepts a `unit` suffix beside the value and `live` for opt-in announcements.
-- `DataGrid` renders an accessible React Aria table with sortable headers, single or multiple selection, compact density, zebra striping, an `EmptyState`-backed empty view, and virtualized rows above a configurable threshold. React Aria `Virtualizer` and `TableLayout` preserve the complete collection for keyboard navigation and accessibility while observing variable row heights. Give each item a stable `id` or `key`; the index fallback remounts visible rows after sorting or filtering. Sorting is controlled: pair `onSortChange` with `sortDescriptor` and sort `items` in the consumer. `Column` is the package's wrapper around React Aria's column and adds `numeric` (end-aligned figures in tabular digits) and `wrap` (multi-line virtualized cells); `Row` and `Cell` are re-exported from React Aria Components. The grid installs its styles from the owning `PanelRoot` and requires one.
-- `Table`, `TableHeaderCell`, `TableCell`, and `TableScrollRegion` cover the small semantic table that does not need the grid: a table named by `caption` or ARIA, `numeric` cells, `zebra` rows, `density`, and a focusable named scroll region.
-- `EmptyState` presents an empty view with a decorative icon, a title, a description, and an action. The title is a styled div, not a heading, so consumers own the surrounding outline.
-- `ActionBar` lays out consumer-owned state and actions. `sticky="top"` and `sticky="bottom"` preserve scroll-container pinning. `sticky="viewport-bottom"` keeps actions at the usable viewport bottom inside the `PanelRoot` column, accounts for the visual viewport and safe-area inset, reserves flow space, returns to natural flow at its anchor, and leaves when the panel is offscreen. Pass `statusRef` to obtain the focusable status destination, then focus it when save or discard disables the initiating control.
-- `SaveActionBar` is the Save and Discard footer built on `ActionBar`. It takes `dirty`, `saving`, `unconfigured`, `saveRequestedAt`, and `invalidMessage`, keeps the saved message up for `savedMessageDurationMs` (2,500 by default) measured from the request so a panel needs no timer of its own, renders a polite status whose tone follows the state, disables Save per the shared rule, moves focus to the status after either action, and docks at the viewport bottom by default. `resolveSaveActionBarState` exposes the rules as data for tests.
-- `InlineConfirm` replaces blocking browser confirmations with a named, focus-managed inline region that supports Escape and announces its message on open. It runs controlled through `open` or uncontrolled through `defaultOpen`. Set `headingLevel` to preserve the surrounding heading hierarchy, `landmark={false}` to drop the region landmark, and `initialFocusRef` and `returnFocusRef` to steer focus on open and close.
-- `Dialog` renders a modal surface with a scrim, focus management, a title and description, and an actions footer that accepts nodes or a `(close) => nodes` function so an uncontrolled dialog can close from its own action. `dismissable` covers a scrim press and `keyboardDismissable` covers Escape, and every decline calls `onCancel` before the dialog closes. It supports controlled or uncontrolled open state and a standard or wide width. Dialog sizing follows the visual viewport and safe-area insets.
-- `AlertDialog` shares the `Dialog` API and renders with the `alertdialog` role for confirmations that demand acknowledgement. Its required, non-empty `cancelLabel` creates an always-enabled cancel action before supplemental `actions`; `onCancel` runs before the dialog closes for the cancel button, Escape, and a scrim press when one is allowed, `cancelVariant` defaults to `secondary`, and scrim dismissal is off by default.
-- `Menu` pairs a `Button` trigger with a popover list of `MenuItem` actions, grouped by `MenuSection` and divided by `MenuSeparator`, with destructive styling for irreversible actions. The menu family exposes refs and forwards the attributes React Aria passes to the DOM, and an item derives its typeahead text from its children.
-- `Popover` anchors free-form overlay content to a trigger with logical placement, collision flipping, and an optional fixed `width` given as a CSS length. Use a library `Button` as the trigger. A custom trigger must render a semantic interactive element, forward its ref, and spread every injected event and ARIA prop onto that element. Dialogs, menus, and popovers portal into their owning `PanelRoot`, use public z-index tokens that sit above the Signal K Admin fixed header and sidebar, and raise nested overlays above their owning dialog.
+The [API reference](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md) holds every component's props, defaults, and ref target. This list says what each one is for, and the choice a panel makes when it reaches for it.
 
-`formatRelativeAge(ageMs, options)` formats an elapsed age in milliseconds through `Intl.RelativeTimeFormat`, from seconds through years. The defaults count in numbers from a day up and use words below it (`"now"`, `"2 minutes ago"`, `"1 day ago"`, `style: "long"`) with the fallback `"Unknown"`; `RELATIVE_AGE_EN` pins the wording to English for a panel whose surrounding copy is English anyway; `RELATIVE_AGE_NARROW` restores the compact form, and callers may provide `locale`, `numeric`, `style`, `negative`, and `fallback`. A small negative age from clock skew reads as now unless `negative: "fallback"` is passed. `formatRelativeAgeSince(timestamp, nowMs, options)` accepts epoch milliseconds, ISO strings, and dates, and the `RelativeAge` component owns the clock read and the tick.
+- `PanelShell` frames a panel, as Basic use shows; pass `themeToggle="end"` rather than relying on the default. `usePanelAnnouncer` speaks through the shell's own polite and assertive regions, which stay audible while a dialog, menu, or modal popover is open, and warns in development when no shell is there to speak through. `PanelErrorBoundary` is the boundary the shell renders, for a panel that builds its own frame, and `useUnsavedChangesGuard(dirty)` registers the browser's unload confirmation while the panel has unsaved changes.
+- `PanelRoot` provides scoped styles, theme state, the label bundle, and the in-root portal container that overlays and notifications require. Compose it directly only when the shell does not fit: run the browser preflight yourself, rendering `UnsupportedBrowserNotice` when it fails, and expect `usePanelAnnouncer` to have no regions to speak through. `defaultTheme` suits a panel that expects night use.
+- `ThemeToggle` offers Match Admin, Match device, Light, Dark, and Night. Offer all five unless the panel has a reason to narrow the set through `choices`.
+- `Button` renders primary, secondary, ghost, and danger actions, and an anchor through `as="a"`. For an action that cannot run right now, prefer `ariaDisabled` with a `disabledReason` over `disabled`: the button keeps its focus and says why, and `disabledReasonVisibility="visible"` shows the reason on screen. A loading button keeps its name and adds `loadingLabel` as its busy description.
+- `LabeledField` names, describes, and validates one control: `TextInput`, `NumberInput`, `RangeInput`, `Select`, `Textarea`, or a custom control that forwards the field props, and `InputGroup` lines a control up with its addons and actions. Pass the control as the child, or use the render-prop form for a composite field, as shown below. `Checkbox` carries its own label and validation message.
+- `NumberField` is a labeled numeric field that keeps a draft while the user types. It validates by default, showing a message once the edit finishes and reporting `onValidityChange`, or clamps to its bounds when given a `fallback`. `useNumberDraft` gives a bare `NumberInput` the same draft, `useFieldValidity` collects field validity for the save bar, and `useResetDrafts` returns a reset that a Discard handler calls to clear every draft in the panel.
+- `SegmentedControl`, `RadioGroup` with `Radio`, and `Switch` cover single choices and on or off settings, with native form participation. For a choice that cannot change right now, use `readOnly` rather than `disabled`, so the control keeps its tab stop.
+- `SecretInput` is a text input with an explicit Show or Hide button, whose input turns off autofill of saved passwords and the spelling, capitalization, and correction services, so a revealed secret is not captured. The consumer still owns the secret value, storage, redaction, and authorization policy.
+- `FieldGroup` groups related fields in a native fieldset under a legend, and `CheckboxGroup` builds a checkbox list with a select-all box on it. Name either with `label`; `legend` is an equivalent alias.
+- `Section` and `CollapsibleSection` group content under a heading, and `Accordion` keeps at most one collapsible section open. A collapsible section's `mountStrategy` decides whether hidden content keeps its state, which the retaining strategies do while pausing its effects. A section nested in another package section, and an embedded collapsible section, stays out of the landmark list unless `landmark` says otherwise.
+- `Disclosure` and `Tabs` provide a headless disclosure and a tab list that own their ids, keyboard handling, and focus handoff; `useDisclosure` returns the same props for custom elements.
+- `Banner` and `StatusIndicator` report state in words, glyphs, and shapes rather than color alone. Decide whether a message is news: `live` announces it, and a polite region that mounts with its message waits a moment before speaking so a screen reader hears it, which `deferFirstMessage={false}` turns off.
+- `FreshnessNote` says how recently a readout was checked, and changes to its own warning wording when the consumer marks it stale. The stale threshold stays with the consumer, and `resolveFreshness` and `usePollFreshness` compute it.
+- `Progress` reports determinate or indeterminate progress under a required label.
+- `Text`, `Code`, and `VisuallyHidden` are the hint, caption, identifier, and hidden-text primitives. `LiveRegion` announces text that is not otherwise on screen, and `settleMs` makes it wait until a changing message holds still.
+- `RelativeAge` renders an elapsed age in words and owns its own tick. `formatRelativeAge` and `formatRelativeAgeSince` return the same words as a string, and `RELATIVE_AGE_EN` pins them to English for a panel whose surrounding copy is English.
+- `ToastRegion` shows queued toasts inside the panel. Reach for a toast to report transient feedback; a condition that persists until someone acts on it belongs in a `Banner` or a tone-marked `Card`. `createToastQueue` builds a queue, and the shared `toast` queue covers a single region.
+- `Stack`, `Cluster`, `Card`, `MetricGrid`, `Metric`, and `Badge` standardize rhythm and status shells, while the consumer decides what a status means. `as` renders a semantic element, such as `<Stack as="form">`. `Metric.unit` takes a symbol or `{ symbol, name }`, so a screen reader hears the unit's name.
+- `DataGrid` is an accessible table with sorting, selection, and virtualized rows, and `Table` is the small semantic table that does not need the grid. Sorting is controlled: sort `items` in the consumer, and give each item a stable `id` or `key`.
+- `EmptyState` presents an empty view with a title, a description, and an action. Its title is not a heading, so the consumer owns the outline around it.
+- `ActionBar` lays out consumer-owned state and actions, and `SaveActionBar` is the Save and Discard footer built on it. Give `SaveActionBar` the panel's state (`dirty`, `saving`, `unconfigured`, `saveRequestedAt`, `invalidMessage`, and an `outcome` the plugin heard back from the server), and it decides the status, which buttons are enabled, and where focus goes; a Save or Discard handler may return the element to focus instead. `resolveSaveActionBarState` exposes the rules as data for tests.
+- `InlineConfirm` replaces a blocking browser confirmation with a named inline region that manages focus and takes its heading level from the section around it.
+- `Dialog` and `AlertDialog` are modal surfaces; use `AlertDialog`, whose `cancelLabel` is required, for a confirmation that demands acknowledgement. `Menu` pairs a button with a list of actions, and `Popover` anchors free-form content to a trigger; a custom trigger must render a semantic interactive element and forward its ref. All three portal into their owning `PanelRoot`, above the Signal K Admin header and sidebar.
 
 `LabeledField` children must accept and forward `id`, `required`, `disabled`, `name`, `aria-describedby`, `aria-errormessage`, and `aria-invalid`. The exported `FieldControlProps` interface defines that contract for custom controls. Required field labels, checkbox labels, radio group labels, legends, section titles, collapsible titles, and metric labels must contain rendered, non-whitespace content.
 
@@ -314,7 +360,7 @@ Refs are ordinary props and support object refs, callback refs, and React 19 cal
 
 ### Localization
 
-Every package-owned user-visible string is overridable. The [localization table](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md#localization-defaults) records the defaults for loading, dismissals, tone names, secret visibility, inline confirmation, the theme selector, theme choices, empty data, toasts, compatibility notices, panel errors, the save bar, number-field validation, and relative-age fallbacks. Every one of those defaults is fixed English: the package reads no locale for its own copy, while React Aria's built-in strings follow the browser locale. A panel on a non-English Admin replaces them in one place with `labels` on `PanelRoot` or `PanelShell`, a deeply optional bundle keyed by the surfaces in that table, and a component prop still wins over the bundle where one call site needs its own words. `AlertDialog.cancelLabel` has no default and must be supplied by the consumer.
+Every package-owned user-visible string is overridable. The [localization table](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md#localization-defaults) records the defaults for loading, dismissals, tone names, secret visibility, inline confirmation, the theme selector, theme choices, code blocks, freshness notes, empty data, toasts, compatibility notices, panel errors, the save bar, number-field validation, and relative-age fallbacks. Every one of those defaults is fixed English: the package reads no locale for its own copy, while React Aria's built-in strings follow the browser locale. A panel shown in a non-English browser replaces them in one place with `labels` on `PanelRoot` or `PanelShell`, a deeply optional bundle keyed by the surfaces in that table, and a component prop still wins over the bundle where one call site needs its own words. Blank bundle text reads as absent, so a partial translation leaves the rest in English. `PANEL_LABEL_DEFAULTS` exports the English defaults, frozen, so a consumer test can assert the words the package ships rather than retyping them, and the [test hooks](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md#test-hooks) list the data attributes a test may select by. `AlertDialog.cancelLabel` has no default and must be supplied by the consumer.
 
 ### Validation announcements
 
@@ -338,38 +384,49 @@ Persistent validation text defaults to `errorLive="off"`. Use `polite` or `asser
 
 ### Loading buttons
 
-Loading buttons remain in the focus order and suppress repeat activation. Keep the action label stable and localize the state prefix when needed:
+A loading button stays in the focus order and refuses repeat activation. Keep the action label as its name; `loadingLabel` is the busy description added beside it, so pass a short state word:
 
 ```tsx
-<Button loading={saving} loadingLabel="Saving" onClick={save}>
-  Configuration
+<Button loading={saving} loadingLabel="Saving" onClick={handleSave}>
+  Save configuration
 </Button>
 ```
 
 ### Composite fields
 
-For a composite field, spread the render-prop contract onto the primary control and copy only its `aria-describedby` value to secondary controls. Use a growing slot for the flexible control and a fixed slot to keep an exact input and its addon together:
+For a composite field, pass the render-prop argument through `splitLabeledFieldControlProps`, spread the `controlProps` it returns onto the primary control, and point each secondary control at `descriptionId` through `aria-describedby`. The two ids are lookups rather than attributes, so they belong on no element. Use a growing slot for the flexible control and a fixed slot to keep an exact input and its addon together:
 
 ```tsx
 <LabeledField label="Cache limit" description="Whole GiB" layout="inline">
-  {(controlProps) => (
-    <InputGroup density="compact">
-      <InputGroupControl controlWidth="grow">
-        <RangeInput {...controlProps} min={4} max={32} />
-      </InputGroupControl>
-      <InputGroupControl controlWidth="fixed">
-        <NumberInput
-          aria-label="Cache limit exact value"
-          aria-describedby={controlProps["aria-describedby"]}
-          min={4}
-          max={32}
-        />
-        <InputGroupAddon>GiB</InputGroupAddon>
-      </InputGroupControl>
-    </InputGroup>
-  )}
+  {(fieldProps) => {
+    const { controlProps, descriptionId } =
+      splitLabeledFieldControlProps(fieldProps);
+    return (
+      <InputGroup density="compact">
+        <InputGroupControl controlWidth="grow">
+          <RangeInput
+            {...controlProps}
+            min={4}
+            max={32}
+            unit={{ symbol: "GiB", name: "gibibytes" }}
+          />
+        </InputGroupControl>
+        <InputGroupControl controlWidth="fixed">
+          <NumberInput
+            aria-label="Cache limit exact value"
+            aria-describedby={descriptionId}
+            min={4}
+            max={32}
+          />
+          <InputGroupAddon>GiB</InputGroupAddon>
+        </InputGroupControl>
+      </InputGroup>
+    );
+  }}
 </LabeledField>
 ```
+
+`RangeInput.unit` draws nothing: it makes the slider read its value as "12 gibibytes" rather than a bare number.
 
 ### Token overrides
 
@@ -407,9 +464,9 @@ The Night palette preserves red for dark-adapted vision at the helm. The showcas
 The shared preference key is `signalk-nearlcrews-ui.theme.v1`, the only storage key the package reads or writes. On first resolution, `PanelRoot` uses this order:
 
 1. Read the shared key when it contains a valid value.
-2. Otherwise, use Auto without writing an implicit preference. Auto leaves `data-snui-theme` off the root so an optional Bootstrap, CoreUI, or legacy `.dark-mode` ancestor marker can apply. Without a recognized marker, the library uses Light. Signal K Admin does not currently guarantee or set one of these markers.
+2. Otherwise, use Auto, which the selector labels Match Admin, without writing an implicit preference. Auto leaves `data-snui-theme` off the root so an optional Bootstrap, CoreUI, or legacy `.dark-mode` ancestor marker can apply. Without a recognized marker, the library uses Light. Signal K Admin does not currently guarantee or set one of these markers.
 
-Selecting a theme writes the shared key and broadcasts the choice to panels in the same document, while open panels in other tabs follow the browser storage event. If the write fails, the selection remains current in the mounted panels for the page session but is not durable. Existing valid values, including Auto and System, otherwise remain authoritative. Auto follows only an optional recognized ancestor marker and falls back to Light, including in the current unmarked Signal K Admin host. System follows the operating-system color preference independently of the host theme. The Night theme uses a red-preserving palette inside the panel, so status remains distinguishable through text, glyphs, shapes, borders, and accessible tone labels rather than hue alone. It does not recolor Signal K host chrome or surrounding page gutters, so a host that needs full-surface night adaptation must coordinate those surfaces separately.
+Selecting a theme writes the shared key and broadcasts the choice to panels in the same document, while open panels in other tabs follow the browser storage event. If the write fails, the selection remains current in the mounted panels for the page session but is not durable. Existing valid values, including Auto and System, otherwise remain authoritative. Auto follows only an optional recognized ancestor marker and falls back to Light, including in the current unmarked Signal K Admin host. System, which the selector labels Match device, follows the operating-system color preference independently of the host theme. The Night theme uses a red-preserving palette inside the panel, so status remains distinguishable through text, glyphs, shapes, borders, and accessible tone labels rather than hue alone. It does not recolor Signal K host chrome or surrounding page gutters, so a host that needs full-surface night adaptation must coordinate those surfaces separately.
 
 ### Tokens without React
 
@@ -435,18 +492,45 @@ Use the standard Signal K schema-generated configuration form when a plugin need
 
 A consumer exposing a custom configuration panel uses the fixed `./PluginConfigurationPanel` module name and the `signalk-plugin-configurator` discovery keyword. Its default component receives only the host-owned `configuration` value and `save(configuration)` callback. Those are consumer entry-point responsibilities, not APIs exported or implemented by this component package.
 
-The current host types `save` as a function returning `void` and does not await persistence before updating its local configuration state. Treat calling it as a submission request, not confirmed durable success. A panel that needs confirmation, failure details, or retry behavior must obtain that evidence through a plugin-owned API.
+### What the host passes and does
+
+The Admin opens a panel in one of three states, and never passes `null`:
+
+- `configuration` is undefined for a plugin nobody has configured.
+- `configuration` is `{}` for a package that enables itself by default through `signalk-plugin-enabled-by-default`, until its first save. That plugin is already running.
+- After a save, `configuration` is the object the panel saved. The Admin hands it straight back without waiting for the server, so it is the panel's own value rather than a confirmation.
+
+Normalize the first two through the plugin's own defaults, and derive `SaveActionBar` `unconfigured` from an absent configuration only: a plugin enabled by default is already running with `{}`, so "Save to enable the plugin" would be false there. `snui-check-consumer --runtime` renders the panel in both unsaved states.
+
+The current host types `save` as a function returning `void` and does not await persistence before updating its local configuration state. Treat calling it as a submission request, not confirmed durable success. Confirming that a save persisted requires reading the saved value back, from the host's plugin configuration route or a plugin-owned API; failure details and retry behavior need a plugin-owned API.
+
+Signal K Admin renders and handles several things around a configuration panel, which a panel should neither repeat nor assume away:
+
+- Above the panel it renders one heading, the plugin card header, an `h5` holding the npm package name, then the Enabled, Data logging, and Enable debug switches, then the plugin's status message and last error while it is enabled. The page has no `h1`, so a panel heads at level 2, and a panel title adds a second name for the plugin the card header already names. A panel need not repeat the status line the card shows.
+- Saving answers the request and then stops and starts the plugin, so a panel polling a plugin route sees failures for that window. A panel holds its last reachability state, or reports it as not yet contacted, through the restart that follows its own save.
+- The host serves the persisted options at `GET /skServer/plugins/<id>/config`, readable by the admin session that holds the panel, which is how a panel can confirm a save without an API of its own.
+- A failed save raises the Admin's own alert and is otherwise not reported to the panel.
+- The Admin's viewport meta carries no `viewport-fit=cover`, so every `env(safe-area-inset-*)` is zero inside it, and the package's safe-area rules take effect only in a host that opts in.
 
 Signal K loads an embedded remote as trusted same-origin code in the Admin document. `PanelRoot`, native CSS scope, versioned styles, and in-root portals isolate presentation; they do not sandbox JavaScript, storage, network access, or the host DOM. Review and secure a custom panel as part of the plugin that ships it.
 
-Keep these concerns in each plugin:
+### What stays in each plugin
 
 - Fetching and Signal K API calls
 - Configuration state and normalization
-- SI storage, display-boundary conversion, and server unit preferences, which a panel reads from the server (`/signalk/v1/unitpreferences/active`, or the per-user override the Admin honors under `/signalk/v1/applicationData/user/unitpreferences/1.0.0`) rather than from a panel-local units toggle
-- Local draft, dirty, and submission state; confirmed save status and retry orchestration require a plugin-owned API
+- SI storage, display-boundary conversion, and server unit preferences, which a panel reads from the server rather than from a panel-local units toggle, as described below
+- Local draft, dirty, and submission state; confirmed save status and retry orchestration read the saved value back or use a plugin-owned API
 - Domain validation and provider behavior
 - Plugin-specific tables, cards, and workflows
+
+The package draws and speaks a unit; it never fetches, selects, or converts one. A panel that shows a length, depth, speed, or temperature follows the Signal K server's unit preferences rather than a panel-local switch or a guess from the browser locale, and resolves them in four steps:
+
+1. Read the user's own choice from `GET /signalk/v1/applicationData/user/unitpreferences/1.0.0` with same-origin credentials. It holds only `{ activePreset }`.
+2. Resolve that name with `GET /signalk/v1/unitpreferences/presets/{name}`.
+3. Without a user choice, read the server-wide preset from `GET /signalk/v1/unitpreferences/active`, which needs no authentication and carries each category's `targetUnit`, `formula`, `inverseFormula`, and `symbol`.
+4. On any failure, use metric: servers without the unit preferences API answer 404.
+
+The server's own per-user resolution has one more step, a legacy `userPresets` configuration a panel cannot read, so the ladder above is the closest a panel gets. A value read from a Signal K path takes its display unit from that path's metadata, whose `displayUnits` the server has already resolved for the user, rather than from the category preset. Keep configuration and the data model in SI and convert only at the field. For a `NamedUnit`, the symbol comes from the preset and the long name from `GET /signalk/v1/unitpreferences/definitions`, where each conversion carries a `longName` such as "knots" beside the symbol "kn". The lookup, the conversion, and the fallback all stay in the plugin.
 
 See [the API reference](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/api-reference.md), [the design contract](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/design-contract.md), [the migration guide](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/migration.md), and [the release policy](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/release-policy.md) for the complete rules.
 
@@ -460,7 +544,7 @@ npm run test:browser
 
 Development supports Node 22.22.2 or newer in the Node 22 release line, Node 24.15.0 or newer in the Node 24 release line, or Node 26, with npm 11.16.0 or newer or npm 12; `devEngines` in `package.json` is the enforced statement of both ranges. These are source-tooling requirements and do not impose a Node runtime on consumers of the browser bundle; the published `engines.node` is the `>=22` floor Signal K server itself declares.
 
-`npm run validate` runs Biome and Prettier formatting, Markdown lint, spelling, repository-local link checks, Biome and type-aware ESLint rules, Knip dead-code analysis, TypeScript checks under both installed compilers, a Signal K Admin host dependency comparison against the committed contract baseline, and a locked React Aria compatibility check. It also runs unit and type-level coverage with aggregate and per-file floors, the runtime dependency audit, compilation, packed-package validation, an emitted-declaration comparison against the committed baseline, a consumer type check against the packed artifact, export-map-wide bundle-size and React externalization checks, and classic `var` and output-module ESM Module Federation fixture builds. The full-tree dependency audit runs as a separate, non-blocking CI job.
+`npm run validate` runs Biome and Prettier formatting, Markdown lint, spelling, repository-local link checks, the localization table check, Biome and type-aware ESLint rules, Knip dead-code analysis, TypeScript checks under both installed compilers, a Signal K Admin host dependency comparison against the committed contract baseline, and a locked React Aria compatibility check. It also runs unit and type-level coverage with aggregate and per-file floors, the runtime dependency audit, compilation with the shipped style text compacted and checked against its source, packed-package validation, a comparison of the public type surface against the committed baseline, a consumer type check against the packed artifact, a compile of every `tsx` example in this README and the migration guide against the packed declarations, export-map-wide bundle-size and React externalization checks, and classic `var` and output-module ESM Module Federation fixture builds. The unit suite also renders each of those examples and fails on any console warning. The full-tree dependency audit runs as a separate, non-blocking CI job.
 
 Two TypeScript compilers are installed on purpose. See the TypeScript toolchain section of `CONTRIBUTING.md` in the repository for why, and for the condition that collapses them back to one.
 
