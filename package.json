@@ -151,7 +151,7 @@
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",
     "@axe-core/playwright": "^4.13.0",
-    "@biomejs/biome": "2.5.13",
+    "@biomejs/biome": "2.5.14",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.63.0",
     "@testing-library/jest-dom": "^7.0.1",
