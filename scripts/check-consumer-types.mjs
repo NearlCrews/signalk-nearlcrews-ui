@@ -7,27 +7,23 @@
  * the tarball into a temporary tree, and compiles `fixtures/consumer` against
  * it with no path mapping. It then proves the exports map resolves under
  * CommonJS `require` from the same tree, and that the federation entry loads
- * with the share map the build rendered.
+ * with the share map the build rendered. It also compiles the documentation
+ * examples in the same workspace (scripts/lib/doc-example-compile.mjs), so
+ * validation packs once.
  */
-import { execFileSync, spawnSync } from "node:child_process";
-import {
-  cpSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  realpathSync,
-  rmSync,
-  symlinkSync,
-} from "node:fs";
+import { spawnSync } from "node:child_process";
+import { cpSync, existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { exportSpecifier } from "./lib/bundle-contract.mjs";
+import {
+  compileDocExamples,
+  readDocExamples,
+} from "./lib/doc-example-compile.mjs";
 import { createFederationShared } from "./lib/federation-share.mjs";
-import { parseNpmPackResult, runNpmPack } from "./lib/npm-pack.mjs";
-import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
+import { createPackedWorkspace } from "./lib/packed-workspace.mjs";
+import { repositoryPath } from "./lib/paths.mjs";
 import { typescriptCompilerEntry } from "./lib/typescript-compiler.mjs";
 
 const fixtureDirectory = repositoryPath("fixtures", "consumer");
@@ -36,46 +32,11 @@ if (!existsSync(repositoryPath("dist", "index.d.ts"))) {
   throw new Error("Run the build before checking consumer types.");
 }
 
-const workspace = mkdtempSync(join(tmpdir(), "snui-consumer-"));
+const packed = await createPackedWorkspace("snui-consumer-");
 
 try {
-  // `--ignore-scripts` keeps `prepack` from rebuilding dist in the middle of a
-  // validation run that already built it. `--json` keeps the tarball name out
-  // of stdout scraping.
-  const output = runNpmPack([
-    "--json",
-    "--ignore-scripts",
-    "--pack-destination",
-    workspace,
-  ]);
-  const packageJson = await readPackageJson();
+  const { packageDirectory, packageJson, workspace } = packed;
   const packageName = packageJson.name;
-  const tarball = parseNpmPackResult(output, packageName).filename;
-
-  const modules = join(workspace, "node_modules");
-  mkdirSync(modules, { recursive: true });
-
-  // Extract the packed artifact as the dependency under test.
-  const packageDirectory = join(modules, packageName);
-  mkdirSync(packageDirectory, { recursive: true });
-  execFileSync(
-    "tar",
-    ["--extract", "--strip-components=1", "--file", join(workspace, tarball)],
-    { cwd: packageDirectory },
-  );
-
-  // Reuse the repository's installed dependencies rather than reaching the
-  // network: a real consumer install resolves the package's own dependencies
-  // (React Aria Components and its type packages) beside it, and the packed
-  // declarations reach into them.
-  for (const dependency of readdirSync(repositoryPath("node_modules"))) {
-    if (dependency.startsWith(".") || dependency === packageName) continue;
-    symlinkSync(
-      repositoryPath("node_modules", dependency),
-      join(modules, dependency),
-      "junction",
-    );
-  }
 
   // The fixture is compiled from inside the workspace so bare specifiers
   // resolve to the packed artifact rather than walking up to the repository.
@@ -99,6 +60,10 @@ try {
       "Consumer types failed to compile against the packed declarations.",
     );
   }
+
+  // The documentation examples compile in the same packed workspace, so
+  // validation packs the package once.
+  process.stdout.write(`${compileDocExamples(packed, readDocExamples())}\n`);
 
   // A CommonJS consumer (a Node test runner, a build script) must be able to
   // resolve every JavaScript entry through `require`; the `default` condition
@@ -141,5 +106,5 @@ try {
     "Packed-artifact consumer types compiled against dist, and every entry resolves under require.\n",
   );
 } finally {
-  rmSync(workspace, { force: true, recursive: true });
+  packed.dispose();
 }

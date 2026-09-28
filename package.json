@@ -123,6 +123,7 @@
     "spellcheck": "cspell lint --no-progress --show-suggestions --config cspell.json \"**/*.md\" \"src/**/*.{ts,tsx}\" \"scripts/**/*.mjs\" \"bin/**/*.mjs\"",
     "docs:links": "node scripts/check-docs-links.mjs",
     "docs:labels": "node scripts/check-label-table.mjs",
+    "docs:examples": "node scripts/check-doc-examples.mjs",
     "docs:check": "npm run lint:docs && npm run spellcheck && npm run docs:links && npm run docs:labels",
     "knip": "knip",
     "host-contract": "node scripts/check-host-contract.mjs",
