@@ -6,6 +6,7 @@ import {
   useRef,
 } from "react";
 import { useComposedRef, useNodeRef } from "../hooks/use-node-ref.js";
+import { DraftResetScope } from "../hooks/use-reset-drafts.js";
 import { installPanelStyles } from "../styles/install.js";
 import { PANEL_STYLES } from "../styles/root-sheet.js";
 import { ThemeProvider, usePanelTheme } from "../theme/context.js";
@@ -100,7 +101,9 @@ function PanelSurface({
       <PanelLocaleProvider value={locale}>
         <PanelLabelsProvider value={labels}>
           <PanelPortalProvider getContainer={getPortalContainer}>
-            <div className="snui-root__content">{children}</div>
+            <DraftResetScope>
+              <div className="snui-root__content">{children}</div>
+            </DraftResetScope>
           </PanelPortalProvider>
         </PanelLabelsProvider>
       </PanelLocaleProvider>

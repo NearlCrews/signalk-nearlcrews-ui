@@ -20,8 +20,10 @@ import { DIALOG_STYLES } from "../styles/dialog.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { isDevelopment } from "../utils/environment.js";
 import { focusIsOnBody, focusPanelRoot } from "../utils/focus.js";
 import type { HeadingLevel } from "../utils/heading.js";
+import { SectionOutlineReset } from "../utils/heading-level.js";
 import {
   OverlayLayerProvider,
   overlayZIndex,
@@ -29,7 +31,11 @@ import {
 } from "../utils/overlay-layer.js";
 import { usePanelPortalContainer } from "../utils/portal.js";
 import { definedProps } from "../utils/props.js";
-import { hasReactContent, requireContent } from "../utils/react-node.js";
+import {
+  hasReactContent,
+  reactNodeText,
+  requireContent,
+} from "../utils/react-node.js";
 import {
   observePanelViewport,
   readViewportEdges,
@@ -76,8 +82,16 @@ export interface DialogProps
   readonly children?: ReactNode | undefined;
   readonly className?: string | undefined;
   readonly description?: ReactNode | undefined;
-  /** Allows dismissal by pressing the scrim. Defaults to true. */
+  /**
+   * Allows dismissal by pressing the scrim. Defaults to true. Turned off on a
+   * dialog without actions, it leaves Escape as the only way out, which a
+   * touch screen reader cannot send, and development builds warn.
+   */
   readonly dismissable?: boolean | undefined;
+  /**
+   * Level of the dialog title, default 2. The sections inside take the level
+   * below it, and a confirmation directly inside nests below it too.
+   */
   readonly headingLevel?: HeadingLevel | undefined;
   readonly id?: string | undefined;
   /** Allows dismissal with Escape. Defaults to true, for AlertDialog too. */
@@ -114,10 +128,29 @@ interface DialogSurfaceProps extends DialogProps {
   readonly role: "dialog" | "alertdialog";
 }
 
-function warnNoRouteOut(componentName: string): void {
+/**
+ * Warns about a dialog with no actions whose scrim does not close it. React
+ * Aria renders its visually hidden dismiss button only for a dismissable
+ * overlay, so Escape is then the one exit left, and a touch screen reader on a
+ * helm tablet cannot send Escape.
+ */
+function warnNoRouteOut(
+  componentName: string,
+  title: ReactNode,
+  keyboardDismissable: boolean,
+): void {
+  // Named by its title, so two such dialogs in one panel are both reported.
+  const dialog = `${componentName} ${JSON.stringify(reactNodeText(title).trim())}`;
+  if (keyboardDismissable) {
+    warnOnce(
+      `dialog-escape-only:${dialog}`,
+      `${dialog} refuses the scrim and renders no actions, so Escape is its only way out, which a touch screen reader cannot send. Pass actions, or render a close control in children.`,
+    );
+    return;
+  }
   warnOnce(
-    `dialog-no-route-out:${componentName}`,
-    `${componentName} refuses both the scrim and Escape and renders no actions, so the user may have no way out. Pass actions, or render a close control in children.`,
+    `dialog-no-route-out:${dialog}`,
+    `${dialog} refuses both the scrim and Escape and renders no actions, so the user may have no way out. Pass actions, or render a close control in children.`,
   );
 }
 
@@ -234,13 +267,15 @@ function DialogSurface({
       : undefined;
   const describedBy = joinIdReferences(ariaDescribedBy, descriptionId, bodyId);
 
+  // Gated here rather than in warnOnce, because naming the dialog walks its
+  // title, which a production render has no reason to pay for.
   if (
+    isDevelopment() &&
     !dismissable &&
-    !keyboardDismissable &&
     actions === undefined &&
     leadingActions === undefined
   ) {
-    warnNoRouteOut(componentName);
+    warnNoRouteOut(componentName, title, keyboardDismissable);
   }
 
   // The listener below is attached once per mount, so the gate it reads is
@@ -336,30 +371,40 @@ function DialogSurface({
                 : actions;
             return (
               <OverlayLayerProvider value={dialogLayer + 1}>
-                <DialogFocusBackstop panelRoot={panelRoot} />
-                <Heading
-                  slot="title"
-                  level={headingLevel}
-                  className="snui-dialog__title"
-                >
-                  {title}
-                </Heading>
-                {hasDescription ? (
-                  <div id={descriptionId} className="snui-dialog__description">
-                    {description}
-                  </div>
-                ) : null}
-                {hasBody ? (
-                  <div id={bodyId} className="snui-dialog__body">
-                    {children}
-                  </div>
-                ) : null}
-                {hasReactContent(leading) || hasReactContent(resolved) ? (
-                  <div className="snui-dialog__actions">
-                    {leading}
-                    {resolved}
-                  </div>
-                ) : null}
+                {/*
+                  Portaled to the panel root, but React context still hands
+                  the dialog the outline of the section it was opened from,
+                  so the dialog starts its own below its title.
+                */}
+                <SectionOutlineReset level={headingLevel}>
+                  <DialogFocusBackstop panelRoot={panelRoot} />
+                  <Heading
+                    slot="title"
+                    level={headingLevel}
+                    className="snui-dialog__title"
+                  >
+                    {title}
+                  </Heading>
+                  {hasDescription ? (
+                    <div
+                      id={descriptionId}
+                      className="snui-dialog__description"
+                    >
+                      {description}
+                    </div>
+                  ) : null}
+                  {hasBody ? (
+                    <div id={bodyId} className="snui-dialog__body">
+                      {children}
+                    </div>
+                  ) : null}
+                  {hasReactContent(leading) || hasReactContent(resolved) ? (
+                    <div className="snui-dialog__actions">
+                      {leading}
+                      {resolved}
+                    </div>
+                  ) : null}
+                </SectionOutlineReset>
               </OverlayLayerProvider>
             );
           }}

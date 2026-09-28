@@ -1,248 +1,16 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-
-import { Checkbox, NumberInput, Select, Textarea } from "../../src/index.js";
-import { formOf, renderInPanel } from "../helpers.js";
-
-describe("Checkbox activation area", () => {
-  it("places both messages outside the label that toggles the box", () => {
-    const { container } = renderInPanel(
-      <Checkbox
-        label="Emit computed values"
-        description="Publishes onto the vessel bus."
-        error="Choose a source first."
-        defaultChecked={false}
-      />,
-    );
-
-    // The test below proves behaviorally that pressing a message does not
-    // toggle; this one pins where the two messages sit, which is what makes
-    // that true and what a restructuring could quietly undo.
-    const control = container.querySelector("label.snui-checkbox__control");
-    expect(control?.querySelector(".snui-checkbox__description")).toBeNull();
-    expect(control?.querySelector(".snui-checkbox__error")).toBeNull();
-    const block = container.querySelector(".snui-checkbox");
-    expect(block?.tagName).toBe("DIV");
-    expect(block?.querySelector(".snui-checkbox__description")).not.toBeNull();
-    expect(block?.querySelector(".snui-checkbox__error")).not.toBeNull();
-  });
-
-  it("keeps the setting unchanged when the description or the error is pressed", async () => {
-    const user = userEvent.setup();
-    const { container } = renderInPanel(
-      <Checkbox
-        label="Emit computed values"
-        description="Publishes onto the vessel bus."
-        error="Choose a source first."
-      />,
-    );
-
-    const checkbox = screen.getByRole("checkbox", {
-      name: "Emit computed values",
-    });
-    const description = container.querySelector(".snui-checkbox__description");
-    const error = container.querySelector(".snui-checkbox__error");
-    expect(description).not.toBeNull();
-    expect(error).not.toBeNull();
-
-    await user.click(description as HTMLElement);
-    expect(checkbox).not.toBeChecked();
-    await user.click(error as HTMLElement);
-    expect(checkbox).not.toBeChecked();
-
-    // The label itself still toggles, so the control keeps its own hit area.
-    await user.click(screen.getByText("Emit computed values"));
-    expect(checkbox).toBeChecked();
-  });
-
-  it("marks a required box and keeps the mark out of its name", () => {
-    const { container } = renderInPanel(
-      <Checkbox required label="Accept the provider agreement" />,
-    );
-
-    const box = screen.getByRole("checkbox", {
-      name: "Accept the provider agreement",
-    });
-    expect(box).toBeRequired();
-    const marks = container.querySelectorAll(".snui-required-mark");
-    expect(marks).toHaveLength(1);
-    expect(marks[0]).toHaveAttribute("aria-hidden", "true");
-  });
-
-  it("takes markers of its own for the required and optional cases", () => {
-    const { container } = renderInPanel(
-      <>
-        <Checkbox required requiredLabel="(required)" label="Accept terms" />
-        <Checkbox optionalLabel="(optional)" label="Send diagnostics" />
-        <Checkbox label="Publish depth" />
-      </>,
-    );
-
-    const labels = container.querySelectorAll(".snui-checkbox__label");
-    expect(labels[0]?.querySelector(".snui-required-mark")).toHaveTextContent(
-      "(required)",
-    );
-    // The optional marker stays in the name, so what is heard matches what is
-    // drawn; a box with neither marker gains no trailing space.
-    expect(
-      screen.getByRole("checkbox", { name: "Send diagnostics (optional)" }),
-    ).toBeTruthy();
-    expect(labels[2]?.textContent).toBe("Publish depth");
-  });
-
-  it("reports an aria-label the rendered label overrides", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    renderInPanel(
-      <Checkbox
-        aria-label="Wind"
-        label="Publish wind alerts to the vessel bus"
-      />,
-    );
-
-    expect(warn.mock.calls[0]?.[0]).toContain("aria-label");
-    // The rendered label is what names the box, whatever was passed.
-    expect(
-      screen.getByRole("checkbox", {
-        name: "Publish wind alerts to the vessel bus",
-      }),
-    ).toBeTruthy();
-  });
-});
-
-describe("Checkbox held focusable while blocked", () => {
-  it("blocks every route to the state while staying operable", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    renderInPanel(
-      <Checkbox
-        ariaDisabled
-        label="Include primary provider"
-        checked
-        onChange={onChange}
-      />,
-    );
-
-    const box = screen.getByRole("checkbox", {
-      name: "Include primary provider",
-    });
-    expect(box).toHaveAttribute("aria-disabled", "true");
-    // Focusable, and still reporting its real state: this is the last
-    // remaining selection, not a control that has gone away.
-    expect(box).toBeEnabled();
-    expect(box).toBeChecked();
-    box.focus();
-    expect(box).toHaveFocus();
-
-    await user.click(box);
-    expect(onChange).not.toHaveBeenCalled();
-    expect(box).toBeChecked();
-
-    // The label is part of the activation area, so pressing it has to be
-    // blocked as well, and Space is the box's own activation key.
-    await user.click(screen.getByText("Include primary provider"));
-    await user.keyboard(" ");
-    expect(onChange).not.toHaveBeenCalled();
-    expect(box).toBeChecked();
-    expect(box).toHaveFocus();
-  });
-
-  it("keeps submitting with its form and lets Enter through", async () => {
-    const user = userEvent.setup();
-    const onSubmit = vi.fn((event: React.SyntheticEvent) => {
-      event.preventDefault();
-    });
-    renderInPanel(
-      <form onSubmit={onSubmit}>
-        <Checkbox
-          ariaDisabled
-          name="providers"
-          value="primary"
-          label="Include primary provider"
-          defaultChecked
-        />
-        <button type="submit">Save</button>
-      </form>,
-    );
-
-    const box = screen.getByRole("checkbox", {
-      name: "Include primary provider",
-    });
-    // A blocked box is not an absent one: its value still belongs to the form.
-    expect(new FormData(formOf(box)).getAll("providers")).toEqual(["primary"]);
-
-    box.focus();
-    await user.keyboard("{Enter}");
-    // Enter belongs to the form, not to the box, so it is not an activation
-    // key to block.
-    expect(onSubmit).toHaveBeenCalledOnce();
-    expect(box).toBeChecked();
-  });
-
-  it("reads a native aria-disabled attribute only while the prop is absent", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    renderInPanel(
-      <>
-        <Checkbox
-          aria-disabled="true"
-          label="From the attribute"
-          onChange={onChange}
-        />
-        <Checkbox
-          ariaDisabled={false}
-          aria-disabled="true"
-          label="Prop wins"
-          onChange={onChange}
-        />
-      </>,
-    );
-
-    await user.click(
-      screen.getByRole("checkbox", { name: "From the attribute" }),
-    );
-    expect(onChange).not.toHaveBeenCalled();
-
-    await user.click(screen.getByRole("checkbox", { name: "Prop wins" }));
-    expect(onChange).toHaveBeenCalledOnce();
-  });
-
-  it("does not describe a natively disabled box twice", () => {
-    renderInPanel(
-      <Checkbox disabled ariaDisabled label="Unavailable entirely" />,
-    );
-
-    const box = screen.getByRole("checkbox", { name: "Unavailable entirely" });
-    expect(box).toBeDisabled();
-    expect(box).not.toHaveAttribute("aria-disabled");
-  });
-});
-
-describe("Checkbox mixed state while blocked", () => {
-  it("keeps the mixed state when a blocked box is pressed", async () => {
-    const user = userEvent.setup();
-    renderInPanel(
-      <Checkbox
-        ariaDisabled
-        indeterminate
-        checked={false}
-        label="Some layers selected"
-        onChange={vi.fn()}
-      />,
-    );
-
-    const box = screen.getByRole<HTMLInputElement>("checkbox", {
-      name: "Some layers selected",
-    });
-    expect(box.indeterminate).toBe(true);
-
-    // Toggling clears the mixed state as well as the checkedness, and no
-    // render follows a blocked press to re-assert it.
-    await user.click(box);
-    expect(box.indeterminate).toBe(true);
-    expect(box).not.toBeChecked();
-  });
-});
+import {
+  LabeledField,
+  NumberInput,
+  RangeInput,
+  Select,
+  Textarea,
+  TextInput,
+} from "../../src/index.js";
+import { formOf, panel, renderInPanel } from "../helpers.js";
 
 describe("Monospace and row-count options", () => {
   it("renders numeric and select identifiers in the monospace stack", () => {
@@ -285,5 +53,443 @@ describe("Monospace and row-count options", () => {
     expect(screen.getByRole("textbox", { name: "Comments" })).not.toHaveClass(
       "snui-textarea--rows",
     );
+  });
+});
+
+describe("Native input controls", () => {
+  it("tracks the filled range progress across input and prop updates", () => {
+    const rangeRef = createRef<HTMLInputElement>();
+    const { rerender } = renderInPanel(
+      <RangeInput
+        ref={rangeRef}
+        aria-label="Depth alarm"
+        min={0}
+        max={200}
+        defaultValue={50}
+      />,
+    );
+
+    const range = screen.getByRole("slider", { name: "Depth alarm" });
+    expect(rangeRef.current).toBe(range);
+    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("25%");
+
+    fireEvent.input(range, { target: { value: "150" } });
+    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("75%");
+
+    rerender(
+      panel(
+        <RangeInput
+          ref={rangeRef}
+          aria-label="Depth alarm"
+          min={0}
+          max={100}
+          value={80}
+          onChange={() => undefined}
+        />,
+      ),
+    );
+    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("80%");
+  });
+
+  it("fills range progress from browser defaults and guards invalid bounds", () => {
+    renderInPanel(
+      <>
+        <RangeInput aria-label="Volume" defaultValue={50} />
+        <RangeInput
+          aria-label="Broken bounds"
+          min="low"
+          max="high"
+          defaultValue={5}
+        />
+      </>,
+    );
+
+    const volume = screen.getByRole("slider", { name: "Volume" });
+    expect(volume.style.getPropertyValue("--snui-range-progress")).toBe("50%");
+
+    const broken = screen.getByRole("slider", { name: "Broken bounds" });
+    expect(broken.style.getPropertyValue("--snui-range-progress")).toBe("0%");
+  });
+
+  it("restores range progress when a controlled owner rejects input", async () => {
+    renderInPanel(
+      <RangeInput
+        aria-label="Locked threshold"
+        min={0}
+        max={200}
+        value={50}
+        onChange={() => undefined}
+      />,
+    );
+
+    const range = screen.getByRole("slider", { name: "Locked threshold" });
+    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("25%");
+
+    fireEvent.input(range, { target: { value: "150" } });
+    await waitFor(() =>
+      expect(range.style.getPropertyValue("--snui-range-progress")).toBe("25%"),
+    );
+    expect(range).toHaveValue("50");
+  });
+
+  it("preserves native number-input behavior", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <LabeledField label="Interval">
+        <NumberInput min={1} max={60} />
+      </LabeledField>,
+    );
+
+    const input = screen.getByRole("spinbutton", { name: "Interval" });
+    await user.type(input, "15");
+    expect(input).toHaveValue(15);
+  });
+
+  it("preserves native range-input semantics", () => {
+    renderInPanel(
+      <LabeledField label="Confidence">
+        <RangeInput min={0} max={100} defaultValue={50} />
+      </LabeledField>,
+    );
+
+    expect(screen.getByRole("slider", { name: "Confidence" })).toHaveValue(
+      "50",
+    );
+  });
+
+  it("supports typed text modes, selects, and textareas", () => {
+    renderInPanel(
+      <>
+        <LabeledField label="API key">
+          <TextInput type="password" />
+        </LabeledField>
+        <LabeledField label="Source">
+          <Select defaultValue="gps">
+            <option value="gps">GPS</option>
+            <option value="manual">Manual</option>
+          </Select>
+        </LabeledField>
+        <LabeledField label="Notes">
+          <Textarea defaultValue="Ready" />
+        </LabeledField>
+      </>,
+    );
+
+    expect(screen.getByLabelText("API key")).toHaveAttribute(
+      "type",
+      "password",
+    );
+    expect(screen.getByRole("combobox", { name: "Source" })).toHaveValue("gps");
+    expect(screen.getByRole("textbox", { name: "Notes" })).toHaveValue("Ready");
+  });
+});
+
+describe("monospace and sizing modifiers", () => {
+  it("adds the monospace class to TextInput and Textarea", () => {
+    renderInPanel(
+      <>
+        <TextInput aria-label="Path" monospace />
+        <TextInput aria-label="Name" />
+        <Textarea aria-label="Prompt" monospace />
+      </>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Path" })).toHaveClass(
+      "snui-input--monospace",
+    );
+    expect(screen.getByRole("textbox", { name: "Name" })).not.toHaveClass(
+      "snui-input--monospace",
+    );
+    expect(screen.getByRole("textbox", { name: "Prompt" })).toHaveClass(
+      "snui-input--monospace",
+    );
+  });
+
+  it("sizes a Textarea from minRows and lets an explicit rows attribute win", () => {
+    renderInPanel(
+      <>
+        <Textarea aria-label="Prompt" minRows={8} />
+        <Textarea aria-label="Notes" minRows={8} rows={3} />
+        <Textarea aria-label="Plain" />
+      </>,
+    );
+
+    const prompt = screen.getByRole("textbox", { name: "Prompt" });
+    expect(prompt).toHaveAttribute("rows", "8");
+    expect(prompt).toHaveClass("snui-textarea--rows");
+    expect(screen.getByRole("textbox", { name: "Notes" })).toHaveAttribute(
+      "rows",
+      "3",
+    );
+    const plain = screen.getByRole("textbox", { name: "Plain" });
+    expect(plain).not.toHaveAttribute("rows");
+    expect(plain).not.toHaveClass("snui-textarea--rows");
+  });
+});
+
+describe("TextInput calendar types", () => {
+  it("accepts month and week input types", () => {
+    renderInPanel(
+      <>
+        <LabeledField label="Maintenance month">
+          <TextInput type="month" />
+        </LabeledField>
+        <LabeledField label="Maintenance week">
+          <TextInput type="week" />
+        </LabeledField>
+      </>,
+    );
+
+    expect(screen.getByLabelText("Maintenance month")).toHaveAttribute(
+      "type",
+      "month",
+    );
+    expect(screen.getByLabelText("Maintenance week")).toHaveAttribute(
+      "type",
+      "week",
+    );
+  });
+});
+
+describe("Controlled text and numeric form reset", () => {
+  it("restores the controlled value after a native form reset", async () => {
+    renderInPanel(
+      <form>
+        <TextInput
+          aria-label="Broker host"
+          value="mqtt.local"
+          onChange={() => undefined}
+        />
+        <NumberInput
+          aria-label="Broker port"
+          value={1883}
+          onChange={() => undefined}
+        />
+      </form>,
+    );
+
+    const host = screen.getByRole("textbox", { name: "Broker host" });
+    const port = screen.getByRole("spinbutton", { name: "Broker port" });
+
+    // A native reset restores an input from its value attribute, which a
+    // controlled input does not carry, and React neither re-renders nor
+    // reports a change afterwards.
+    formOf(host).reset();
+    await waitFor(() => {
+      expect(host).toHaveValue("mqtt.local");
+      expect(port).toHaveValue(1883);
+    });
+  });
+
+  it("leaves an uncontrolled control to the native reset", async () => {
+    renderInPanel(
+      <form>
+        <TextInput aria-label="Vessel name" defaultValue="Kittiwake" />
+      </form>,
+    );
+
+    const name = screen.getByRole("textbox", { name: "Vessel name" });
+    fireEvent.change(name, { target: { value: "Petrel" } });
+    expect(name).toHaveValue("Petrel");
+
+    formOf(name).reset();
+    await waitFor(() => expect(name).toHaveValue("Kittiwake"));
+  });
+
+  it("follows the control to the form its form attribute names", async () => {
+    const tree = (form: string): React.JSX.Element => (
+      <>
+        <form id="first" />
+        <form id="second" />
+        <TextInput
+          aria-label="Alarm label"
+          form={form}
+          value="Shallow"
+          onChange={() => undefined}
+        />
+      </>
+    );
+    const { rerender } = renderInPanel(tree("first"));
+
+    const input = screen.getByRole("textbox", { name: "Alarm label" });
+    rerender(panel(tree("second")));
+
+    fireEvent.change(input, { target: { value: "Deep" } });
+    const second = document.getElementById("second");
+    if (!(second instanceof HTMLFormElement)) {
+      throw new Error("Expected the second form to be in the document.");
+    }
+    second.reset();
+    await waitFor(() => expect(input).toHaveValue("Shallow"));
+  });
+});
+
+describe("NumberInput wheel guard", () => {
+  it("drops focus before a wheel can spin the value", () => {
+    const onWheel = vi.fn();
+    renderInPanel(
+      <NumberInput
+        aria-label="Depth alarm"
+        defaultValue={12}
+        onWheel={onWheel}
+      />,
+    );
+
+    const input = screen.getByRole("spinbutton", { name: "Depth alarm" });
+    input.focus();
+    expect(input).toHaveFocus();
+
+    // Scrolling past a focused numeric field at a nav station would otherwise
+    // rewrite a configured threshold and report it as the operator's edit.
+    fireEvent.wheel(input);
+    expect(input).not.toHaveFocus();
+    expect(onWheel).toHaveBeenCalledOnce();
+  });
+});
+
+describe("RangeInput form reset", () => {
+  it("resyncs the range fill after a native form reset", async () => {
+    renderInPanel(
+      <form>
+        <RangeInput
+          aria-label="Depth alarm"
+          min={0}
+          max={100}
+          defaultValue={50}
+        />
+      </form>,
+    );
+
+    const range = screen.getByRole("slider", { name: "Depth alarm" });
+    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("50%");
+
+    fireEvent.input(range, { target: { value: "80" } });
+    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("80%");
+
+    formOf(range).reset();
+    await waitFor(() =>
+      expect(range.style.getPropertyValue("--snui-range-progress")).toBe("50%"),
+    );
+    expect(range).toHaveValue("50");
+  });
+});
+
+describe("RangeInput unit", () => {
+  it("reads the value with the unit's name as the value text", () => {
+    const { rerender } = renderInPanel(
+      <RangeInput
+        aria-label="Speed limit"
+        min={0}
+        max={30}
+        value={12}
+        onChange={() => undefined}
+        unit={{ symbol: "kn", name: "knots" }}
+      />,
+    );
+
+    const range = screen.getByRole("slider", { name: "Speed limit" });
+    expect(range).toHaveAttribute("aria-valuetext", "12 knots");
+
+    rerender(
+      panel(
+        <RangeInput
+          aria-label="Speed limit"
+          min={0}
+          max={30}
+          value={15}
+          onChange={() => undefined}
+          unit="kn"
+        />,
+      ),
+    );
+    // A unit given as text is read as that text.
+    expect(range).toHaveAttribute("aria-valuetext", "15 kn");
+
+    rerender(
+      panel(
+        <RangeInput
+          aria-label="Speed limit"
+          min={0}
+          max={30}
+          value={15}
+          onChange={() => undefined}
+        />,
+      ),
+    );
+    expect(range).not.toHaveAttribute("aria-valuetext");
+  });
+
+  it("follows an uncontrolled value through input and form reset", async () => {
+    renderInPanel(
+      <form>
+        <RangeInput
+          aria-label="Cache size"
+          min={0}
+          max={100}
+          defaultValue={50}
+          unit={{ symbol: "GiB", name: "gibibytes" }}
+        />
+      </form>,
+    );
+
+    const range = screen.getByRole("slider", { name: "Cache size" });
+    expect(range).toHaveAttribute("aria-valuetext", "50 gibibytes");
+    fireEvent.input(range, { target: { value: "80" } });
+    expect(range).toHaveAttribute("aria-valuetext", "80 gibibytes");
+
+    formOf(range).reset();
+    await waitFor(() =>
+      expect(range).toHaveAttribute("aria-valuetext", "50 gibibytes"),
+    );
+  });
+
+  it("leaves a value text the caller wrote alone", () => {
+    renderInPanel(
+      <RangeInput
+        aria-label="Speed limit"
+        aria-valuetext="twelve knots"
+        min={0}
+        max={30}
+        value={12}
+        onChange={() => undefined}
+        unit={{ symbol: "kn", name: "knots" }}
+      />,
+    );
+
+    expect(screen.getByRole("slider", { name: "Speed limit" })).toHaveAttribute(
+      "aria-valuetext",
+      "twelve knots",
+    );
+  });
+});
+
+describe("Owned node and consumer refs", () => {
+  it("registers the reset listener once whatever ref the caller passes", () => {
+    // An inline ref is a new function on every render.
+    const tree = (): React.JSX.Element => (
+      <form>
+        <RangeInput
+          aria-label="Depth alarm"
+          min={0}
+          max={100}
+          defaultValue={50}
+          ref={() => undefined}
+        />
+      </form>
+    );
+    const { rerender } = renderInPanel(tree());
+
+    const range = screen.getByRole("slider", { name: "Depth alarm" });
+    const form = formOf(range);
+    const addListener = vi.spyOn(form, "addEventListener");
+
+    // The node and its reset listener belong to the mount, so neither is torn
+    // down and rebuilt.
+    for (let pass = 0; pass < 3; pass += 1) {
+      rerender(panel(tree()));
+    }
+
+    expect(addListener).not.toHaveBeenCalled();
+    expect(screen.getByRole("slider", { name: "Depth alarm" })).toBe(range);
   });
 });

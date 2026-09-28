@@ -1,12 +1,17 @@
 import {
   BLOCKED_SELECTOR,
   FIELD_ERROR_DECLARATIONS,
+  FIELD_MARKERS,
   GROUP_LEGEND_DECLARATIONS,
   NARROW_PANEL_QUERY,
+  NON_LINK_DESCENDANTS,
   SURFACE_DECLARATIONS,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
+
+/** A field whose control is held either way, natively or by aria-disabled. */
+const BLOCKED_FIELD = `.snui-field:has(> .snui-field__control ${BLOCKED_SELECTOR})`;
 
 export const FORM_STYLES = scopeStyles(`
 .snui-field__control {
@@ -45,6 +50,15 @@ export const FORM_STYLES = scopeStyles(`
 
 .snui-field--inline > .snui-field__error {
   grid-column: 2;
+}
+
+/*
+ * With no description there is no second row to share: a control spanning
+ * two would hand part of its height to an empty track, and the label would
+ * center in a short first row above the control's middle.
+ */
+.snui-field--inline:not(:has(> .snui-field__description)) > .snui-field__control {
+  grid-row: 1;
 }
 
 .snui-input-group {
@@ -100,8 +114,13 @@ export const FORM_STYLES = scopeStyles(`
   white-space: nowrap;
 }
 
+/*
+ * Regular weight beside the semibold label: in Night the muted color sits
+ * almost on the text color, so weight is what keeps the marker apart.
+ */
 .snui-optional-mark {
   color: var(--snui-color-text-muted);
+  font-weight: normal;
 }
 
 .snui-field-group {
@@ -114,7 +133,20 @@ ${SURFACE_DECLARATIONS}
   margin: 0;
 }
 
+/*
+ * A fieldset draws its first legend child in the top border unless that
+ * legend floats, and a legend drawn there is no grid item, so the placement
+ * below would never apply. Floating makes it an ordinary child: the grid
+ * ignores the float, the legend takes the row beside the actions, and the
+ * border runs unbroken. The fieldset is still named by its first legend,
+ * floated or not. The foundation reset keeps consumer legends unfloated.
+ *
+ * WebKit computes float to none on every grid item, so there the legend stays
+ * the rendered legend in the border notch, which is the 0.12.0 rendering
+ * rather than a regression.
+ */
 .snui-field-group__legend {
+  float: inline-start;
   text-wrap: balance;
   grid-column: 1;
   grid-row: 1;
@@ -154,6 +186,20 @@ ${FIELD_ERROR_DECLARATIONS}
 }
 
 /*
+ * Every field error sets its danger glyph and message side by side, the
+ * message as its own item, so a wrapped line hangs past the glyph. The gap
+ * after the glyph is the one every glyph in front of its own text takes.
+ */
+.snui-field-error__row {
+  display: flex;
+  align-items: baseline;
+}
+
+.snui-field-error__text {
+  min-width: 0;
+}
+
+/*
  * Disabled text uses a measurable token rather than opacity, so the muted
  * description stays readable on every theme surface, Night included.
  */
@@ -165,10 +211,11 @@ ${FIELD_ERROR_DECLARATIONS}
 /*
  * The field's own label dims with the control it names. A field whose control
  * is held either way reads as editable at a glance otherwise, while its input
- * is not, and the group and the checkbox beside it already say so.
+ * is not, and the group and the checkbox beside it already say so. The
+ * markers set colors of their own, so they are named to dim with it.
  */
-.snui-field:has(> .snui-field__control ${BLOCKED_SELECTOR})
-  > .snui-field__label {
+${BLOCKED_FIELD} > .snui-field__label,
+${BLOCKED_FIELD} > .snui-field__label ${FIELD_MARKERS} {
   color: var(--snui-color-text-disabled);
 }
 
@@ -219,15 +266,22 @@ ${visuallyHiddenDeclarations()}
  * everywhere else.
  */
 @media (forced-colors: active) {
+  /*
+   * Each rule reaches the text's descendants as well, the markers included,
+   * except a link: a disabled control or fieldset does not disable it, so it
+   * keeps the system link color. None opts out of forced colors: that
+   * opt-out inherits and would hand the descendants their theme colors back.
+   * A system color the author names paints as it is either way.
+   */
   .snui-field-group:disabled > .snui-field-group__legend,
-  .snui-field-group:disabled > .snui-field-group__description {
-    forced-color-adjust: none;
+  .snui-field-group:disabled > .snui-field-group__legend ${NON_LINK_DESCENDANTS},
+  .snui-field-group:disabled > .snui-field-group__description,
+  .snui-field-group:disabled > .snui-field-group__description ${NON_LINK_DESCENDANTS} {
     color: GrayText;
   }
 
-  .snui-field:has(> .snui-field__control ${BLOCKED_SELECTOR})
-    > .snui-field__label {
-    forced-color-adjust: none;
+  ${BLOCKED_FIELD} > .snui-field__label,
+  ${BLOCKED_FIELD} > .snui-field__label ${NON_LINK_DESCENDANTS} {
     color: GrayText;
   }
 }
@@ -241,6 +295,7 @@ ${NARROW_PANEL_QUERY} {
   .snui-field--inline > .snui-field__label,
   .snui-field--inline > .snui-field__description,
   .snui-field--inline > .snui-field__control,
+  .snui-field--inline:not(:has(> .snui-field__description)) > .snui-field__control,
   .snui-field--inline > .snui-field__error {
     grid-column: 1;
     grid-row: auto;

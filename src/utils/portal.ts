@@ -10,6 +10,7 @@ import {
 } from "react-aria/PortalProvider";
 import { PACKAGE_VERSION, ROOT_CLASS } from "../version.js";
 import { createRequiredContext } from "./context.js";
+import { packageError } from "./errors.js";
 
 // The UNSAFE portal API is upstream's explicit no-stability marker, so every
 // internal consumer reaches it through this one module: an upstream rename or
@@ -102,7 +103,7 @@ export function useOptionalPanelRoot(): HTMLElement | null {
  * is what a consumer acts on, so it stays the same for both.
  */
 function portalContainerError(componentName: string, reason: string): Error {
-  return new Error(
+  return packageError(
     `${componentName} portal container must be its owning PanelRoot. ${reason}.`,
   );
 }

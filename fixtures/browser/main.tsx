@@ -289,7 +289,12 @@ function Fixture(): React.JSX.Element {
               <Card>
                 <Cluster gap={2}>
                   <Button disabled>Disabled</Button>
-                  <Button ariaDisabled>Unavailable here</Button>
+                  <Button
+                    ariaDisabled
+                    disabledReason="This fixture offers no action here."
+                  >
+                    Unavailable here
+                  </Button>
                   {testFocusLoading ? (
                     <Button
                       data-testid="focus-loading-button"

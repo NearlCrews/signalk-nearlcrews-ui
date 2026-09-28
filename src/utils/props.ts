@@ -7,6 +7,8 @@
  * the components spread the values they only sometimes pass. Written once
  * here, an element states its optional props in one call instead of in a run
  * of conditional spreads.
+ *
+ * @internal
  */
 export function definedProps<T extends object>(
   values: T,
@@ -21,3 +23,8 @@ export function definedProps<T extends object>(
   // `name?: string`.
   return defined as { [K in keyof T]?: Exclude<T[K], undefined> };
 }
+
+/** `data-*` hooks, which an object of props has to name as a type. */
+export type DataAttributes = Readonly<
+  Record<`data-${string}`, string | number | boolean | undefined>
+>;

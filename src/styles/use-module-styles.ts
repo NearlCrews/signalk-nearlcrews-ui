@@ -1,4 +1,5 @@
 import { useLayoutEffect } from "react";
+import { packageError } from "../utils/errors.js";
 import {
   useOptionalPanelRoot,
   usePanelPortalContainer,
@@ -69,8 +70,8 @@ function installModuleStylesForRoot(
   // survives for a consumer reaching past the package, and for the day one of
   // those orderings changes.
   if (nonces.length === 0) {
-    throw new Error(
-      `signalk-nearlcrews-ui ${PACKAGE_VERSION} panel styles are not installed in this document; render inside PanelRoot.`,
+    throw packageError(
+      `Panel styles for version ${PACKAGE_VERSION} are not installed in this document; render inside PanelRoot.`,
     );
   }
 

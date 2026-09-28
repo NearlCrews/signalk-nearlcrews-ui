@@ -12,6 +12,7 @@ import {
   installStyleModule,
   type StyleModule,
   supportsNativeCssScope,
+  UnsupportedBrowserError,
 } from "../../src/styles/install.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { TABLE_STYLES } from "../../src/styles/table.js";
@@ -72,7 +73,10 @@ describe("style module manifest", () => {
    * component that stayed in the root sheet: every field shares the rule that
    * takes an empty error region out of flow.
    */
-  const SHARED_ROOT_RULES = new Set([".snui-radio-group__error:empty"]);
+  const SHARED_ROOT_RULES = new Set([
+    ".snui-radio-group__error:empty",
+    ".snui-switch__error:empty",
+  ]);
 
   it("keeps every per-component block out of the root sheet", () => {
     const [root] = STYLE_MODULES;
@@ -192,7 +196,9 @@ describe("installStyleModule", () => {
         { id: "dialog", styles: ".fixture { color: blue; }" },
         "another-nonce",
       ),
-    ).toThrow(/Conflicting signalk-nearlcrews-ui styles .* module "dialog"/);
+    ).toThrow(
+      /^signalk-nearlcrews-ui: Conflicting styles were loaded for version .*, module "dialog"\.$/,
+    );
 
     const removeTable = installStyleModule(
       document,
@@ -317,6 +323,32 @@ describe("installStyleModule", () => {
     removeFirst();
     removeSecond();
     removeModule();
+  });
+});
+
+describe("style install errors", () => {
+  it("names the package and the missing feature on an unsupported browser", () => {
+    const error = new UnsupportedBrowserError();
+    expect(error).toBeInstanceOf(Error);
+    expect(error.name).toBe("UnsupportedBrowserError");
+    expect(error.feature).toBe("CSS @scope");
+    expect(error.message).toBe(
+      "signalk-nearlcrews-ui: A browser with native CSS @scope support is required.",
+    );
+  });
+
+  it("names the missing head rather than failing inside the ref that installs", () => {
+    // A detached HTML document has no window, so the feature check has
+    // nothing to protect, and once its head is removed the head check speaks.
+    const headless = document.implementation.createHTMLDocument("");
+    headless.head.remove();
+    expect(() =>
+      installPanelStyles(headless, PACKAGE_VERSION, ".fixture {}", undefined),
+    ).toThrow(
+      new Error(
+        "signalk-nearlcrews-ui: Styles need a document with a <head> element.",
+      ),
+    );
   });
 });
 
@@ -465,7 +497,9 @@ describe("useModuleStyles", () => {
   it("names the component in the error thrown outside PanelRoot", () => {
     expect(() =>
       render(<ModuleConsumer module={DIALOG_STYLES} name="Dialog" />),
-    ).toThrow("Dialog must be rendered inside PanelRoot.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: Dialog must be rendered inside PanelRoot.",
+    );
   });
 
   it("rejects a nested provider that resolves no portal container", () => {
@@ -479,7 +513,9 @@ describe("useModuleStyles", () => {
           </UNSAFE_PortalProvider>
         </PanelRoot>,
       ),
-    ).toThrow("Dialog portal container must be its owning PanelRoot.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: Dialog portal container must be its owning PanelRoot.",
+    );
   });
 });
 
@@ -542,7 +578,7 @@ describe("a module installing with no root sheet", () => {
         </PanelRoot>,
       ),
     ).toThrow(
-      `signalk-nearlcrews-ui ${PACKAGE_VERSION} panel styles are not installed in this document; render inside PanelRoot.`,
+      `signalk-nearlcrews-ui: Panel styles for version ${PACKAGE_VERSION} are not installed in this document; render inside PanelRoot.`,
     );
   });
 });

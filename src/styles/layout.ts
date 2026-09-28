@@ -4,6 +4,7 @@ import {
   NARROW_PANEL_QUERY,
   PROSE_MEASURE_DECLARATION,
   SURFACE_DECLARATIONS,
+  TONE_GLYPH_GAP_EM,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
@@ -16,12 +17,22 @@ import {
 
 /*
  * Internal geometry rather than tokens: the pill's own height and vertical
- * padding, and the gap that sets a glyph beside its text, are what these
- * shapes need rather than values a consumer themes.
+ * padding are what this shape needs rather than values a consumer themes.
  */
 const BADGE_MIN_HEIGHT = "1.75rem";
 const BADGE_PADDING_BLOCK = "0.125rem";
-const TONE_GLYPH_GAP = "0.375em";
+
+/*
+ * A stack item that takes up room. Hidden items and the package's out-of-flow
+ * shells are left out: the visually hidden class, and the announcing banner
+ * and status that wait empty, which leave the flow by their own rules rather
+ * than the class. A bare :empty is not used, because it would also drop an
+ * image or any other void item. The shells sit inside :where(), because
+ * :not() takes the weight of its heaviest argument, and the exclusions should
+ * add matches rather than make the divider rule harder to override.
+ */
+const SHOWN_ITEM =
+  ":not([hidden], .snui-visually-hidden):not(:where(.snui-banner:empty, .snui-status:empty, .snui-status:has(> .snui-status__region:only-child)))";
 
 // The prop type and the rules come from one scale, so a new step reaches both.
 const GAP_RULES = SPACE_SCALE.map((space) => {
@@ -30,6 +41,10 @@ const GAP_RULES = SPACE_SCALE.map((space) => {
 .snui-stack--gap-${scale},
 .snui-cluster--gap-${scale} {
   gap: var(--snui-space-${scale});
+}
+
+.snui-stack--divided.snui-stack--gap-${scale} {
+  --snui-stack-divider-space: calc(var(--snui-space-${scale}) / 2);
 }`;
 }).join("\n");
 
@@ -54,6 +69,23 @@ export const LAYOUT_STYLES = scopeStyles(`
 }
 
 ${GAP_RULES}
+
+/*
+ * A divided stack rules off each item from the one before it. The step is
+ * split around the rule, half as the row gap above and half as the item's own
+ * padding below, so the rhythm matches an undivided stack of the same step.
+ * An item the page hides, or one taken out of the flow like a live region or
+ * an announcing component waiting empty, draws no rule and does not count as
+ * the item a rule follows.
+ */
+.snui-stack.snui-stack--divided {
+  row-gap: var(--snui-stack-divider-space);
+}
+
+.snui-stack--divided > ${SHOWN_ITEM} ~ ${SHOWN_ITEM} {
+  padding-block-start: var(--snui-stack-divider-space);
+  border-block-start: 1px solid var(--snui-color-border-subtle);
+}
 
 /*
  * A closed disclosure panel spread onto one of these carries the hidden
@@ -121,20 +153,29 @@ ${SURFACE_DECLARATIONS}
   min-width: 0;
   text-wrap: balance;
   padding-block-end: var(--snui-space-3);
-  border-block-end: 1px solid var(--snui-color-border);
+  border-block-end: 1px solid var(--snui-color-border-subtle);
   font-weight: var(--snui-font-weight-bold);
   overflow-wrap: anywhere;
 }
 
+/*
+ * The rule spans the card like the header's; only the text inside keeps to
+ * the prose measure, since a measure on the ruled box cut the rule off partway
+ * across a wide card. The measure also caps the width a long footnote asks of
+ * a card that sizes to its content.
+ */
 .snui-card__footer {
   min-width: 0;
-${PROSE_MEASURE_DECLARATION}
   padding-block-start: var(--snui-space-3);
-  border-block-start: 1px solid var(--snui-color-border);
+  border-block-start: 1px solid var(--snui-color-border-subtle);
   color: var(--snui-color-text-muted);
   font-size: var(--snui-font-size-xs);
   overflow-wrap: anywhere;
   text-wrap: pretty;
+}
+
+.snui-card__footer-content {
+${PROSE_MEASURE_DECLARATION}
 }
 
 .snui-card--compact > .snui-card__header {
@@ -186,7 +227,7 @@ ${toneAccentBar("snui-card", "accent-")}
 .snui-metric {
   min-width: 0;
   padding: var(--snui-space-3);
-  border: 1px solid var(--snui-color-border);
+  border: 1px solid var(--snui-color-border-subtle);
   border-radius: var(--snui-radius-md);
   background: var(--snui-color-surface-raised);
 }
@@ -212,9 +253,11 @@ ${toneAccentBar("snui-card", "accent-")}
 /*
  * An announcing value stays mounted so a screen reader observes it before the
  * first reading arrives. With no reading it leaves the flow rather than the
- * accessibility tree, so it adds no margin under the label.
+ * accessibility tree, so it adds no margin under the label. A settling value
+ * carries its region inside, so with no reading it holds that region alone.
  */
-.snui-metric__value:empty {
+.snui-metric__value:empty,
+.snui-metric__value:has(> .snui-metric__region:only-child) {
 ${visuallyHiddenDeclarations()}
 }
 
@@ -239,11 +282,13 @@ ${visuallyHiddenDeclarations()}
 
 ${toneDescendantColorRules("snui-metric", ".snui-metric__value")}
 
-/* One spacing decision for every glyph that sits in front of its own text. */
+/* One spacing decision for these glyphs, each set in front of its own text. */
 .snui-card__tone-glyph,
 .snui-metric__tone-glyph,
-.snui-badge__tone-glyph {
-  margin-inline-end: ${TONE_GLYPH_GAP};
+.snui-badge__tone-glyph,
+.snui-field-error__tone-glyph,
+.snui-freshness__tone-glyph {
+  margin-inline-end: ${String(TONE_GLYPH_GAP_EM)}em;
 }
 
 /* A badge usually holds a count, and tabular digits keep the pill from

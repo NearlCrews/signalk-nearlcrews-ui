@@ -9,6 +9,10 @@ import type {
 } from "../../src/composites.js";
 import type { Column, DataGridProps } from "../../src/data-grid.js";
 import type {
+  FormatCountOptions as FormatEntryCountOptions,
+  PanelLocale as FormatEntryLocale,
+} from "../../src/format.js";
+import type {
   RadioGroupProps,
   RadioProps,
   SecretInputProps,
@@ -24,6 +28,7 @@ import type {
   CheckboxLabelVisibility,
   CheckboxProps,
   FieldControlProps,
+  FormatCountOptions,
   FormatRelativeAgeOptions,
   InlineConfirmProps,
   LabeledFieldChild,
@@ -31,7 +36,7 @@ import type {
   LabeledFieldProps,
   NumberDraftResolution,
   NumberFieldProps,
-  PanelShellProps,
+  PanelLocale,
   SegmentedControlLabelVisibility,
   SegmentedControlOption,
   SegmentedControlProps,
@@ -46,7 +51,7 @@ import type {
   ThemeToggleProps,
   UnsupportedBrowserNoticeProps,
 } from "../../src/index.js";
-import { SegmentedControl } from "../../src/index.js";
+import { formatCount, SegmentedControl } from "../../src/index.js";
 import type {
   AlertDialogProps,
   DialogProps,
@@ -388,6 +393,29 @@ describe("relative age formatting", () => {
   });
 });
 
+describe("count formatting", () => {
+  it("takes the panel locale in the options that follow the plural", () => {
+    expectTypeOf<FormatCountOptions["locale"]>().toEqualTypeOf<
+      PanelLocale | undefined
+    >();
+    expectTypeOf<PanelLocale>().toEqualTypeOf<string | readonly string[]>();
+    expectTypeOf(formatCount).parameters.toEqualTypeOf<
+      [
+        count: number,
+        singular: string,
+        plural?: string | undefined,
+        options?: FormatCountOptions | undefined,
+      ]
+    >();
+    expectTypeOf(formatCount).returns.toBeString();
+  });
+
+  it("publishes the same contract from the React-free entry", () => {
+    expectTypeOf<FormatEntryCountOptions>().toEqualTypeOf<FormatCountOptions>();
+    expectTypeOf<FormatEntryLocale>().toEqualTypeOf<PanelLocale>();
+  });
+});
+
 describe("unsupported browser notice", () => {
   it("keeps its role out of consumer props", () => {
     expectTypeOf<"role">().not.toExtend<keyof UnsupportedBrowserNoticeProps>();
@@ -509,22 +537,11 @@ describe("narrowed variant props", () => {
     expectTypeOf<"warning">().not.toExtend<MenuItemProps["tone"]>();
   });
 
-  it("suggests auto on a popover width without narrowing the set", () => {
+  it("suggests auto on a popover width and takes only CSS lengths", () => {
     expectTypeOf<"auto">().toExtend<PopoverWidth>();
     expectTypeOf<"18rem">().toExtend<PopoverWidth>();
-    expectTypeOf<320>().toExtend<PopoverWidth>();
+    expectTypeOf<320>().not.toExtend<PopoverWidth>();
     expectTypeOf<boolean>().not.toExtend<PopoverWidth>();
-  });
-});
-
-describe("panel shell error fallback text", () => {
-  it("forwards the boundary strings without colliding with the panel title", () => {
-    expectTypeOf<NonNullable<PanelShellProps["errorLabels"]>>().toEqualTypeOf<{
-      readonly description?: ReactNode | undefined;
-      readonly reloadLabel?: ReactNode | undefined;
-      readonly retryLabel?: ReactNode | undefined;
-      readonly title?: ReactNode | undefined;
-    }>();
   });
 });
 
@@ -539,6 +556,7 @@ describe("save action bar rules as data", () => {
         | "dirty"
         | "invalidMessage"
         | "labels"
+        | "outcome"
         | "saveRequestedAt"
         | "saving"
         | "unconfigured"

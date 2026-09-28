@@ -49,7 +49,7 @@ ${visuallyHiddenDeclarations()}
 .snui-table th,
 .snui-table td {
   padding: var(--snui-space-2) var(--snui-space-3);
-  border-block-end: 1px solid var(--snui-color-border);
+  border-block-end: 1px solid var(--snui-color-border-subtle);
   vertical-align: top;
   overflow-wrap: anywhere;
 }

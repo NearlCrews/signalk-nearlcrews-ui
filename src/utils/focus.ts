@@ -1,10 +1,23 @@
 import { prefersReducedMotion } from "./motion.js";
 
 /**
+ * Whether an event target or a node is an element. Read from the node's own
+ * type rather than the global `Element`, so a panel rendered into a
+ * secondary window reads the same.
+ *
+ * @internal
+ */
+export function isElementNode(target: EventTarget | null): target is Element {
+  return (target as Partial<Node> | null)?.nodeType === 1;
+}
+
+/**
  * The focused element, when the owning document has focused a real element at
  * all. `activeElement` is typed as `Element`, is null between documents, and
  * is the body when nothing is focused, so every caller that wants somewhere to
  * put focus back narrows it the same way.
+ *
+ * @internal
  */
 export function focusedElement(ownerDocument: Document): HTMLElement | null {
   const ownerWindow = ownerDocument.defaultView;
@@ -18,6 +31,8 @@ export function focusedElement(ownerDocument: Document): HTMLElement | null {
  * had nowhere to hand focus back to leaves it. The body is what
  * `activeElement` reports when nothing is focused, so the test that a reader
  * was left nowhere is written once rather than per overlay.
+ *
+ * @internal
  */
 export function focusIsOnBody(ownerDocument: Document): boolean {
   return ownerDocument.activeElement === ownerDocument.body;
@@ -31,6 +46,8 @@ export function focusIsOnBody(ownerDocument: Document): boolean {
  * that closes while the element it was opened from is gone would otherwise
  * leave focus on the document body, which costs a keyboard user their place
  * and makes them tab in from the top of the host page.
+ *
+ * @internal
  */
 export function focusPanelRoot(panelRoot: HTMLElement): void {
   let returnTabIndex: (() => void) | undefined;

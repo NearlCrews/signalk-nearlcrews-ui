@@ -16,6 +16,8 @@ interface MediaQueryView {
  * presents. jsdom implements neither `matchMedia` nor these queries, so the
  * lookup is feature detected rather than assumed and an unanswerable query
  * reads as unmatched.
+ *
+ * @internal
  */
 export function mediaMatches(
   view: MediaQueryView | null | undefined,

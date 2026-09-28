@@ -1,10 +1,4 @@
-import {
-  type HTMLAttributes,
-  type ReactNode,
-  type RefAttributes,
-  useEffect,
-  useReducer,
-} from "react";
+import type { HTMLAttributes, ReactNode, RefAttributes } from "react";
 
 import {
   type AnnouncementMode,
@@ -13,10 +7,12 @@ import {
 } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
 import { createPolymorphicElement } from "../utils/polymorphic.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { hasReactContent, reactNodeText } from "../utils/react-node.js";
 import {
-  LIVE_REGION_BLANK_MS,
+  useFirstMessageHold,
   useRepeatAnnouncement,
+  useSettlingText,
+  waitsToSettle,
 } from "../utils/repeat-announcement.js";
 
 export type LiveRegionElement = "div" | "span" | "p";
@@ -30,15 +26,17 @@ export interface LiveRegionProps
    * presses, or the id of the event that produced the message.
    */
   readonly announceKey?: string | number | undefined;
-  /**
-   * Whether a message already present on the first render is announced.
-   * Defaults to true. Set it to false where the region mounts together with
-   * its subject, a panel switching to a mode that renders both, so the region
-   * empties for a beat first and the announcement is observed rather than
-   * missed.
-   */
-  readonly announceOnMount?: boolean | undefined;
   readonly as?: LiveRegionElement | undefined;
+  /**
+   * Holds a message present on the first render for one beat, so the region
+   * exists empty before its text arrives and the announcement is observed
+   * rather than missed. Set it where the region mounts together with its
+   * subject, a panel switching to a mode that renders both. Defaults to false,
+   * which renders the first message at once: right for a region mounted with
+   * the panel, before anything has happened, whose first message arrives
+   * later.
+   */
+  readonly deferFirstMessage?: boolean | undefined;
   /**
    * Announcement mode. Defaults to `"polite"` here, because the component
    * exists to announce; the components that only sometimes announce, `Banner`,
@@ -48,6 +46,17 @@ export interface LiveRegionProps
   readonly live?: AnnouncementMode | undefined;
   /** The text to announce. The region stays mounted while this is empty. */
   readonly message?: ReactNode | undefined;
+  /**
+   * Milliseconds a changed message has to stay the same before the region
+   * exposes it. Each change restarts the wait, so a result count that follows
+   * every keystroke is announced once, after the typing stops, rather than
+   * once per key. The region is empty while it waits, and the message it
+   * mounts with is exposed at once. Change is measured on the message's text,
+   * so a message made only of components that render their own text never
+   * waits. Unset, or anything but a positive number, exposes every change at
+   * once.
+   */
+  readonly settleMs?: number | undefined;
 }
 
 /**
@@ -64,22 +73,27 @@ export interface LiveRegionProps
  */
 export function LiveRegion({
   announceKey,
-  announceOnMount = true,
   as = "div",
   className,
+  deferFirstMessage = false,
   live = "polite",
   message,
   role: suppliedRole,
+  settleMs,
   ...props
 }: LiveRegionProps): React.JSX.Element {
   const region = liveRegionProps(live, suppliedRole);
-  // A reducer rather than useState: the lint rule against a synchronous
-  // setState inside an effect does not fire on a dispatch, and this is a
-  // one-way latch that opens once the region has existed for a beat.
-  const [settled, markSettled] = useReducer(() => true, announceOnMount);
   // A region that announces nothing speaks for nobody, so there is nothing to
-  // re-announce and nothing to hold back there.
+  // re-announce, hold back, or wait for there.
   const announcing = announcesUpdates(region);
+  const holding = useFirstMessageHold(announcing && deferFirstMessage);
+  // The text is read only when a wait was asked for, because walking the
+  // message costs a render nothing otherwise.
+  const settles = announcing && waitsToSettle(settleMs);
+  const settling = useSettlingText(
+    settles ? reactNodeText(message) : "",
+    settles ? settleMs : undefined,
+  );
   // The message is withheld for one beat so the region really empties before
   // it fills again. An empty message has nothing to re-announce, so it goes
   // straight through and no timer runs.
@@ -87,17 +101,6 @@ export function LiveRegion({
     announceKey,
     announcing && hasReactContent(message),
   );
-  const withheld = announcing && !settled;
-
-  useEffect(() => {
-    if (settled) return undefined;
-    // The ambient timer is deliberate: this component owns no node, so there
-    // is no owning window to read the timer from.
-    const timer = setTimeout(markSettled, LIVE_REGION_BLANK_MS);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [settled]);
 
   return createPolymorphicElement(
     as,
@@ -107,6 +110,6 @@ export function LiveRegion({
       role: region.role,
       "aria-live": region["aria-live"],
     },
-    repeating || withheld ? null : message,
+    repeating || holding || settling ? null : message,
   );
 }

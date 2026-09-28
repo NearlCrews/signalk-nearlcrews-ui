@@ -14,9 +14,13 @@ import { useNodeRef } from "../hooks/use-node-ref.js";
 import { landmarkLabel, requireIdToken } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import type { HeadingLevel } from "../utils/heading.js";
-import { useResolvedHeading } from "../utils/heading-level.js";
+import {
+  SectionOutlineProvider,
+  useResolvedHeading,
+  useWithinPackageLandmark,
+} from "../utils/heading-level.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
-import type { StatusTone } from "../utils/tone.js";
+import { isSemanticTone, type StatusTone } from "../utils/tone.js";
 import { ToneMark } from "./ToneMark.js";
 
 export type CollapsibleMountStrategy = "lazy-retain" | "retain" | "unmount";
@@ -31,9 +35,10 @@ export interface CollapsibleSectionProps
   readonly defaultOpen?: boolean | undefined;
   readonly disabled?: boolean | undefined;
   /**
-   * Level of the section heading. It defaults to the level below a
-   * `PanelShell` title, and to 2 outside one, so the ordinary panel nests
-   * rather than repeating the level its own title already took.
+   * Level of the section heading. It defaults to the level below the title of
+   * an enclosing `PanelShell`, `Dialog`, or `AlertDialog`, and to 2 outside
+   * them, so the ordinary panel nests rather than repeating the level its own
+   * title already took.
    */
   readonly headingLevel?: HeadingLevel | undefined;
   /**
@@ -44,9 +49,13 @@ export interface CollapsibleSectionProps
    */
   readonly idPrefix?: string | undefined;
   /**
-   * Removes the region landmark naming when false, including any
+   * Names the section as a region landmark. Defaults to true, and to false
+   * for the embedded variant and for a section nested inside another package
+   * region, because a landmark per nested row crowds the list a reader
+   * navigates by; Accordion defaults it to false for its sections too. An
+   * explicit value always decides. False removes the naming, including any
    * `aria-labelledby` the consumer passed: the section is then named by its
-   * heading in the ordinary way. Accordion defaults it to false.
+   * heading in the ordinary way.
    */
   readonly landmark?: boolean | undefined;
   /**
@@ -102,7 +111,7 @@ export function CollapsibleSection({
   disabled = false,
   headingLevel,
   idPrefix,
-  landmark = true,
+  landmark,
   leading,
   mountStrategy = "retain",
   onOpenChange,
@@ -137,7 +146,10 @@ export function CollapsibleSection({
   const toggleRef = useRef<HTMLButtonElement | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const setToggleNode = useNodeRef(toggleRef, triggerRef);
-  const { Heading, level } = useResolvedHeading(headingLevel);
+  const { Heading, depth, level } = useResolvedHeading(headingLevel);
+  const withinLandmark = useWithinPackageLandmark();
+  const effectiveLandmark =
+    landmark ?? (variant !== "embedded" && !withinLandmark);
 
   // Latch first-open for lazy-retain: guarded render-phase adjustment, so the
   // content mounts in the same commit that first opens the section. No other
@@ -170,6 +182,10 @@ export function CollapsibleSection({
         {summary}
       </div>
     ) : null;
+  const headerSummary = summaryPlacement === "header" ? summaryNode : null;
+  const actionsNode = hasReactContent(actions) ? (
+    <div className="snui-collapsible__actions">{actions}</div>
+  ) : null;
 
   return (
     <section
@@ -181,63 +197,71 @@ export function CollapsibleSection({
         tone !== "neutral" && `snui-collapsible--${tone}`,
         className,
       )}
-      aria-labelledby={landmarkLabel(landmark, ariaLabelledBy, titleId)}
+      aria-labelledby={landmarkLabel(
+        effectiveLandmark,
+        ariaLabelledBy,
+        titleId,
+      )}
     >
-      <header className="snui-collapsible__header">
-        {hasReactContent(leading) ? (
-          <div className="snui-collapsible__leading">{leading}</div>
-        ) : null}
-        <Heading
-          className={classNames(
-            "snui-collapsible__heading",
-            `snui-collapsible__heading--level-${String(level)}`,
-          )}
-        >
-          <button
-            ref={setToggleNode}
-            type="button"
-            id={toggleId}
-            className="snui-collapsible__toggle"
-            aria-controls={contentId}
-            aria-expanded={effectiveOpen}
-            disabled={disabled}
-            onClick={toggle}
+      <SectionOutlineProvider landmark={effectiveLandmark} level={level}>
+        <header className="snui-collapsible__header">
+          {hasReactContent(leading) ? (
+            <div className="snui-collapsible__leading">{leading}</div>
+          ) : null}
+          <Heading
+            className={classNames(
+              "snui-collapsible__heading",
+              depth === 0 && "snui-collapsible__heading--top",
+            )}
           >
-            <span className="snui-collapsible__chevron" aria-hidden="true">
-              ›
-            </span>
-            <ToneMark
-              className="snui-collapsible__tone-glyph"
-              tone={tone}
-              toneLabel={toneLabel}
-            />
-            <span id={titleId} className="snui-collapsible__title">
-              {title}
-            </span>
-          </button>
-        </Heading>
-        {summaryPlacement === "header" ? summaryNode : null}
-        {hasReactContent(actions) ? (
-          <div className="snui-collapsible__actions">{actions}</div>
-        ) : null}
-      </header>
-      {summaryPlacement === "below" ? summaryNode : null}
-      <div
-        ref={contentRef}
-        id={contentId}
-        className="snui-collapsible__content"
-        hidden={!effectiveOpen}
-      >
-        {childrenMounted ? (
-          mountStrategy === "unmount" ? (
-            children
-          ) : (
-            <Activity mode={effectiveOpen ? "visible" : "hidden"}>
-              {children}
-            </Activity>
-          )
-        ) : null}
-      </div>
+            <button
+              ref={setToggleNode}
+              type="button"
+              id={toggleId}
+              className="snui-collapsible__toggle"
+              aria-controls={contentId}
+              aria-expanded={effectiveOpen}
+              disabled={disabled}
+              onClick={toggle}
+            >
+              <span className="snui-collapsible__chevron" aria-hidden="true">
+                ›
+              </span>
+              {isSemanticTone(tone) ? (
+                <span className="snui-collapsible__tone">
+                  <ToneMark tone={tone} toneLabel={toneLabel} />
+                </span>
+              ) : null}
+              <span id={titleId} className="snui-collapsible__title">
+                {title}
+              </span>
+            </button>
+          </Heading>
+          {headerSummary || actionsNode ? (
+            <div className="snui-collapsible__trailing">
+              {headerSummary}
+              {actionsNode}
+            </div>
+          ) : null}
+        </header>
+        {summaryPlacement === "below" ? summaryNode : null}
+        <div
+          ref={contentRef}
+          id={contentId}
+          className="snui-collapsible__content"
+          hidden={!effectiveOpen}
+        >
+          {childrenMounted ? (
+            mountStrategy === "unmount" ? (
+              children
+            ) : (
+              <Activity mode={effectiveOpen ? "visible" : "hidden"}>
+                {children}
+              </Activity>
+            )
+          ) : null}
+        </div>
+      </SectionOutlineProvider>
     </section>
   );
 }

@@ -42,16 +42,18 @@ export function FieldError({
       aria-live={ariaLive}
     >
       {region.referencedErrorId === undefined ? null : (
-        <>
+        // The message is its own item in the row, so a wrapped line starts
+        // under the text rather than back under the glyph.
+        <span className="snui-field-error__row">
           {/*
             The danger mark, the way Banner and StatusIndicator carry it. In
             Night the danger color is the same hue as the muted description
             above the error, so the shape and the announced tone word are what
             separate them.
           */}
-          <ToneMark tone="danger" />
-          {error}
-        </>
+          <ToneMark className="snui-field-error__tone-glyph" tone="danger" />
+          <span className="snui-field-error__text">{error}</span>
+        </span>
       )}
     </Element>
   );

@@ -1,6 +1,5 @@
 import {
   act,
-  fireEvent,
   type RenderResult,
   render,
   screen,
@@ -8,13 +7,12 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   CollapsibleSection,
   PanelRoot,
-  SegmentedControl,
   supportsNativeCssScope,
+  THEME_CHOICES,
   THEME_STORAGE_KEY,
   type ThemeChoice,
   ThemeToggle,
@@ -204,7 +202,7 @@ describe("PanelRoot themes", () => {
         ".fixture { color: blue; }",
         undefined,
       ),
-    ).toThrow(/Conflicting signalk-nearlcrews-ui styles/);
+    ).toThrow(/^signalk-nearlcrews-ui: Conflicting styles were loaded/);
     remove();
   });
 
@@ -224,7 +222,7 @@ describe("PanelRoot themes", () => {
         ".fixture { color: blue; }",
         "second-nonce",
       ),
-    ).toThrow(/Conflicting signalk-nearlcrews-ui styles/);
+    ).toThrow(/^signalk-nearlcrews-ui: Conflicting styles were loaded/);
     expect(
       headSheets('style[data-snui-styles="cross-nonce-conflict"]'),
     ).toHaveLength(1);
@@ -532,7 +530,7 @@ describe("PanelRoot themes", () => {
 
   it("requires the theme context for ThemeToggle and usePanelTheme", () => {
     expect(() => render(<ThemeToggle />)).toThrow(
-      "usePanelTheme must be called inside PanelRoot",
+      "signalk-nearlcrews-ui: usePanelTheme must be called inside PanelRoot",
     );
   });
 
@@ -541,7 +539,7 @@ describe("PanelRoot themes", () => {
       <PanelRoot>
         <ThemeToggle
           label="Thème du panneau"
-          labels={{ auto: "Automatique", dark: "Sombre", light: "  " }}
+          choiceLabels={{ auto: "Automatique", dark: "Sombre", light: "  " }}
         />
       </PanelRoot>,
     );
@@ -554,6 +552,41 @@ describe("PanelRoot themes", () => {
     ).toBeVisible();
     expect(within(group).getByRole("radio", { name: "Light" })).toBeVisible();
     expect(within(group).getByRole("radio", { name: "Sombre" })).toBeVisible();
+  });
+
+  it("explains Match Admin in the operator's words", () => {
+    render(
+      <PanelRoot>
+        <ThemeToggle />
+      </PanelRoot>,
+    );
+
+    // The one package sentence every operator sees on every panel, so it
+    // names the product rather than the host's internals.
+    expect(
+      screen.getByRole("radiogroup", { name: /Panel theme/ }),
+    ).toHaveAccessibleDescription(
+      "Match Admin uses the Signal K Admin theme when Admin shares one, and Light until then.",
+    );
+  });
+
+  it("marks each theme radio with its choice, whatever its label says", () => {
+    render(
+      <PanelRoot>
+        <ThemeToggle choiceLabels={{ night: "Nacht" }} />
+      </PanelRoot>,
+    );
+
+    // A consumer test finds a theme by this hook rather than by the package's
+    // wording, so a label change or a translation does not break it.
+    for (const choice of THEME_CHOICES) {
+      expect(
+        document.querySelector(`[data-snui-theme-choice="${choice}"]`),
+      ).toHaveAttribute("role", "radio");
+    }
+    expect(
+      document.querySelector('[data-snui-theme-choice="night"]'),
+    ).toHaveAccessibleName("Nacht");
   });
 
   it("starts at the theme a consumer seeds and writes nothing", () => {
@@ -679,120 +712,5 @@ describe("PanelRoot themes", () => {
     // the sentence around it.
     expect(screen.getByText("en-GB")).toBeVisible();
     expect(screen.getByText("runtime default")).toBeVisible();
-  });
-});
-
-describe("SegmentedControl", () => {
-  const DISPLAY_MODES = [
-    { label: "Auto", value: "auto" },
-    { label: "Light", value: "light", disabled: true },
-    { label: "Dark", value: "dark" },
-    { label: "Night", value: "night" },
-  ] as const;
-
-  function ControlledControl({
-    initial = "auto",
-  }: {
-    readonly initial?: ThemeChoice;
-  }): React.JSX.Element {
-    const [value, setValue] = useState<ThemeChoice>(initial);
-
-    return (
-      <SegmentedControl
-        label="Display mode"
-        value={value}
-        onValueChange={setValue}
-        options={DISPLAY_MODES}
-      />
-    );
-  }
-
-  it("uses radio semantics and supports roving arrow-key selection", async () => {
-    const user = userEvent.setup();
-    render(<ControlledControl />);
-
-    const auto = screen.getByRole("radio", { name: "Auto" });
-    auto.focus();
-    await user.keyboard("{ArrowRight}");
-
-    const dark = screen.getByRole("radio", { name: "Dark" });
-    expect(dark).toHaveAttribute("aria-checked", "true");
-    expect(dark).toHaveFocus();
-
-    await user.keyboard("{End}");
-    expect(screen.getByRole("radio", { name: "Night" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-
-    await user.keyboard("{Home}");
-    expect(auto).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("radio", { name: "Light" })).toBeDisabled();
-  });
-
-  it("moves backward from a disabled selected option", async () => {
-    const user = userEvent.setup();
-
-    render(<ControlledControl initial="light" />);
-    const auto = screen.getByRole("radio", { name: "Auto" });
-    expect(auto).toHaveAttribute("tabindex", "0");
-    expect(screen.getByRole("radio", { name: "Light" })).toHaveAttribute(
-      "tabindex",
-      "-1",
-    );
-    auto.focus();
-    await user.keyboard("{ArrowLeft}");
-
-    expect(screen.getByRole("radio", { name: "Night" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-  });
-
-  it("reverses horizontal arrow navigation in right-to-left layouts", () => {
-    render(
-      <div dir="rtl">
-        <ControlledControl />
-      </div>,
-    );
-
-    const auto = screen.getByRole("radio", { name: "Auto" });
-    auto.focus();
-    fireEvent.keyDown(auto, { key: "ArrowRight" });
-
-    expect(screen.getByRole("radio", { name: "Night" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
-  });
-
-  it("forwards native attributes and a root ref", () => {
-    const rootRef = createRef<HTMLDivElement>();
-    render(
-      <SegmentedControl
-        ref={rootRef}
-        data-testid="display-mode"
-        label="Display mode"
-        value="auto"
-        onValueChange={() => undefined}
-        options={[{ label: "Auto", value: "auto" }]}
-      />,
-    );
-
-    expect(rootRef.current).toBe(screen.getByTestId("display-mode"));
-    expect(rootRef.current).toHaveAttribute("aria-orientation", "horizontal");
-  });
-
-  it("rejects a whitespace-only legend", () => {
-    expect(() =>
-      render(
-        <SegmentedControl
-          label="  "
-          value="auto"
-          onValueChange={() => undefined}
-          options={[{ label: "Auto", value: "auto" }]}
-        />,
-      ),
-    ).toThrow("SegmentedControl requires a non-empty label.");
   });
 });

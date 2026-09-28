@@ -14,6 +14,7 @@ export {
   type ButtonAsAnchorProps,
   type ButtonAsButtonProps,
   type ButtonProps,
+  type ButtonReasonVisibility,
   type ButtonShape,
   type ButtonSize,
   type ButtonVariant,
@@ -32,6 +33,11 @@ export {
   type FieldGroupProps,
 } from "./components/FieldGroup.js";
 export {
+  FreshnessNote,
+  type FreshnessNoteLabels,
+  type FreshnessNoteProps,
+} from "./components/FreshnessNote.js";
+export {
   InlineConfirm,
   type InlineConfirmCancelReason,
   type InlineConfirmProps,
@@ -40,6 +46,7 @@ export {
   Checkbox,
   type CheckboxLabelVisibility,
   type CheckboxProps,
+  type CheckboxReasonVisibility,
   type MonospaceControlProps,
   NumberInput,
   type NumberInputProps,
@@ -100,6 +107,8 @@ export {
 export {
   NumberField,
   type NumberFieldInputProps,
+  type NumberFieldMessage,
+  type NumberFieldMessageContext,
   type NumberFieldMessages,
   type NumberFieldProps,
 } from "./components/NumberField.js";
@@ -115,10 +124,8 @@ export {
 } from "./components/PanelRoot.js";
 export {
   PanelShell,
-  type PanelShellErrorLabels,
   type PanelShellProps,
   type PanelShellThemeToggle,
-  type PanelShellUnsupportedLabels,
 } from "./components/PanelShell.js";
 export {
   RelativeAge,
@@ -182,6 +189,7 @@ export {
   type PollFreshnessOptions,
   usePollFreshness,
 } from "./hooks/use-poll-freshness.js";
+export { useResetDrafts } from "./hooks/use-reset-drafts.js";
 export { useUnsavedChangesGuard } from "./hooks/use-unsaved-changes-guard.js";
 export {
   supportsNativeCssScope,
@@ -237,6 +245,10 @@ export type { HeadingLevel } from "./utils/heading.js";
 export { type PanelLocale, usePanelLocale } from "./utils/locale.js";
 export { prefersReducedMotion } from "./utils/motion.js";
 export type { MountStrategy } from "./utils/mount-strategy.js";
+export {
+  PANEL_LABEL_DEFAULTS,
+  type PanelLabelDefaults,
+} from "./utils/panel-label-defaults.js";
 export { type PanelLabels, usePanelLabels } from "./utils/panel-labels.js";
 export {
   REACHABILITY_STATUS,
@@ -244,8 +256,13 @@ export {
   type ReachabilityStatus,
   resolveReachability,
 } from "./utils/reachability.js";
-export { formatCount, joinList } from "./utils/text.js";
+export {
+  type FormatCountOptions,
+  formatCount,
+  joinList,
+} from "./utils/text.js";
 export type { SemanticTone, StatusTone } from "./utils/tone.js";
+export type { NamedUnit, UnitContent } from "./utils/unit.js";
 export type {
   Density,
   Orientation,

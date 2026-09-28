@@ -18,10 +18,12 @@ import {
   type DialogProps,
   Popover,
 } from "../../src/overlays.js";
+import { DIALOG_STYLES } from "../../src/styles/dialog.js";
 import {
   PanelPortalProvider,
   usePanelPortalContainer,
 } from "../../src/utils/portal.js";
+import { ruleBody } from "../css-helpers.js";
 import { flushAnimationFrames, renderInPanel } from "../helpers.js";
 
 function renderDialog(
@@ -71,7 +73,9 @@ describe("Dialog", () => {
           <p>Dialog body</p>
         </Dialog>,
       ),
-    ).toThrow("Dialog must be rendered inside PanelRoot.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: Dialog must be rendered inside PanelRoot.",
+    );
   });
 
   it("rejects a nested provider that redirects its portal outside PanelRoot", () => {
@@ -86,7 +90,7 @@ describe("Dialog", () => {
         </PanelRoot>,
       ),
     ).toThrow(
-      "Dialog portal container must be its owning PanelRoot. The resolved container is another element.",
+      "signalk-nearlcrews-ui: Dialog portal container must be its owning PanelRoot. The resolved container is another element.",
     );
   });
 
@@ -102,7 +106,7 @@ describe("Dialog", () => {
         </PanelRoot>,
       ),
     ).toThrow(
-      "Dialog portal container must be its owning PanelRoot. No portal container is installed.",
+      "signalk-nearlcrews-ui: Dialog portal container must be its owning PanelRoot. No portal container is installed.",
     );
   });
 
@@ -163,7 +167,7 @@ describe("Dialog", () => {
 
   it("throws when the title is empty", () => {
     expect(() => renderInPanel(<Dialog title="  ">Body</Dialog>)).toThrow(
-      "Dialog requires a non-empty title.",
+      "signalk-nearlcrews-ui: Dialog requires a non-empty title.",
     );
   });
 
@@ -186,6 +190,9 @@ describe("Dialog", () => {
   });
 
   it("ignores scrim presses when dismissable is false and still closes on Escape", async () => {
+    // Escape as the only exit is reported in development; the report has its
+    // own test below.
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
     const { container } = renderDialog({
@@ -458,6 +465,43 @@ describe("Dialog", () => {
     );
   });
 
+  it("reports a dialog that only Escape can close", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    // A touch screen reader on a helm tablet has no Escape key, and React Aria
+    // renders its hidden dismiss button only for a dismissable overlay.
+    renderInPanel(
+      <Dialog title="Escape only" defaultOpen dismissable={false}>
+        <p>Dialog body</p>
+      </Dialog>,
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("Escape is its only way out"),
+    );
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays quiet for a dialog with actions or a scrim to close it", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <>
+        <Dialog
+          title="With actions"
+          defaultOpen
+          dismissable={false}
+          actions={<Button>Done</Button>}
+        >
+          <p>Dialog body</p>
+        </Dialog>
+        <Dialog title="With a scrim" defaultOpen keyboardDismissable={false}>
+          <p>Dialog body</p>
+        </Dialog>
+      </>,
+    );
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("keeps focus in the panel when the control that opened it is gone", async () => {
     const user = userEvent.setup();
 
@@ -611,7 +655,7 @@ describe("AlertDialog", () => {
         </AlertDialog>,
       ),
     ).toThrow(
-      "AlertDialog requires a non-empty cancelLabel so the user always has an explicit way out.",
+      "signalk-nearlcrews-ui: AlertDialog requires a non-empty cancelLabel so the user always has an explicit way out.",
     );
   });
 
@@ -715,5 +759,32 @@ describe("panel portal container", () => {
     // A panel root resolves its element a commit after mounting, so an
     // overlay defers instead of portaling into nothing.
     expect(screen.getByTestId("probe")).toHaveTextContent("pending");
+  });
+});
+
+describe("dialog style module", () => {
+  it("stretches every narrow-panel action, a button with a visible reason included", () => {
+    // A button that shows why it is blocked is wrapped with its reason, and
+    // the wrapper, not the button, is then the row's child.
+    const narrow = DIALOG_STYLES.styles.slice(
+      DIALOG_STYLES.styles.indexOf("@container"),
+    );
+    expect(
+      ruleBody(
+        narrow,
+        "  .snui-dialog__actions > :is(.snui-button, .snui-button-reason)",
+      ),
+    ).toContain("flex: 1 1 auto;");
+    expect(
+      ruleBody(narrow, "  .snui-dialog__actions > .snui-button-reason"),
+    ).toContain("align-items: stretch;");
+  });
+
+  it("keeps the boundary token on the dialog outline", () => {
+    // A dialog floats over the scrim and whatever lies beneath it, so its
+    // outline is a boundary rather than a decorative divider.
+    expect(ruleBody(DIALOG_STYLES.styles, ".snui-dialog")).toContain(
+      "border: 1px solid var(--snui-color-border);",
+    );
   });
 });

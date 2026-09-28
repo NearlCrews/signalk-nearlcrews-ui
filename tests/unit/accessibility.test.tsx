@@ -224,13 +224,15 @@ describe("accessibility", () => {
     );
 
     // Every other field is refused by a prop; the number field is refused by
-    // what the operator typed, so the draft has to be made invalid before the
-    // sweep sees that state at all.
+    // what the operator typed, and shows it once the edit finishes, so the
+    // draft has to be made invalid and finished before the sweep sees that
+    // state at all.
     const interval = screen.getByRole("spinbutton", {
       name: /Refresh interval/,
     });
     await user.clear(interval);
     await user.type(interval, "0");
+    await user.keyboard("{Enter}");
     expect(interval).toHaveAttribute("aria-invalid", "true");
 
     await expectNoAxeViolations(container);

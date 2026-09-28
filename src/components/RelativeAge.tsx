@@ -1,12 +1,6 @@
-import {
-  type HTMLAttributes,
-  type RefAttributes,
-  useEffect,
-  useEffectEvent,
-  useMemo,
-  useState,
-} from "react";
+import { type HTMLAttributes, type RefAttributes, useMemo } from "react";
 
+import { useClockReading } from "../hooks/use-clock-reading.js";
 import { classNames } from "../utils/class-names.js";
 import {
   type FormatRelativeAgeOptions,
@@ -15,14 +9,13 @@ import {
   type RelativeAgeTimestamp,
   timestampToMs,
 } from "../utils/format-relative-age.js";
+import { resolveBundledLabel } from "../utils/labels.js";
 import { usePanelLocale } from "../utils/locale.js";
+import { RELATIVE_AGE_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { createPolymorphicElement } from "../utils/polymorphic.js";
 import { definedProps } from "../utils/props.js";
-import {
-  DEFAULT_CLOCK_TICK_MS,
-  subscribeToClock,
-} from "../utils/shared-clock.js";
+import { DEFAULT_CLOCK_TICK_MS } from "../utils/shared-clock.js";
 
 export type RelativeAgeElement = "time" | "span";
 
@@ -51,9 +44,11 @@ export interface RelativeAgeProps
 /**
  * Renders a relative age such as "3 minutes ago". Give it `since` for a live
  * age the component keeps current, or `ageMs` for a value the consumer already
- * computed. The clock is seeded once in the initial state and read again only
- * on the shared tick, never on a re-render, so a render stays pure and
- * StrictMode replays agree.
+ * computed. The clock is seeded once in the initial state, read again on the
+ * shared tick, and read once more in the render that first sees a new
+ * `since`, so a moment stamped at receipt is never measured against an older
+ * reading. That reading is stored with the moment, so every later render of
+ * it is pure and StrictMode replays agree.
  */
 export function RelativeAge({
   ageMs,
@@ -67,44 +62,50 @@ export function RelativeAge({
   const panelLocale = usePanelLocale();
   const bundledFallback = usePanelLabels()?.relativeAge?.fallback;
   // The panel's locale unless the caller names one, so an age and the numbers
-  // the same panel formats itself cannot end up in two languages. The panel's
-  // fallback wording joins on the same terms.
+  // the same panel formats itself cannot end up in two languages. The
+  // fallback follows the rule every bundled string follows: the caller's,
+  // then the panel's, then the default, with blank text reading as absent at
+  // each step, so an unknown age never renders an empty element.
   const options = useMemo<FormatRelativeAgeOptions | undefined>(() => {
-    const panelDefaults = definedProps({
-      locale: panelLocale,
-      fallback: bundledFallback,
-    });
-    if (Object.keys(panelDefaults).length === 0) return suppliedOptions;
-    return { ...panelDefaults, ...definedProps(suppliedOptions ?? {}) };
+    const suppliedFallback = suppliedOptions?.fallback;
+    const fallback = resolveBundledLabel(
+      suppliedFallback,
+      bundledFallback,
+      RELATIVE_AGE_LABEL_DEFAULTS.fallback,
+    );
+    // The caller's own object is kept whenever nothing needs filling in, so
+    // a stable options prop costs no new object per render.
+    if (
+      panelLocale === undefined &&
+      fallback === (suppliedFallback ?? RELATIVE_AGE_LABEL_DEFAULTS.fallback)
+    ) {
+      return suppliedOptions;
+    }
+    return {
+      ...definedProps({ locale: panelLocale }),
+      ...definedProps(suppliedOptions ?? {}),
+      fallback,
+    };
   }, [bundledFallback, panelLocale, suppliedOptions]);
 
   const ownsClock = since !== null && since !== undefined;
-  const [nowMs, setNowMs] = useState(() => Date.now());
 
   // Read once per render, so a string timestamp is not parsed again on every
   // tick that checks whether the words changed.
   const sinceMs = timestampToMs(since);
+  // A settled age formats the same for tick after tick: "3 hours ago" is
+  // still "3 hours ago" ten seconds later, and an age past a minute repeats
+  // for five ticks out of six. Two formats are far cheaper than the render
+  // they save, so a tick commits only when the words would change, and a new
+  // moment is measured against a clock read as it arrives.
+  const nowMs = useClockReading(ownsClock ? sinceMs : Number.NaN, tickMs, {
+    changes: (candidateMs, currentMs) =>
+      formatRelativeAgeSince(sinceMs, candidateMs, options) !==
+      formatRelativeAgeSince(sinceMs, currentMs, options),
+  });
   const text = ownsClock
     ? formatRelativeAgeSince(sinceMs, nowMs, options)
     : formatRelativeAge(ageMs, options);
-
-  const readClock = useEffectEvent((candidateMs: number): void => {
-    // A settled age formats the same for tick after tick: "3 hours ago" is
-    // still "3 hours ago" ten seconds later, and an age past a minute repeats
-    // for five ticks out of six. One extra format is far cheaper than the
-    // render it saves, and it also absorbs the millisecond of drift between
-    // the initial state and the instant the subscription delivers at once.
-    if (formatRelativeAgeSince(sinceMs, candidateMs, options) !== text) {
-      setNowMs(candidateMs);
-    }
-  });
-
-  useEffect(() => {
-    // A cadence that is not a positive finite number does not tick at all;
-    // subscribeToClock owns that rule for every reader of the shared clock.
-    if (!ownsClock) return undefined;
-    return subscribeToClock(tickMs, readClock);
-  }, [ownsClock, tickMs]);
 
   /*
    * A time element promises a machine-readable moment, so it is used only

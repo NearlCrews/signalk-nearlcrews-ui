@@ -9,7 +9,11 @@ import {
 import { landmarkLabel } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import type { HeadingLevel } from "../utils/heading.js";
-import { useResolvedHeading } from "../utils/heading-level.js";
+import {
+  SectionOutlineProvider,
+  useResolvedHeading,
+  useWithinPackageLandmark,
+} from "../utils/heading-level.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import type { Density } from "../utils/variants.js";
 
@@ -25,9 +29,10 @@ export interface SectionProps
   readonly density?: Density | undefined;
   readonly description?: ReactNode | undefined;
   /**
-   * Level of the section heading. It defaults to the level below a
-   * `PanelShell` title, and to 2 outside one, so the ordinary panel nests
-   * rather than repeating the level its own title already took.
+   * Level of the section heading. It defaults to the level below the title of
+   * an enclosing `PanelShell`, `Dialog`, or `AlertDialog`, and to 2 outside
+   * them, so the ordinary panel nests rather than repeating the level its own
+   * title already took.
    */
   readonly headingLevel?: HeadingLevel | undefined;
   /**
@@ -38,11 +43,21 @@ export interface SectionProps
    */
   readonly headingRef?: Ref<HTMLHeadingElement> | undefined;
   /**
-   * Removes the region landmark naming when false, including any
-   * `aria-labelledby` the consumer passed: the section is then named by its
-   * heading in the ordinary way.
+   * Names the section as a region landmark. Defaults to true, and to false
+   * for a section nested inside another package region, because a landmark
+   * per nested row crowds the list a reader navigates by; an explicit value
+   * always decides. False removes the naming, including any `aria-labelledby`
+   * the consumer passed: the section is then named by its heading in the
+   * ordinary way.
    */
   readonly landmark?: boolean | undefined;
+  /**
+   * Content placed before the heading on the title line, such as the
+   * plugin's glyph. It sits outside the heading, so it is not part of the
+   * section's name and keeps its own semantics: mark a decorative glyph
+   * `aria-hidden` yourself.
+   */
+  readonly leading?: ReactNode | undefined;
   readonly title: ReactNode;
 }
 
@@ -55,7 +70,8 @@ export function Section({
   description,
   headingLevel,
   headingRef,
-  landmark = true,
+  landmark,
+  leading,
   ref,
   title,
   ...props
@@ -63,7 +79,22 @@ export function Section({
   requireContent(title, "Section requires a non-empty title.");
 
   const titleId = useId();
-  const { Heading } = useResolvedHeading(headingLevel);
+  const { Heading, depth, level } = useResolvedHeading(headingLevel);
+  const withinLandmark = useWithinPackageLandmark();
+  const effectiveLandmark = landmark ?? !withinLandmark;
+  const heading = (
+    <Heading
+      ref={headingRef}
+      id={titleId}
+      className={classNames(
+        "snui-section__title",
+        depth === 0 && "snui-section__title--top",
+      )}
+      tabIndex={headingRef === undefined ? undefined : -1}
+    >
+      {title}
+    </Heading>
+  );
 
   return (
     <section
@@ -74,27 +105,35 @@ export function Section({
         density === "compact" && "snui-section--compact",
         className,
       )}
-      aria-labelledby={landmarkLabel(landmark, ariaLabelledBy, titleId)}
+      aria-labelledby={landmarkLabel(
+        effectiveLandmark,
+        ariaLabelledBy,
+        titleId,
+      )}
     >
-      <header className="snui-section__header">
-        <div className="snui-section__heading-group">
-          <Heading
-            ref={headingRef}
-            id={titleId}
-            className="snui-section__title"
-            tabIndex={headingRef === undefined ? undefined : -1}
-          >
-            {title}
-          </Heading>
-          {hasReactContent(description) ? (
-            <div className="snui-section__description">{description}</div>
+      <SectionOutlineProvider landmark={effectiveLandmark} level={level}>
+        <header className="snui-section__header">
+          <div className="snui-section__heading-group">
+            {/* The row exists only for leading content, so a section without
+                any keeps the markup it has always had. */}
+            {hasReactContent(leading) ? (
+              <div className="snui-section__title-row">
+                <div className="snui-section__leading">{leading}</div>
+                {heading}
+              </div>
+            ) : (
+              heading
+            )}
+            {hasReactContent(description) ? (
+              <div className="snui-section__description">{description}</div>
+            ) : null}
+          </div>
+          {hasReactContent(actions) ? (
+            <div className="snui-section__actions">{actions}</div>
           ) : null}
-        </div>
-        {hasReactContent(actions) ? (
-          <div className="snui-section__actions">{actions}</div>
-        ) : null}
-      </header>
-      {children}
+        </header>
+        {children}
+      </SectionOutlineProvider>
     </section>
   );
 }

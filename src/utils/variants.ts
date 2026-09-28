@@ -7,7 +7,11 @@
  */
 export type Density = "default" | "compact";
 
-/** Reads a density prop, falling back to the default step. */
+/**
+ * Reads a density prop, falling back to the default step.
+ *
+ * @internal
+ */
 export function resolveDensity(density: Density | undefined): Density {
   return density ?? "default";
 }

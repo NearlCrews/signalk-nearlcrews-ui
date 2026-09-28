@@ -21,10 +21,14 @@ import {
 } from "react-aria-components";
 import { MENU_STYLES } from "../styles/menu.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
+import { resolveAriaDisabled } from "../utils/activation.js";
 import { classNames } from "../utils/class-names.js";
+import { packageError } from "../utils/errors.js";
 import { hasText, resolveBundledLabel } from "../utils/labels.js";
+import { MENU_ITEM_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { usePanelPortalContainerReady } from "../utils/portal.js";
+import type { DataAttributes } from "../utils/props.js";
 import { racDomProps } from "../utils/react-aria.js";
 import {
   hasReactContent,
@@ -32,7 +36,12 @@ import {
   requireContent,
 } from "../utils/react-node.js";
 import type { StatusTone } from "../utils/tone.js";
-import { Button, type ButtonSize, type ButtonVariant } from "./Button.js";
+import {
+  Button,
+  type ButtonAsButtonProps,
+  type ButtonSize,
+  type ButtonVariant,
+} from "./Button.js";
 import {
   type OverlayOpenState,
   type OverlayPlacement,
@@ -40,8 +49,14 @@ import {
 } from "./overlay-placement.js";
 import { OverlayPopover } from "./overlay-popover.js";
 
-/** Default accessible name added to a destructive menu item. */
-const DEFAULT_MENU_ITEM_TONE_LABEL = "Destructive action";
+/**
+ * Keys React Aria's menu trigger opens on by itself, alone or with Alt,
+ * beside the activation keys the Button already refuses while blocked.
+ */
+const MENU_OPENING_ARROWS: ReadonlySet<string> = new Set([
+  "ArrowDown",
+  "ArrowUp",
+]);
 
 /**
  * The global events React Aria forwards to a collection element. `onClick`
@@ -99,7 +114,20 @@ export type MenuElementAttributes<E extends HTMLElement> = Pick<
   | MenuElementEventName
 > &
   Pick<AriaAttributes, "aria-label" | "aria-labelledby"> &
-  Readonly<Record<`data-${string}`, string | number | boolean | undefined>>;
+  DataAttributes;
+
+/**
+ * The trigger button's own props: `iconOnly` for the square target an icon
+ * trigger takes, `ariaDisabled` with its `disabledReason`, `className`, `ref`,
+ * `data-*` hooks, and the rest of a library Button. The words, the accessible
+ * name, the size, and the variant have their own `Menu` props, and the menu
+ * owns the press, so those are left out here.
+ */
+export type MenuTriggerProps = Omit<
+  ButtonAsButtonProps,
+  "aria-label" | "as" | "children" | "href" | "onClick" | "size" | "variant"
+> &
+  DataAttributes;
 
 export interface MenuProps
   extends OverlayOpenState,
@@ -119,6 +147,14 @@ export interface MenuProps
    * otherwise left unset so the visible words are the name.
    */
   readonly triggerLabel?: string | undefined;
+  /**
+   * Props for the trigger button itself, such as `iconOnly` for an overflow
+   * menu or `ariaDisabled` with a `disabledReason` for one that cannot open
+   * yet. A blocked or loading trigger stays focusable and opens nothing: not
+   * on a press, not on Enter or Space, and not on the arrow keys a menu
+   * trigger otherwise opens on.
+   */
+  readonly triggerProps?: MenuTriggerProps | undefined;
   readonly triggerSize?: ButtonSize | undefined;
   readonly triggerVariant?: ButtonVariant | undefined;
 }
@@ -126,8 +162,8 @@ export interface MenuProps
 /**
  * A trigger button and its menu list. The ref and the HTML attributes belong
  * to the list (`role="menu"`), which exists while the menu is open; the
- * trigger is a library Button styled through `triggerSize` and
- * `triggerVariant`.
+ * trigger is a library Button styled through `triggerSize`,
+ * `triggerVariant`, and `triggerProps`.
  */
 export function Menu({
   children,
@@ -140,6 +176,7 @@ export function Menu({
   placement = "bottom",
   ref,
   triggerLabel,
+  triggerProps,
   triggerSize,
   triggerVariant,
   ...props
@@ -148,8 +185,12 @@ export function Menu({
     label,
     "Menu requires a non-empty label to name its trigger button.",
   );
-  if (triggerLabel === undefined && !hasText(reactNodeText(label))) {
-    throw new Error(
+  if (
+    triggerLabel === undefined &&
+    !hasText(triggerProps?.["aria-labelledby"]) &&
+    !hasText(reactNodeText(label))
+  ) {
+    throw packageError(
       "Menu requires a triggerLabel when its label renders no text, so the trigger button is not left unnamed.",
     );
   }
@@ -168,13 +209,37 @@ export function Menu({
     [onAction],
   );
 
+  // The Button blocks its own click and activation keys, but React Aria
+  // opens the menu from pointer events the Button never sees and from the
+  // arrow keys, which are not activation keys, so both are refused here too.
+  // Native `disabled` is included for an engine that still delivers pointer
+  // events to a disabled button.
+  const triggerBlocked =
+    triggerProps?.disabled === true ||
+    triggerProps?.loading === true ||
+    resolveAriaDisabled(
+      triggerProps?.ariaDisabled,
+      triggerProps?.["aria-disabled"],
+    );
+  const consumerKeyDownCapture = triggerProps?.onKeyDownCapture;
+
   return (
     <MenuTrigger {...overlayOpenProps({ open, defaultOpen, onOpenChange })}>
-      <Pressable>
+      <Pressable isDisabled={triggerBlocked}>
         <Button
+          {...triggerProps}
           aria-label={triggerLabel}
           size={triggerSize}
           variant={triggerVariant}
+          onKeyDownCapture={(event) => {
+            // The menu trigger opens on an arrow only when nothing handled the
+            // key first, and a capture listener runs before its bubble one, so
+            // marking the key handled here keeps a blocked menu shut.
+            if (triggerBlocked && MENU_OPENING_ARROWS.has(event.key)) {
+              event.preventDefault();
+            }
+            consumerKeyDownCapture?.(event);
+          }}
         >
           {label}
         </Button>
@@ -252,7 +317,7 @@ export function MenuItem({
   const menuItemToneLabel = resolveBundledLabel(
     toneLabel,
     usePanelLabels()?.menuItem?.tone,
-    DEFAULT_MENU_ITEM_TONE_LABEL,
+    MENU_ITEM_LABEL_DEFAULTS.tone,
   );
   const domProps = racDomProps<RACMenuItemProps>(props);
   return (

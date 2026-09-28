@@ -58,6 +58,12 @@ interface ViewportPlacement {
   readonly width: number;
 }
 
+/** The focused control, and the scroll offset at which it was last on screen. */
+interface VisibleFocus {
+  readonly element: HTMLElement;
+  readonly scrollOffset: number;
+}
+
 const NATURAL_VIEWPORT_PLACEMENT: ViewportPlacement = {
   bottomInset: 0,
   docked: false,
@@ -97,6 +103,27 @@ function isScrollable(element: HTMLElement, ownerWindow: Window): boolean {
     SCROLLABLE_OVERFLOW.has(overflow) &&
     element.scrollHeight > element.clientHeight
   );
+}
+
+/**
+ * How far the page and every ancestor of the panel have scrolled, summed. An
+ * ancestor that does not scroll adds nothing, so no style is read, which keeps
+ * the sum cheap enough to take on every measuring pass. Any change in it means
+ * the reader scrolled, whatever the viewport did meanwhile.
+ */
+function panelScrollOffset(
+  panelRoot: HTMLElement,
+  ownerWindow: Window,
+): number {
+  let offset = ownerWindow.scrollY;
+  for (
+    let ancestor = panelRoot.parentElement;
+    ancestor !== null && ancestor !== ownerWindow.document.body;
+    ancestor = ancestor.parentElement
+  ) {
+    offset += ancestor.scrollTop;
+  }
+  return offset;
 }
 
 function scrollFocusedTarget(
@@ -224,7 +251,12 @@ function ActionBarSurface({
   return (
     <div
       {...props}
+      // Supported test hooks, listed in the API reference: the bar, its
+      // sticky mode, and whether a viewport bar is docked right now. Class
+      // names stay private.
       data-snui-action-bar=""
+      data-snui-sticky={sticky}
+      data-snui-docked={docked ? "" : undefined}
       className={classNames(
         "snui-action-bar",
         `snui-action-bar--${variant}`,
@@ -264,6 +296,11 @@ function ViewportBottomActionBar({
   // effect, so locating the panel root is written and walked in one place.
   const ownerWindowRef = useRef<Window | null>(null);
   const panelRootRef = useRef<HTMLElement | null>(null);
+  // The viewport bottom the last placement was taken at, and where the focused
+  // control was last seen on screen, so the focus effect can tell a viewport
+  // that closed over the control from a reader who scrolled away from it.
+  const lastViewportBottomRef = useRef<number | null>(null);
+  const visibleFocusRef = useRef<VisibleFocus | null>(null);
   const [placement, setPlacement] = useState<ViewportPlacement>(
     NATURAL_VIEWPORT_PLACEMENT,
   );
@@ -345,7 +382,32 @@ function ViewportBottomActionBar({
       return nextPlacement;
     };
 
+    // Records the scroll offset while the focused control is on screen, on
+    // every pass whether or not the placement changes, because a scroll made
+    // with the bar already docked changes no placement. Only a visible control
+    // refreshes it: once the control has left the screen, the offset it was
+    // last seen at is what a later shrinking viewport is compared against.
+    // While docked, what the reader can see ends at the bar's top edge,
+    // because a control wholly behind the opaque bar is as hidden as one below
+    // the screen. It ends at the viewport's bottom edge instead when the
+    // viewport has just shrunk past a bar that has not moved yet in this pass.
+    const noteVisibleFocus = (): void => {
+      const target = focusedElement(ownerDocument);
+      if (target === null || !panelRoot.contains(target)) return;
+      const edges = readViewportEdges(ownerWindow);
+      const visibleBottom = placementRef.current.docked
+        ? Math.min(bar.getBoundingClientRect().top, edges.bottom)
+        : edges.bottom;
+      const box = target.getBoundingClientRect();
+      if (box.top >= visibleBottom || box.bottom <= edges.top) return;
+      visibleFocusRef.current = {
+        element: target,
+        scrollOffset: panelScrollOffset(panelRoot, ownerWindow),
+      };
+    };
+
     const measure = (): void => {
+      noteVisibleFocus();
       // Settle inside this frame. Each pass commits its placement
       // synchronously, so the next pass reads the layout that placement
       // produced rather than waiting for another frame, and the bar's box is
@@ -371,6 +433,7 @@ function ViewportBottomActionBar({
     };
 
     const keepFocusedContentVisible = (event: FocusEvent): void => {
+      noteVisibleFocus();
       if (!placementRef.current.docked) return;
       const target = event.target;
       if (!(target instanceof ownerWindow.HTMLElement)) return;
@@ -434,6 +497,8 @@ function ViewportBottomActionBar({
   useComposedRef(barRef, ref);
 
   useLayoutEffect(() => {
+    const previousViewportBottom = lastViewportBottomRef.current;
+    lastViewportBottomRef.current = placement.viewportBottom;
     if (!placement.docked) return undefined;
     const bar = barRef.current;
     const ownerWindow = ownerWindowRef.current;
@@ -443,6 +508,26 @@ function ViewportBottomActionBar({
     }
     const target = focusedElement(ownerWindow.document);
     if (target === null) return undefined;
+    // Focus left wholly below the docked bar is content the reader scrolled
+    // away from rather than content the bar covers, unless the viewport moved
+    // while the page stayed where it was when the control was last on screen:
+    // that is a viewport closing over the control, such as a smaller window or
+    // an on-screen keyboard. Pulling a control the reader scrolled away from
+    // back into view would undo their scroll, so a keyboard user scrolling up
+    // from a control near the end of the panel could never leave it. The
+    // scroll offset decides, not the viewport edge alone, because a touch
+    // browser's toolbar changes the viewport during the very same scroll.
+    if (
+      target.getBoundingClientRect().top >= bar.getBoundingClientRect().bottom
+    ) {
+      const seen = visibleFocusRef.current;
+      const viewportClosedOver =
+        previousViewportBottom !== null &&
+        previousViewportBottom !== placement.viewportBottom &&
+        seen?.element === target &&
+        seen.scrollOffset === panelScrollOffset(panelRoot, ownerWindow);
+      if (!viewportClosedOver) return undefined;
+    }
     requestFocusClearance(
       target,
       bar,
@@ -467,7 +552,6 @@ function ViewportBottomActionBar({
         "snui-action-bar__viewport-anchor",
         placement.docked && "snui-action-bar__viewport-anchor--docked",
       )}
-      data-snui-docked={placement.docked ? "" : undefined}
       style={anchorStyle}
     >
       <span

@@ -9,8 +9,14 @@ import { scopeStyles } from "./scope.js";
 export const TEXTAREA_STYLES: StyleModule = {
   id: "textarea",
   styles: scopeStyles(`
+/*
+ * Single-line fields let the control floor set their height and pad by the
+ * small step; several lines of text need the full inset above the first and
+ * below the last, so the field restores it.
+ */
 .snui-textarea {
   min-height: 6rem;
+  padding-block: var(--snui-space-2);
   resize: vertical;
 }
 

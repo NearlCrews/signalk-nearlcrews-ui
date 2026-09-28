@@ -1,17 +1,17 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, createElement, createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { Button } from "../../src/index.js";
+import { Button, Section } from "../../src/index.js";
 import { Popover } from "../../src/overlays.js";
 import { panel, renderInPanel } from "../helpers.js";
 
 const NOT_INTERACTIVE =
-  "Popover trigger must render a semantic interactive element or an element with an interactive ARIA role.";
+  "signalk-nearlcrews-ui: Popover trigger must render a semantic interactive element or an element with an interactive ARIA role.";
 
 const NOT_FOCUSABLE =
-  "Popover trigger must be focusable: remove the negative tabIndex, or spread the injected props onto the element.";
+  "signalk-nearlcrews-ui: Popover trigger must be focusable: remove the negative tabIndex, or spread the injected props onto the element.";
 
 describe("Popover trigger element", () => {
   it("accepts a summary that opens the details it heads", async () => {
@@ -65,7 +65,7 @@ describe("Popover trigger element", () => {
         </Popover>,
       ),
     ).toThrow(
-      "Popover trigger must forward its ref to a semantic interactive element.",
+      "signalk-nearlcrews-ui: Popover trigger must forward its ref to a semantic interactive element.",
     );
   });
 
@@ -189,10 +189,10 @@ describe("Popover surface", () => {
     ).toBe("var(--snui-content-width-standard)");
   });
 
-  it("applies a fixed pixel width through a CSS variable", async () => {
+  it("takes a pixel width as a length string and leaves auto unset", async () => {
     const user = userEvent.setup();
-    renderInPanel(
-      <Popover trigger={<Button>Info</Button>} width={240}>
+    const { unmount } = renderInPanel(
+      <Popover trigger={<Button>Info</Button>} width="240px">
         <p>Hint text</p>
       </Popover>,
     );
@@ -201,6 +201,32 @@ describe("Popover surface", () => {
     expect(
       screen.getByRole("dialog").style.getPropertyValue("--snui-popover-width"),
     ).toBe("240px");
+    unmount();
+
+    renderInPanel(
+      <Popover trigger={<Button>Info</Button>}>
+        <p>Hint text</p>
+      </Popover>,
+    );
+    await user.click(screen.getByRole("button", { name: "Info" }));
+    expect(
+      screen.getByRole("dialog").style.getPropertyValue("--snui-popover-width"),
+    ).toBe("");
+  });
+
+  it("no longer reads a bare number as pixels", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      // @ts-expect-error a width is a CSS length string or "auto"
+      <Popover trigger={<Button>Info</Button>} width={240}>
+        <p>Hint text</p>
+      </Popover>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Info" }));
+    expect(
+      screen.getByRole("dialog").style.getPropertyValue("--snui-popover-width"),
+    ).not.toBe("240px");
   });
 
   it("merges a consumer className onto the popover", async () => {
@@ -227,7 +253,9 @@ describe("Popover", () => {
           <p>Depth details</p>
         </Popover>,
       ),
-    ).toThrow("Popover must be rendered inside PanelRoot.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: Popover must be rendered inside PanelRoot.",
+    );
   });
 
   it("opens on trigger click and forwards ref to the popover element", async () => {
@@ -248,6 +276,39 @@ describe("Popover", () => {
     expect(popover).toHaveStyle({ zIndex: "var(--snui-z-overlay)" });
     expect(popover.closest(".snui-root")).not.toBeNull();
     expect(ref.current).toBe(popover);
+  });
+
+  it("opens nothing from a blocked library Button trigger", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <>
+        <Popover
+          trigger={
+            <Button ariaDisabled disabledReason="Connect a source first.">
+              Blocked
+            </Button>
+          }
+        >
+          <p>Blocked body</p>
+        </Popover>
+        <Popover trigger={<Button loading>Busy</Button>}>
+          <p>Busy body</p>
+        </Popover>
+      </>,
+    );
+
+    const blocked = screen.getByRole("button", { name: "Blocked" });
+    await user.click(blocked);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    // The blocked trigger stays focusable, and the keyboard opens nothing.
+    blocked.focus();
+    expect(blocked).toHaveFocus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Busy" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("closes on Escape and restores focus to the trigger", async () => {
@@ -351,5 +412,27 @@ describe("Popover", () => {
 
     await user.click(screen.getByRole("button", { name: "Info" }));
     expect(screen.getByRole("dialog")).toHaveAttribute("data-placement", "top");
+  });
+});
+
+describe("Popover content outline", () => {
+  it("starts content opened from inside a section with an outline of its own", async () => {
+    // The popover is portaled to the panel root, but React context would
+    // still hand it the outline of the section it was opened from, which
+    // takes the landmark from a section inside it.
+    const user = userEvent.setup();
+    renderInPanel(
+      <Section title="Outer">
+        <Popover trigger={<Button>Details</Button>}>
+          <Section title="Inside popover">Content</Section>
+        </Popover>
+      </Section>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Details" }));
+    const popover = screen.getByRole("dialog", { name: "Details" });
+    expect(
+      within(popover).getByRole("region", { name: "Inside popover" }),
+    ).toBeInTheDocument();
   });
 });

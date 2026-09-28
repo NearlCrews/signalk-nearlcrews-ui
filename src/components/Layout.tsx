@@ -17,19 +17,21 @@ import {
   createPolymorphicElement,
   type PolymorphicProps,
 } from "../utils/polymorphic.js";
-import { definedProps } from "../utils/props.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { useAnnouncingTiming } from "../utils/repeat-announcement.js";
 import {
   isSemanticTone,
   type SemanticTone,
   type StatusTone,
 } from "../utils/tone.js";
+import { hasUnitContent, renderUnit, type UnitContent } from "../utils/unit.js";
 import {
   type Density,
   resolveDensity,
   type SpaceScale,
 } from "../utils/variants.js";
-import { ToneMark } from "./ToneMark.js";
+import { ToneEchoRegion } from "./ToneEchoRegion.js";
+import { ToneGlyph, ToneMark } from "./ToneMark.js";
 
 export type { SpaceScale };
 export type LayoutAlignment = "start" | "center" | "end" | "stretch";
@@ -72,17 +74,33 @@ interface StackOwnProps {
   readonly gap?: SpaceScale | undefined;
 }
 
+interface DividedStackOwnProps extends StackOwnProps {
+  /**
+   * Draws a rule between the items, the separator a list of rows or report
+   * entries needs, with the gap split evenly above and below it. Items the
+   * page hides, and visually hidden ones such as a `LiveRegion`, draw no rule
+   * and take none. For rows inside a card, put the stack inside a `Card` with
+   * `density="flush"`.
+   */
+  readonly divided?: boolean | undefined;
+}
+
 /**
  * Discriminated on `as`: a form stack accepts form attributes and its ref
  * resolves to the form element. See {@link PolymorphicProps}.
  */
-export type StackProps = PolymorphicProps<StackElement, "div", StackOwnProps>;
+export type StackProps = PolymorphicProps<
+  StackElement,
+  "div",
+  DividedStackOwnProps
+>;
 
 export function Stack({
   align = "stretch",
   as = "div",
   children,
   className,
+  divided = false,
   gap = 4,
   ...props
 }: StackProps): React.JSX.Element {
@@ -93,6 +111,7 @@ export function Stack({
       className: classNames(
         "snui-stack",
         `snui-stack--gap-${String(gap)}`,
+        divided && "snui-stack--divided",
         `snui-layout--align-${align}`,
         className,
       ),
@@ -238,12 +257,13 @@ interface CardOwnProps {
   /**
    * Names the card and groups what it holds, for a repeated row a reader
    * should be able to tell from its neighbours. Plain text, because it becomes
-   * the accessible name; `labelledBy` names it by something already on screen
-   * instead. A card that supplies its own `role` keeps it.
+   * the accessible name. The native `aria-label` and `aria-labelledby` name
+   * and group the card the same way, the latter by something already on
+   * screen. Only a div card becomes a group: a card rendered as `nav` or
+   * `section` keeps the landmark its element already is, which the name
+   * completes. A card that supplies its own `role` keeps it.
    */
   readonly label?: string | undefined;
-  /** Id of the element whose text names the card. See {@link CardOwnProps.label}. */
-  readonly labelledBy?: string | undefined;
   /** Paints a leading accent bar and marks the card with the tone glyph. */
   readonly tone?: StatusTone | undefined;
   readonly toneLabel?: string | undefined;
@@ -260,7 +280,6 @@ export function Card({
   footer,
   header,
   label,
-  labelledBy,
   tone = "neutral",
   toneLabel,
   ...props
@@ -279,26 +298,31 @@ export function Card({
       />
     ) : null;
   /*
-   * A named card is a group: the name would otherwise sit on a plain div and
-   * reach nobody, and a repeated row is exactly where a reader needs to be
-   * told which one it is in. A caller-supplied role wins, so a card rendered
-   * as a landmark stays one.
+   * A named div card is a group: the name would otherwise sit on a plain div
+   * and reach nobody, and a repeated row is exactly where a reader needs to be
+   * told which one it is in. A nav or section card is already a landmark once
+   * named, and a group role would replace it, which ARIA does not even allow
+   * on nav, so only the div takes one. The native attributes name it the same
+   * way the prop does, since every other component takes them, and `label`
+   * stands in for a blank `aria-label`. A caller-supplied role wins.
    */
-  const groupProps = hasAccessibleName(label, labelledBy)
-    ? {
-        role: "group",
-        ...definedProps({
-          "aria-label": trimmedText(label) || undefined,
-          "aria-labelledby": trimmedText(labelledBy) || undefined,
-        }),
-      }
-    : {};
+  const ariaLabel =
+    trimmedText(props["aria-label"]) || trimmedText(label) || undefined;
+  const ariaLabelledBy = trimmedText(props["aria-labelledby"]) || undefined;
+  const groupProps =
+    as === "div" && hasAccessibleName(ariaLabel, ariaLabelledBy)
+      ? { role: "group" }
+      : {};
 
   return createPolymorphicElement(
     as,
     {
       ...groupProps,
       ...props,
+      // Written after the spread, so a blank name the consumer passed is
+      // dropped rather than rendered as an empty attribute.
+      "aria-label": ariaLabel,
+      "aria-labelledby": ariaLabelledBy,
       className: classNames(
         "snui-card",
         // Only the steps that change something: the default carries no rule,
@@ -328,7 +352,9 @@ export function Card({
       </div>
     ),
     hasReactContent(footer) ? (
-      <div className="snui-card__footer">{footer}</div>
+      <div className="snui-card__footer">
+        <div className="snui-card__footer-content">{footer}</div>
+      </div>
     ) : null,
   );
 }
@@ -362,6 +388,14 @@ export function MetricGrid({
 export interface MetricProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children">,
     RefAttributes<HTMLDivElement> {
+  /**
+   * Holds a reading the metric mounts with for one beat, so its value region
+   * exists before the reading arrives and a screen reader observes it.
+   * Defaults to true on a polite metric and false on an assertive one. Set it
+   * to false where the reading at mount is not news, such as a figure present
+   * when the panel loads. Meaningful only on an announcing metric.
+   */
+  readonly deferFirstMessage?: boolean | undefined;
   readonly detail?: ReactNode | undefined;
   readonly label: ReactNode;
   /**
@@ -371,24 +405,36 @@ export interface MetricProps
    * value region occupies no space.
    */
   readonly live?: AnnouncementMode | undefined;
+  /**
+   * Milliseconds a changed reading has to stay the same before it is spoken.
+   * The visible value still changes at once; a visually hidden region inside
+   * the value speaks it once it settles, so the value element itself no
+   * longer carries the role. Anything but a positive number speaks each
+   * change at once. Meaningful only on an announcing metric.
+   */
+  readonly settleMs?: number | undefined;
   readonly tone?: StatusTone | undefined;
   readonly toneLabel?: string | undefined;
   /**
-   * Unit shown after the value. Source the string, and any conversion behind
-   * it, from the consumer's own resolution of the server's unit preferences:
-   * this package neither fetches nor selects units.
+   * Unit shown after the value. Pass `{ symbol, name }` to show a compact
+   * symbol and speak its name, so "kn" reads as "12 knots" rather than letter
+   * by letter. Source both, and any conversion behind them, from the
+   * consumer's own resolution of the server's unit preferences: this package
+   * neither fetches nor selects units.
    */
-  readonly unit?: ReactNode | undefined;
+  readonly unit?: UnitContent | undefined;
   readonly value: ReactNode;
 }
 
 export function Metric({
   "aria-labelledby": ariaLabelledBy,
   className,
+  deferFirstMessage,
   detail,
   label,
   live,
   ref,
+  settleMs,
   tone = "neutral",
   toneLabel,
   unit,
@@ -407,7 +453,16 @@ export function Metric({
    * unit with no number read as a measured state rather than a missing one.
    */
   const hasValue = hasReactContent(value);
+  const hasUnit = hasUnitContent(unit);
   const { attributes } = resolveAnnouncingRegion(live, undefined, hasValue);
+  // A reading present on the first render is held for a beat, so the region
+  // exists empty before the number arrives. A settling value speaks through a
+  // region of its own, which owns the hold, so the visible reading never waits.
+  const { defers, echoes, holding } = useAnnouncingTiming(attributes, {
+    deferFirstMessage,
+    hasContent: hasValue,
+    settleMs,
+  });
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: Metrics may render outside MetricGrid, and fieldset would imply form controls.
@@ -421,28 +476,62 @@ export function Metric({
       <div id={labelId} className="snui-metric__label">
         {label}
       </div>
-      <div
-        className="snui-metric__value"
-        role={attributes.role}
-        aria-live={attributes["aria-live"]}
-      >
-        {hasValue ? (
-          <>
-            <ToneMark
-              className="snui-metric__tone-glyph"
-              tone={tone}
-              toneLabel={toneLabel}
-            />
-            {value}
-            {hasReactContent(unit) ? (
+      {echoes ? (
+        <div className="snui-metric__value">
+          {hasValue ? (
+            <>
+              <ToneGlyph className="snui-metric__tone-glyph" tone={tone} />
+              <span aria-hidden="true">{value}</span>
+              {hasUnit ? (
+                <>
+                  {" "}
+                  <span className="snui-metric__unit" aria-hidden="true">
+                    {renderUnit(unit)}
+                  </span>
+                </>
+              ) : null}
+            </>
+          ) : null}
+          <ToneEchoRegion
+            className="snui-metric__region"
+            defers={defers}
+            live={live}
+            settleMs={settleMs}
+            tone={tone}
+            toneLabel={toneLabel}
+          >
+            {hasValue ? (
               <>
-                {" "}
-                <span className="snui-metric__unit">{unit}</span>
+                {value}
+                {hasUnit ? <> {renderUnit(unit)}</> : null}
               </>
             ) : null}
-          </>
-        ) : null}
-      </div>
+          </ToneEchoRegion>
+        </div>
+      ) : (
+        <div
+          className="snui-metric__value"
+          role={attributes.role}
+          aria-live={attributes["aria-live"]}
+        >
+          {hasValue && !holding ? (
+            <>
+              <ToneMark
+                className="snui-metric__tone-glyph"
+                tone={tone}
+                toneLabel={toneLabel}
+              />
+              {value}
+              {hasUnit ? (
+                <>
+                  {" "}
+                  <span className="snui-metric__unit">{renderUnit(unit)}</span>
+                </>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      )}
       {hasReactContent(detail) ? (
         <div className="snui-metric__detail">{detail}</div>
       ) : null}

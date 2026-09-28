@@ -8,8 +8,12 @@ import {
   type ReactElement,
   type ReactNode,
   type RefAttributes,
+  useEffect,
+  useEffectEvent,
   useId,
   useMemo,
+  useRef,
+  useState,
 } from "react";
 import {
   Cell,
@@ -27,6 +31,7 @@ import {
   TableHeader,
 } from "react-aria-components";
 import { TableLayout, Virtualizer } from "react-aria-components/Virtualizer";
+import { useNodeRef } from "../hooks/use-node-ref.js";
 import { TABLE_STYLES } from "../styles/table.js";
 import {
   DATA_GRID_ROW_HEIGHTS,
@@ -35,7 +40,11 @@ import {
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { joinIdReferences, requireAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { describeReceived, packageError } from "../utils/errors.js";
+import { isElementNode } from "../utils/focus.js";
+import { resolveLabel } from "../utils/labels.js";
 import { mediaMatches } from "../utils/motion.js";
+import { DATA_GRID_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { definedProps } from "../utils/props.js";
 import { hasReactContent, plainReactNodeText } from "../utils/react-node.js";
@@ -122,10 +131,11 @@ export interface DataGridColumnProps
   readonly numeric?: boolean | undefined;
   /**
    * Lets virtualized cells in the column wrap onto several lines. By default
-   * a virtualized cell keeps one line, truncates with an ellipsis, and carries
-   * its text as a `title`, which a pointer reveals and a touch screen does
-   * not, so set `wrap` on any column whose value the operator has to read in
-   * full. Non-virtualized cells always wrap.
+   * a virtualized cell keeps one line and truncates with an ellipsis. Its
+   * text rides along as a `title`, which a pointer reveals, and keyboard focus
+   * on the cell unwraps it, but a touch screen gets neither, so set `wrap` on
+   * any text column whose value the operator has to read in full, such as a
+   * Signal K path or a source name. Non-virtualized cells always wrap.
    */
   readonly wrap?: boolean | undefined;
 }
@@ -163,6 +173,38 @@ interface VirtualCollectionItem<T> {
   readonly id: Key;
   readonly odd: boolean;
   readonly value: T;
+}
+
+/**
+ * Rows of a virtualized grid rebuilt so the virtualizer measures them again.
+ *
+ * A virtualized cell unwraps its whole value while it holds keyboard focus,
+ * which changes its row's height, but the virtualizer measures a row only
+ * when the row is built anew, and it keeps the tallest height any cell of the
+ * row reported. Handing React Aria a fresh wrapper for the rows focus moves
+ * between rebuilds those rows and no other, so each is measured at its new
+ * height, taller while a long value shows and back to one line after.
+ */
+interface RowRemeasure<T> {
+  /** The focused cell, as its row key and column index, or null. */
+  readonly focused: ReturnType<typeof focusedCellOf>;
+  /** The wrappers below were built from these; any other set voids them. */
+  readonly items: readonly VirtualCollectionItem<T>[];
+  /** A fresh wrapper per rebuilt row, by row key. */
+  readonly wrappers: ReadonlyMap<string, VirtualCollectionItem<T>>;
+}
+
+const BODY_CELL_SELECTOR = '[role="gridcell"], [role="rowheader"]';
+
+/** The body cell a focus target sits in, as its row key and column index. */
+function focusedCellOf(
+  target: EventTarget | null,
+): { readonly column: string; readonly row: string } | null {
+  if (!isElementNode(target)) return null;
+  const cell = target.closest(BODY_CELL_SELECTOR);
+  const row = cell?.closest('[role="row"]')?.getAttribute("data-key");
+  const column = cell?.getAttribute("data-column-index");
+  return row == null || column == null ? null : { column, row };
 }
 
 interface DataGridBaseProps<TRow>
@@ -276,8 +318,8 @@ function isPlainStyle(style: unknown): style is CSSProperties | undefined {
 
 function validateDynamicColumns(columns: unknown): void {
   if (columns !== undefined && !Array.isArray(columns)) {
-    throw new Error(
-      "DataGrid columns must be a readonly array so React can replay concurrent and StrictMode renders safely.",
+    throw packageError(
+      `DataGrid columns must be an array; received ${describeReceived(columns)}. Pass a readonly array and replace it when the columns change.`,
     );
   }
 }
@@ -377,7 +419,8 @@ type CellDecorationProps = Partial<CellProps> & {
 /**
  * Stamps a cell with its column's alignment, wrapping, and width options and,
  * in a virtualized grid, wraps text-only content so the full value stays
- * reachable through a title once the one-line cell truncates it.
+ * reachable through a title once the one-line cell truncates it. The span is
+ * also what the stylesheet unwraps while the cell holds keyboard focus.
  */
 function decorateCell(
   cell: ReactElement<CellProps>,
@@ -636,9 +679,6 @@ function resolveDynamicHeader<TColumn>(
   return { ...resolvedDecorations(keys, decorations), headerChildren };
 }
 
-/** Title of an empty grid whose caller and panel bundle both leave it out. */
-const DEFAULT_EMPTY_TITLE = "Nothing to show yet";
-
 /**
  * A virtualized, sortable, selectable grid over React Aria's Table. Requires
  * a PanelRoot ancestor, which supplies the scoped styles the grid installs.
@@ -677,10 +717,14 @@ export function DataGrid<TRow, TColumn = unknown>({
   }
 
   useModuleStyles(TABLE_STYLES, "DataGrid");
-  // Only an absent title reaches the bundle: a blank one is a caller mistake,
-  // and EmptyState reports it rather than painting a heading with no words.
-  const bundledEmptyTitle =
-    usePanelLabels()?.dataGrid?.emptyTitle ?? DEFAULT_EMPTY_TITLE;
+  // Only an absent title reaches the bundle: a blank one the caller wrote is
+  // a mistake, and EmptyState reports it rather than painting a heading with
+  // no words. A blank bundle entry reads as absent, the way every bundled
+  // string does, so a partial translation falls back to the default.
+  const bundledEmptyTitle = resolveLabel(
+    usePanelLabels()?.dataGrid?.emptyTitle,
+    DATA_GRID_LABEL_DEFAULTS.emptyTitle,
+  );
   const generatedId = useId();
   const captionId = `${generatedId}-caption`;
   const labelledBy = hasCaption
@@ -715,6 +759,78 @@ export function DataGrid<TRow, TColumn = unknown>({
     [items, virtualized, zebra],
   );
 
+  const [remeasure, setRemeasure] = useState<RowRemeasure<TRow> | null>(null);
+  // Rows focus moved between take their fresh wrapper; every other row keeps
+  // the one React Aria has already rendered.
+  const renderedItems = useMemo(
+    () =>
+      remeasure?.items === virtualItems
+        ? virtualItems.map(
+            (entry) => remeasure.wrappers.get(String(entry.id)) ?? entry,
+          )
+        : virtualItems,
+    [remeasure, virtualItems],
+  );
+
+  /** Rebuilds the rows focus left and entered when it moves to `focused`. */
+  const noteFocusedCell = (focused: RowRemeasure<TRow>["focused"]): void => {
+    setRemeasure((current) => {
+      // The focused cell outlives an items change, which rebuilds every row,
+      // the focused one at its unwrapped height; only the wrappers, built
+      // from the old items, are void.
+      const before = current?.focused ?? null;
+      if (before?.row === focused?.row && before?.column === focused?.column) {
+        return current;
+      }
+      const wrappers = new Map(
+        current?.items === virtualItems ? current.wrappers : undefined,
+      );
+      for (const row of new Set([before?.row, focused?.row])) {
+        if (row === undefined) continue;
+        const entry = virtualItems.find((item) => String(item.id) === row);
+        if (entry !== undefined) wrappers.set(row, { ...entry });
+      }
+      return { focused, items: virtualItems, wrappers };
+    });
+  };
+
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const setGridRef = useNodeRef(gridRef, ref);
+  const noteFocusTarget = useEffectEvent((target: EventTarget | null): void => {
+    noteFocusedCell(focusedCellOf(target));
+  });
+
+  // Native listeners rather than handler props: they observe where focus
+  // stands so the rows can be measured again, and make the container no more
+  // interactive than it was. A focus event covers focus arriving and leaving;
+  // a key the grid handled is followed by a look at where focus stands,
+  // because the virtualizer can hand the focused element to another row as
+  // it moves its views, and then no focus event fires.
+  useEffect(() => {
+    const grid = gridRef.current;
+    if (!virtualized || grid === null) return undefined;
+    const onFocusIn = (event: FocusEvent): void => {
+      noteFocusTarget(event.target);
+    };
+    const onFocusOut = (event: FocusEvent): void => {
+      const next = event.relatedTarget;
+      if (!(isElementNode(next) && grid.contains(next))) {
+        noteFocusTarget(null);
+      }
+    };
+    const onKeyUp = (): void => {
+      noteFocusTarget(grid.ownerDocument.activeElement);
+    };
+    grid.addEventListener("focusin", onFocusIn);
+    grid.addEventListener("focusout", onFocusOut);
+    grid.addEventListener("keyup", onKeyUp);
+    return () => {
+      grid.removeEventListener("focusin", onFocusIn);
+      grid.removeEventListener("focusout", onFocusOut);
+      grid.removeEventListener("keyup", onKeyUp);
+    };
+  }, [virtualized]);
+
   // React Aria keeps each rendered row against its item and rebuilds it only
   // when one of these changes: the renderer, compared by identity, and the
   // column options, compared by value.
@@ -746,7 +862,7 @@ export function DataGrid<TRow, TColumn = unknown>({
     <TableBody
       className="snui-data-grid__body"
       dependencies={rowDependencies}
-      items={virtualItems}
+      items={renderedItems}
       renderEmptyState={renderEmpty}
     >
       {(entry) => {
@@ -804,7 +920,7 @@ export function DataGrid<TRow, TColumn = unknown>({
   return (
     <div
       {...rest}
-      ref={ref}
+      ref={setGridRef}
       className={classNames(
         "snui-data-grid",
         // Every density emits its modifier, the default included, so a

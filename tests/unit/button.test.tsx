@@ -1,8 +1,7 @@
-import { screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, createRef } from "react";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-
 import { Button, type IconOnlyButtonProps } from "../../src/index.js";
 import { panel, renderInPanel } from "../helpers.js";
 
@@ -319,7 +318,7 @@ describe("Button width and icon-only modifiers", () => {
 
   it("throws when an icon-only button has no accessible name", () => {
     const unnamed =
-      "Button with iconOnly requires an accessible name: pass a non-empty aria-label or aria-labelledby.";
+      "signalk-nearlcrews-ui: Button with iconOnly requires an accessible name: pass a non-empty aria-label or aria-labelledby.";
     expect(() =>
       renderInPanel(
         <Button iconOnly>
@@ -481,6 +480,172 @@ describe("Button blocked reason", () => {
   });
 });
 
+describe("Button visible blocked reason", () => {
+  it("draws the reason under a blocked button and reads it once", () => {
+    const { container, rerender } = renderInPanel(
+      <Button
+        ariaDisabled
+        disabledReason="Connect a source first."
+        disabledReasonVisibility="visible"
+      >
+        Run
+      </Button>,
+    );
+
+    const blocked = screen.getByRole("button", { name: "Run" });
+    expect(blocked).toHaveAccessibleDescription("Connect a source first.");
+    const reason = screen.getByText("Connect a source first.");
+    // Drawn beside the button rather than inside it, and not hidden from
+    // assistive technology, so browse mode reads it where it sits.
+    expect(blocked).not.toContainElement(reason);
+    expect(reason).not.toHaveAttribute("aria-hidden");
+    expect(reason).toHaveClass("snui-button-reason__text");
+    // One copy only: the hidden form is not rendered as well.
+    expect(container.querySelectorAll(".snui-visually-hidden")).toHaveLength(0);
+
+    rerender(
+      panel(
+        <Button
+          disabledReason="Connect a source first."
+          disabledReasonVisibility="visible"
+        >
+          Run
+        </Button>,
+      ),
+    );
+
+    // The wrapper stays, so the button the reader stands on is the same
+    // element once it goes live, and the reason goes away with the block.
+    expect(screen.getByRole("button", { name: "Run" })).toBe(blocked);
+    expect(screen.queryByText("Connect a source first.")).toBeNull();
+    expect(blocked).not.toHaveAccessibleDescription();
+  });
+
+  it("keeps the caller's class and ref on the button, and spans the row when full width", () => {
+    const ref = createRef<HTMLButtonElement>();
+    renderInPanel(
+      <Button
+        ref={ref}
+        className="run-action"
+        fullWidth
+        ariaDisabled
+        disabledReason="Connect a source first."
+        disabledReasonVisibility="visible"
+      >
+        Run
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Run" });
+    expect(ref.current).toBe(button);
+    expect(button).toHaveClass("run-action", "snui-button--full-width");
+    expect(button.parentElement).toHaveClass(
+      "snui-button-reason",
+      "snui-button-reason--full-width",
+    );
+  });
+
+  it("draws the reason under a blocked anchor too", () => {
+    renderInPanel(
+      <Button
+        as="a"
+        href="https://example.com/docs"
+        ariaDisabled
+        disabledReason="Offline."
+        disabledReasonVisibility="visible"
+      >
+        Docs
+      </Button>,
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Docs" }),
+    ).toHaveAccessibleDescription("Offline.");
+  });
+});
+
+describe("Button development checks", () => {
+  function warnings(warn: { mock: { calls: unknown[][] } }): string[] {
+    return warn.mock.calls.map(([message]) => String(message));
+  }
+
+  it("asks a blocked button that says nothing to say why", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <>
+        <Button ariaDisabled>Apply retention</Button>
+        <Button ariaDisabled disabledReason="Nothing to apply.">
+          Explained
+        </Button>
+        <Button ariaDisabled aria-describedby="elsewhere">
+          Described
+        </Button>
+        {/* A running button's busy description is its explanation. */}
+        <Button ariaDisabled loading>
+          Running
+        </Button>
+      </>,
+    );
+
+    expect(warnings(warn)).toEqual([
+      'Button "Apply retention" is blocked with ariaDisabled but says nothing about why. Pass disabledReason, or point aria-describedby at the text that explains it. A block that lasts only while another action runs needs one too, such as "Available when the scan finishes".',
+    ]);
+  });
+
+  it("names ariaDisabled when a reason is given to a natively disabled button", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <>
+        <Button disabled disabledReason="No key set.">
+          Test API key
+        </Button>
+        {/* A visible hint wired by hand is legitimate beside native disabled. */}
+        <Button disabled aria-describedby="hint">
+          Test connection
+        </Button>
+      </>,
+    );
+
+    expect(warnings(warn)).toEqual([
+      'Button "Test API key" has a disabledReason beside native disabled, which takes it out of the tab order, so no one reaches the reason. Use ariaDisabled instead: the button stays focusable and reads the reason.',
+    ]);
+  });
+
+  it("asks an aria-label to keep the words the button shows", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <>
+        <Button aria-label="Delete navigation.speedOverGround">Remove</Button>
+        <Button aria-label="Remove navigation.speedOverGround">Remove</Button>
+        <Button aria-label="Save configuration">Save…</Button>
+        <Button aria-label="Close panel" iconOnly>
+          <span aria-hidden="true">×</span>
+        </Button>
+      </>,
+    );
+
+    expect(warnings(warn)).toEqual([
+      'Button "Remove" has the aria-label "Delete navigation.speedOverGround", which does not contain its visible text. Speech input users say the words they see, so keep them in the name: add context as visually hidden text inside the button, such as Remove<VisuallyHidden> depth alarm</VisuallyHidden>, instead of an aria-label.',
+    ]);
+  });
+
+  it("stays silent in production builds", () => {
+    vi.stubEnv("NODE_ENV", "production");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <>
+        <Button ariaDisabled>Quiet blocked</Button>
+        <Button disabled disabledReason="Quiet.">
+          Quiet disabled
+        </Button>
+        <Button aria-label="Other words">Quiet label</Button>
+      </>,
+    );
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
 describe("Button list-line variant", () => {
   it("renders the text variant with the shared button behavior", async () => {
     const user = userEvent.setup();
@@ -533,5 +698,143 @@ describe("Button native form", () => {
 
     await user.click(button);
     expect(onClick).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("buttons and confirmation", () => {
+  it("groups consumer icons and labels inside the button content slot", () => {
+    renderInPanel(
+      <Button>
+        <span aria-hidden="true">+</span>
+        <span>Add source</span>
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Add source" });
+    const content = button.querySelector(".snui-button__content");
+    expect(content).not.toBeNull();
+    expect(content?.children).toHaveLength(2);
+  });
+
+  it("keeps a loading button focusable while suppressing activation", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    const onSubmit = vi.fn((event: React.SubmitEvent<HTMLFormElement>) =>
+      event.preventDefault(),
+    );
+    const saveForm = (loading: boolean): React.JSX.Element => (
+      <form onSubmit={onSubmit}>
+        <Button
+          loading={loading}
+          variant="primary"
+          type="submit"
+          onClick={onClick}
+        >
+          Save
+        </Button>
+      </form>
+    );
+    const { rerender } = renderInPanel(saveForm(false));
+    const idleButton = screen.getByRole("button", { name: "Save" });
+    idleButton.focus();
+
+    rerender(panel(saveForm(true)));
+
+    // The accessible name stays stable across the busy transition; busy state
+    // is conveyed as a description plus aria-busy.
+    const button = screen.getByRole("button", { name: "Save" });
+    expect(button).toHaveAccessibleDescription("Working");
+    expect(button).toBe(idleButton);
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button.querySelector(".snui-button__spinner")).not.toBeNull();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    await user.click(button);
+    expect(button).toHaveFocus();
+    expect(onClick).not.toHaveBeenCalled();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("localizes a loading button with an explicit accessible label", () => {
+    renderInPanel(
+      <Button loading loadingLabel="Saving" aria-label="Save settings">
+        Save
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Save settings" });
+    expect(button).toHaveAttribute("aria-busy", "true");
+    expect(button).toHaveAccessibleDescription("Saving");
+  });
+
+  it("keeps aria-disabled buttons focusable while suppressing activation", async () => {
+    const user = userEvent.setup();
+    const onClick = vi.fn();
+    renderInPanel(
+      <Button ariaDisabled onClick={onClick} size="compact" shape="pill">
+        Move up
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Move up" });
+    expect(button).toBeEnabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button.querySelector(".snui-button__content")).toHaveTextContent(
+      "Move up",
+    );
+    button.focus();
+    await user.keyboard("{Enter}");
+    await user.click(button);
+    expect(button).toHaveFocus();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+});
+
+describe("Button blocked activation keys", () => {
+  it.each([
+    ["aria-disabled", { ariaDisabled: true }],
+    ["loading", { loading: true }],
+  ] as const)(
+    "suppresses consumer onKeyDown for activation keys while %s",
+    (_, blocking) => {
+      const onKeyDown = vi.fn();
+      renderInPanel(
+        <Button {...blocking} onKeyDown={onKeyDown}>
+          Save
+        </Button>,
+      );
+
+      const button = screen.getByRole("button", { name: "Save" });
+      fireEvent.keyDown(button, { key: "Enter" });
+      fireEvent.keyDown(button, { key: " " });
+      expect(onKeyDown).not.toHaveBeenCalled();
+    },
+  );
+
+  it("passes non-activation keys through while blocked", () => {
+    const onKeyDown = vi.fn();
+    renderInPanel(
+      <Button ariaDisabled onKeyDown={onKeyDown}>
+        Save
+      </Button>,
+    );
+
+    const button = screen.getByRole("button", { name: "Save" });
+    fireEvent.keyDown(button, { key: "Tab" });
+    fireEvent.keyDown(button, { key: "ArrowDown" });
+    fireEvent.keyDown(button, { key: "Escape" });
+    expect(onKeyDown).toHaveBeenCalledTimes(3);
+  });
+
+  it("passes activation keys through when the button is enabled", () => {
+    const onKeyDown = vi.fn();
+    renderInPanel(<Button onKeyDown={onKeyDown}>Save</Button>);
+
+    const button = screen.getByRole("button", { name: "Save" });
+    fireEvent.keyDown(button, { key: "Enter" });
+    fireEvent.keyDown(button, { key: " " });
+    expect(onKeyDown).toHaveBeenCalledTimes(2);
   });
 });

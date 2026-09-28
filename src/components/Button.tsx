@@ -10,15 +10,26 @@ import {
 
 import {
   blockedActivationProps,
+  reportBlockedReason,
   resolveAriaDisabled,
 } from "../utils/activation.js";
 import { joinIdReferences, requireAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { DEFAULT_LOADING_LABEL, resolveBundledLabel } from "../utils/labels.js";
+import { isDevelopment } from "../utils/environment.js";
+import {
+  DEFAULT_LOADING_LABEL,
+  resolveBundledLabel,
+  trimmedText,
+} from "../utils/labels.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
-import { hasReactContent } from "../utils/react-node.js";
-import type { Density } from "../utils/variants.js";
+import {
+  hasReactContent,
+  plainReactNodeText,
+  reactNodeText,
+} from "../utils/react-node.js";
+import type { Density, Visibility } from "../utils/variants.js";
 import { warnOnce } from "../utils/warn-once.js";
+import { HiddenDescription } from "./HiddenDescription.js";
 
 /**
  * `"text"` is the list-line form: it keeps the control height, the focus
@@ -35,6 +46,8 @@ export type ButtonVariant =
 /** Alias of the shared {@link Density} vocabulary. */
 export type ButtonSize = Density;
 export type ButtonShape = "default" | "pill";
+/** Alias of the shared {@link Visibility} vocabulary. */
+export type ButtonReasonVisibility = Visibility;
 
 interface ButtonCommonProps {
   /**
@@ -48,14 +61,32 @@ interface ButtonCommonProps {
    * holds and dropped once the button is live. A blocked button with no
    * reason is unfinished: the whole point of `ariaDisabled` over native
    * `disabled` is that the control stays reachable, so the explanation has to
-   * be reachable too. It pairs with `ariaDisabled` rather than with native
-   * `disabled`, which takes the button out of the tab order where a keyboard
-   * user never reaches the reason.
+   * be reachable too, and development says so once for a blocked button with
+   * neither this nor an `aria-describedby`. It pairs with `ariaDisabled`
+   * rather than with native `disabled`, which takes the button out of the tab
+   * order where a keyboard user never reaches the reason.
+   *
+   * A reason text wired by hand through `aria-describedby` is read already, so
+   * pass it one way or the other, never both, or it is read twice.
    */
   readonly disabledReason?: ReactNode | undefined;
+  /**
+   * Whether the reason is drawn as well as read. `"hidden"`, the default,
+   * serves assistive technology only, so a sighted keyboard or touch user sees
+   * nothing. `"visible"` draws it as a muted line under the blocked button:
+   * the button then renders inside a wrapper that holds the line, present
+   * whenever this is set so the button stays the same element as it blocks
+   * and unblocks.
+   */
+  readonly disabledReasonVisibility?: ButtonReasonVisibility | undefined;
   readonly fullWidth?: boolean | undefined;
   readonly iconOnly?: boolean | undefined;
   readonly loading?: boolean | undefined;
+  /**
+   * Busy description read while `loading` holds, beside the name the button
+   * keeps. Keep the action label stable and pass a short state word here,
+   * such as "Saving". Falls back to the panel bundle, then "Working".
+   */
   readonly loadingLabel?: string | undefined;
   readonly shape?: ButtonShape | undefined;
   readonly size?: ButtonSize | undefined;
@@ -117,6 +148,8 @@ type SharedButtonPropKey =
 
 interface ButtonState<Props extends ButtonProps> {
   readonly blocksActivation: boolean;
+  /** Wraps the element with its drawn reason, when the reason is drawn. */
+  readonly frame: (element: React.JSX.Element) => React.JSX.Element;
   readonly dom: {
     readonly "aria-busy": AriaAttributes["aria-busy"];
     readonly "aria-describedby": string | undefined;
@@ -127,6 +160,65 @@ interface ButtonState<Props extends ButtonProps> {
   };
   /** Everything the element form still has to place itself. */
   readonly rest: Omit<Props, SharedButtonPropKey>;
+}
+
+/** Text compared for label in name: case, punctuation, and spacing aside. */
+function comparableText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+interface ButtonMistakeCheck {
+  readonly ariaDescribedBy: string | undefined;
+  readonly ariaLabel: string | undefined;
+  readonly children: ReactNode;
+  readonly disabledReason: ReactNode;
+  readonly isAriaDisabled: boolean;
+  readonly loading: boolean;
+  readonly nativeDisabled: boolean;
+}
+
+/**
+ * Reports the three ways a button compiles and still fails a reader, once
+ * each: a block that explains nothing, a reason native `disabled` drops, and
+ * an `aria-label` that no longer contains the words on screen.
+ */
+function reportButtonMistakes({
+  ariaDescribedBy,
+  ariaLabel,
+  children,
+  disabledReason,
+  isAriaDisabled,
+  loading,
+  nativeDisabled,
+}: ButtonMistakeCheck): void {
+  const label = trimmedText(ariaLabel);
+  reportBlockedReason({
+    // A running button's own busy description is its explanation.
+    advice:
+      'A block that lasts only while another action runs needs one too, such as "Available when the scan finishes".',
+    blocked: isAriaDisabled && !loading && !nativeDisabled,
+    component: "Button",
+    describedBy: ariaDescribedBy,
+    hasReason: hasReactContent(disabledReason),
+    name: label || reactNodeText(children).trim(),
+    nativeDisabled,
+    noun: "button",
+  });
+  const visible = plainReactNodeText(children)?.trim();
+  if (
+    label !== "" &&
+    visible !== undefined &&
+    !comparableText(label).includes(comparableText(visible))
+  ) {
+    warnOnce(
+      `button-label-in-name:${label}:${visible}`,
+      `Button ${JSON.stringify(visible)} has the aria-label ${JSON.stringify(label)}, which does not contain its visible text. Speech input users say the words they see, so keep them in the name: add context as visually hidden text inside the button, such as Remove<VisuallyHidden> depth alarm</VisuallyHidden>, instead of an aria-label.`,
+    );
+  }
 }
 
 function useButtonState<Props extends ButtonProps>(
@@ -142,6 +234,7 @@ function useButtonState<Props extends ButtonProps>(
     children,
     className,
     disabledReason,
+    disabledReasonVisibility = "hidden",
     fullWidth = false,
     iconOnly = false,
     loading = false,
@@ -166,9 +259,43 @@ function useButtonState<Props extends ButtonProps>(
   const loadingId = `${baseId}-loading`;
   const reasonId = `${baseId}-reason`;
   const showsReason = isAriaDisabled && hasReactContent(disabledReason);
+  const drawsReason = disabledReasonVisibility === "visible";
+
+  if (isDevelopment()) {
+    reportButtonMistakes({
+      ariaDescribedBy,
+      ariaLabel,
+      children,
+      disabledReason,
+      isAriaDisabled,
+      loading,
+      // Only the button form has a native disabled state.
+      nativeDisabled: (props as { disabled?: boolean }).disabled === true,
+    });
+  }
 
   return {
     blocksActivation,
+    frame: (element) =>
+      drawsReason ? (
+        // The wrapper stays for as long as the reason is drawn, so the
+        // button is not remounted, and focus not lost, as it blocks.
+        <span
+          className={classNames(
+            "snui-button-reason",
+            fullWidth && "snui-button-reason--full-width",
+          )}
+        >
+          {element}
+          {showsReason ? (
+            <span id={reasonId} className="snui-button-reason__text">
+              {disabledReason}
+            </span>
+          ) : null}
+        </span>
+      ) : (
+        element
+      ),
     // Presentation and naming are identical for both elements, so the two
     // forms spread one object rather than restating every attribute.
     dom: {
@@ -186,36 +313,25 @@ function useButtonState<Props extends ButtonProps>(
             <>
               <span className="snui-button__spinner" aria-hidden="true" />
               {/*
-               * Busy state is a description, not part of the name. Rewriting
-               * the accessible name mid-interaction makes the button read as a
-               * different control to assistive technology, so this node is
-               * hidden from the name computation, which walks the button's own
-               * subtree, and reached only through aria-describedby, which
-               * includes a hidden element it references directly.
+               * Busy state is a description, not part of the name: rewriting
+               * the name mid-interaction would make the button read as a
+               * different control.
                */}
-              <span
-                id={loadingId}
-                className="snui-visually-hidden"
-                aria-hidden="true"
-              >
+              <HiddenDescription id={loadingId}>
                 {resolveBundledLabel(
                   loadingLabel,
                   bundledLoadingLabel,
                   DEFAULT_LOADING_LABEL,
                 )}
-              </span>
+              </HiddenDescription>
             </>
           ) : null}
-          {showsReason ? (
+          {showsReason && !drawsReason ? (
             // The refusal is a description for the same reason the busy label
             // is: the button keeps the name it had before it was blocked.
-            <span
-              id={reasonId}
-              className="snui-visually-hidden"
-              aria-hidden="true"
-            >
+            <HiddenDescription id={reasonId}>
               {disabledReason}
-            </span>
+            </HiddenDescription>
           ) : null}
           <span className="snui-button__content">{children}</span>
         </>
@@ -264,7 +380,7 @@ function safeAnchorHref(href: string): string | undefined {
 }
 
 function NativeButton(props: ButtonAsButtonProps): React.JSX.Element {
-  const { blocksActivation, dom, rest } = useButtonState(props);
+  const { blocksActivation, dom, frame, rest } = useButtonState(props);
   const {
     as: Component = "button",
     disabled,
@@ -275,7 +391,7 @@ function NativeButton(props: ButtonAsButtonProps): React.JSX.Element {
     ...buttonProps
   } = rest;
 
-  return (
+  return frame(
     <Component
       {...buttonProps}
       {...dom}
@@ -290,7 +406,7 @@ function NativeButton(props: ButtonAsButtonProps): React.JSX.Element {
       ref={ref}
       type={type}
       disabled={disabled}
-    />
+    />,
   );
 }
 
@@ -313,7 +429,7 @@ function AnchorButton(props: ButtonAsAnchorProps): React.JSX.Element {
   const safeHref = useMemo(() => safeAnchorHref(href), [href]);
   const blocksActivation = state.blocksActivation || safeHref === undefined;
 
-  return (
+  return state.frame(
     <Component
       {...anchorProps}
       {...state.dom}
@@ -336,10 +452,20 @@ function AnchorButton(props: ButtonAsAnchorProps): React.JSX.Element {
         onClick,
         onKeyDown,
       })}
-    />
+    />,
   );
 }
 
+/**
+ * An action button, or a link styled as one with `as="a"`.
+ *
+ * The visible words are the name. To add context a screen reader needs, such
+ * as which row a Remove acts on, append visually hidden text inside the
+ * button, `Remove<VisuallyHidden> depth alarm</VisuallyHidden>`, rather than
+ * an `aria-label`: speech input users say the words they see, and a label
+ * that stops containing them cannot be activated by voice. Development says
+ * so once for an `aria-label` that does not contain the visible text.
+ */
 export function Button(props: ButtonProps): React.JSX.Element {
   return props.as === "a" ? (
     <AnchorButton {...props} />

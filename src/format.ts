@@ -18,11 +18,16 @@ export {
   type RelativeAgeTimestamp,
 } from "./utils/format-relative-age.js";
 export { type Freshness, resolveFreshness } from "./utils/freshness.js";
+export type { PanelLocale } from "./utils/intl.js";
 export {
   REACHABILITY_STATUS,
   type Reachability,
   type ReachabilityStatus,
   resolveReachability,
 } from "./utils/reachability.js";
-export { formatCount, joinList } from "./utils/text.js";
+export {
+  type FormatCountOptions,
+  formatCount,
+  joinList,
+} from "./utils/text.js";
 export type { SemanticTone, StatusTone } from "./utils/tone.js";

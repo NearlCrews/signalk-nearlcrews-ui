@@ -17,8 +17,10 @@ import {
   type Menu,
   type MenuItem,
   type MenuItemProps,
+  type MenuProps,
   type MenuSection,
   type MenuSeparator,
+  type MenuTriggerProps,
   type PopoverProps,
   type ToastEviction,
   type ToastEvictionReason,
@@ -67,6 +69,23 @@ describe("overlay and data-grid ref types", () => {
       Pick<MenuItemProps, "data-testid">
     >();
   });
+
+  it("types the Menu trigger props as a Button without the Menu-owned props", () => {
+    expectTypeOf<MenuProps["triggerProps"]>().toEqualTypeOf<
+      MenuTriggerProps | undefined
+    >();
+    expectTypeOf<MenuTriggerProps>().toHaveProperty("iconOnly");
+    expectTypeOf<MenuTriggerProps>().toHaveProperty("ariaDisabled");
+    expectTypeOf<MenuTriggerProps>().toHaveProperty("disabledReason");
+    expectTypeOf<MenuTriggerProps>().toHaveProperty("className");
+    expectTypeOf<MenuTriggerProps>().toHaveProperty("ref");
+    expectTypeOf<MenuTriggerProps>().toHaveProperty("aria-labelledby");
+    expectTypeOf<MenuTriggerProps>().not.toHaveProperty("children");
+    expectTypeOf<MenuTriggerProps>().not.toHaveProperty("onClick");
+    expectTypeOf<MenuTriggerProps>().not.toHaveProperty("aria-label");
+    expectTypeOf<MenuTriggerProps>().not.toHaveProperty("size");
+    expectTypeOf<MenuTriggerProps>().not.toHaveProperty("variant");
+  });
 });
 
 describe("overlay prop vocabularies", () => {
@@ -82,10 +101,10 @@ describe("overlay prop vocabularies", () => {
     expectTypeOf<undefined>().toExtend<DialogProps["onCancel"]>();
   });
 
-  it("accepts a CSS length string for popover width", () => {
+  it("accepts a CSS length string for popover width and refuses a bare number", () => {
     expectTypeOf<"18rem">().toExtend<PopoverProps["width"]>();
     expectTypeOf<"auto">().toExtend<PopoverProps["width"]>();
-    expectTypeOf<240>().toExtend<PopoverProps["width"]>();
+    expectTypeOf<240>().not.toExtend<PopoverProps["width"]>();
     expectTypeOf<undefined>().toExtend<PopoverProps["width"]>();
   });
 

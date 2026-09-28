@@ -11,6 +11,7 @@ import type { AnnouncementMode } from "../utils/announcement.js";
 import { idReferenceList, joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { isDevelopment } from "../utils/environment.js";
+import { packageError } from "../utils/errors.js";
 import { resolveFieldRegions } from "../utils/field-error.js";
 import { forwardsFieldControlProps } from "../utils/field-forwarding.js";
 import { definedProps } from "../utils/props.js";
@@ -162,7 +163,7 @@ function requireLabelableIntrinsicChild(
       (child.props as FieldControlProps & { readonly type?: string }).type ===
         "hidden")
   ) {
-    throw new Error(
+    throw packageError(
       "LabeledField element children must render a labelable form control. Use the render-prop form for composite controls.",
     );
   }

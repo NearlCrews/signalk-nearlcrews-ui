@@ -1,7 +1,7 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { type SyntheticEvent, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-
 import { SecretInput } from "../../src/forms.js";
 import { flushAnimationFrames, renderInPanel } from "../helpers.js";
 
@@ -133,7 +133,149 @@ describe("SecretInput arrangement", () => {
     expect(() =>
       renderInPanel(<SecretInput aria-label="API token" id="api token" />),
     ).toThrow(
-      'SecretInput id must be a non-empty string holding no whitespace; received "api token".',
+      'signalk-nearlcrews-ui: SecretInput id must be a non-empty string holding no whitespace; received "api token".',
+    );
+  });
+});
+
+describe("SecretInput", () => {
+  it("toggles an uncontrolled secret without submitting its form", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn((event: SyntheticEvent<HTMLFormElement>) =>
+      event.preventDefault(),
+    );
+    render(
+      <form onSubmit={onSubmit}>
+        <SecretInput aria-label="API key" defaultValue="secret" />
+      </form>,
+    );
+
+    const input = screen.getByLabelText("API key");
+    expect(input).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(input).toHaveAttribute("type", "text");
+    expect(onSubmit).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Hide" }));
+    expect(input).toHaveAttribute("type", "password");
+  });
+
+  it("supports controlled state and preserves focus and selection", async () => {
+    function Harness(): React.JSX.Element {
+      const [revealed, setRevealed] = useState(false);
+      return (
+        <SecretInput
+          aria-label="Token"
+          defaultValue="abcdef"
+          revealed={revealed}
+          onRevealedChange={setRevealed}
+        />
+      );
+    }
+
+    const user = userEvent.setup();
+    render(<Harness />);
+    const input = screen.getByLabelText<HTMLInputElement>("Token");
+    input.focus();
+    input.setSelectionRange(1, 4);
+    await user.click(screen.getByRole("button", { name: "Show" }));
+
+    expect(input).toHaveFocus();
+    expect(input.selectionStart).toBe(1);
+    expect(input.selectionEnd).toBe(4);
+  });
+
+  it("supports localized toggle labels and reports state changes", () => {
+    const onRevealedChange = vi.fn();
+    render(
+      <SecretInput
+        aria-label="Secret"
+        showLabel="Afficher"
+        hideLabel="Masquer"
+        onRevealedChange={onRevealedChange}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Afficher" }));
+    expect(onRevealedChange).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("button", { name: "Masquer" })).not.toHaveAttribute(
+      "aria-pressed",
+    );
+  });
+
+  it("does not reveal a disabled secret", async () => {
+    const user = userEvent.setup();
+    render(
+      <SecretInput
+        aria-label="Disabled token"
+        defaultValue="secret"
+        disabled
+      />,
+    );
+
+    const input = screen.getByLabelText<HTMLInputElement>("Disabled token");
+    const toggle = screen.getByRole("button", { name: "Show" });
+    expect(input).toBeDisabled();
+    expect(toggle).toBeDisabled();
+    await user.click(toggle);
+    expect(input).toHaveAttribute("type", "password");
+  });
+});
+
+describe("SecretInput", () => {
+  it("ties the reveal button to the input through aria-controls", () => {
+    renderInPanel(
+      <>
+        <SecretInput aria-label="API token" />
+        <SecretInput aria-label="Webhook secret" id="webhook-secret" />
+      </>,
+    );
+
+    const token = screen.getByLabelText("API token");
+    const webhook = screen.getByLabelText("Webhook secret");
+    expect(token.id).not.toBe("");
+    expect(webhook).toHaveAttribute("id", "webhook-secret");
+    const [showToken, showWebhook] = screen.getAllByRole("button", {
+      name: "Show",
+    });
+    expect(showToken).toHaveAttribute("aria-controls", token.id);
+    expect(showWebhook).toHaveAttribute("aria-controls", "webhook-secret");
+  });
+
+  it("keeps browser capture off in both states unless overridden", async () => {
+    const user = userEvent.setup();
+    renderInPanel(<SecretInput aria-label="API token" />);
+
+    const input = screen.getByLabelText("API token");
+    const expectDefaults = (): void => {
+      expect(input).toHaveAttribute("autocomplete", "new-password");
+      expect(input).toHaveAttribute("spellcheck", "false");
+      expect(input).toHaveAttribute("autocapitalize", "off");
+      expect(input).toHaveAttribute("autocorrect", "off");
+    };
+    expect(input).toHaveAttribute("type", "password");
+    expectDefaults();
+
+    await user.click(screen.getByRole("button", { name: "Show" }));
+    expect(input).toHaveAttribute("type", "text");
+    expectDefaults();
+  });
+
+  it("lets the caller override the capture defaults", () => {
+    renderInPanel(
+      <SecretInput aria-label="Passphrase" autoComplete="current-password" />,
+    );
+
+    expect(screen.getByLabelText("Passphrase")).toHaveAttribute(
+      "autocomplete",
+      "current-password",
+    );
+  });
+
+  it("applies the monospace modifier to the input", () => {
+    renderInPanel(<SecretInput aria-label="API token" monospace />);
+
+    expect(screen.getByLabelText("API token")).toHaveClass(
+      "snui-input--monospace",
     );
   });
 });

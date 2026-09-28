@@ -2,6 +2,7 @@ import { versionedAnimationName } from "../version.js";
 import {
   CONTROL_LABEL_DECLARATIONS,
   FIELD_STACK_DECLARATIONS,
+  FIRST_LINE_GLYPH_SLOT_DECLARATIONS,
   TRACK_THICKNESS,
   TRACK_THICKNESS_COARSE,
 } from "./fragments.js";
@@ -60,13 +61,13 @@ ${FIELD_STACK_DECLARATIONS}
 ${CONTROL_LABEL_DECLARATIONS}
 }
 
+/* The tone mark keeps its glyph on the label's first line. */
 .snui-progress__tone {
-  flex: none;
+${FIRST_LINE_GLYPH_SLOT_DECLARATIONS}
 }
 
-.snui-progress__tone-glyph {
-  vertical-align: middle;
-}
+/* The glyph's shape takes the tone, as the fill does, not the label color. */
+${toneDescendantColorRules("snui-progress", ".snui-progress__tone-glyph", "color", "tone-")}
 
 .snui-progress__track {
   position: relative;

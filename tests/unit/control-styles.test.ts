@@ -3,8 +3,10 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { COMPONENT_STYLES } from "../../src/styles/components.js";
 import { CONTROL_STYLES } from "../../src/styles/controls.js";
 import { FORM_STYLES } from "../../src/styles/forms.js";
+import { FOUNDATION_STYLES } from "../../src/styles/foundation.js";
 import { TRACK_THICKNESS_COARSE } from "../../src/styles/fragments.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { PROGRESS_STYLES } from "../../src/styles/progress.js";
@@ -145,6 +147,25 @@ describe("control and form stylesheets", () => {
     expect(textarea).not.toContain("forced-colors: active");
   });
 
+  it("lets the focus ring replace every forced-colors invalid outline", () => {
+    // The dashed reconstruction outweighs the ring a field gets under forced
+    // colors, so each selector that draws it has to stand aside while the
+    // control shows visible focus.
+    const invalidRules = [controls, range, radio].flatMap((sheet) =>
+      [...sheet.matchAll(/([^{}]+)\{\s*outline: 2px dashed CanvasText;/g)].map(
+        (match) => match[1] ?? "",
+      ),
+    );
+    expect(invalidRules.length).toBe(3);
+    for (const list of invalidRules) {
+      for (const selector of list.split(",")) {
+        expect(selector.trim()).toMatch(
+          /:not\(:focus-visible\)|:not\(\[data-focus-visible\]\)/,
+        );
+      }
+    }
+  });
+
   it("marks an invalid control with a shape as well as a color", () => {
     // Night caps every foreground's red, so the danger border alone cannot
     // separate a refused field from an ordinary one.
@@ -226,7 +247,7 @@ describe("control and form stylesheets", () => {
       /\.snui-button--secondary:focus-visible,\s*\.snui-button--ghost:focus-visible,/,
     );
     expect(forcedColors).toMatch(
-      /\.snui-button--secondary\[aria-disabled="true"\],[\s\S]*?color: GrayText;/,
+      /\.snui-button\[aria-disabled="true"\]:not\(\[aria-busy="true"\]\) \{\s*border-color: GrayText;\s*color: GrayText;/,
     );
   });
 
@@ -242,5 +263,187 @@ describe("control and form stylesheets", () => {
       // rather than the block that also holds the description and the error.
       /\.snui-checkbox--label-hidden > \.snui-checkbox__control \{\s*grid-template-columns: auto;\s*justify-items: center;\s*align-items: center;\s*min-inline-size: var\(--snui-control-min-height\);/,
     );
+  });
+
+  it("draws a blocked reason as the muted description text beside its control", () => {
+    // A button's reason travels with the button as one item in a row.
+    expect(controls).toMatch(
+      /\.snui-button-reason \{\s*display: inline-flex;\s*max-width: 100%;\s*flex-direction: column;/,
+    );
+    expect(controls).toMatch(
+      /\.snui-button-reason--full-width \{\s*display: flex;\s*width: 100%;/,
+    );
+    expect(controls).toMatch(
+      /\.snui-button-reason__text \{\s*min-width: 0;\s*color: var\(--snui-color-text-muted\);/,
+    );
+    // A checkbox's reason lines up with its description, label hidden or not.
+    expect(controls).toMatch(
+      /\.snui-checkbox__description,\s*\.snui-checkbox__reason \{\s*min-width: 0;\s*color: var\(--snui-color-text-muted\);/,
+    );
+    expect(controls).toContain(
+      ".snui-checkbox--label-hidden > :is(.snui-checkbox__description, .snui-checkbox__reason, .snui-checkbox__error)",
+    );
+  });
+
+  it("paints a blocked segmented option as a disabled one and keeps a read-only group's cursor", () => {
+    expect(controls).toMatch(
+      /\.snui-segmented\[aria-readonly="true"\] \.snui-segmented__option \{\s*cursor: not-allowed;/,
+    );
+    expect(controls).toMatch(
+      /\.snui-segmented__option\[aria-disabled="true"\]:not\(:disabled\):active \{\s*background: transparent;\s*cursor: not-allowed;\s*color: var\(--snui-color-text-disabled\);/,
+    );
+    const blockedHover = styleRules(controls).find(({ selector }) =>
+      selector.startsWith(
+        '.snui-segmented__option[aria-disabled="true"]:not(:disabled):hover',
+      ),
+    );
+    expect(blockedHover?.atRules).toContain("@media (hover: hover)");
+  });
+
+  it("keeps the control boundary token on the segmented track, the one edge of an interactive control", () => {
+    // Container outlines move to the subtle token; a control's only edge does
+    // not, so it holds the 3:1 a control boundary needs.
+    expect(controls).toMatch(
+      /\.snui-segmented__group \{\s*border: 1px solid var\(--snui-color-border\);/,
+    );
+    expect(controls).not.toContain("--snui-color-border-subtle");
+  });
+
+  it("sets a button's own type size, so a footer or a small-text surface cannot shrink it", () => {
+    expect(controls).toMatch(
+      /\.snui-button \{[^}]*font-size: var\(--snui-font-size\);/,
+    );
+    // The list-line form reads as part of its row, so it keeps the row's size.
+    expect(controls).toMatch(/\.snui-button--text \{[^}]*font-size: inherit;/);
+  });
+
+  it("leaves a button rendered as an anchor to its own variant rules", () => {
+    // The package's link look outweighs one class, so it has to step aside
+    // for a button anchor rather than be outweighed by every variant.
+    const foundation = stripComments(FOUNDATION_STYLES);
+    for (const selector of [
+      "a:any-link:where(:not(.snui-button))",
+      "a:visited:where(:not(.snui-button))",
+      "a:any-link:hover:where(:not(.snui-button))",
+    ]) {
+      expect(foundation).toContain(`${selector} {`);
+    }
+    expect(foundation).not.toMatch(/(^|\s)a:any-link \{/);
+    expect(foundation).not.toMatch(/(^|\s)a:visited \{/);
+  });
+
+  it("dims a blocked checkbox's own label, in the theme and under forced colors", () => {
+    // The markers set their own colors, so the blocked rule names them too.
+    expect(controls).toMatch(
+      /\.snui-checkbox:has\(\.snui-checkbox__input:is\(:disabled, \[aria-disabled="true"\]\)\) \.snui-checkbox__label,\s*\.snui-checkbox:has\(\.snui-checkbox__input:is\(:disabled, \[aria-disabled="true"\]\)\) \.snui-checkbox__label :is\(\.snui-optional-mark, \.snui-required-mark\) \{\s*color: var\(--snui-color-text-disabled\);/,
+    );
+    const forced = controls.slice(
+      controls.indexOf("@media (forced-colors: active)"),
+    );
+    // Every piece of label text takes the system color, the markers
+    // included, but a link, which a disabled box does not disable, keeps the
+    // system link color. Nothing opts the subtree out of forced colors, so no
+    // theme color can reach the system palette through it.
+    expect(forced).toMatch(
+      /\.snui-checkbox:has\(\.snui-checkbox__input:is\(:disabled, \[aria-disabled="true"\]\)\) \.snui-checkbox__label,\s*\.snui-checkbox:has\(\.snui-checkbox__input:is\(:disabled, \[aria-disabled="true"\]\)\) \.snui-checkbox__label :not\(:any-link, :any-link \*\) \{\s*color: GrayText;\s*\}/,
+    );
+  });
+
+  it("keeps every blocked field text rule under forced colors inside the system palette", () => {
+    // forced-color-adjust inherits, so an opt-out on a label would hand its
+    // markers and links back their theme colors.
+    const forcedForms = stripComments(FORM_STYLES).slice(
+      stripComments(FORM_STYLES).indexOf("@media (forced-colors: active)"),
+    );
+    expect(forcedForms).toMatch(
+      /\.snui-field-group:disabled > \.snui-field-group__legend,\s*\.snui-field-group:disabled > \.snui-field-group__legend :not\(:any-link, :any-link \*\),\s*\.snui-field-group:disabled > \.snui-field-group__description,\s*\.snui-field-group:disabled > \.snui-field-group__description :not\(:any-link, :any-link \*\) \{\s*color: GrayText;\s*\}/,
+    );
+    expect(forcedForms).toMatch(
+      /> \.snui-field__label,\s*\.snui-field:has\(> \.snui-field__control :is\(:disabled, \[aria-disabled="true"\]\)\)\s*> \.snui-field__label :not\(:any-link, :any-link \*\) \{\s*color: GrayText;\s*\}/,
+    );
+    // A blocked field's markers dim with its label in the theme as well.
+    expect(stripComments(FORM_STYLES)).toMatch(
+      /> \.snui-field__label,\s*\.snui-field:has\(> \.snui-field__control :is\(:disabled, \[aria-disabled="true"\]\)\)\s*> \.snui-field__label :is\(\.snui-optional-mark, \.snui-required-mark\) \{\s*color: var\(--snui-color-text-disabled\);/,
+    );
+    const forcedControls = controls.slice(
+      controls.indexOf("@media (forced-colors: active)"),
+    );
+    // Any rule whose selector reaches a label, a legend, or a description,
+    // by the package's class or by the bare element, must not opt out. The
+    // element branch starts at a combinator or a list separator, so a
+    // modifier such as `--label-hidden` or an `aria-label` attribute does not
+    // count as the element.
+    const optsOut = (block: string): boolean =>
+      /[^{}]*(?:__(?:label|legend|description)\b|(?:^|[\s>+~(,])(?:label|legend)(?![\w-]))[^{}]*\{[^}]*forced-color-adjust:\s*none/.test(
+        block,
+      );
+    for (const block of [forcedForms, forcedControls]) {
+      expect(optsOut(block)).toBe(false);
+    }
+    // The guard itself catches an opt-out in each shape a descendant rule
+    // has taken, on the bare text rule, and on a bare element selector.
+    for (const injected of [
+      ".snui-field__label :not(:any-link, :any-link *) { forced-color-adjust: none; }",
+      ".snui-field-group__legend * { forced-color-adjust: none; }",
+      ".snui-checkbox__label {\n    color: GrayText;\n    forced-color-adjust: none;\n  }",
+      ".snui-field-group:disabled > legend { forced-color-adjust: none; }",
+      ".snui-checkbox label :not(:any-link, :any-link *) { forced-color-adjust:none; }",
+    ]) {
+      expect(optsOut(`${forcedControls}\n${injected}`), injected).toBe(true);
+    }
+    // And it does not mistake a modifier, an attribute, or another control
+    // for a label.
+    for (const unrelated of [
+      ".snui-checkbox--label-hidden { forced-color-adjust: none; }",
+      ".snui-button[aria-label] { forced-color-adjust: none; }",
+      ".snui-button--primary { forced-color-adjust: none; }",
+    ]) {
+      expect(optsOut(unrelated), unrelated).toBe(false);
+    }
+  });
+
+  it("paints every blocked button GrayText under forced colors, at the blocked rules' own weight", () => {
+    const forced = controls.slice(
+      controls.indexOf("@media (forced-colors: active)"),
+    );
+    // The aria-disabled branch weighs three classes and excludes a busy
+    // button, the same as the theme's blocked rules it has to replace.
+    expect(forced).toMatch(
+      /\.snui-button:disabled,\s*\.snui-button\[aria-disabled="true"\]:not\(\[aria-busy="true"\]\) \{\s*border-color: GrayText;\s*color: GrayText;\s*opacity: 1;/,
+    );
+    expect(forced).toMatch(
+      /\.snui-button--primary:disabled,\s*\.snui-button--primary\[aria-disabled="true"\]:not\(\[aria-busy="true"\]\) \{\s*background: ButtonFace;/,
+    );
+    // The dashed state outline sits on the resting danger rule alone, not on
+    // its hover restatement, which would outweigh the focus ring.
+    expect(forced).toMatch(
+      /\.snui-button--danger \{\s*outline: 2px dashed ButtonText;\s*outline-offset: 1px;\s*\}/,
+    );
+    const dangerHover =
+      /\.snui-button--danger,\s*\.snui-button--danger:not\(:disabled\):not\(\[aria-disabled="true"\]\):hover \{([^}]*)\}/.exec(
+        forced,
+      );
+    expect(dangerHover?.[1]).toBeDefined();
+    expect(dangerHover?.[1]).not.toContain("outline");
+    // Danger's dashed outline dims with the rest, except while the focus
+    // ring owns the outline.
+    expect(forced).toMatch(
+      /\.snui-button--danger:disabled,\s*\.snui-button--danger\[aria-disabled="true"\]:not\(\[aria-busy="true"\]\):not\(:focus-visible\) \{\s*outline-color: GrayText;/,
+    );
+  });
+
+  it("lines the switch messages up with its label and hides an empty error region", () => {
+    expect(switchStyles).toMatch(
+      /\.snui-switch__description \{\s*min-width: 0;\s*color: var\(--snui-color-text-muted\);[\s\S]*?padding-inline-start: calc\(2\.25rem \+ var\(--snui-space-3\)\);/,
+    );
+    expect(switchStyles).toMatch(
+      /\.snui-switch__error \{\s*min-width: 0;\s*color: var\(--snui-color-danger\);[\s\S]*?padding-inline-start: calc\(2\.25rem \+ var\(--snui-space-3\)\);/,
+    );
+    // An empty announcing region leaves the flow through the one shared
+    // rule every field error region joins, not a copy in the switch module.
+    expect(stripComments(COMPONENT_STYLES)).toMatch(
+      /\.snui-segmented__error:empty,\s*\.snui-switch__error:empty \{\s*position: absolute/,
+    );
+    expect(switchStyles).not.toContain(".snui-switch__error:empty");
   });
 });

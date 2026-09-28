@@ -16,6 +16,7 @@ import {
 import { useNodeRef } from "../hooks/use-node-ref.js";
 import { hasAccessibleName, requireIdToken } from "../utils/aria.js";
 import { createValueContext } from "../utils/context.js";
+import { packageError } from "../utils/errors.js";
 import { focusIsOnBody } from "../utils/focus.js";
 import type { MountStrategy } from "../utils/mount-strategy.js";
 import { warnOnce } from "../utils/warn-once.js";
@@ -215,7 +216,7 @@ function useResolvedDisclosure(
   const value = useDisclosureContext();
   const resolved = supplied ?? value;
   if (resolved === null) {
-    throw new Error(
+    throw packageError(
       `${component} must be rendered inside Disclosure. Pass the useDisclosure result as the disclosure prop to place it outside one.`,
     );
   }

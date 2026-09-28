@@ -20,6 +20,7 @@ import {
   blockChange,
   blockedActivationProps,
   CHECKBOX_ACTIVATION_KEYS,
+  reportBlockedReason,
   resolveAriaDisabled,
 } from "../utils/activation.js";
 import type { AnnouncementMode } from "../utils/announcement.js";
@@ -27,17 +28,26 @@ import { joinIdReferences, requireIdToken } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { isDevelopment } from "../utils/environment.js";
 import { resolveFieldRegions } from "../utils/field-error.js";
-import { markForwardsFieldControlProps } from "../utils/field-forwarding.js";
+import {
+  markForwardsFieldControlProps,
+  withoutFieldLookupIds,
+} from "../utils/field-forwarding.js";
 import {
   afterMicrotaskIfConnected,
   observeFormReset,
 } from "../utils/form-reset.js";
-import { requireContent } from "../utils/react-node.js";
+import {
+  hasReactContent,
+  reactNodeText,
+  requireContent,
+} from "../utils/react-node.js";
+import { type UnitContent, unitSpokenText } from "../utils/unit.js";
 import type { Visibility } from "../utils/variants.js";
 import { warnOnce } from "../utils/warn-once.js";
 import { blurBeforeWheel } from "../utils/wheel-guard.js";
 import { FieldError } from "./FieldError.js";
 import { FieldMarker } from "./FieldMarker.js";
+import { HiddenDescription } from "./HiddenDescription.js";
 
 export type TextInputType =
   | "date"
@@ -155,7 +165,7 @@ export const TextInput = /* @__PURE__ */ markForwardsFieldControlProps(
 
     return (
       <input
-        {...props}
+        {...withoutFieldLookupIds(props)}
         ref={attachInput}
         type={type}
         value={value}
@@ -189,7 +199,7 @@ export const NumberInput = /* @__PURE__ */ markForwardsFieldControlProps(
 
     return (
       <input
-        {...props}
+        {...withoutFieldLookupIds(props)}
         ref={attachInput}
         type="number"
         value={value}
@@ -207,7 +217,16 @@ export type RangeInputProps = Omit<
   InputHTMLAttributes<HTMLInputElement>,
   "type"
 > &
-  RefAttributes<HTMLInputElement>;
+  RefAttributes<HTMLInputElement> & {
+    /**
+     * Unit the value is read with, as the slider's `aria-valuetext`, so every
+     * step reads "12 knots" rather than a bare number. A named unit is read by
+     * its name. The unit is not drawn: show it beside the slider, where an
+     * `InputGroupAddon` wired into the description also names it once on
+     * focus. An `aria-valuetext` the caller passes wins.
+     */
+    readonly unit?: UnitContent | undefined;
+  };
 
 function setRangeProgress(element: HTMLInputElement): void {
   const minimum = Number(element.min || "0");
@@ -219,19 +238,47 @@ function setRangeProgress(element: HTMLInputElement): void {
   element.style.setProperty("--snui-range-progress", `${String(safePercent)}%`);
 }
 
+/**
+ * Writes the unit value text, or removes one this control wrote. A value text
+ * the caller passes belongs to React, so it is left alone.
+ */
+function setRangeValueText(
+  element: HTMLInputElement,
+  owned: boolean,
+  spokenUnit: string | undefined,
+): void {
+  if (!owned) return;
+  if (spokenUnit === undefined) {
+    element.removeAttribute("aria-valuetext");
+    return;
+  }
+  element.setAttribute("aria-valuetext", `${element.value} ${spokenUnit}`);
+}
+
 export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
   function RangeInput({
+    "aria-valuetext": ariaValueText,
     className,
     onInput,
     ref,
+    unit,
     ...props
   }: RangeInputProps): React.JSX.Element {
     useOptionalModuleStyles(RANGE_STYLES);
 
+    const ownsValueText = ariaValueText === undefined;
+    const spokenUnit = unitSpokenText(unit);
+    // The fill and the value text both follow the value the element holds,
+    // which an uncontrolled slider changes without a render.
+    const syncRange = (element: HTMLInputElement): void => {
+      setRangeProgress(element);
+      setRangeValueText(element, ownsValueText, spokenUnit);
+    };
+
     const [inputRef, attachInput] = useResettableControl(
       ref,
       props.form,
-      setRangeProgress,
+      syncRange,
     );
 
     // The fill is a style property rather than an attribute, so nothing repaints
@@ -239,21 +286,22 @@ export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
     // min, max, and value can each move the fill and any of them can change
     // without an input event.
     useLayoutEffect(() => {
-      if (inputRef.current !== null) setRangeProgress(inputRef.current);
+      if (inputRef.current !== null) syncRange(inputRef.current);
     });
 
     return (
       <input
-        {...props}
+        {...withoutFieldLookupIds(props)}
         ref={attachInput}
         type="range"
+        aria-valuetext={ariaValueText}
         className={classNames("snui-range", className)}
         onInput={(event) => {
           const element = event.currentTarget;
-          setRangeProgress(element);
+          syncRange(element);
           onInput?.(event);
           // Re-sync after React restores a rejected controlled value.
-          afterMicrotaskIfConnected(element, setRangeProgress);
+          afterMicrotaskIfConnected(element, syncRange);
         }}
       />
     );
@@ -273,7 +321,7 @@ export const Select = /* @__PURE__ */ markForwardsFieldControlProps(
   }: SelectProps): React.JSX.Element {
     return (
       <select
-        {...props}
+        {...withoutFieldLookupIds(props)}
         ref={ref}
         className={inputClassNames(monospace, className, "snui-select")}
       />
@@ -307,7 +355,7 @@ export const Textarea = /* @__PURE__ */ markForwardsFieldControlProps(
 
     return (
       <textarea
-        {...props}
+        {...withoutFieldLookupIds(props)}
         ref={ref}
         rows={rows ?? minRows}
         className={inputClassNames(
@@ -327,6 +375,8 @@ export const Textarea = /* @__PURE__ */ markForwardsFieldControlProps(
 
 /** Alias of the shared {@link Visibility} vocabulary. */
 export type CheckboxLabelVisibility = Visibility;
+/** Alias of the shared {@link Visibility} vocabulary. */
+export type CheckboxReasonVisibility = Visibility;
 
 export interface CheckboxProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "children" | "type">,
@@ -342,6 +392,19 @@ export interface CheckboxProps
    */
   readonly ariaDisabled?: boolean | undefined;
   readonly description?: ReactNode | undefined;
+  /**
+   * Why the box refuses, read after its description while `ariaDisabled`
+   * holds and dropped once the box is live, the way `Button.disabledReason`
+   * is. Development says so once for a blocked box with neither this nor an
+   * `aria-describedby`. Native `disabled` drops it, because the box then
+   * leaves the tab order.
+   */
+  readonly disabledReason?: ReactNode | undefined;
+  /**
+   * Whether the reason is drawn under the label as well as read. Defaults to
+   * `"hidden"`, which serves assistive technology only.
+   */
+  readonly disabledReasonVisibility?: CheckboxReasonVisibility | undefined;
   readonly error?: ReactNode | undefined;
   readonly errorLive?: AnnouncementMode | undefined;
   /**
@@ -385,6 +448,8 @@ export function Checkbox({
   className,
   description,
   disabled,
+  disabledReason,
+  disabledReasonVisibility = "hidden",
   error,
   errorLive = "off",
   id,
@@ -441,21 +506,42 @@ export function Checkbox({
     );
   }
 
-  const regions = resolveFieldRegions(controlId, description, error, errorLive);
-  const { descriptionId, hasDescription, hasError, referencedErrorId } =
-    regions;
-  const describedBy = joinIdReferences(
-    ariaDescribedBy,
-    descriptionId,
-    referencedErrorId,
-  );
-  const errorMessage = joinIdReferences(ariaErrorMessage, referencedErrorId);
-
   const labelHidden = labelVisibility === "hidden";
   const blocksActivation = resolveAriaDisabled(
     ariaDisabled,
     nativeAriaDisabled,
   );
+  const nativeDisabled = disabled === true;
+  const hasReason = hasReactContent(disabledReason);
+  // Native disabled takes the box out of the tab order, where the reason
+  // would reach no one, so it is dropped there as Button drops it.
+  const showsReason = blocksActivation && !nativeDisabled && hasReason;
+  const reasonId = `${controlId}-reason`;
+
+  if (isDevelopment()) {
+    reportBlockedReason({
+      blocked: blocksActivation && !nativeDisabled,
+      component: "Checkbox",
+      describedBy: ariaDescribedBy,
+      hasReason,
+      name: reactNodeText(label).trim(),
+      nativeDisabled,
+      noun: "box",
+    });
+  }
+
+  const regions = resolveFieldRegions(controlId, description, error, errorLive);
+  const { descriptionId, hasDescription, hasError, referencedErrorId } =
+    regions;
+  // The reason follows the description, which says what the box does, and
+  // comes before an error about the value it holds.
+  const describedBy = joinIdReferences(
+    ariaDescribedBy,
+    descriptionId,
+    showsReason ? reasonId : undefined,
+    referencedErrorId,
+  );
+  const errorMessage = joinIdReferences(ariaErrorMessage, referencedErrorId);
 
   // The blocked state and both activation guards travel together, and a
   // natively disabled box is left to expose its own state.
@@ -545,6 +631,15 @@ export function Checkbox({
         <span id={descriptionId} className="snui-checkbox__description">
           {description}
         </span>
+      ) : null}
+      {showsReason ? (
+        disabledReasonVisibility === "visible" ? (
+          <span id={reasonId} className="snui-checkbox__reason">
+            {disabledReason}
+          </span>
+        ) : (
+          <HiddenDescription id={reasonId}>{disabledReason}</HiddenDescription>
+        )
       ) : null}
       <FieldError
         as="span"

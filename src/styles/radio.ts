@@ -109,7 +109,7 @@ ${CONTROL_ROW_DECLARATIONS}
 }
 
 .snui-radio__button[data-focus-visible] .snui-radio__control {
-${focusRingDeclarations("2px", true)}
+${focusRingDeclarations("outset", true)}
 }
 
 .snui-radio__button[data-invalid] .snui-radio__control {
@@ -137,8 +137,12 @@ ${CONTROL_LABEL_DECLARATIONS}
 }
 
 @media (forced-colors: active) {
-  /* The invalid outline the root sheet reconstructs for every field. */
-  .snui-radio__button[data-invalid] .snui-radio__control {
+  /*
+   * The invalid outline the root sheet reconstructs for every field, which
+   * stands aside while the focus ring owns the outline, whatever order the
+   * two rules take.
+   */
+  .snui-radio__button[data-invalid]:not([data-focus-visible]) .snui-radio__control {
 ${FORCED_COLORS_INVALID_DECLARATIONS}
   }
 

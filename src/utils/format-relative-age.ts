@@ -1,3 +1,5 @@
+import { createFormatterCache, type PanelLocale } from "./intl.js";
+
 export type RelativeAgeNegative = "clamp" | "fallback";
 
 export interface FormatRelativeAgeOptions {
@@ -7,7 +9,7 @@ export interface FormatRelativeAgeOptions {
    * BCP 47 locale or list. An unsupported or malformed value falls back to the
    * runtime default locale instead of throwing.
    */
-  readonly locale?: string | readonly string[] | undefined;
+  readonly locale?: PanelLocale | undefined;
   /**
    * How an age below zero renders. Clock skew between the Signal K server and
    * the browser makes the freshest sample slightly negative, so `"clamp"`, the
@@ -42,8 +44,24 @@ export const RELATIVE_AGE_EN = {
   locale: "en",
 } as const satisfies FormatRelativeAgeOptions;
 
-/** Skew this large still reads as "now" under `negative: "clamp"`. */
-const NEGATIVE_TOLERANCE_MS = 60_000;
+/**
+ * The words for an age that cannot be stated. Written here rather than read
+ * from the panel label defaults, because this module also serves the
+ * React-free `/format` entry.
+ *
+ * @internal
+ */
+export const DEFAULT_RELATIVE_AGE_FALLBACK = "Unknown";
+
+/**
+ * Skew this large still reads as "now" under `negative: "clamp"`, and still
+ * counts as a fresh sample in `resolveFreshness`: the Signal K server's clock
+ * and the browser's are independent, so the freshest sample can be stamped a
+ * little ahead of the browser. Beyond it the age is unknown in both.
+ *
+ * @internal
+ */
+export const NEGATIVE_TOLERANCE_MS = 60_000;
 
 const SECONDS_PER_DAY = 86_400;
 const SECONDS_PER_YEAR = 365 * SECONDS_PER_DAY;
@@ -84,44 +102,18 @@ function selectUnit(ageSeconds: number): RelativeUnit {
   return selected;
 }
 
-const FORMATTER_CACHE_LIMIT = 32;
-const formatters = new Map<string, Intl.RelativeTimeFormat>();
+const relativeTimeFormatters = createFormatterCache<Intl.RelativeTimeFormat>();
 
 function getFormatter(
-  locale: string | readonly string[] | undefined,
+  locale: PanelLocale | undefined,
   numeric: Intl.RelativeTimeFormatNumeric,
   style: Intl.RelativeTimeFormatStyle,
 ): Intl.RelativeTimeFormat {
-  // Concatenated rather than serialized, and read straight off the caller's
-  // value: this runs on every render of every relative age on screen, and the
-  // default path has no locale at all. The copy Intl needs waits for a miss.
-  const tags = typeof locale === "string" ? locale : (locale?.join(",") ?? "");
-  const key = `${tags}\u0000${numeric}\u0000${style}`;
-  const cached = formatters.get(key);
-  if (cached !== undefined) return cached;
-
-  const locales =
-    locale === undefined
-      ? undefined
-      : typeof locale === "string"
-        ? [locale]
-        : [...locale];
-  let formatter: Intl.RelativeTimeFormat;
-  try {
-    formatter = new Intl.RelativeTimeFormat(locales, { numeric, style });
-  } catch (error) {
-    // A malformed or unsupported locale tag is data, often from a host
-    // setting, so it degrades to the runtime default rather than breaking a
-    // render. Anything else is a real failure and propagates.
-    if (!(error instanceof RangeError)) throw error;
-    formatter = new Intl.RelativeTimeFormat(undefined, { numeric, style });
-  }
-  // A full clear rather than an eviction: the cap is only there to bound a
-  // pathological caller, and rebuilding a handful of formatters is cheaper
-  // than tracking use order.
-  if (formatters.size >= FORMATTER_CACHE_LIMIT) formatters.clear();
-  formatters.set(key, formatter);
-  return formatter;
+  return relativeTimeFormatters(
+    locale,
+    `${numeric}\u0000${style}`,
+    (locales) => new Intl.RelativeTimeFormat(locales, { numeric, style }),
+  );
 }
 
 /**
@@ -143,7 +135,7 @@ const CALENDAR_WORDED_UNITS: ReadonlySet<Intl.RelativeTimeFormatUnit> = new Set(
 export function formatRelativeAge(
   ageMs: number | null | undefined,
   {
-    fallback = "Unknown",
+    fallback = DEFAULT_RELATIVE_AGE_FALLBACK,
     locale,
     negative = "clamp",
     numeric,
@@ -177,7 +169,11 @@ export type RelativeAgeTimestamp = number | string | Date;
 /** The largest epoch millisecond a Date can hold, in either direction. */
 const MAX_DATE_MS = 8.64e15;
 
-/** Epoch milliseconds for a timestamp, or NaN when it cannot be read. */
+/**
+ * Epoch milliseconds for a timestamp, or NaN when it cannot be read.
+ *
+ * @internal
+ */
 export function timestampToMs(
   timestamp: RelativeAgeTimestamp | null | undefined,
 ): number {

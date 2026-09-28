@@ -4,6 +4,7 @@ import {
   NARROW_PANEL_QUERY,
   RAISED_SURFACE_TOKEN_DECLARATIONS,
   SAFE_AREA_PADDING_DECLARATIONS,
+  stretchedActionRules,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
@@ -165,9 +166,7 @@ ${NARROW_PANEL_QUERY} {
     border-end-end-radius: 0;
   }
 
-  .snui-dialog__actions > .snui-button {
-    flex: 1 1 auto;
-  }
+${stretchedActionRules(".snui-dialog__actions")}
 }
 
 @media (prefers-reduced-transparency: reduce) {

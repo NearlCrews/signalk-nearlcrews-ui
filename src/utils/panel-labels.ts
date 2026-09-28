@@ -23,18 +23,39 @@ type NumberFieldMessageKey =
  * specific than the panel's own wording, and blank text reads as absent at
  * both steps. `PanelRoot.labels` and `PanelShell.labels` publish the bundle.
  *
- * Two surfaces are deliberately absent. The compatibility notice renders
- * before the panel exists, so it takes its text from
- * `PanelShell.unsupportedLabels`. `CheckboxGroup.selectAllLabel` names the
+ * The package's own English wording for every group except `numberField`
+ * is exported as `PANEL_LABEL_DEFAULTS`, in the same shape.
+ *
+ * One surface is deliberately absent: `CheckboxGroup.selectAllLabel` names the
  * things being selected, which is panel content rather than package wording.
  */
 export interface PanelLabels {
-  /** Accessible name announced while a `Banner` offers to be dismissed. */
+  /** Accessible name of the `Banner` dismiss button. */
   readonly banner?: { readonly dismiss?: string | undefined } | undefined;
-  /** Accessible name announced while a `Button` is loading. */
+  /**
+   * Busy description a `Button` adds while loading. Its name stays the action
+   * label, so pass a short state word such as "Saving".
+   */
   readonly button?: { readonly loading?: string | undefined } | undefined;
+  /** Accessible name of a scrolling `Code` block the consumer names nothing. */
+  readonly codeBlock?: { readonly label?: string | undefined } | undefined;
   /** Title of a `DataGrid` with no rows. */
   readonly dataGrid?: { readonly emptyTitle?: string | undefined } | undefined;
+  /**
+   * Wording of a `FreshnessNote`, keyed the way its own `labels` are. `fresh`
+   * and `stale` mark where the age goes with `{age}`.
+   */
+  readonly freshnessNote?:
+    | {
+        readonly fresh?: string | undefined;
+        readonly freshAnnouncement?: string | undefined;
+        readonly freshUnknown?: string | undefined;
+        readonly pending?: string | undefined;
+        readonly stale?: string | undefined;
+        readonly staleAnnouncement?: string | undefined;
+        readonly staleUnknown?: string | undefined;
+      }
+    | undefined;
   /** The two actions and the fallback title of an `InlineConfirm`. */
   readonly inlineConfirm?:
     | {
@@ -45,15 +66,26 @@ export interface PanelLabels {
     | undefined;
   /** Announcement beside a destructive `MenuItem`. */
   readonly menuItem?: { readonly tone?: string | undefined } | undefined;
-  /** Validation messages, keyed the way `NumberField.messages` is. */
+  /**
+   * Validation messages, keyed the way `NumberField.messages` is. Text may
+   * carry `{min}` and `{max}`, which the field fills with its bounds. The
+   * bundle takes text only: a message built from the field's rules, such as
+   * one naming its unit, is the function form of the field's own `messages`.
+   */
   readonly numberField?:
     | Partial<Readonly<Record<NumberFieldMessageKey, string>>>
     | undefined;
-  /** Text and actions of the built-in panel error fallback. */
+  /**
+   * Text and actions of the built-in panel error fallback. `description` is
+   * shown when the fallback offers Try again alone, `reloadDescription` when
+   * it also offers the page reload, so each sentence names only the actions
+   * on screen.
+   */
   readonly panelError?:
     | {
         readonly description?: string | undefined;
         readonly reload?: string | undefined;
+        readonly reloadDescription?: string | undefined;
         readonly retry?: string | undefined;
         readonly title?: string | undefined;
       }
@@ -79,10 +111,13 @@ export interface PanelLabels {
         readonly show?: string | undefined;
       }
     | undefined;
-  /** Group name, guidance, and per-choice names of the theme selector. */
+  /**
+   * Group name, guidance, and per-choice names of the theme selector, keyed
+   * the way `ThemeToggle`'s own props are.
+   */
   readonly themeToggle?:
     | {
-        readonly choices?:
+        readonly choiceLabels?:
           | Partial<Readonly<Record<ThemeChoice, string>>>
           | undefined;
         readonly description?: string | undefined;
@@ -98,11 +133,27 @@ export interface PanelLabels {
         readonly label?: string | undefined;
       }
     | undefined;
+  /**
+   * Heading and explanation of the compatibility notice `PanelShell` shows on
+   * a browser without native CSS scope. The notice renders instead of the
+   * panel, so `PanelShell` reads this group from its own `labels` prop. The
+   * group is browser advice and stands for the browser case only: when the
+   * host's React is the reason, the notice keeps its own English heading and
+   * names both versions.
+   */
+  readonly unsupportedBrowser?:
+    | {
+        readonly description?: string | undefined;
+        readonly title?: string | undefined;
+      }
+    | undefined;
 }
 
 /**
  * The label bundle a panel publishes, and undefined for a panel that ships the
- * package's English defaults, which is every panel that passes no bundle.
+ * package's English defaults, which is every panel that passes no bundle. It
+ * holds the panel's replacements only; a consumer control that follows the
+ * panel wording falls back to `PANEL_LABEL_DEFAULTS` for the rest.
  */
 export const { Provider: PanelLabelsProvider, useValue: usePanelLabels } =
   createValueContext<PanelLabels | undefined>(undefined);

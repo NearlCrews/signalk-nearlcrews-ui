@@ -52,14 +52,13 @@ ${visuallyHiddenDeclarations()}
   font-weight: var(--snui-font-weight-bold);
 }
 
-/* Heavier than the inline mark it refines, and no glyph margin: the flex row
-   above owns the gap between the mark and the text. */
+/* Larger and heavier than the inline mark it refines, and no glyph margin:
+   the flex row above owns the gap between the mark and the text. */
 .snui-banner__tone-icon {
   display: inline-grid;
   width: ${BANNER_TONE_ICON_SIZE};
   height: ${BANNER_TONE_ICON_SIZE};
   place-items: center;
-  border-width: 2px;
   font-weight: var(--snui-font-weight-heavy);
 }
 
@@ -79,10 +78,29 @@ ${PROSE_MEASURE_DECLARATION}
   text-wrap: pretty;
 }
 
+/*
+ * The message column takes the row rather than shrinking to its content.
+ * WebKit's pretty line breaking wants slack, and a column sized to its own
+ * max-content width leaves none, so it broke a sentence that fit on one line.
+ */
 .snui-banner__content {
   display: flex;
+  flex: 1 1 auto;
   align-items: flex-start;
   gap: var(--snui-space-2);
+}
+
+.snui-banner__text {
+  flex: 1 1 auto;
+}
+
+/*
+ * A banner with actions starts its content low enough that the lifted action
+ * row below keeps at least space-2 of inset from the top border: the lift
+ * alone spent most of the padding, and a focus ring landed on the border.
+ */
+.snui-banner:has(> .snui-banner__actions) {
+  padding-block-start: max(var(--snui-space-3), calc(var(--snui-space-2) + (var(--snui-control-min-height) - 1lh) / 2));
 }
 
 /*
@@ -96,12 +114,33 @@ ${PROSE_MEASURE_DECLARATION}
   flex-wrap: wrap;
   align-items: center;
   gap: var(--snui-space-2);
+  /*
+   * A control is taller than a line of text, so the row is lifted to center
+   * on the banner's first line, the title where there is one, rather than
+   * hanging half a line below it. The row keeps control height, so a shorter
+   * action such as a link centers inside it rather than rising above the line.
+   */
+  min-block-size: var(--snui-control-min-height);
+  margin-block-start: calc((1lh - var(--snui-control-min-height)) / 2);
 }
 
 ${NARROW_PANEL_QUERY} {
   .snui-banner {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  /*
+   * Stacked under the text, the actions keep their own line and are not
+   * lifted, so they also drop the control-height row a lift needs.
+   */
+  .snui-banner__actions {
+    min-block-size: auto;
+    margin-block-start: 0;
+  }
+
+  .snui-banner:has(> .snui-banner__actions) {
+    padding-block-start: var(--snui-space-3);
   }
 }
 

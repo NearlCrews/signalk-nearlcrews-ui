@@ -58,7 +58,7 @@ ${OVERLAY_TRANSITION_DECLARATIONS}
 }
 
 .snui-menu__item[data-focus-visible] {
-${focusRingDeclarations("-2px", false)}
+${focusRingDeclarations("inset", false)}
 }
 
 .snui-menu__item[data-pressed] {
@@ -79,11 +79,11 @@ ${DISABLED_DECLARATIONS}
 
 .snui-menu__separator {
   margin: var(--snui-space-1) var(--snui-space-2);
-  border-block-start: 1px solid var(--snui-color-border);
+  border-block-start: 1px solid var(--snui-color-border-subtle);
 }
 
 .snui-menu__section + .snui-menu__section {
-  border-block-start: 1px solid var(--snui-color-border);
+  border-block-start: 1px solid var(--snui-color-border-subtle);
   margin-block-start: var(--snui-space-1);
   padding-block-start: var(--snui-space-1);
 }

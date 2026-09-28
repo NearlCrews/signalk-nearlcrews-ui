@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useControllableState } from "../hooks/use-controllable-state.js";
 import { classNames } from "../utils/class-names.js";
+import { packageError } from "../utils/errors.js";
 import { warnOnce } from "../utils/warn-once.js";
 import {
   CollapsibleSection,
@@ -62,7 +63,7 @@ export function Accordion({
       !isValidElement<CollapsibleSectionProps>(child) ||
       child.type !== CollapsibleSection
     ) {
-      throw new Error(
+      throw packageError(
         `Accordion accepts only CollapsibleSection children; received ${describeChild(child)}.`,
       );
     }

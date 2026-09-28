@@ -4,6 +4,8 @@ import type {
   KeyboardEventHandler,
   MouseEventHandler,
 } from "react";
+import { hasText } from "./labels.js";
+import { warnOnce } from "./warn-once.js";
 
 /*
  * Event guards for a control held inoperable through `aria-disabled` rather
@@ -115,6 +117,12 @@ export interface BlockedActivationOptions<Target> {
   readonly blocked: boolean;
   /** Whether the control also carries the native `disabled` attribute. */
   readonly disabled?: boolean | undefined;
+  /**
+   * Whether the control itself carries `aria-disabled` while blocked. Default
+   * true. A read-only group states the refusal once, as `aria-readonly` on the
+   * group, so its options refuse without reading as unavailable.
+   */
+  readonly exposeState?: boolean | undefined;
   readonly onClick?: MouseEventHandler<Target> | undefined;
   readonly onKeyDown?: KeyboardEventHandler<Target> | undefined;
 }
@@ -142,12 +150,13 @@ export function blockedActivationProps<Target>({
   activationKeys = BUTTON_ACTIVATION_KEYS,
   blocked,
   disabled = false,
+  exposeState = true,
   onClick,
   onKeyDown,
 }: BlockedActivationOptions<Target>): BlockedActivationProps<Target> {
   if (blocked) {
     return {
-      "aria-disabled": disabled ? undefined : true,
+      "aria-disabled": disabled || !exposeState ? undefined : true,
       onClick: refuseActivation,
       onKeyDown: refuseActivationKeys(activationKeys, onKeyDown),
     };
@@ -159,4 +168,92 @@ export function blockedActivationProps<Target>({
     onClick: onClick ?? ignoreActivation,
     onKeyDown: onKeyDown ?? ignoreActivation,
   };
+}
+
+/** What the blocked-reason check needs to know about one control. */
+export interface BlockedReasonCheck {
+  /** Advice appended to the message for a block that explains nothing. */
+  readonly advice?: string | undefined;
+  /** Whether `ariaDisabled` holds with nothing else explaining it. */
+  readonly blocked: boolean;
+  /** The component, as the message names it, such as "Button". */
+  readonly component: string;
+  /** An `aria-describedby` the caller wired, which may carry the reason. */
+  readonly describedBy: string | undefined;
+  /**
+   * The fix the message offers for a block that explains nothing. Defaults to
+   * `disabledReason` or `aria-describedby`; a control that cannot take the
+   * attribute, such as an option in a list, names only what it can take.
+   */
+  readonly fix?: string | undefined;
+  /** Whether a `disabledReason` carries content. */
+  readonly hasReason: boolean;
+  /** The words the control is named by, which locate it in the message. */
+  readonly name: string;
+  /** Whether native `disabled` is set, which drops the reason. */
+  readonly nativeDisabled: boolean;
+  /** What the fix calls the control, such as "button" or "box". */
+  readonly noun: string;
+}
+
+/**
+ * The key the blocked-without-reason warning is deduplicated under, so a
+ * composite that reports its own clearer message first keeps the generic one
+ * from repeating it.
+ */
+export function blockedWithoutReasonKey(
+  component: string,
+  name: string,
+): string {
+  return `blocked-without-reason:${component}:${name}`;
+}
+
+/** The fix a blocked control that explains nothing is offered by default. */
+const DEFAULT_BLOCKED_FIX =
+  "Pass disabledReason, or point aria-describedby at the text that explains it.";
+
+/**
+ * The message for a control held by `ariaDisabled` that explains nothing,
+ * worded once so a composite reporting for its own parts says the same
+ * thing. `subject` names the control, such as `Button "Save"`.
+ */
+export function blockedWithoutReasonMessage(
+  subject: string,
+  fix: string = DEFAULT_BLOCKED_FIX,
+): string {
+  return `${subject} is blocked with ariaDisabled but says nothing about why. ${fix}`;
+}
+
+/**
+ * Reports, once each and in development only, the two ways a blocked
+ * control's reason fails a reader: a control held by `ariaDisabled` that
+ * explains nothing, where a keyboard user presses it and hears nothing
+ * change, and a `disabledReason` beside native `disabled`, which takes the
+ * control out of the tab order so no one reaches the reason.
+ */
+export function reportBlockedReason({
+  advice,
+  blocked,
+  component,
+  describedBy,
+  fix,
+  hasReason,
+  name,
+  nativeDisabled,
+  noun,
+}: BlockedReasonCheck): void {
+  const label = JSON.stringify(name);
+  if (blocked && !hasReason && !hasText(describedBy)) {
+    const message = blockedWithoutReasonMessage(`${component} ${label}`, fix);
+    warnOnce(
+      blockedWithoutReasonKey(component, name),
+      advice === undefined ? message : `${message} ${advice}`,
+    );
+  }
+  if (nativeDisabled && hasReason) {
+    warnOnce(
+      `disabled-reason:${component}:${name}`,
+      `${component} ${label} has a disabledReason beside native disabled, which takes it out of the tab order, so no one reaches the reason. Use ariaDisabled instead: the ${noun} stays focusable and reads the reason.`,
+    );
+  }
 }

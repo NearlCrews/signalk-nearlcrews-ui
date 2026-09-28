@@ -1,14 +1,17 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { createRef, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
-
 import {
   ActionBar,
   type ActionBarProps,
   Button,
   PanelRoot,
   Stack,
+  StatusIndicator,
 } from "../../src/index.js";
+import { COMPONENT_STYLES } from "../../src/styles/components.js";
+import { NARROW_PANEL_QUERY } from "../../src/styles/fragments.js";
+import { ruleBody } from "../css-helpers.js";
 import {
   flushAnimationFrames,
   headSheets,
@@ -17,6 +20,9 @@ import {
   renderInPanel,
   stubAnimationFrames,
 } from "../helpers.js";
+
+/** The class the viewport anchor carries while its bar is docked. */
+const DOCKED_ANCHOR = "snui-action-bar__viewport-anchor--docked";
 
 /** A rectangle a spec pins on an element, read fresh at every measurement. */
 type ElementRect = () => DOMRect;
@@ -222,7 +228,7 @@ describe("ActionBar contract", () => {
   it("rejects a bar with no action", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     expect(() => renderInPanel(<ActionBar actions={null} />)).toThrow(
-      "ActionBar requires at least one action.",
+      "signalk-nearlcrews-ui: ActionBar requires at least one action.",
     );
   });
 
@@ -256,6 +262,26 @@ describe("ActionBar contract", () => {
     );
     expect(screen.getByTestId("viewport-bottom-bar")).toHaveClass(
       "snui-action-bar--sticky-viewport-bottom",
+    );
+    // The mode is also published as a supported hook, so a consumer test
+    // stops asserting a private class name.
+    expect(screen.getByTestId("bottom-bar")).toHaveAttribute(
+      "data-snui-sticky",
+      "bottom",
+    );
+    expect(screen.getByTestId("top-bar")).toHaveAttribute(
+      "data-snui-sticky",
+      "top",
+    );
+    expect(screen.getByTestId("viewport-bottom-bar")).toHaveAttribute(
+      "data-snui-sticky",
+      "viewport-bottom",
+    );
+    expect(screen.getByTestId("viewport-bottom-bar")).not.toHaveAttribute(
+      "data-snui-docked",
+    );
+    expect(screen.getByTestId("plain-bar")).not.toHaveAttribute(
+      "data-snui-sticky",
     );
     expect(actionBarParts(container).anchor).toHaveStyle({
       "--snui-action-bar-fixed-bottom": "0px",
@@ -304,8 +330,15 @@ describe("ActionBar viewport docking", () => {
     ]);
 
     visualViewport.dispatchEvent(new Event("resize"));
-    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
     expect(bar).toHaveClass("snui-action-bar--viewport-docked");
+    // The supported hooks sit on the bar itself, so a consumer test reads the
+    // docking state from the element it already found by its own hook, and
+    // the hook names one element: the anchor around the bar does not repeat
+    // it, or a selector for the documented name would find the anchor first.
+    expect(bar).toHaveAttribute("data-snui-docked", "");
+    expect(anchor).not.toHaveAttribute("data-snui-docked");
+    expect(bar).toHaveAttribute("data-snui-sticky", "viewport-bottom");
     expect(anchor).toHaveStyle({
       "--snui-action-bar-fixed-bottom": "100px",
       "--snui-action-bar-fixed-height": "60px",
@@ -315,13 +348,15 @@ describe("ActionBar viewport docking", () => {
 
     anchorTop = 430;
     document.dispatchEvent(new Event("scroll"));
-    await waitFor(() => expect(anchor).not.toHaveAttribute("data-snui-docked"));
+    await waitFor(() => expect(anchor).not.toHaveClass(DOCKED_ANCHOR));
     expect(bar).not.toHaveClass("snui-action-bar--viewport-docked");
+    expect(bar).not.toHaveAttribute("data-snui-docked");
+    expect(bar).toHaveAttribute("data-snui-sticky", "viewport-bottom");
 
     anchorTop = 900;
     panelTop = 650;
     window.dispatchEvent(new Event("resize"));
-    await waitFor(() => expect(anchor).not.toHaveAttribute("data-snui-docked"));
+    await waitFor(() => expect(anchor).not.toHaveClass(DOCKED_ANCHOR));
 
     unmount();
     restore();
@@ -347,16 +382,354 @@ describe("ActionBar viewport docking", () => {
     ]);
 
     visualViewport.dispatchEvent(new Event("resize"));
-    await waitFor(() => expect(anchor).not.toHaveAttribute("data-snui-docked"));
+    await waitFor(() => expect(anchor).not.toHaveClass(DOCKED_ANCHOR));
     target.focus();
     scrollBy.mockClear();
 
     Reflect.set(visualViewport, "height", 400);
     visualViewport.dispatchEvent(new Event("resize"));
 
-    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
     await waitFor(() =>
       expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 50 }),
+    );
+
+    unmount();
+    restore();
+  });
+
+  it("leaves focus the reader scrolled away from when scrolling docks the bar", async () => {
+    const { restore, visualViewport } = installVisualViewport({ height: 500 });
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+
+    const { anchor, bar, panel, safeAreaProbe, unmount } = renderDockingBar(
+      <Button data-testid="left-behind">Last theme</Button>,
+    );
+    const target = screen.getByTestId("left-behind");
+    let anchorTop = 430;
+    let targetTop = 380;
+
+    mockActionBarGeometry([
+      [panel, PANEL_AT_TOP],
+      [anchor, () => new DOMRect(120, anchorTop, 560, 60)],
+      [bar, barRect(bar, (docked) => (docked ? 440 : anchorTop))],
+      [target, () => new DOMRect(140, targetTop, 200, 40)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).not.toHaveClass(DOCKED_ANCHOR));
+    target.focus();
+    scrollBy.mockClear();
+
+    // The reader scrolls up with focus left on a control near the end, which
+    // moves the anchor below the fold and docks the bar. The control is now
+    // off screen below the bar, not under it, so pulling it back would undo
+    // the reader's own scroll.
+    anchorTop = 1_030;
+    targetTop = 980;
+    document.dispatchEvent(new Event("scroll"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
+    await flushAnimationFrames();
+    expect(scrollBy).not.toHaveBeenCalled();
+    expect(target).toHaveFocus();
+
+    unmount();
+    restore();
+  });
+
+  it("leaves focus alone when a touch toolbar resizes the viewport during that scroll", async () => {
+    const { restore, visualViewport } = installVisualViewport({ height: 500 });
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+    let scrollOffset = 1_200;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollOffset);
+
+    const { anchor, bar, panel, safeAreaProbe, unmount } = renderDockingBar(
+      <Button data-testid="left-behind">Last theme</Button>,
+    );
+    const target = screen.getByTestId("left-behind");
+    let anchorTop = 430;
+    let targetTop = 380;
+
+    mockActionBarGeometry([
+      [panel, PANEL_AT_TOP],
+      [anchor, () => new DOMRect(120, anchorTop, 560, 60)],
+      [
+        bar,
+        barRect(bar, (docked) =>
+          docked ? visualViewport.height - 60 : anchorTop,
+        ),
+      ],
+      [target, () => new DOMRect(140, targetTop, 200, 40)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).not.toHaveClass(DOCKED_ANCHOR));
+    target.focus();
+    scrollBy.mockClear();
+
+    // Scrolling up on a phone or tablet brings the browser's toolbar back,
+    // which shortens the visual viewport in the same moment. The page did
+    // scroll, so this is still the reader leaving the control, not the
+    // viewport closing over it.
+    scrollOffset = 600;
+    Reflect.set(visualViewport, "height", 440);
+    anchorTop = 1_030;
+    targetTop = 980;
+    visualViewport.dispatchEvent(new Event("resize"));
+    document.dispatchEvent(new Event("scroll"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
+    await flushAnimationFrames();
+    expect(scrollBy).not.toHaveBeenCalled();
+    expect(target).toHaveFocus();
+
+    unmount();
+    restore();
+  });
+
+  it("leaves a control scrolled behind the docked bar alone when a toolbar returns later", async () => {
+    const { restore, visualViewport } = installVisualViewport({ height: 600 });
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+    let scrollOffset = 200;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollOffset);
+
+    const { anchor, bar, panel, safeAreaProbe, unmount } = renderDockingBar(
+      <Button data-testid="behind-bar">Last theme</Button>,
+    );
+    const target = screen.getByTestId("behind-bar");
+    let targetTop = 450;
+
+    mockActionBarGeometry([
+      [panel, PANEL_AT_TOP],
+      [anchor, () => new DOMRect(120, 900, 560, 60)],
+      [
+        bar,
+        barRect(bar, (docked) => (docked ? visualViewport.height - 60 : 900)),
+      ],
+      [target, () => new DOMRect(140, targetTop, 200, 40)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
+    target.focus();
+
+    // The reader scrolls until the control sits wholly behind the docked bar,
+    // which hides it as surely as the bottom of the screen does.
+    scrollOffset = 90;
+    targetTop = 560;
+    document.dispatchEvent(new Event("scroll"));
+    await flushAnimationFrames();
+    scrollBy.mockClear();
+
+    // A touch browser's toolbar then returns in a pass of its own, shortening
+    // the viewport with no scroll. The reader scrolled the control out of
+    // sight, so the bar does not scroll it back.
+    Reflect.set(visualViewport, "height", 550);
+    visualViewport.dispatchEvent(new Event("resize"));
+    await flushAnimationFrames();
+    expect(scrollBy).not.toHaveBeenCalled();
+    expect(target).toHaveFocus();
+
+    unmount();
+    restore();
+  });
+
+  it("does not count a control below a shrunken viewport as seen before the bar moves", async () => {
+    const { restore, visualViewport } = installVisualViewport({ height: 600 });
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+    let scrollOffset = 200;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollOffset);
+
+    const { anchor, bar, panel, safeAreaProbe, unmount } = renderDockingBar(
+      <Button data-testid="below-new-edge">Last theme</Button>,
+    );
+    const target = screen.getByTestId("below-new-edge");
+    let targetTop = 450;
+
+    // The docked bar sits where the committed placement put it, against the
+    // layout viewport, not where the visual viewport now ends: a keyboard or
+    // pinch zoom that shrinks only the visual viewport leaves it there until
+    // the pass that measures the change commits a new placement.
+    const committedBarTop = (): number =>
+      window.innerHeight -
+      Number.parseFloat(
+        anchor.style.getPropertyValue("--snui-action-bar-fixed-bottom"),
+      ) -
+      60;
+    mockActionBarGeometry([
+      [panel, PANEL_AT_TOP],
+      [anchor, () => new DOMRect(120, 900, 560, 60)],
+      [bar, barRect(bar, (docked) => (docked ? committedBarTop() : 900))],
+      [target, () => new DOMRect(140, targetTop, 200, 40)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
+    target.focus();
+    await flushAnimationFrames();
+    scrollBy.mockClear();
+
+    // In one frame the reader scrolls, which moves the control down to 510,
+    // and the visual viewport shrinks to 460. The control is below the new
+    // viewport bottom though still above the bar's old spot, so it is not on
+    // screen, and the scroll the reader made is not undone.
+    scrollOffset = 140;
+    targetTop = 510;
+    Reflect.set(visualViewport, "height", 460);
+    visualViewport.dispatchEvent(new Event("resize"));
+    document.dispatchEvent(new Event("scroll"));
+    await flushAnimationFrames();
+    expect(scrollBy).not.toHaveBeenCalled();
+    expect(target).toHaveFocus();
+
+    unmount();
+    restore();
+  });
+
+  it("does not credit one control's visible offset to another it never showed", async () => {
+    const { restore, visualViewport } = installVisualViewport({ height: 600 });
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+
+    const { anchor, bar, panel, safeAreaProbe, unmount } = renderDockingBar(
+      <>
+        <Button data-testid="seen">Seen control</Button>
+        <Button data-testid="unseen">Unseen control</Button>
+      </>,
+    );
+    const seen = screen.getByTestId("seen");
+    const unseen = screen.getByTestId("unseen");
+
+    mockActionBarGeometry([
+      [panel, PANEL_AT_TOP],
+      [anchor, () => new DOMRect(120, 500, 560, 60)],
+      [
+        bar,
+        barRect(bar, (docked) => (docked ? visualViewport.height - 60 : 500)),
+      ],
+      [seen, () => new DOMRect(140, 350, 200, 40)],
+      [unseen, () => new DOMRect(140, 620, 200, 40)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).not.toHaveClass(DOCKED_ANCHOR));
+    // The first control is recorded while on screen; focus then moves to one
+    // below the fold that was never on screen.
+    seen.focus();
+    unseen.focus({ preventScroll: true });
+    scrollBy.mockClear();
+
+    // The viewport shrinks with no scroll, docking the bar. The offset recorded
+    // for the first control says nothing about the second, which the reader
+    // never saw, so it is left where it is.
+    Reflect.set(visualViewport, "height", 450);
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
+    await flushAnimationFrames();
+    expect(scrollBy).not.toHaveBeenCalled();
+    expect(unseen).toHaveFocus();
+
+    unmount();
+    restore();
+  });
+
+  it("clears focus a shrinking viewport hides after a scroll made while docked", async () => {
+    const { restore, visualViewport } = installVisualViewport({ height: 600 });
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+    let scrollOffset = 0;
+    vi.spyOn(window, "scrollY", "get").mockImplementation(() => scrollOffset);
+
+    const { anchor, bar, panel, safeAreaProbe, unmount } = renderDockingBar(
+      <Button data-testid="in-view">Earlier action</Button>,
+    );
+    const target = screen.getByTestId("in-view");
+    let targetTop = 450;
+
+    mockActionBarGeometry([
+      [panel, PANEL_AT_TOP],
+      [anchor, () => new DOMRect(120, 900, 560, 60)],
+      [
+        bar,
+        barRect(bar, (docked) => (docked ? visualViewport.height - 60 : 900)),
+      ],
+      [target, () => new DOMRect(140, targetTop, 200, 40)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
+    target.focus();
+
+    // The reader scrolls a little with the bar already docked. The placement
+    // does not change, and the control stays on screen above the bar.
+    scrollOffset = 100;
+    targetTop = 350;
+    document.dispatchEvent(new Event("scroll"));
+    await flushAnimationFrames();
+    scrollBy.mockClear();
+
+    // Then the viewport shrinks with no scroll, as a smaller window or an
+    // on-screen keyboard does, and leaves the control wholly below the bar.
+    // The reader was looking at it, so it is brought back above the bar.
+    Reflect.set(visualViewport, "height", 300);
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() =>
+      expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 150 }),
+    );
+
+    unmount();
+    restore();
+  });
+
+  it("still clears focus a shrinking viewport leaves below the docked bar", async () => {
+    const { restore, visualViewport } = installVisualViewport({ height: 600 });
+    const scrollBy = vi
+      .spyOn(window, "scrollBy")
+      .mockImplementation(() => undefined);
+
+    const { anchor, bar, panel, safeAreaProbe, unmount } = renderDockingBar(
+      <Button data-testid="shrunk-away">Last theme</Button>,
+    );
+    const target = screen.getByTestId("shrunk-away");
+
+    mockActionBarGeometry([
+      [panel, PANEL_AT_TOP],
+      [anchor, () => new DOMRect(120, 500, 560, 60)],
+      [bar, barRect(bar, (docked) => (docked ? 340 : 500))],
+      [target, () => new DOMRect(140, 450, 200, 40)],
+      [safeAreaProbe, OUTSIDE_THE_VIEWPORT],
+    ]);
+
+    visualViewport.dispatchEvent(new Event("resize"));
+    await waitFor(() => expect(anchor).not.toHaveClass(DOCKED_ANCHOR));
+    target.focus();
+    scrollBy.mockClear();
+
+    // The viewport shrinks under the focused control, as an on-screen keyboard
+    // or a smaller window does. The reader did not move, so the control they
+    // are on is brought back above the bar even though it now sits wholly
+    // below it.
+    Reflect.set(visualViewport, "height", 400);
+    visualViewport.dispatchEvent(new Event("resize"));
+
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
+    await waitFor(() =>
+      expect(scrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 150 }),
     );
 
     unmount();
@@ -380,7 +753,7 @@ describe("ActionBar viewport docking", () => {
     });
 
     visualViewport.dispatchEvent(new Event("resize"));
-    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
     target.focus();
 
     expect(nestedScrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 10 });
@@ -414,7 +787,7 @@ describe("ActionBar viewport docking", () => {
     );
 
     visualViewport.dispatchEvent(new Event("resize"));
-    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
     target.focus();
 
     // The same ten pixels the scrollBy path reports, applied by hand, and the
@@ -477,7 +850,7 @@ describe("ActionBar viewport docking", () => {
     });
 
     visualViewport.dispatchEvent(new Event("resize"));
-    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
     target.focus();
 
     expect(nestedScrollBy).toHaveBeenCalledWith({ behavior: "auto", top: 6 });
@@ -513,7 +886,7 @@ describe("ActionBar viewport docking", () => {
     ]);
 
     visualViewport.dispatchEvent(new Event("resize"));
-    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
 
     // A press focuses its target before the release lands. Scrolling now would
     // move the control out from under the pointer and the click would never
@@ -591,14 +964,86 @@ describe("ActionBar viewport docking", () => {
     ]);
 
     visualViewport.dispatchEvent(new Event("resize"));
-    await waitFor(() => expect(anchor).toHaveAttribute("data-snui-docked"));
+    await waitFor(() => expect(anchor).toHaveClass(DOCKED_ANCHOR));
 
     document.dispatchEvent(new Event("scroll"));
     await flushAnimationFrames();
-    expect(anchor).toHaveAttribute("data-snui-docked");
+    expect(anchor).toHaveClass(DOCKED_ANCHOR);
     expect(bar).toHaveClass("snui-action-bar--viewport-docked");
 
     unmount();
     restore();
+  });
+});
+
+describe("ActionBar layout", () => {
+  /** The selector of the rule that sets the shared panel surface inset. */
+  const INSET_SURFACES =
+    ":is(.snui-section, .snui-collapsible, .snui-action-bar)";
+
+  it("insets its content by the section inset, so it lines up with the sections above", () => {
+    // A panel ends with its save bar under a column of sections, so the bar's
+    // status and buttons keep the same inline edge as the section content, on
+    // a wide panel and on a narrow one. The block padding stays the bar's own,
+    // which keeps its height and the docking clearance unchanged.
+    const bar = ruleBody(COMPONENT_STYLES, ".snui-action-bar");
+    expect(bar).toContain("padding-block: var(--snui-space-3);");
+    expect(bar).toContain("padding-inline: var(--snui-section-inset);");
+    expect(bar).not.toMatch(/(^|\n)\s*padding:/);
+    expect(ruleBody(COMPONENT_STYLES, INSET_SURFACES)).toContain(
+      "--snui-section-inset: var(--snui-space-4);",
+    );
+    const narrow = ruleBody(COMPONENT_STYLES, NARROW_PANEL_QUERY);
+    expect(ruleBody(narrow, INSET_SURFACES)).toContain(
+      "--snui-section-inset: var(--snui-space-3);",
+    );
+  });
+
+  it("keeps action state and actions presentational", () => {
+    renderInPanel(
+      <ActionBar
+        status={<StatusIndicator>Unsaved changes</StatusIndicator>}
+        actions={<Button variant="primary">Save</Button>}
+      />,
+    );
+
+    expect(screen.getByText("Unsaved changes")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("makes sticky positioning an explicit action-bar option", () => {
+    const { container } = renderInPanel(
+      <ActionBar sticky="bottom" actions={<Button>Save</Button>} />,
+    );
+
+    expect(
+      container.querySelector(".snui-action-bar--sticky-bottom"),
+    ).not.toBeNull();
+    expect(container.querySelector(".snui-action-bar__status")).toBeNull();
+  });
+
+  it("does not create an action-bar status wrapper for false content", () => {
+    const { container } = renderInPanel(
+      <ActionBar status={false} actions={<Button>Save</Button>} />,
+    );
+
+    expect(container.querySelector(".snui-action-bar__status")).toBeNull();
+  });
+});
+
+describe("ActionBar status focus target", () => {
+  it("provides a programmatic action-status focus target", () => {
+    const statusRef = createRef<HTMLDivElement>();
+    renderInPanel(
+      <ActionBar
+        statusRef={statusRef}
+        status="Configuration saved"
+        actions={<Button>Save</Button>}
+      />,
+    );
+
+    statusRef.current?.focus();
+    expect(statusRef.current).toHaveFocus();
+    expect(statusRef.current).toHaveAttribute("tabindex", "-1");
   });
 });

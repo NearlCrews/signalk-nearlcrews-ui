@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import {
   createRef,
   type Ref,
@@ -7,7 +7,6 @@ import {
   useRef,
 } from "react";
 import { describe, expect, it, vi } from "vitest";
-
 import {
   type FocusReturn,
   type FocusReturnOptions,
@@ -344,7 +343,7 @@ describe("createRequiredContext", () => {
 
   it("names both ends when a part is rendered outside its owner", () => {
     expect(() => render(<Reader />)).toThrow(
-      "TabList must be rendered inside Tabs.",
+      "signalk-nearlcrews-ui: TabList must be rendered inside Tabs.",
     );
   });
 });
@@ -476,5 +475,32 @@ describe("useResolvedHeading", () => {
     expect(
       screen.getByTestId("explicit").querySelector("h5"),
     ).toBeInTheDocument();
+  });
+});
+
+describe("useUnsavedChangesGuard", () => {
+  function Guard({ dirty }: { readonly dirty: boolean }): null {
+    useUnsavedChangesGuard(dirty);
+    return null;
+  }
+
+  function dispatchBeforeUnload(): boolean {
+    const event = new Event("beforeunload", { cancelable: true });
+    fireEvent(window, event);
+    return event.defaultPrevented;
+  }
+
+  it("asks the browser to confirm unloading only while dirty", () => {
+    const { rerender, unmount } = render(<Guard dirty />);
+    expect(dispatchBeforeUnload()).toBe(true);
+
+    rerender(<Guard dirty={false} />);
+    expect(dispatchBeforeUnload()).toBe(false);
+
+    rerender(<Guard dirty />);
+    expect(dispatchBeforeUnload()).toBe(true);
+
+    unmount();
+    expect(dispatchBeforeUnload()).toBe(false);
   });
 });

@@ -381,7 +381,7 @@ describe("Tabs", () => {
           </TabList>
         </Tabs>,
       ),
-    ).toThrow("TabList requires an accessible name");
+    ).toThrow("signalk-nearlcrews-ui: TabList requires an accessible name");
     expect(() =>
       renderInPanel(
         <Tabs>
@@ -390,9 +390,9 @@ describe("Tabs", () => {
           </TabList>
         </Tabs>,
       ),
-    ).toThrow("Tab requires a non-empty label.");
+    ).toThrow("signalk-nearlcrews-ui: Tab requires a non-empty label.");
     expect(() => renderInPanel(<TabPanel value="a">Orphan</TabPanel>)).toThrow(
-      "TabPanel must be rendered inside Tabs.",
+      "signalk-nearlcrews-ui: TabPanel must be rendered inside Tabs.",
     );
   });
 });

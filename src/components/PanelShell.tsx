@@ -1,31 +1,25 @@
-import { type ReactNode, useCallback, useState, version } from "react";
+import { type ReactNode, useState, version } from "react";
 
 import { supportsNativeCssScope } from "../styles/install.js";
-import {
-  type PanelAnnounce,
-  PanelAnnouncerProvider,
-} from "../utils/announcer.js";
 import {
   HEADING_ELEMENTS,
   type HeadingLevel,
   nextHeadingLevel,
 } from "../utils/heading.js";
 import { HeadingLevelProvider } from "../utils/heading-level.js";
+import { trimmedText } from "../utils/labels.js";
 import { definedProps } from "../utils/props.js";
 import { hasReactContent } from "../utils/react-node.js";
 import { reactBelowFloor, reactFloorMessage } from "../utils/react-version.js";
 import { type SpaceScale, Stack } from "./Layout.js";
-import { LiveRegion } from "./LiveRegion.js";
+import { PanelAnnouncer } from "./PanelAnnouncer.js";
 import {
   PanelErrorBoundary,
   type PanelErrorBoundaryProps,
 } from "./PanelErrorBoundary.js";
 import { PanelRoot, type PanelRootProps } from "./PanelRoot.js";
 import { ThemeToggle, type ThemeToggleProps } from "./ThemeToggle.js";
-import {
-  UnsupportedBrowserNotice,
-  type UnsupportedBrowserNoticeProps,
-} from "./UnsupportedBrowserNotice.js";
+import { UnsupportedBrowserNotice } from "./UnsupportedBrowserNotice.js";
 
 /**
  * Where the theme toggle sits: after the content, between title and content,
@@ -34,20 +28,6 @@ import {
  */
 export type PanelShellThemeToggle = "end" | "between" | "none";
 
-export type PanelShellErrorLabels = Pick<
-  PanelErrorBoundaryProps,
-  "description" | "reloadLabel" | "retryLabel" | "title"
->;
-
-/**
- * Text of the compatibility notice, for a panel that ships in another
- * language. `children` replaces the explanation under the heading.
- */
-export type PanelShellUnsupportedLabels = Pick<
-  UnsupportedBrowserNoticeProps,
-  "children" | "title"
->;
-
 export interface PanelShellProps
   extends Omit<PanelRootProps, "children" | "onError" | "title"> {
   readonly children: ReactNode;
@@ -55,19 +35,21 @@ export interface PanelShellProps
   readonly description?: ReactNode | undefined;
   /**
    * Replaces the default error fallback; see `PanelErrorBoundary`. A fallback
-   * of your own supplies its own text, so `errorLabels` is ignored beside it.
+   * of your own supplies its own text, so `labels.panelError` does not reach
+   * it. The default fallback reads its text from `labels.panelError`.
    */
   readonly errorFallback?: PanelErrorBoundaryProps["fallback"] | undefined;
-  /** Text of the default error fallback; ignored when `errorFallback` is set. */
-  readonly errorLabels?: PanelShellErrorLabels | undefined;
   /** Gap of the outer Stack. Defaults to the Stack's own gap. */
   readonly gap?: SpaceScale | undefined;
   /**
-   * Level of the panel title, default 2. Signal K Admin renders the plugin
-   * card header as an `h5` and the page title as its own heading, so a panel
-   * must not add another `h1`. A titled shell also offers the next level down
-   * to the sections inside it, so they nest under the panel heading without
-   * being told where they are.
+   * Level of the panel title, and of the sections of a panel with no title,
+   * default 2. Above a configuration panel, Signal K Admin renders a single
+   * heading: the plugin card header, an `h5` holding the npm package name.
+   * The page has no `h1` for a panel to nest under, so level 2 is the highest
+   * a panel should take, and the one that keeps its sections reachable by
+   * heading level. A titled shell also offers the next level down to the
+   * sections inside it, so they nest under the panel heading without being
+   * told where they are.
    */
   readonly headingLevel?: HeadingLevel | undefined;
   /** Called for every error the boundary catches; replaces the div's native `onError`. */
@@ -86,16 +68,28 @@ export interface PanelShellProps
   readonly themeToggle?: PanelShellThemeToggle | undefined;
   readonly themeToggleProps?: ThemeToggleProps | undefined;
   /**
-   * Heading of the panel itself. Signal K Admin already shows the plugin name
-   * in its card header, so a title repeating that name reads twice on screen;
-   * most panels leave it unset and let the host name them.
+   * Heading of the panel itself. The Signal K Admin card header above the
+   * panel already names the plugin, by its npm package name, so a panel title
+   * adds a second name for the same plugin; most panels leave it unset and
+   * let the card header name them.
    */
   readonly title?: ReactNode | undefined;
-  /** Rendered instead of the panel when the browser lacks native CSS scope. */
+  /**
+   * Rendered instead of the panel when the browser lacks native CSS scope or
+   * the host's React is below the floor. Without it the shell shows its own
+   * compatibility notice, whose text comes from `labels.unsupportedBrowser` in
+   * the browser case; the notice for a host React below the floor stays in
+   * English, because it names both versions and the fix is the host's.
+   */
   readonly unsupported?: React.JSX.Element | undefined;
-  /** Text of the built-in compatibility notice; ignored when `unsupported` is set. */
-  readonly unsupportedLabels?: PanelShellUnsupportedLabels | undefined;
 }
+
+/**
+ * Heading of the notice when the host's React is the reason. The browser is
+ * not the problem then, so the browser heading would send the operator after
+ * the wrong update.
+ */
+const REACT_FLOOR_TITLE = "Signal K update required";
 
 /**
  * Reloads the whole Admin page, the escape hatch every panel wrote for itself
@@ -103,56 +97,6 @@ export interface PanelShellProps
  */
 function reloadHostPage(): void {
   window.location.reload();
-}
-
-interface Announcement {
-  readonly key: number;
-  readonly message: string;
-}
-
-const NO_ANNOUNCEMENT: Announcement = { key: 0, message: "" };
-
-/**
- * The panel's two live regions, mounted with the shell and empty until there
- * is something to say, because a region created together with its first
- * message is not announced reliably. A panel reaches them through
- * `usePanelAnnouncer` instead of mounting a region of its own beside each
- * message.
- */
-function PanelAnnouncer({
-  children,
-}: {
-  readonly children: ReactNode;
-}): React.JSX.Element {
-  const [polite, setPolite] = useState(NO_ANNOUNCEMENT);
-  const [assertive, setAssertive] = useState(NO_ANNOUNCEMENT);
-
-  const announce = useCallback<PanelAnnounce>((message, options) => {
-    // The key counts announcements rather than naming them, so the same words
-    // twice in a row are read twice instead of reading as an unchanged region.
-    const next = (previous: Announcement): Announcement => ({
-      key: previous.key + 1,
-      message,
-    });
-    if (options?.assertive === true) setAssertive(next);
-    else setPolite(next);
-  }, []);
-
-  return (
-    <PanelAnnouncerProvider value={announce}>
-      <LiveRegion
-        live="polite"
-        announceKey={polite.key}
-        message={polite.message}
-      />
-      <LiveRegion
-        live="assertive"
-        announceKey={assertive.key}
-        message={assertive.message}
-      />
-      {children}
-    </PanelAnnouncerProvider>
-  );
 }
 
 /**
@@ -167,7 +111,6 @@ export function PanelShell({
   defaultTheme,
   description,
   errorFallback,
-  errorLabels,
   gap,
   headingLevel = 2,
   labels,
@@ -180,7 +123,6 @@ export function PanelShell({
   themeToggleProps,
   title,
   unsupported,
-  unsupportedLabels,
   width,
   ...htmlProps
 }: PanelShellProps): React.JSX.Element {
@@ -192,6 +134,20 @@ export function PanelShell({
   });
 
   if (blocker !== undefined) {
+    // The notice renders instead of PanelRoot, so no bundle is published yet
+    // and the shell reads the notice's group from its own prop. Blank text
+    // reads as absent, leaving the notice's English default. The group is
+    // browser advice, which cannot help when the host's React is the reason,
+    // so that case keeps its own heading and the message naming both versions.
+    const noticeLabels = labels?.unsupportedBrowser;
+    const noticeTitle =
+      blocker === "react"
+        ? REACT_FLOOR_TITLE
+        : trimmedText(noticeLabels?.title);
+    const explanation =
+      blocker === "react"
+        ? reactFloorMessage(version)
+        : trimmedText(noticeLabels?.description);
     // The consumer's own attributes reach the notice, so a host that finds
     // the panel by id or a data attribute still finds something here. The
     // panel ref does not: this branch renders a section, not the panel div.
@@ -200,10 +156,9 @@ export function PanelShell({
         <UnsupportedBrowserNotice
           {...htmlProps}
           {...definedProps({
-            children:
-              blocker === "react" ? reactFloorMessage(version) : undefined,
+            children: explanation || undefined,
+            title: noticeTitle || undefined,
           })}
-          {...unsupportedLabels}
           className={className}
           headingLevel={headingLevel}
         />
@@ -263,7 +218,6 @@ export function PanelShell({
             ) : null}
             {placement === "between" ? toggle : null}
             <PanelErrorBoundary
-              {...errorLabels}
               fallback={errorFallback}
               onError={onError}
               onReload={onReload ?? undefined}

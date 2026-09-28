@@ -1,18 +1,272 @@
 import { screen } from "@testing-library/react";
-import { createRef } from "react";
-import { describe, expect, it, vi } from "vitest";
+import {
+  type AriaAttributes,
+  createRef,
+  Fragment,
+  type ReactElement,
+} from "react";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 import { SecretInput } from "../../src/forms.js";
 import {
   Checkbox,
   type FieldControlProps,
-  FieldGroup,
+  InputGroup,
+  InputGroupAddon,
+  InputGroupControl,
   LabeledField,
   type LabeledFieldControlProps,
   NumberInput,
+  RangeInput,
+  Section,
+  Select,
   splitLabeledFieldControlProps,
+  Textarea,
   TextInput,
 } from "../../src/index.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { renderInPanel } from "../helpers.js";
+
+describe("LabeledField", () => {
+  it("exports the complete native aria-invalid type", () => {
+    expectTypeOf<FieldControlProps["aria-invalid"]>().toEqualTypeOf<
+      AriaAttributes["aria-invalid"]
+    >();
+  });
+
+  it("connects labels, descriptions, errors, and required state", () => {
+    renderInPanel(
+      <LabeledField
+        label="Server URL"
+        description="Use the Signal K server address."
+        error="A server URL is required."
+        required
+      >
+        <TextInput />
+      </LabeledField>,
+    );
+
+    const input = screen.getByRole("textbox", { name: /Server URL/ });
+    expect(input).toBeRequired();
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription(
+      "Use the Signal K server address. Error.A server URL is required.",
+    );
+  });
+
+  it("sets an error's danger glyph and message side by side in one row", () => {
+    const { container } = renderInPanel(
+      <LabeledField
+        label="Server URL"
+        error={
+          <>
+            Enter an <strong>HTTP</strong> address.
+          </>
+        }
+      >
+        <TextInput />
+      </LabeledField>,
+    );
+
+    // The glyph and the message are the row's two items, whatever markup the
+    // message holds, so a wrapped line hangs past the glyph.
+    const row = container.querySelector(
+      ".snui-field__error > .snui-field-error__row",
+    );
+    const items = [...(row?.children ?? [])].filter(
+      (item) => !item.classList.contains("snui-visually-hidden"),
+    );
+    expect(items.map((item) => item.className)).toEqual([
+      expect.stringContaining("snui-field-error__tone-glyph"),
+      "snui-field-error__text",
+    ]);
+    expect(items[1]).toHaveTextContent("Enter an HTTP address.");
+  });
+
+  it("accepts date and time text input types", () => {
+    renderInPanel(
+      <>
+        <LabeledField label="Maintenance date">
+          <TextInput type="date" />
+        </LabeledField>
+        <LabeledField label="Maintenance time">
+          <TextInput type="time" />
+        </LabeledField>
+      </>,
+    );
+
+    expect(screen.getByLabelText("Maintenance date")).toHaveAttribute(
+      "type",
+      "date",
+    );
+    expect(screen.getByLabelText("Maintenance time")).toHaveAttribute(
+      "type",
+      "time",
+    );
+  });
+
+  it("supports opt-in field and checkbox error announcements", () => {
+    renderInPanel(
+      <>
+        <LabeledField
+          label="Server URL"
+          error="The server URL is invalid."
+          errorLive="polite"
+        >
+          <TextInput />
+        </LabeledField>
+        <Checkbox
+          label="Enable provider"
+          error="The provider cannot be enabled."
+          errorLive="assertive"
+        />
+      </>,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "The server URL is invalid.",
+    );
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "The provider cannot be enabled.",
+    );
+  });
+
+  it("rejects whitespace-only field and checkbox labels", () => {
+    expect(() =>
+      renderInPanel(
+        <LabeledField label="  ">
+          <TextInput />
+        </LabeledField>,
+      ),
+    ).toThrow(
+      "signalk-nearlcrews-ui: LabeledField requires a non-empty label.",
+    );
+
+    expect(() => renderInPanel(<Checkbox label={"\t"} />)).toThrow(
+      "signalk-nearlcrews-ui: Checkbox requires a non-empty label.",
+    );
+  });
+
+  it("treats null field help and errors as absent", () => {
+    renderInPanel(
+      <LabeledField label="Server URL" description={null} error={false}>
+        <TextInput />
+      </LabeledField>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Server URL" });
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(input).not.toHaveAttribute("aria-describedby");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("preserves the complete native aria-invalid value set", () => {
+    renderInPanel(
+      <LabeledField label="Server URL">
+        <TextInput aria-invalid="grammar" />
+      </LabeledField>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Server URL" })).toHaveAttribute(
+      "aria-invalid",
+      "grammar",
+    );
+  });
+
+  it("treats empty arrays and fragments as absent content", () => {
+    const { container } = renderInPanel(
+      <>
+        <LabeledField
+          label="Server URL"
+          description={[]}
+          error={
+            <>
+              {false}
+              <Fragment key="nested-empty">{null}</Fragment>
+            </>
+          }
+        >
+          <TextInput />
+        </LabeledField>
+        <Section title="Status" description={<Fragment key="empty" />}>
+          Ready
+        </Section>
+      </>,
+    );
+
+    const input = screen.getByRole("textbox", { name: "Server URL" });
+    expect(input).not.toHaveAttribute("aria-describedby");
+    expect(input).not.toHaveAttribute("aria-invalid");
+    expect(container.querySelector(".snui-section__description")).toBeNull();
+  });
+
+  it("recognizes renderable content nested inside fragments", () => {
+    renderInPanel(
+      <LabeledField
+        label="Server URL"
+        description={
+          <Fragment key="outer">
+            <Fragment key="inner">Server address</Fragment>
+          </Fragment>
+        }
+      >
+        <TextInput />
+      </LabeledField>,
+    );
+
+    expect(
+      screen.getByRole("textbox", { name: "Server URL" }),
+    ).toHaveAccessibleDescription("Server address");
+  });
+
+  it("labels the primary control in a composite inline field", () => {
+    const { container } = renderInPanel(
+      <LabeledField
+        label="Cache limit"
+        description="Whole GiB"
+        error="Choose at least 4 GiB."
+        layout="inline"
+        density="compact"
+      >
+        {(controlProps) => {
+          const { descriptionId, errorId, ...rangeProps } = controlProps;
+          return (
+            <InputGroup>
+              <InputGroupControl controlWidth="grow">
+                <RangeInput {...rangeProps} min={4} max={32} />
+              </InputGroupControl>
+              <InputGroupControl controlWidth="fixed">
+                <NumberInput
+                  aria-label="Cache limit exact value"
+                  aria-describedby={[descriptionId, errorId].join(" ")}
+                />
+                <InputGroupAddon>GiB</InputGroupAddon>
+              </InputGroupControl>
+            </InputGroup>
+          );
+        }}
+      </LabeledField>,
+    );
+
+    const slider = screen.getByRole("slider", { name: /Cache limit/ });
+    expect(slider).toHaveAttribute("aria-invalid", "true");
+    expect(slider).toHaveAccessibleDescription(
+      "Whole GiB Error.Choose at least 4 GiB.",
+    );
+    expect(
+      screen.getByRole("spinbutton", { name: "Cache limit exact value" }),
+    ).toHaveAccessibleDescription("Whole GiB Error.Choose at least 4 GiB.");
+    expect(container.querySelector(".snui-field--inline")).not.toBeNull();
+    expect(container.querySelector(".snui-field--compact")).not.toBeNull();
+    expect(
+      container.querySelector(".snui-input-group__control--grow"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(".snui-input-group__control--fixed"),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(".snui-input-group__addon"),
+    ).toHaveTextContent("GiB");
+  });
+});
 
 describe("LabeledField root", () => {
   it("forwards the ref and native attributes to the root element", () => {
@@ -61,7 +315,7 @@ describe("LabeledField control injection", () => {
         </LabeledField>,
       ),
     ).toThrow(
-      "LabeledField element children must render a labelable form control. Use the render-prop form for composite controls.",
+      "signalk-nearlcrews-ui: LabeledField element children must render a labelable form control. Use the render-prop form for composite controls.",
     );
   });
 
@@ -463,133 +717,70 @@ describe("LabeledField optional marker", () => {
   });
 });
 
-describe("FieldGroup naming and description", () => {
-  it("names the group from label, and still accepts the legend spelling", () => {
-    renderInPanel(
-      <>
-        <FieldGroup label="Notifications">
-          <Checkbox label="Wind" />
-        </FieldGroup>
-        <FieldGroup legend="Providers">
-          <Checkbox label="Primary" />
-        </FieldGroup>
-        <FieldGroup label="Sources" legend="Ignored">
-          <Checkbox label="AIS" />
-        </FieldGroup>
-      </>,
-    );
-
-    expect(screen.getByRole("group", { name: "Notifications" })).toBeTruthy();
-    expect(screen.getByRole("group", { name: "Providers" })).toBeTruthy();
-    // label decides when both are given, the way it does on the other groups.
-    expect(screen.getByRole("group", { name: "Sources" })).toBeTruthy();
-  });
-
-  it("reads its own text before the ids the caller adds", () => {
-    renderInPanel(
-      <>
-        <p id="alert-note">Alerts publish to the vessel bus.</p>
-        <FieldGroup
-          label="Notifications"
-          description="Choose the alerts to publish."
-          error="Select at least one alert."
-          groupDescribedBy="alert-note"
-        >
-          <Checkbox label="Wind" />
-        </FieldGroup>
-      </>,
-    );
-
-    expect(
-      screen.getByRole("group", { name: "Notifications" }),
-    ).toHaveAccessibleDescription(
-      "Choose the alerts to publish. Error.Select at least one alert. Alerts publish to the vessel bus.",
-    );
-  });
-});
-
-describe("FieldGroup group error", () => {
-  it("associates a group error with the fieldset without announcing it", () => {
-    renderInPanel(
-      <FieldGroup
-        legend="Notifications"
-        description="Choose the alerts to publish."
-        error="Select at least one alert."
-      >
-        <Checkbox label="Wind" />
-      </FieldGroup>,
-    );
-
-    const group = screen.getByRole("group", { name: "Notifications" });
-    expect(group).toHaveAccessibleDescription(
-      "Choose the alerts to publish. Error.Select at least one alert.",
-    );
-    const error = screen.getByText("Select at least one alert.");
-    expect(error).toHaveClass("snui-field-group__error");
-    expect(error).not.toHaveAttribute("role");
-    expect(error).toHaveAttribute("aria-live", "off");
-    // The group role supports neither attribute, so the description carries
-    // the error instead.
-    expect(group).not.toHaveAttribute("aria-errormessage");
-    expect(group).not.toHaveAttribute("aria-invalid");
-  });
-
-  it("mounts an announcing region before group error content arrives", () => {
-    const { container, rerender } = renderInPanel(
-      <FieldGroup legend="Notifications" errorLive="polite">
-        <Checkbox label="Wind" />
-      </FieldGroup>,
-    );
-
-    const region = container.querySelector(".snui-field-group__error");
-    expect(region).not.toBeNull();
-    // A roled live region does not also carry aria-live.
-    expect(region).toHaveAttribute("role", "status");
-    expect(region).not.toHaveAttribute("aria-live");
-    expect(region).toBeEmptyDOMElement();
-    expect(
-      screen.getByRole("group", { name: "Notifications" }),
-    ).not.toHaveAccessibleDescription();
-
-    rerender(
-      panel(
-        <FieldGroup
-          legend="Notifications"
-          errorLive="polite"
-          error="Select at least one alert."
-        >
-          <Checkbox label="Wind" />
-        </FieldGroup>,
+describe("Region ids spread onto a package control", () => {
+  it.each([
+    [
+      "RangeInput",
+      (props: LabeledFieldControlProps): ReactElement => (
+        <RangeInput {...props} min={0} max={10} defaultValue={5} />
       ),
+    ],
+    [
+      "NumberInput",
+      (props: LabeledFieldControlProps): ReactElement => (
+        <NumberInput {...props} defaultValue={5} />
+      ),
+    ],
+    [
+      "TextInput",
+      (props: LabeledFieldControlProps): ReactElement => (
+        <TextInput {...props} defaultValue="5" />
+      ),
+    ],
+    [
+      "Select",
+      (props: LabeledFieldControlProps): ReactElement => (
+        <Select {...props} defaultValue="5">
+          <option value="5">Five</option>
+        </Select>
+      ),
+    ],
+    [
+      "Textarea",
+      (props: LabeledFieldControlProps): ReactElement => (
+        <Textarea {...props} defaultValue="5" />
+      ),
+    ],
+    [
+      "SecretInput",
+      (props: LabeledFieldControlProps): ReactElement => (
+        <SecretInput {...props} defaultValue="5" />
+      ),
+    ],
+  ])("keeps them off the element %s renders", (_, control) => {
+    const error = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    const { container } = renderInPanel(
+      <LabeledField
+        label="Retention"
+        description="Whole GiB"
+        error="Enter at most 10."
+      >
+        {control}
+      </LabeledField>,
     );
 
-    expect(region).toHaveTextContent("Select at least one alert.");
-    expect(
-      screen.getByRole("group", { name: "Notifications" }),
-    ).toHaveAccessibleDescription("Error.Select at least one alert.");
-  });
-});
-
-describe("TextInput calendar types", () => {
-  it("accepts month and week input types", () => {
-    renderInPanel(
-      <>
-        <LabeledField label="Maintenance month">
-          <TextInput type="month" />
-        </LabeledField>
-        <LabeledField label="Maintenance week">
-          <TextInput type="week" />
-        </LabeledField>
-      </>,
+    // The raw render-prop argument carries both lookup ids; the control
+    // drops them rather than writing unknown attributes.
+    const element = container.querySelector(
+      "input:not([type=hidden]), select, textarea",
     );
-
-    expect(screen.getByLabelText("Maintenance month")).toHaveAttribute(
-      "type",
-      "month",
+    expect(element).not.toHaveAttribute("descriptionid");
+    expect(element).not.toHaveAttribute("errorid");
+    expect(element).toHaveAccessibleDescription(
+      "Whole GiB Error.Enter at most 10.",
     );
-    expect(screen.getByLabelText("Maintenance week")).toHaveAttribute(
-      "type",
-      "week",
-    );
+    expect(error).not.toHaveBeenCalled();
   });
 });

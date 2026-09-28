@@ -36,6 +36,8 @@ export type PolymorphicProps<
  * Creates the element a polymorphic component resolved. The props union and
  * the `as` union are correlated by construction but not in a way TypeScript
  * can follow, so this is the one place the pairing is asserted.
+ *
+ * @internal
  */
 export function createPolymorphicElement(
   as: IntrinsicElement,

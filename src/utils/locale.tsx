@@ -1,7 +1,7 @@
 import { createValueContext } from "./context.js";
+import type { PanelLocale } from "./intl.js";
 
-/** A BCP 47 locale or list, in the shape every formatter in the package takes. */
-export type PanelLocale = string | readonly string[];
+export type { PanelLocale } from "./intl.js";
 
 /**
  * The locale a panel pins for everything it formats.

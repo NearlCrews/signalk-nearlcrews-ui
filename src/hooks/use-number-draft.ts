@@ -11,6 +11,7 @@ import {
 import { isDevelopment } from "../utils/environment.js";
 import { warnOnce } from "../utils/warn-once.js";
 import { blurBeforeWheel } from "../utils/wheel-guard.js";
+import { useDraftResetScope } from "./use-reset-drafts.js";
 
 /** Why a draft cannot be committed. Keys the per-reason validation messages. */
 export type NumberDraftInvalidReason =
@@ -286,27 +287,49 @@ function resolveInputMode(
 }
 
 export interface NumberDraft {
-  /** Drops a valid draft so the input shows the committed value again. */
+  /**
+   * Ends the edit, as blur and Enter do: a valid draft is dropped so the input
+   * shows the committed value again, and an invalid one starts showing its
+   * reason.
+   */
   readonly finishEdit: () => void;
   /** Records a keystroke and commits whatever the draft resolves to. */
   readonly handleChange: (raw: string) => void;
   readonly inputProps: NumberDraftInputProps;
-  /** Why the current draft is invalid, or undefined while it is valid. */
+  /**
+   * Why the draft is invalid, once the field should say so. It is set when an
+   * edit finishes on an invalid draft and cleared the moment the draft turns
+   * valid, so neither the message nor `aria-invalid` interrupts typing. Leaving
+   * the field is how an edit finishes, so pressing a Save button or any other
+   * control shows it too.
+   */
   readonly invalidReason: NumberDraftInvalidReason | undefined;
+  /**
+   * Whether the draft can be committed, updated on every keystroke. It crosses
+   * exactly when `onValidityChange` reports, so a Save action gated on either
+   * stays exact while the message waits for the edit to finish.
+   */
+  readonly valid: boolean;
 }
 
 export interface UseNumberDraftOptions extends NumberDraftOptions {
   /**
-   * Called when the draft crosses between valid and invalid. Consumers gate a
-   * save action on it. It is never called from an unmount, so a consumer that
-   * stops rendering the field clears its own entry, which the shared
-   * `useFieldValidity` bookkeeping does for a panel that would rather not.
+   * Called when the draft crosses between valid and invalid, on the keystroke
+   * that crosses. Consumers gate a save action on it. It is never called from
+   * an unmount, so a consumer that stops rendering the field clears its own
+   * entry, which the shared `useFieldValidity` bookkeeping does for a panel
+   * that would rather not. A draft reset through `useResetDrafts` reports an
+   * invalid draft valid from the Discard event, even while its field sits in
+   * a collapsed section, and also for a field that left the tree while
+   * invalid and has not been reset since. That can repeat a valid report a
+   * consumer already applied on unmount, so keep bookkeeping a repeat cannot
+   * unbalance, such as a set of names rather than a count.
    */
   readonly onValidityChange?: ((valid: boolean) => void) | undefined;
   /**
-   * Changing this value drops the draft. Use it for a Discard action that
-   * restores a committed value identical to the current one, which the
-   * external-change rule below cannot see.
+   * Changing this value drops the draft, like the panel-wide reset
+   * `useResetDrafts` returns, and combines with it. Use it to drop one field's
+   * draft on its own.
    */
   readonly resetKey?: string | number | undefined;
 }
@@ -314,8 +337,12 @@ export interface UseNumberDraftOptions extends NumberDraftOptions {
 interface Draft {
   /** Committed value the draft was typed against. */
   readonly committed: number | undefined;
+  /** The panel's draft reset epoch the draft was typed under. */
+  readonly epoch: number;
   readonly raw: string;
   readonly resetKey: string | number | undefined;
+  /** Whether an edit has finished on this draft while it was invalid. */
+  readonly shown: boolean;
 }
 
 function formatValue(value: number | undefined): string {
@@ -332,10 +359,12 @@ function formatValue(value: number | undefined): string {
  * focused input on wheel so a scroll gesture cannot spin the value.
  *
  * The draft is stored beside the value it was typed against and is shown only
- * while that value is still the committed one. An external change such as a
- * Discard action therefore replaces the draft without an effect, and a
+ * while that value is still the committed one. A change of the committed
+ * value from outside therefore replaces the draft without an effect, and a
  * `CollapsibleSection` collapse and reopen, which reruns effects while state
- * survives, cannot discard an edit in progress.
+ * survives, cannot discard an edit in progress. A Discard action that
+ * restores the value the draft was typed against changes nothing the draft is
+ * keyed on, which is what `useResetDrafts` and `resetKey` are for.
  */
 export function useNumberDraft(
   value: number | undefined,
@@ -343,48 +372,72 @@ export function useNumberDraft(
   options: UseNumberDraftOptions = {},
 ): NumberDraft {
   const { onValidityChange, resetKey, ...rules } = options;
+  const { epoch, trackInvalid } = useDraftResetScope();
   const [draft, setDraft] = useState<Draft | null>(null);
   const active =
     draft !== null &&
     Object.is(draft.committed, value) &&
-    draft.resetKey === resetKey;
+    draft.resetKey === resetKey &&
+    draft.epoch === epoch;
   const resolution = active ? resolveNumberDraft(draft.raw, rules) : null;
-  const invalidReason =
+  const draftReason =
     resolution?.status === "invalid" ? resolution.reason : undefined;
-  const isValid = invalidReason === undefined;
+  const isValid = draftReason === undefined;
+  const invalidReason = active && draft.shown ? draftReason : undefined;
 
   // Validity is reported on transitions only, through a ref, so a paused and
   // resumed subtree does not repeat the last report.
+  const reportedValid = useRef(true);
+  const forgetInvalid = useRef<(() => void) | null>(null);
   const reportValidity = useEffectEvent((next: boolean): void => {
+    reportedValid.current = next;
+    if (next) {
+      forgetInvalid.current?.();
+      forgetInvalid.current = null;
+    } else {
+      // The panel's reset reports an invalid draft valid from the Discard
+      // event itself. The entry is not forgotten on unmount, because hiding a
+      // retained section runs the same cleanup while the draft survives; a
+      // reset reaching a field that has since left reports a valid state
+      // nobody can contradict, and clears the entry.
+      forgetInvalid.current ??= trackInvalid(() => {
+        forgetInvalid.current = null;
+        reportedValid.current = true;
+        onValidityChange?.(true);
+      });
+    }
     onValidityChange?.(next);
   });
-  const reportedValid = useRef(true);
   useEffect(() => {
     if (reportedValid.current === isValid) return;
-    reportedValid.current = isValid;
     reportValidity(isValid);
   }, [isValid]);
 
   const handleChange = (raw: string): void => {
     const next = resolveNumberDraft(raw, rules);
     const committed = next.status === "valid" ? next.value : value;
-    setDraft({ committed, raw, resetKey });
+    // A reason already on screen follows the draft until it turns valid,
+    // rather than vanishing on the next keystroke and returning on blur.
+    const shown = active && draft.shown && next.status === "invalid";
+    setDraft({ committed, epoch, raw, resetKey, shown });
     if (next.status === "valid" && !Object.is(next.value, value)) {
       onValueChange(next.value);
     }
   };
 
   const finishEdit = (): void => {
-    // An invalid draft stays visible with its message; only a valid one is
-    // replaced by the formatted committed value.
-    if (active && isValid) setDraft(null);
+    if (!active) return;
+    // A valid draft is replaced by the formatted committed value; an invalid
+    // one stays visible and starts showing its reason.
+    if (isValid) setDraft(null);
+    else if (!draft.shown) setDraft({ ...draft, shown: true });
   };
 
   return {
     finishEdit,
     handleChange,
     inputProps: {
-      "aria-invalid": isValid ? undefined : true,
+      "aria-invalid": invalidReason === undefined ? undefined : true,
       enterKeyHint: "done",
       inputMode: resolveInputMode(rules),
       max: rules.max,
@@ -403,5 +456,6 @@ export function useNumberDraft(
       value: active ? draft.raw : formatValue(value),
     },
     invalidReason,
+    valid: isValid,
   };
 }

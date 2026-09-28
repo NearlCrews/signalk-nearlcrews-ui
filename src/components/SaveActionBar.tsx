@@ -1,22 +1,38 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import {
+  type RefObject,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type { AnnouncementMode } from "../utils/announcement.js";
+import {
+  focusedElement,
+  focusIsOnBody,
+  revealAndFocus,
+} from "../utils/focus.js";
 import { resolveBundledLabels, trimmedText } from "../utils/labels.js";
+import { SAVE_ACTION_BAR_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
-import type { StatusTone } from "../utils/tone.js";
+import type { SemanticTone, StatusTone } from "../utils/tone.js";
 import { ActionBar, type ActionBarProps } from "./ActionBar.js";
 import { Button, type ButtonAsButtonProps } from "./Button.js";
 import { StatusIndicator } from "./StatusIndicator.js";
 
 export interface SaveActionBarLabels {
-  /** Status while the configuration is clean and already applied. */
+  /**
+   * Status while the panel matches the last configuration it loaded or sent,
+   * default "Nothing to save".
+   */
   readonly clean: string;
   readonly discard: string;
   readonly save: string;
   /**
    * Status once a save has been requested and nothing is pending. A panel that
-   * hears back from the server should pass its own wording here together with
-   * `savedMessageDurationMs={0}`, and report the outcome itself.
+   * hears back from the server reports what it heard through `outcome`
+   * instead, and keeps this label for localization.
    */
   readonly saved: string;
   /** Status while `saving` is true. */
@@ -30,16 +46,6 @@ export interface SaveActionBarLabels {
   /** Status while there are edits to save. */
   readonly unsaved: string;
 }
-
-const DEFAULT_LABELS: SaveActionBarLabels = {
-  clean: "All changes saved",
-  discard: "Discard",
-  save: "Save",
-  saved: "Save sent to the server",
-  saving: "Saving changes",
-  unconfigured: "Save to enable the plugin",
-  unsaved: "Unsaved changes",
-};
 
 /**
  * The status keeps one role across every state, and only its text changes.
@@ -59,15 +65,60 @@ const DEFAULT_SAVED_MESSAGE_DURATION_MS = 2_500;
 /** Where focus goes after Save or Discard runs. */
 export type SaveActionBarFocus = "none" | "status";
 
+/**
+ * Where a Save or Discard handler sends focus once it has run: an element, or
+ * a ref to one, such as the first field a validating save refused. Nothing,
+ * null, or a target that cannot take focus leaves the bar's own rule in
+ * charge.
+ */
+export type SaveActionBarFocusTarget =
+  | HTMLElement
+  | RefObject<HTMLElement | null>
+  | null
+  | undefined;
+
+/**
+ * A Save or Discard handler. Returning nothing is the ordinary case, and an
+ * async handler still fits; a handler that knows where the reader should go
+ * next returns that place. Only a target returned synchronously is followed:
+ * the bar does not await a returned promise, so an async handler gets the
+ * status, or no focus move under `focusOnAction="none"`.
+ */
+export type SaveActionBarAction =
+  | (() => void)
+  | (() => SaveActionBarFocusTarget);
+
+/**
+ * What the panel heard back about its last save request, shown in the bar's
+ * own status. The bar only presents it: the request, its timing, and any
+ * retry stay with the panel, which clears the outcome when it starts the next
+ * request.
+ */
+export interface SaveActionBarOutcome {
+  /**
+   * The words for the operator, such as "Save failed. Check the connection."
+   */
+  readonly message: string;
+  /**
+   * `"danger"` for a request the server refused or never answered, which
+   * keeps Save available for a retry and stays up through later edits,
+   * because the configuration on the server is still not the one requested.
+   * Any other tone reports an accepted request in place of the saved
+   * message, and gives way to the next edit.
+   */
+  readonly tone: SemanticTone;
+}
+
 export interface SaveActionBarProps
   extends Omit<ActionBarProps, "actions" | "status" | "statusRef"> {
   /** The working configuration differs from the last requested snapshot. */
   readonly dirty: boolean;
   /**
-   * Where focus goes after either action. `"status"`, the default, moves it to
-   * the status line, because the button that was pressed usually disables
-   * itself. Pass `"none"` where the panel owns the destination, for example a
-   * save that validates and sends focus to the field it refused.
+   * Where focus goes after either action when the handler names no target.
+   * `"status"`, the default, moves it to the status line, because the button
+   * that was pressed usually disables itself. Pass `"none"` where the panel
+   * moves focus later on its own. A save that validates and sends focus to the
+   * field it refused returns that field from `onSave` instead.
    */
   readonly focusOnAction?: SaveActionBarFocus | undefined;
   /**
@@ -78,8 +129,30 @@ export interface SaveActionBarProps
    */
   readonly invalidMessage?: string | null | undefined;
   readonly labels?: Partial<SaveActionBarLabels> | undefined;
-  readonly onDiscard: () => void;
-  readonly onSave: () => void;
+  /**
+   * Restores the configuration. A panel whose fields keep drafts calls
+   * `useResetDrafts()` here too, so an invalid draft, which never committed
+   * and so did not change with the configuration, is discarded with it.
+   * Return an element or a ref to send focus there instead of the status.
+   */
+  readonly onDiscard: SaveActionBarAction;
+  /**
+   * Requests the save. A panel that validates on submit returns the first
+   * field it refused, such as `validity.firstInvalid()` from
+   * `useFieldValidity`, and the bar sends focus there once, after the handler
+   * has run, instead of to the status. A field inside a collapsed section has
+   * to be shown first: open the section inside `flushSync`, then return the
+   * field.
+   */
+  readonly onSave: SaveActionBarAction;
+  /**
+   * The result the panel heard back for its last request, or nothing. The
+   * status keeps its polite delivery for a failure too: the operator pressed
+   * Save moments ago and focus stands on the status line, and Signal K Admin
+   * raises its own alert for a failed request, so an assertive interruption
+   * would add a second alarm rather than news.
+   */
+  readonly outcome?: SaveActionBarOutcome | null | undefined;
   /**
    * Epoch milliseconds of the last save request, or null before the first.
    * The bar reports the request for `savedMessageDurationMs` from that
@@ -134,6 +207,7 @@ export type SaveActionBarStateInput = Pick<
   | "dirty"
   | "invalidMessage"
   | "labels"
+  | "outcome"
   | "saveRequestedAt"
   | "saving"
   | "unconfigured"
@@ -142,8 +216,8 @@ export type SaveActionBarStateInput = Pick<
 /**
  * The save rules shared by every configuration panel, as data so a consumer
  * can test them without rendering. Save is enabled while there is something
- * to save: edits, or a plugin that has never been configured. Invalid input
- * and an in-flight save block it.
+ * to save: edits, a plugin that has never been configured, or a request that
+ * failed. Invalid input and an in-flight save block it.
  *
  * Every string falls back to the component's own default, so the rules a test
  * exercises are the rules the rendered bar runs.
@@ -153,7 +227,11 @@ export function resolveSaveActionBarState(
 ): SaveActionBarState {
   return resolveStateWithLabels(
     input,
-    resolveBundledLabels(DEFAULT_LABELS, input.labels, undefined),
+    resolveBundledLabels(
+      SAVE_ACTION_BAR_LABEL_DEFAULTS,
+      input.labels,
+      undefined,
+    ),
   );
 }
 
@@ -191,6 +269,7 @@ function resolveStateWithLabels(
   {
     dirty,
     invalidMessage,
+    outcome,
     saveRequestedAt,
     saving = false,
     unconfigured = false,
@@ -198,6 +277,8 @@ function resolveStateWithLabels(
   labels: SaveActionBarLabels,
 ): SaveActionBarState {
   const validationMessage = trimmedText(invalidMessage ?? undefined);
+  const outcomeMessage = trimmedText(outcome?.message);
+  const outcomeTone = outcomeMessage === "" ? undefined : outcome?.tone;
   if (saving) {
     return saveState({
       discardDisabled: true,
@@ -209,9 +290,19 @@ function resolveStateWithLabels(
   if (validationMessage !== "") {
     return saveState({
       blocked: true,
-      discardDisabled: !dirty,
+      // Discard stays available even with nothing committed: an invalid
+      // draft never commits, so it is the one edit there is to discard.
+      discardDisabled: false,
       message: validationMessage,
       saveDisabled: true,
+      tone: "danger",
+    });
+  }
+  if (outcomeTone === "danger") {
+    return saveState({
+      discardDisabled: !dirty,
+      message: outcomeMessage,
+      saveDisabled: false,
       tone: "danger",
     });
   }
@@ -224,6 +315,14 @@ function resolveStateWithLabels(
       // used, so the status informs rather than cautioning; warning is kept
       // for a state that asks the operator to be careful.
       tone: "info",
+    });
+  }
+  if (outcomeTone !== undefined) {
+    return saveState({
+      discardDisabled: true,
+      message: outcomeMessage,
+      saveDisabled: !unconfigured,
+      tone: outcomeTone,
     });
   }
   if (saveRequestedAt !== null && saveRequestedAt !== undefined) {
@@ -327,12 +426,30 @@ function useSavedMessageWindowClosed(
 }
 
 /**
+ * The element a handler's return value names, or null for none. The value is
+ * read defensively, because a handler typed to return nothing can still hand
+ * back something, such as the promise of an async handler.
+ */
+function focusTargetElement(
+  returned: unknown,
+  ownerWindow: Document["defaultView"],
+): HTMLElement | null {
+  if (ownerWindow === null) return null;
+  const target =
+    typeof returned === "object" && returned !== null && "current" in returned
+      ? returned.current
+      : returned;
+  return target instanceof ownerWindow.HTMLElement ? target : null;
+}
+
+/**
  * The Save and Discard footer of a configuration panel with its status line.
- * After either action, focus moves to the status, because the button that was
- * pressed usually disables itself and would otherwise drop focus to the body;
- * a panel that owns the destination passes `focusOnAction="none"`.
- * Configuration state stays with the consumer; this component owns
- * presentation, focus, and how long the saved message stays up.
+ * After either action, focus moves to the place the handler returned, or else
+ * to the status, because the button that was pressed usually disables itself
+ * and would otherwise drop focus to the body; a panel that owns the
+ * destination passes `focusOnAction="none"`. Configuration state stays with
+ * the consumer; this component owns presentation, focus, and how long the
+ * saved message stays up.
  */
 export function SaveActionBar({
   dirty,
@@ -341,6 +458,7 @@ export function SaveActionBar({
   labels: labelOverrides,
   onDiscard,
   onSave,
+  outcome,
   saveRequestedAt,
   savedMessageDurationMs = DEFAULT_SAVED_MESSAGE_DURATION_MS,
   saving = false,
@@ -354,7 +472,12 @@ export function SaveActionBar({
   // Seven labels of which at most four ever render, re-resolved on every
   // dirty, saving, and saved transition otherwise.
   const labels = useMemo(
-    () => resolveBundledLabels(DEFAULT_LABELS, labelOverrides, bundledLabels),
+    () =>
+      resolveBundledLabels(
+        SAVE_ACTION_BAR_LABEL_DEFAULTS,
+        labelOverrides,
+        bundledLabels,
+      ),
     [bundledLabels, labelOverrides],
   );
   const savedWindowClosed = useSavedMessageWindowClosed(
@@ -366,6 +489,7 @@ export function SaveActionBar({
     {
       dirty,
       invalidMessage,
+      outcome,
       saveRequestedAt: savedWindowClosed ? null : saveRequestedAt,
       saving,
       unconfigured,
@@ -373,11 +497,34 @@ export function SaveActionBar({
     labels,
   );
 
-  // Focus moves before the action runs, so it is already on the status when
-  // the re-render disables the pressed button.
-  const runAction = (action: () => void): void => {
-    if (focusOnAction === "status") statusRef.current?.focus();
-    action();
+  // Focus moves once, after the action has run, and still before the
+  // re-render that disables the pressed button, because React commits the
+  // handler's updates after the event.
+  const runAction = (action: SaveActionBarAction): void => {
+    const ownerDocument = statusRef.current?.ownerDocument;
+    const pressed =
+      ownerDocument === undefined ? null : focusedElement(ownerDocument);
+    const target = focusTargetElement(
+      action(),
+      ownerDocument?.defaultView ?? null,
+    );
+    if (target?.isConnected === true) {
+      revealAndFocus(target);
+      if (target.ownerDocument.activeElement === target) return;
+    }
+    const status = statusRef.current;
+    if (focusOnAction !== "status" || status === null) return;
+    // A handler that moved focus on its own keeps the destination it chose;
+    // the status takes focus only from the pressed button, or from nowhere.
+    const current = focusedElement(status.ownerDocument);
+    if (
+      current !== null &&
+      current !== pressed &&
+      !focusIsOnBody(status.ownerDocument)
+    ) {
+      return;
+    }
+    status.focus();
   };
 
   // A refusal keeps a button where the reader is standing and points at the
@@ -400,7 +547,14 @@ export function SaveActionBar({
       sticky={sticky}
       statusRef={statusRef}
       status={
-        <StatusIndicator id={statusId} tone={state.tone} live={state.live}>
+        <StatusIndicator
+          id={statusId}
+          tone={state.tone}
+          live={state.live}
+          // The status the bar mounts with describes the panel as it loaded,
+          // which is not news, so it shows at once rather than a beat late.
+          deferFirstMessage={false}
+        >
           {state.message}
         </StatusIndicator>
       }

@@ -9,6 +9,7 @@ import {
   RelativeAge,
 } from "../../src/index.js";
 import { subscribeToClock } from "../../src/utils/shared-clock.js";
+import { renderInPanel } from "../helpers.js";
 
 const EN = { locale: "en" } as const;
 const NARROW_EN = { ...RELATIVE_AGE_NARROW, ...EN } as const;
@@ -313,6 +314,46 @@ describe("RelativeAge", () => {
     expect(stamp).not.toHaveAttribute("datetime");
   });
 
+  it("reads a blank fallback as absent, as every bundled string does", () => {
+    renderInPanel(
+      <>
+        <RelativeAge
+          ageMs={null}
+          options={{ fallback: "  " }}
+          data-testid="prop"
+        />
+        <RelativeAge ageMs={null} data-testid="bundle" />
+      </>,
+      { labels: { relativeAge: { fallback: "" } } },
+    );
+
+    // An unknown age with no words would render an empty element, which reads
+    // as nothing at all rather than as unknown.
+    expect(screen.getByTestId("prop")).toHaveTextContent("Unknown");
+    expect(screen.getByTestId("bundle")).toHaveTextContent("Unknown");
+  });
+
+  it("prefers the caller's fallback, then the bundle's, trimmed", () => {
+    renderInPanel(
+      <>
+        <RelativeAge
+          ageMs={null}
+          options={{ fallback: " never " }}
+          data-testid="prop"
+        />
+        <RelativeAge
+          ageMs={null}
+          options={{ fallback: "" }}
+          data-testid="bundle"
+        />
+      </>,
+      { labels: { relativeAge: { fallback: "Onbekend" } } },
+    );
+
+    expect(screen.getByTestId("prop").textContent).toBe("never");
+    expect(screen.getByTestId("bundle").textContent).toBe("Onbekend");
+  });
+
   it("renders a timestamp past the Date range like an unreadable one", () => {
     render(
       <>
@@ -383,6 +424,26 @@ describe("RelativeAge", () => {
       vi.advanceTimersByTime(3_600_000);
     });
     expect(screen.getByText("4 hours ago")).toBeInTheDocument();
+  });
+
+  it("reads the clock again when the moment it counts from changes", () => {
+    vi.useFakeTimers({ now: NOW });
+    const age = (since: number): React.JSX.Element => (
+      <RelativeAge since={since} options={EN} data-testid="age" />
+    );
+    // A settled age keeps the clock it last rendered with for as long as
+    // its words hold, here an hour.
+    const { rerender } = render(age(NOW - 2 * 3_600_000));
+    act(() => {
+      vi.advanceTimersByTime(5 * 60_000);
+    });
+    expect(screen.getByTestId("age")).toHaveTextContent("2 hours ago");
+
+    // A new moment from the browser's clock is measured against a clock read
+    // now, not against the one five minutes old, which put it in the future.
+    rerender(age(Date.now()));
+    // Exact text: "Unknown" contains "now".
+    expect(screen.getByTestId("age").textContent).toBe("now");
   });
 
   it("runs no timer for a cadence that is not a number", () => {

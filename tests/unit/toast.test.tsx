@@ -22,6 +22,9 @@ import {
 import { visuallyHiddenDeclarations } from "../../src/styles/fragments.js";
 import { TOAST_STYLES } from "../../src/styles/toast.js";
 import { TRANSITION_FAST_MS } from "../../src/styles/tokens.js";
+import { OVERLAY_TONE_ACCENT_BAR_DECLARATIONS } from "../../src/styles/tone-rules.js";
+import { LIVE_REGION_BLANK_MS } from "../../src/utils/repeat-announcement.js";
+import { ruleBody } from "../css-helpers.js";
 import {
   headSheets,
   installVisualViewport,
@@ -63,7 +66,6 @@ function enqueue(queue: ToastQueue, content: ToastContent): string {
   act(() => {
     key = queue.enqueue(content);
   });
-  // A toast announces its text one tick after the roled region mounts.
   flush();
   return key;
 }
@@ -78,14 +80,33 @@ function cardAround(element: HTMLElement): HTMLElement {
   return card;
 }
 
-// The live region is the text container; hover, focus, and exit state live
-// on the card that wraps it.
-function toastCards(role: "alert" | "status"): HTMLElement[] {
-  return screen.getAllByRole(role).map(cardAround);
+/** Every toast card in the document, newest first. */
+function toastCards(): HTMLElement[] {
+  return [...document.querySelectorAll<HTMLElement>(".snui-toast")];
 }
 
-function toastCard(role: "alert" | "status"): HTMLElement {
-  return at(toastCards(role), 0);
+/** The newest toast card. */
+function toastCard(): HTMLElement {
+  return at(toastCards(), 0);
+}
+
+/** Fails unless no toast card is left in the document. */
+function expectNoCards(): void {
+  expect(document.querySelector(".snui-toast")).toBeNull();
+}
+
+/** The host's persistent region for one announcement mode. */
+function announcer(mode: "assertive" | "polite"): HTMLElement {
+  const region = document.querySelector<HTMLElement>(
+    `.snui-toast-region-host > [role="${mode === "assertive" ? "alert" : "status"}"]`,
+  );
+  if (region === null) throw new Error(`expected a ${mode} region`);
+  return region;
+}
+
+/** The lines a host region carries, one per toast it has spoken. */
+function spokenLines(mode: "assertive" | "polite"): string[] {
+  return [...announcer(mode).children].map((line) => line.textContent);
 }
 
 /** The card whose title reads `title`. */
@@ -236,7 +257,9 @@ describe("ToastRegion", () => {
     expect(screen.getByText("Waypoints synced")).toBeInTheDocument();
     expect(screen.getByText("12 sent")).toBeInTheDocument();
     // The semantic tone name precedes the title for screen readers.
-    expect(screen.getByText(/Information\./)).toBeInTheDocument();
+    expect(
+      within(cardOf("Waypoints synced")).getByText(/Information\./),
+    ).toBeInTheDocument();
   });
 
   it("renders newest first", () => {
@@ -245,7 +268,7 @@ describe("ToastRegion", () => {
     enqueue(queue, { title: "First" });
     enqueue(queue, { title: "Second" });
 
-    const cards = screen.getAllByRole("status");
+    const cards = toastCards();
     expect(cards).toHaveLength(2);
     expect(within(at(cards, 0)).getByText("Second")).toBeInTheDocument();
     expect(within(at(cards, 1)).getByText("First")).toBeInTheDocument();
@@ -256,13 +279,13 @@ describe("ToastRegion", () => {
     renderToastRegion(queue);
     enqueue(queue, { title: "Synced" });
 
-    expect(toastCard("status")).not.toHaveAttribute("data-exiting");
+    expect(toastCard()).not.toHaveAttribute("data-exiting");
     advance(4999);
-    expect(toastCard("status")).not.toHaveAttribute("data-exiting");
+    expect(toastCard()).not.toHaveAttribute("data-exiting");
     advance(1);
-    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard()).toHaveAttribute("data-exiting", "true");
     advance(EXIT_MS);
-    expect(screen.queryByRole("status")).toBeNull();
+    expectNoCards();
   });
 
   it("keeps warning and danger toasts until dismissed by default", () => {
@@ -288,7 +311,7 @@ describe("ToastRegion", () => {
     enqueue(queue, { title: "Save failed", tone: "danger", duration: 300 });
 
     advance(300);
-    expect(toastCard("alert")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard()).toHaveAttribute("data-exiting", "true");
   });
 
   it("honors a custom duration", () => {
@@ -297,9 +320,9 @@ describe("ToastRegion", () => {
     enqueue(queue, { title: "Synced", duration: 250 });
 
     advance(249);
-    expect(toastCard("status")).not.toHaveAttribute("data-exiting");
+    expect(toastCard()).not.toHaveAttribute("data-exiting");
     advance(1);
-    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard()).toHaveAttribute("data-exiting", "true");
   });
 
   it("keeps a duration of zero sticky until dismissed", () => {
@@ -307,71 +330,71 @@ describe("ToastRegion", () => {
     renderToastRegion(queue);
     enqueue(queue, { title: "Anchor alarm", tone: "danger", duration: 0 });
 
-    const card = toastCard("alert");
+    const card = toastCard();
     fireEvent.pointerOver(card);
     advance(60000);
     fireEvent.pointerOut(card);
     advance(60000);
-    expect(toastCard("alert")).toBeInTheDocument();
+    expect(toastCard()).toBeInTheDocument();
 
     fireEvent.click(within(card).getByRole("button", { name: "Dismiss" }));
     advance(EXIT_MS);
-    expect(screen.queryByRole("alert")).toBeNull();
+    expectNoCards();
   });
 
   it("pauses auto-dismiss while hovered and resumes with the remaining time", () => {
     const queue = createToastQueue();
     renderToastRegion(queue);
     enqueue(queue, { title: "Synced", duration: 1000 });
-    const card = toastCard("status");
+    const card = toastCard();
 
     advance(400);
     fireEvent.pointerOver(card);
     advance(10000);
-    expect(toastCard("status")).toBeInTheDocument();
+    expect(toastCard()).toBeInTheDocument();
 
     fireEvent.pointerOut(card);
     advance(599);
-    expect(toastCard("status")).toBeInTheDocument();
+    expect(toastCard()).toBeInTheDocument();
     advance(1);
-    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard()).toHaveAttribute("data-exiting", "true");
   });
 
   it("pauses auto-dismiss while focused and resumes after blur", () => {
     const queue = createToastQueue();
     renderToastRegion(queue);
     enqueue(queue, { title: "Synced", duration: 1000 });
-    const card = toastCard("status");
+    const card = toastCard();
 
     advance(300);
     fireEvent.focusIn(card);
     advance(10000);
-    expect(toastCard("status")).toBeInTheDocument();
+    expect(toastCard()).toBeInTheDocument();
 
     fireEvent.focusOut(card);
     advance(699);
-    expect(toastCard("status")).toBeInTheDocument();
+    expect(toastCard()).toBeInTheDocument();
     advance(1);
-    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard()).toHaveAttribute("data-exiting", "true");
   });
 
   it("stays paused until both hover and focus release", () => {
     const queue = createToastQueue();
     renderToastRegion(queue);
     enqueue(queue, { title: "Synced", duration: 1000 });
-    const card = toastCard("status");
+    const card = toastCard();
 
     fireEvent.pointerOver(card);
     fireEvent.focusIn(card);
     fireEvent.pointerOut(card);
     advance(10000);
-    expect(toastCard("status")).toBeInTheDocument();
+    expect(toastCard()).toBeInTheDocument();
 
     fireEvent.focusOut(card);
     advance(999);
-    expect(toastCard("status")).toBeInTheDocument();
+    expect(toastCard()).toBeInTheDocument();
     advance(1);
-    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard()).toHaveAttribute("data-exiting", "true");
   });
 
   it("dismisses a single toast from its button and keeps the rest", () => {
@@ -380,7 +403,7 @@ describe("ToastRegion", () => {
     enqueue(queue, { title: "First" });
     enqueue(queue, { title: "Second" });
 
-    const newest = at(toastCards("status"), 0);
+    const newest = at(toastCards(), 0);
     fireEvent.click(within(newest).getByRole("button", { name: "Dismiss" }));
     expect(newest).toHaveAttribute("data-exiting", "true");
     expect(screen.getByText("First")).toBeInTheDocument();
@@ -398,9 +421,9 @@ describe("ToastRegion", () => {
     const button = screen.getByRole("button", { name: "Dismiss" });
     fireEvent.click(button);
     fireEvent.click(button);
-    expect(toastCard("status")).toHaveAttribute("data-exiting", "true");
+    expect(toastCard()).toHaveAttribute("data-exiting", "true");
     advance(EXIT_MS);
-    expect(screen.queryByRole("status")).toBeNull();
+    expectNoCards();
   });
 
   it("drops the oldest toast when the queue is full", () => {
@@ -411,7 +434,7 @@ describe("ToastRegion", () => {
     }
     enqueue(queue, { title: "Six", duration: 0 });
 
-    expect(screen.getAllByRole("status")).toHaveLength(5);
+    expect(toastCards()).toHaveLength(5);
     expect(screen.queryByText("One")).toBeNull();
     expect(screen.getByText("Six")).toBeInTheDocument();
   });
@@ -481,56 +504,215 @@ describe("ToastRegion", () => {
     expect(screen.getByText("Six")).toBeInTheDocument();
   });
 
-  it("keeps the dismiss button outside the live region", () => {
+  it("mounts one polite and one assertive region with the host, before any toast", () => {
+    const queue = createToastQueue();
+    const { container } = renderToastRegion(queue);
+    const host = container.querySelector(".snui-toast-region-host");
+
+    for (const mode of ["polite", "assertive"] as const) {
+      const region = announcer(mode);
+      expect(region.parentElement).toBe(host);
+      expect(region).toBeEmptyDOMElement();
+      expect(region).toHaveClass("snui-visually-hidden");
+      // Each toast adds a line, and only the new line is read.
+      expect(region).toHaveAttribute("aria-atomic", "false");
+      // The role already announces, so aria-live is not doubled beside it.
+      expect(region).not.toHaveAttribute("aria-live");
+    }
+    expect(announcer("polite")).toHaveAttribute("role", "status");
+    expect(announcer("assertive")).toHaveAttribute("role", "alert");
+    expectNoCards();
+  });
+
+  it("speaks a toast through the host and leaves the card silent", () => {
     const queue = createToastQueue();
     renderToastRegion(queue);
-    enqueue(queue, { title: "Scoped", duration: 0 });
+    advance(LIVE_REGION_BLANK_MS);
+    enqueue(queue, { title: "Waypoints synced", description: "12 sent" });
 
-    const region = screen.getByRole("status");
-    expect(region).toHaveTextContent("Scoped");
-    expect(within(region).queryByRole("button")).toBeNull();
+    // The tone name leads, the glyph stays silent, and the title and the
+    // description read as two sentences.
+    expect(spokenLines("polite")).toEqual([
+      "Information. Waypoints synced. 12 sent.",
+    ]);
+    expect(spokenLines("assertive")).toEqual([]);
+    // The card is not a live region, so focus entering it reads it once.
+    const card = cardOf("Waypoints synced");
+    expect(card.querySelector("[role='status'], [role='alert']")).toBeNull();
+    expect(card.querySelector("[aria-live]")).toBeNull();
     expect(
-      within(at(toastCards("status"), 0)).getByRole("button", {
-        name: "Dismiss",
-      }),
+      within(card).getByRole("button", { name: "Dismiss" }),
     ).toBeInTheDocument();
   });
 
-  it("maps tones to live region roles without duplicating aria-live", () => {
+  it("routes each tone to its region and honors an explicit live override", () => {
     const queue = createToastQueue();
     renderToastRegion(queue);
+    advance(LIVE_REGION_BLANK_MS);
     enqueue(queue, { title: "Failed", tone: "danger" });
     enqueue(queue, { title: "Low oil", tone: "warning" });
     enqueue(queue, { title: "Saved", tone: "success" });
-    enqueue(queue, { title: "Note", tone: "info" });
-
-    const alerts = screen.getAllByRole("alert");
-    const statuses = screen.getAllByRole("status");
-    expect(alerts).toHaveLength(1);
-    expect(statuses).toHaveLength(3);
-    for (const card of [...alerts, ...statuses]) {
-      expect(card).not.toHaveAttribute("aria-live");
-    }
-    expect(within(at(alerts, 0)).getByText("Failed")).toBeInTheDocument();
-    // A warning in a configuration panel waits its turn.
-    expect(
-      cardOf("Low oil").querySelector(".snui-toast__text"),
-    ).toHaveAttribute("role", "status");
-  });
-
-  it("honors an explicit live override", () => {
-    const queue = createToastQueue();
-    renderToastRegion(queue);
     enqueue(queue, { title: "Quiet", tone: "danger", live: "off" });
     enqueue(queue, { title: "Gentle failure", tone: "danger", live: "polite" });
 
-    const quiet = screen.getByText("Quiet").closest(".snui-toast__text");
-    expect(quiet).not.toBeNull();
-    expect(quiet).not.toHaveAttribute("role");
-    expect(quiet).toHaveAttribute("aria-live", "off");
-    expect(
-      within(screen.getByRole("status")).getByText("Gentle failure"),
-    ).toBeInTheDocument();
+    // Only danger interrupts; a warning in a configuration panel waits its
+    // turn, and a silent toast is shown without being spoken.
+    expect(spokenLines("assertive")).toEqual(["Error. Failed."]);
+    expect(spokenLines("polite")).toEqual([
+      "Warning. Low oil.",
+      "Success. Saved.",
+      "Error. Gentle failure.",
+    ]);
+    expect(screen.getByText("Quiet")).toBeInTheDocument();
+  });
+
+  it("waits out the blank beat when a toast arrives together with the host", () => {
+    const queue = createToastQueue();
+    act(() => {
+      queue.enqueue({ title: "Queued before mount", duration: 0 });
+    });
+    renderToastRegion(queue);
+
+    // The card shows at once; its words reach the region only after the
+    // region has existed long enough for a screen reader to observe it.
+    expect(screen.getByText("Queued before mount")).toBeInTheDocument();
+    expect(spokenLines("polite")).toEqual([]);
+    advance(LIVE_REGION_BLANK_MS - 1);
+    expect(spokenLines("polite")).toEqual([]);
+    advance(1);
+    expect(spokenLines("polite")).toEqual([
+      "Information. Queued before mount.",
+    ]);
+  });
+
+  it("waits out the beat again when the host is inserted anew", () => {
+    const queue = createToastQueue();
+    const tree = (second: boolean) => (
+      <PanelRoot>
+        <ToastRegion queue={queue} />
+        {second ? <ToastRegion queue={createToastQueue()} /> : null}
+      </PanelRoot>
+    );
+    const view = render(tree(false));
+    flush();
+    advance(LIVE_REGION_BLANK_MS);
+    const host = document.querySelector(".snui-toast-region-host");
+    if (!(host instanceof HTMLElement)) throw new Error("expected a host");
+
+    // A host page that removes the host gets it back on the next acquire,
+    // and the reinserted regions are new to a screen reader.
+    host.remove();
+    view.rerender(tree(true));
+    flush();
+    expect(host).toBeInTheDocument();
+    enqueue(queue, { title: "Reattached", duration: 0 });
+    expect(spokenLines("polite")).toEqual([]);
+    advance(LIVE_REGION_BLANK_MS);
+    expect(spokenLines("polite")).toEqual(["Information. Reattached."]);
+  });
+
+  it("reads a burst in the order the queue received it", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    advance(LIVE_REGION_BLANK_MS);
+    act(() => {
+      queue.enqueue({ title: "First", duration: 0 });
+      queue.enqueue({ title: "Second", duration: 0 });
+    });
+    flush();
+
+    // Cards stack newest first, but the words are read in arrival order.
+    expect(spokenLines("polite")).toEqual([
+      "Information. First.",
+      "Information. Second.",
+    ]);
+  });
+
+  it("takes a toast's line away when the toast leaves", () => {
+    const queue = createToastQueue();
+    const { unmount } = renderToastRegion(queue);
+    advance(LIVE_REGION_BLANK_MS);
+    enqueue(queue, { title: "Synced", duration: 0 });
+    enqueue(queue, { title: "Save failed", tone: "danger" });
+    expect(spokenLines("polite")).toHaveLength(1);
+    expect(spokenLines("assertive")).toHaveLength(1);
+
+    fireEvent.click(
+      within(cardOf("Synced")).getByRole("button", { name: "Dismiss" }),
+    );
+    advance(EXIT_MS);
+    expect(spokenLines("polite")).toEqual([]);
+    expect(spokenLines("assertive")).toEqual(["Error. Save failed."]);
+
+    const host = document.querySelector(".snui-toast-region-host");
+    unmount();
+    expect(host).not.toBeInTheDocument();
+  });
+
+  it("drops only its own lines when one of two regions on a host unmounts", () => {
+    const engine = createToastQueue();
+    const network = createToastQueue();
+    const tree = (showEngine: boolean) => (
+      <PanelRoot>
+        {showEngine ? <ToastRegion queue={engine} label="Engine" /> : null}
+        <ToastRegion queue={network} label="Network" />
+      </PanelRoot>
+    );
+    const view = render(tree(true));
+    flush();
+    advance(LIVE_REGION_BLANK_MS);
+    enqueue(engine, { title: "Oil pressure", duration: 0 });
+    enqueue(network, { title: "Link lost", duration: 0 });
+    expect(spokenLines("polite")).toEqual([
+      "Information. Oil pressure.",
+      "Information. Link lost.",
+    ]);
+
+    view.rerender(tree(false));
+    flush();
+    expect(spokenLines("polite")).toEqual(["Information. Link lost."]);
+  });
+
+  it("speaks the bundled tone name and the caller's own", () => {
+    const queue = createToastQueue();
+    renderInPanel(<ToastRegion queue={queue} />, {
+      labels: { tone: { success: "Gelukt" } },
+    });
+    flush();
+    advance(LIVE_REGION_BLANK_MS);
+    enqueue(queue, { title: "Opgeslagen", tone: "success" });
+    enqueue(queue, { title: "Guardado", tone: "success", toneLabel: "Listo" });
+
+    expect(spokenLines("polite")).toEqual([
+      "Gelukt. Opgeslagen.",
+      "Listo. Guardado.",
+    ]);
+  });
+
+  it("reads rendered content as text and skips what is hidden from readers", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue);
+    advance(LIVE_REGION_BLANK_MS);
+    enqueue(queue, {
+      title: (
+        <>
+          Route <strong>Harbor run</strong> saved
+        </>
+      ),
+      description: (
+        <>
+          <span aria-hidden="true">→ </span>
+          <a href="#routes">Open routes</a>
+        </>
+      ),
+      duration: 0,
+    });
+
+    expect(spokenLines("polite")).toEqual([
+      "Information. Route Harbor run saved. Open routes.",
+    ]);
+    // Only words reach the region: a link in the card is not copied into it.
+    expect(announcer("polite").querySelector("a, strong")).toBeNull();
   });
 
   it("localizes the dismiss label and falls back when blank", () => {
@@ -552,8 +734,8 @@ describe("ToastRegion", () => {
     enqueue(queue, { title: "Guardado", tone: "success", toneLabel: "Listo" });
     enqueue(queue, { title: "Stored", tone: "success", toneLabel: " " });
 
-    expect(screen.getByText(/Listo\./)).toBeInTheDocument();
-    expect(screen.getAllByText(/Success\./)).toHaveLength(1);
+    expect(within(cardOf("Guardado")).getByText(/Listo\./)).toBeInTheDocument();
+    expect(within(cardOf("Stored")).getByText(/Success\./)).toBeInTheDocument();
   });
 
   it("clears every toast at once", () => {
@@ -564,7 +746,7 @@ describe("ToastRegion", () => {
     act(() => {
       queue.clear();
     });
-    expect(screen.queryByRole("status")).toBeNull();
+    expectNoCards();
   });
 
   it("keeps multiple regions and queues isolated", () => {
@@ -610,7 +792,7 @@ describe("ToastRegion", () => {
   it("rejects rendering outside a PanelRoot", () => {
     const queue = createToastQueue();
     expect(() => render(<ToastRegion queue={queue} />)).toThrow(
-      "ToastRegion must be rendered inside PanelRoot.",
+      "signalk-nearlcrews-ui: ToastRegion must be rendered inside PanelRoot.",
     );
   });
 
@@ -624,7 +806,9 @@ describe("ToastRegion", () => {
           </UNSAFE_PortalProvider>
         </PanelRoot>,
       ),
-    ).toThrow("ToastRegion portal container must be its owning PanelRoot.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: ToastRegion portal container must be its owning PanelRoot.",
+    );
   });
 
   it("finishes dismissal when the exit transition ends", () => {
@@ -633,9 +817,9 @@ describe("ToastRegion", () => {
     enqueue(queue, { title: "Synced" });
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
-    const card = toastCard("status");
+    const card = toastCard();
     fireEvent.transitionEnd(card, { propertyName: "opacity" });
-    expect(screen.queryByRole("status")).toBeNull();
+    expectNoCards();
   });
 
   it("removes a dismissed toast immediately under reduced motion", () => {
@@ -648,13 +832,13 @@ describe("ToastRegion", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     advance(0);
-    expect(screen.queryByRole("status")).toBeNull();
+    expectNoCards();
   });
 
   it("rejects a whitespace-only region label", () => {
     const queue = createToastQueue();
     expect(() => renderToastRegion(queue, { label: "  " })).toThrow(
-      "ToastRegion requires a non-empty label.",
+      "signalk-nearlcrews-ui: ToastRegion requires a non-empty label.",
     );
   });
 
@@ -664,7 +848,7 @@ describe("ToastRegion", () => {
     // The throw comes from enqueue itself, so the caller can catch it and the
     // region keeps rendering.
     expect(() => queue.enqueue({ title: "  " })).toThrow(
-      "Toast requires a non-empty title.",
+      "signalk-nearlcrews-ui: Toast requires a non-empty title.",
     );
     expect(queue.getSnapshot()).toEqual([]);
     enqueue(queue, { title: "Still working" });
@@ -690,8 +874,11 @@ describe("ToastRegion", () => {
     if (!(host instanceof HTMLElement)) throw new Error("expected a host");
     expect(host).toHaveAttribute("data-react-aria-top-layer");
     expect(host).not.toHaveAttribute("aria-hidden");
-    // Queryable without hidden: true, so assistive technology reaches it.
-    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    // Queryable without hidden: true, so assistive technology reaches the
+    // region the failure is spoken from.
+    advance(LIVE_REGION_BLANK_MS);
+    expect(screen.getByRole("alert")).toHaveTextContent("Error. Save failed.");
+    expect(within(host).getByRole("alert")).toBe(screen.getByRole("alert"));
     // The modal renders its own hidden dismiss buttons; scope to the host.
     const dismiss = within(host).getByRole("button", { name: "Dismiss" });
     dismiss.focus();
@@ -926,7 +1113,7 @@ describe("ToastRegion", () => {
     }
   });
 
-  it("renders a silent toast without the empty first commit", () => {
+  it("shows every card's text in the commit that mounts it", () => {
     const queue = createToastQueue();
     renderToastRegion(queue);
 
@@ -935,12 +1122,11 @@ describe("ToastRegion", () => {
     });
     expect(screen.getByText("Quiet")).toBeInTheDocument();
 
-    // An announcing toast still mounts its region before its text.
+    // The card no longer announces, so it has no empty commit to wait out:
+    // the host's persistent region carries the words instead.
     act(() => {
       queue.enqueue({ title: "Spoken", duration: 0 });
     });
-    expect(screen.queryByText("Spoken")).toBeNull();
-    flush();
     expect(screen.getByText("Spoken")).toBeInTheDocument();
   });
 
@@ -980,7 +1166,7 @@ describe("ToastRegion", () => {
     act(() => {
       queue.dismiss(refused);
     });
-    expect(screen.getAllByRole("alert")).toHaveLength(5);
+    expect(toastCards()).toHaveLength(5);
 
     // Another failure still makes room, and the one that went is reported.
     enqueue(queue, { title: "Six", tone: "danger" });
@@ -1179,6 +1365,25 @@ describe("toast host stylesheet", () => {
     // the user reach Dismiss, so the host loses its paint and keeps its node.
     expect(declarations).not.toMatch(/visibility:/);
     expect(declarations).toContain(visuallyHiddenDeclarations());
+  });
+
+  it("seats the stack from the first landmark after the announcing regions", () => {
+    // The host's persistent regions come first in the host, so the first
+    // landmark is the first section rather than the first child.
+    expect(TOAST_STYLES.styles).toMatch(
+      /\.snui-toast-region:first-of-type \{\n {2}margin-block-start: auto;\n\}/,
+    );
+    expect(TOAST_STYLES.styles).not.toContain(".snui-toast-region:first-child");
+  });
+
+  it("keeps the boundary token around a toast card, which floats over the page", () => {
+    // Like a dialog, menu, or popover, a toast lies over whatever the page
+    // shows, so the rest of its outline is a boundary rather than a
+    // decorative container edge; only the tone bar takes the tone color.
+    const card = ruleBody(TOAST_STYLES.styles, ".snui-toast");
+    expect(card).toContain(OVERLAY_TONE_ACCENT_BAR_DECLARATIONS);
+    expect(card).toContain("border: 1px solid var(--snui-color-border);");
+    expect(card).not.toContain("--snui-color-border-subtle");
   });
 
   it("reconstructs the tone dot under forced colors", () => {

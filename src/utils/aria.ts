@@ -1,3 +1,4 @@
+import { packageError } from "./errors.js";
 import { hasText } from "./labels.js";
 import { joinList } from "./text.js";
 
@@ -5,6 +6,8 @@ import { joinList } from "./text.js";
  * Reports whether either naming attribute carries text. Blank strings do not
  * name a control, so they read the same as an absent attribute, which is the
  * rule `hasText` owns for every caller-supplied string in the package.
+ *
+ * @internal
  */
 export function hasAccessibleName(
   label: string | undefined,
@@ -17,6 +20,8 @@ export function hasAccessibleName(
  * Reads the one-or-many form a describing-ids prop takes as a list, so a field
  * and a fieldset cannot disagree about what a caller may pass. The result
  * feeds {@link joinIdReferences}, which drops the entries left unset.
+ *
+ * @internal
  */
 export function idReferenceList(
   value: string | readonly (string | undefined)[] | undefined,
@@ -32,10 +37,12 @@ const WHITESPACE = /\s/;
  * reports it back. `aria-controls` and `aria-labelledby` hold space separated
  * lists, so an id carrying a space points at two ids that exist nowhere and
  * the relationship disappears without a word.
+ *
+ * @internal
  */
 export function requireIdToken(id: string, option: string): string {
   if (id.length === 0 || WHITESPACE.test(id)) {
-    throw new Error(
+    throw packageError(
       `${option} must be a non-empty string holding no whitespace; received "${id}".`,
     );
   }
@@ -61,7 +68,11 @@ export function joinIdReferences(
   return unique.size > 0 ? [...unique].join(" ") : undefined;
 }
 
-/** Id of the description element a field renders, when it renders one. */
+/**
+ * Id of the description element a field renders, when it renders one.
+ *
+ * @internal
+ */
 export function resolveDescriptionId(
   idBase: string,
   hasDescription: boolean,
@@ -76,6 +87,8 @@ export function resolveDescriptionId(
  * `extraSources` names anything the component takes besides the two ARIA
  * attributes, such as a caption, and reads first in the message because it is
  * the form a consumer should reach for first.
+ *
+ * @internal
  */
 export function requireAccessibleName(
   componentName: string,
@@ -89,7 +102,7 @@ export function requireAccessibleName(
     [...extraSources, "aria-label", "aria-labelledby"],
     "or",
   );
-  throw new Error(
+  throw packageError(
     `${componentName} requires an accessible name: pass a non-empty ${sources}.`,
   );
 }
@@ -99,6 +112,8 @@ export function requireAccessibleName(
  * referenced, so the landmark and the words on screen cannot drift apart. A
  * surface that is not a landmark takes no name here: it is named by its
  * heading in the ordinary way.
+ *
+ * @internal
  */
 export function landmarkLabel(
   landmark: boolean,

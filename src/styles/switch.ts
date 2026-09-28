@@ -1,6 +1,8 @@
 import {
   CONTROL_LABEL_DECLARATIONS,
   DISABLED_DECLARATIONS,
+  FIELD_DESCRIPTION_DECLARATIONS,
+  FIELD_ERROR_DECLARATIONS,
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
   focusRingDeclarations,
 } from "./fragments.js";
@@ -20,6 +22,12 @@ const THUMB_INSET = "0.125rem";
  * each end.
  */
 const THUMB_TRAVEL = `calc(${TRACK_WIDTH} - ${TRACK_BORDER} - ${TRACK_BORDER} - ${THUMB_SIZE} - ${THUMB_INSET} - ${THUMB_INSET})`;
+
+/**
+ * Where the description and the error start: past the track and the gap the
+ * button leaves after it, so the messages line up with the label.
+ */
+const MESSAGE_INSET = `calc(${TRACK_WIDTH} + var(--snui-space-3))`;
 
 /**
  * Switch styles. Installed by `Switch` through `useOptionalModuleStyles`, so
@@ -105,7 +113,7 @@ export const SWITCH_STYLES: StyleModule = {
 }
 
 .snui-switch__button[data-focus-visible] .snui-switch__track {
-${focusRingDeclarations("2px", true)}
+${focusRingDeclarations("outset", true)}
 }
 
 .snui-switch__button[data-disabled] {
@@ -130,6 +138,19 @@ ${DISABLED_DECLARATIONS}
 
 .snui-switch__label {
 ${CONTROL_LABEL_DECLARATIONS}
+}
+
+.snui-switch__description {
+${FIELD_DESCRIPTION_DECLARATIONS}
+  display: block;
+  padding-inline-start: ${MESSAGE_INSET};
+  text-wrap: pretty;
+}
+
+.snui-switch__error {
+${FIELD_ERROR_DECLARATIONS}
+  display: block;
+  padding-inline-start: ${MESSAGE_INSET};
 }
 
 @media (forced-colors: active) {

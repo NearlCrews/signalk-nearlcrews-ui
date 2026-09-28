@@ -1,6 +1,10 @@
 import { Fragment, type ReactNode } from "react";
 
+import { hasAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { resolveBundledLabel, trimmedText } from "../utils/labels.js";
+import { CODE_BLOCK_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
+import { usePanelLabels } from "../utils/panel-labels.js";
 import {
   createPolymorphicElement,
   type PolymorphicProps,
@@ -84,9 +88,6 @@ interface CodeOwnProps {
 
 export type CodeProps = PolymorphicProps<CodeElement, "code", CodeOwnProps>;
 
-/** Default accessible name for a code block that is a keyboard scroll stop. */
-const DEFAULT_CODE_BLOCK_LABEL = "Code";
-
 /** Characters a Signal K path, a URL, or a file name is read in parts around. */
 const SEGMENT_BOUNDARY = /(?<=[./\-_])/;
 
@@ -135,25 +136,38 @@ export function Code({
    * `pre` keeps the author's line breaks and scrolls horizontally when a line
    * is wider than the panel however it was asked for, and a scrollable region
    * that cannot take focus is unreachable without a pointer. A focus stop with
-   * no role and no name announces nothing, so a block names itself the way the
-   * package's other scrollable region does. Both are declared before the rest
-   * props, so a consumer can still set its own. Inline code wraps instead of
-   * scrolling, so it stays out of the tab order.
+   * no role and no name announces nothing, so a block is a group named "Code",
+   * or the panel's own word for it, by default. It becomes a region landmark
+   * only when the consumer names it, because three sample payloads in one
+   * panel would otherwise add three identical "Code" landmarks. The role and
+   * the focus stop are declared before the rest props, so a consumer can
+   * still set its own. Inline code wraps instead of scrolling, so it stays out
+   * of the tab order.
    */
   const element = as ?? (block ? "pre" : "code");
   const scrolls = block || element === "pre";
+  const suppliedLabel = trimmedText(props["aria-label"]) || undefined;
+  const suppliedLabelledBy = trimmedText(props["aria-labelledby"]) || undefined;
+  const named = hasAccessibleName(suppliedLabel, suppliedLabelledBy);
+  const defaultLabel = resolveBundledLabel(
+    undefined,
+    usePanelLabels()?.codeBlock?.label,
+    CODE_BLOCK_LABEL_DEFAULTS.label,
+  );
 
   return createPolymorphicElement(
     element,
     {
+      ...(scrolls ? { role: named ? "region" : "group", tabIndex: 0 } : {}),
+      ...props,
+      // Written after the spread, so a blank name the consumer passed falls
+      // back to the default rather than leaving the stop unnamed.
       ...(scrolls
         ? {
-            "aria-label": DEFAULT_CODE_BLOCK_LABEL,
-            role: "region",
-            tabIndex: 0,
+            "aria-label": named ? suppliedLabel : defaultLabel,
+            "aria-labelledby": suppliedLabelledBy,
           }
         : {}),
-      ...props,
       className: classNames(
         "snui-code",
         scrolls ? "snui-code--block" : "snui-code--inline",

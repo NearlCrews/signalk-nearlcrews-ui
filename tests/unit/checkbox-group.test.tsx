@@ -84,7 +84,9 @@ describe("CheckboxGroup selection", () => {
   it("rejects an empty option list and duplicate values", () => {
     expect(() =>
       render(<CheckboxGroup legend="Import layers" options={[]} />),
-    ).toThrow("CheckboxGroup requires at least one option.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: CheckboxGroup requires at least one option.",
+    );
     expect(() =>
       render(
         <CheckboxGroup
@@ -96,7 +98,7 @@ describe("CheckboxGroup selection", () => {
         />,
       ),
     ).toThrow(
-      'CheckboxGroup option values must be unique; received duplicate value "buoys".',
+      'signalk-nearlcrews-ui: CheckboxGroup option values must be unique; received duplicate value "buoys".',
     );
   });
 
@@ -468,6 +470,84 @@ describe("CheckboxGroup blocked options", () => {
     expect(onValueChange).toHaveBeenCalledExactlyOnceWith([
       "primary",
       "backup",
+    ]);
+  });
+
+  it("reads an option's reason while it is blocked, drawn when the group asks", () => {
+    renderInPanel(
+      <CheckboxGroup
+        legend="Providers"
+        disabledReasonVisibility="visible"
+        options={[
+          {
+            label: "Primary",
+            value: "primary",
+            ariaDisabled: true,
+            disabledReason: "At least one provider stays selected.",
+          },
+          { label: "Backup", value: "backup" },
+        ]}
+        value={["primary"]}
+      />,
+    );
+
+    expect(
+      screen.getByRole("checkbox", { name: "Primary" }),
+    ).toHaveAccessibleDescription("At least one provider stays selected.");
+    expect(
+      screen.getByText("At least one provider stays selected."),
+    ).toHaveClass("snui-checkbox__reason");
+  });
+
+  it("explains a select-all box that has nothing to reach", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const blocked = LAYERS.map((option) => ({ ...option, disabled: true }));
+    renderInPanel(
+      <>
+        <CheckboxGroup
+          legend="Import layers"
+          selectAllLabel="All layers"
+          selectAllDisabledReason="Turn on chart import first."
+          options={blocked}
+        />
+        <CheckboxGroup
+          legend="Export layers"
+          selectAllLabel="Every export layer"
+          options={blocked}
+        />
+      </>,
+    );
+
+    expect(
+      screen.getByRole("checkbox", { name: "All layers" }),
+    ).toHaveAccessibleDescription("Turn on chart import first.");
+    // The group names its own prop rather than the box's.
+    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+      'CheckboxGroup select-all box "Every export layer" is blocked because no option can change, but says nothing about why. Pass selectAllDisabledReason.',
+    ]);
+  });
+
+  it("asks a blocked option with no reason for one, naming the option's own prop", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <CheckboxGroup
+        legend="Standby providers"
+        options={[
+          { label: "Standby primary", value: "primary", ariaDisabled: true },
+          {
+            label: "Standby backup",
+            value: "backup",
+            ariaDisabled: true,
+            disabledReason: "Needs a key.",
+          },
+        ]}
+      />,
+    );
+
+    // One message, from the group the consumer rendered, rather than the
+    // box's own, which names a prop an option cannot take.
+    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+      'CheckboxGroup option "Standby primary" is blocked with ariaDisabled but says nothing about why. Pass disabledReason on the option.',
     ]);
   });
 

@@ -1,5 +1,10 @@
 export type HeadingLevel = 1 | 2 | 3 | 4 | 5 | 6;
 
+/**
+ * The heading element for each outline level.
+ *
+ * @internal
+ */
 export const HEADING_ELEMENTS = {
   1: "h1",
   2: "h2",
@@ -13,6 +18,8 @@ export const HEADING_ELEMENTS = {
  * The level a heading nested under one of this level takes. It stops at 6,
  * because the outline has no deeper level to name and a skipped or invented
  * one reads worse than a repeated one.
+ *
+ * @internal
  */
 export function nextHeadingLevel(level: HeadingLevel): HeadingLevel {
   return level === 6 ? 6 : ((level + 1) as HeadingLevel);

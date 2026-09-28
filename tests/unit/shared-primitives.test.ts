@@ -5,6 +5,7 @@ import {
   bodyEdgeMarginRules,
   CONTROL_LABEL_DECLARATIONS,
   CONTROL_ROW_DECLARATIONS,
+  CONTROL_SURFACE_DECLARATIONS,
   FIELD_DESCRIPTION_DECLARATIONS,
   FIELD_STACK_DECLARATIONS,
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
@@ -13,11 +14,14 @@ import {
   RAISED_SURFACE_TOKEN_DECLARATIONS,
   SAFE_AREA_PADDING_DECLARATIONS,
   SURFACE_DECLARATIONS,
+  stretchedActionRules,
   TABLE_CAPTION_DECLARATIONS,
 } from "../../src/styles/fragments.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { PANEL_STYLES } from "../../src/styles/root-sheet.js";
 import {
+  OVERLAY_TONE_ACCENT_BAR_DECLARATIONS,
+  TONE_ACCENT_BAR_DECLARATIONS,
   toneAccentBar,
   toneAccentBarRules,
   toneBlockColorRules,
@@ -34,6 +38,11 @@ import { landmarkLabel, requireAccessibleName } from "../../src/utils/aria.js";
 import { isRightToLeft } from "../../src/utils/direction.js";
 import { once } from "../../src/utils/document-registry.js";
 import { createEmitter } from "../../src/utils/emitter.js";
+import {
+  describeReceived,
+  ERROR_PREFIX,
+  packageError,
+} from "../../src/utils/errors.js";
 import { resolveFieldRegions } from "../../src/utils/field-error.js";
 import {
   forwardsFieldControlProps,
@@ -42,6 +51,7 @@ import {
 import {
   focusedElement,
   focusPanelRoot,
+  isElementNode,
   revealAndFocus,
   revealElement,
 } from "../../src/utils/focus.js";
@@ -51,6 +61,7 @@ import {
   RELATIVE_AGE_EN,
 } from "../../src/utils/format-relative-age.js";
 import { resolveFreshness } from "../../src/utils/freshness.js";
+import { createFormatterCache } from "../../src/utils/intl.js";
 import {
   DEFAULT_HIDE_LABEL,
   DEFAULT_SHOW_LABEL,
@@ -82,6 +93,8 @@ import {
 import { formatCount, joinList } from "../../src/utils/text.js";
 import { SPACE_SCALE } from "../../src/utils/variants.js";
 import { windowGlobal } from "../../src/utils/window-global.js";
+import { ruleBody } from "../css-helpers.js";
+import { withFrameDocument } from "./lib/frame-document.js";
 
 /** The rules of one installed style module, by its id. */
 function moduleStyles(id: string): string {
@@ -119,6 +132,57 @@ function keyEvent(key: string): EventStub<KeyboardEvent<HTMLButtonElement>> {
   return eventStub({ key });
 }
 
+describe("packageError", () => {
+  it("names the package before the message, so an escaped error points here", () => {
+    const error = packageError("Checkbox requires a non-empty label.");
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe(
+      "signalk-nearlcrews-ui: Checkbox requires a non-empty label.",
+    );
+    expect(ERROR_PREFIX).toBe("signalk-nearlcrews-ui: ");
+  });
+
+  it("keeps the cause it is given", () => {
+    const cause = new Error("network down");
+    expect(packageError("Remote failed.", { cause }).cause).toBe(cause);
+  });
+});
+
+describe("describeReceived", () => {
+  it("names what a value is, with its article", () => {
+    expect(describeReceived(new Set())).toBe("a Set");
+    expect(describeReceived(new Map())).toBe("a Map");
+    expect(describeReceived({})).toBe("a plain object");
+    expect(describeReceived(Object.create(null))).toBe("a plain object");
+    expect(describeReceived("columns")).toBe("a string");
+    expect(describeReceived(3)).toBe("a number");
+    expect(describeReceived(null)).toBe("null");
+    expect(describeReceived(undefined)).toBe("undefined");
+    expect(
+      describeReceived(
+        new (class {
+          readonly kind = "anonymous";
+        })(),
+      ),
+    ).toBe("an object");
+    expect(describeReceived(() => undefined)).toBe("a function");
+    class Iterable {
+      readonly kind = "named";
+    }
+    expect(describeReceived(new Iterable())).toBe("an Iterable");
+  });
+
+  it("reads an initialism or a leading you sound the way it is spoken", () => {
+    expect(describeReceived(new Uint8Array())).toBe("a Uint8Array");
+    expect(describeReceived(new URL("https://example.com/"))).toBe("a URL");
+    expect(describeReceived(document.getElementsByTagName("p"))).toBe(
+      "an HTMLCollection",
+    );
+    expect(describeReceived(new Date(0))).toBe("a Date");
+    expect(describeReceived(new Error("x"))).toBe("an Error");
+  });
+});
+
 describe("definedProps", () => {
   it("drops the undefined entries and keeps every other value", () => {
     expect(
@@ -149,7 +213,7 @@ describe("requireNonEmptyUniqueOptions", () => {
 
   it("refuses an empty array, naming the component", () => {
     expect(() => requireNonEmptyUniqueOptions([], "CheckboxGroup")).toThrow(
-      "CheckboxGroup requires at least one option.",
+      "signalk-nearlcrews-ui: CheckboxGroup requires at least one option.",
     );
   });
 
@@ -160,7 +224,7 @@ describe("requireNonEmptyUniqueOptions", () => {
         "CheckboxGroup",
       ),
     ).toThrow(
-      'CheckboxGroup option values must be unique; received duplicate value "port".',
+      'signalk-nearlcrews-ui: CheckboxGroup option values must be unique; received duplicate value "port".',
     );
   });
 });
@@ -175,6 +239,87 @@ describe("formatCount", () => {
   it("takes an explicit plural for a noun the suffix does not cover", () => {
     expect(formatCount(2, "match", "matches")).toBe("2 matches");
     expect(formatCount(1, "match", "matches")).toBe("1 match");
+  });
+
+  it("groups the digits of a large count in the locale it is given", () => {
+    expect(formatCount(1234, "chart", undefined, { locale: "en" })).toBe(
+      "1,234 charts",
+    );
+    expect(formatCount(1234567, "chart", undefined, { locale: "de" })).toBe(
+      "1.234.567 charts",
+    );
+    expect(formatCount(1234, "match", "matches", { locale: ["en-GB"] })).toBe(
+      "1,234 matches",
+    );
+  });
+
+  it("uses the runtime locale when none is given", () => {
+    expect(formatCount(1234, "chart")).toBe(
+      `${new Intl.NumberFormat().format(1234)} charts`,
+    );
+  });
+
+  it("falls back to the runtime locale for a malformed tag", () => {
+    expect(formatCount(1234, "chart", undefined, { locale: "not a tag" })).toBe(
+      `${new Intl.NumberFormat().format(1234)} charts`,
+    );
+  });
+
+  it("never prints a negative zero", () => {
+    expect(formatCount(-0, "error", undefined, { locale: "en" })).toBe(
+      "0 errors",
+    );
+  });
+});
+
+describe("createFormatterCache", () => {
+  it("builds one formatter per locale and variant", () => {
+    const build = vi.fn(
+      (locales: readonly string[] | undefined) =>
+        new Intl.NumberFormat(locales),
+    );
+    const formatters = createFormatterCache<Intl.NumberFormat>();
+
+    const english = formatters("en", "", build);
+    expect(formatters("en", "", build)).toBe(english);
+    expect(formatters(["en"], "", build)).toBe(english);
+    expect(formatters("en", "compact", build)).not.toBe(english);
+    expect(formatters("de", "", build)).not.toBe(english);
+    expect(build.mock.calls).toEqual([[["en"]], [["en"]], [["de"]]]);
+  });
+
+  it("builds for the runtime locale when the tag is rejected", () => {
+    const build = vi.fn((locales: readonly string[] | undefined) => {
+      if (locales !== undefined) throw new RangeError("Incorrect locale");
+      return "runtime";
+    });
+
+    expect(createFormatterCache<string>()("xx-", "", build)).toBe("runtime");
+    expect(build.mock.calls).toEqual([[["xx-"]], [undefined]]);
+  });
+
+  it("propagates a failure that is not a rejected tag", () => {
+    const formatters = createFormatterCache<string>();
+
+    expect(() =>
+      formatters("en", "", () => {
+        throw new TypeError("broken");
+      }),
+    ).toThrow(TypeError);
+  });
+
+  it("starts over once the cache is full rather than growing without bound", () => {
+    const build = vi.fn((locales: readonly string[] | undefined) =>
+      String(locales),
+    );
+    const formatters = createFormatterCache<string>();
+
+    for (let index = 0; index < 33; index += 1) {
+      formatters("en", String(index), build);
+    }
+    formatters("en", "0", build);
+
+    expect(build).toHaveBeenCalledTimes(34);
   });
 });
 
@@ -202,7 +347,7 @@ describe("requireAccessibleName", () => {
       requireAccessibleName("TabList", "   ", "views-title"),
     ).not.toThrow();
     expect(() => requireAccessibleName("TabList", "  ", "  ")).toThrow(
-      "TabList requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
+      "signalk-nearlcrews-ui: TabList requires an accessible name: pass a non-empty aria-label or aria-labelledby.",
     );
   });
 
@@ -210,7 +355,7 @@ describe("requireAccessibleName", () => {
     expect(() =>
       requireAccessibleName("Table", undefined, undefined, ["caption"]),
     ).toThrow(
-      "Table requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
+      "signalk-nearlcrews-ui: Table requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
     );
   });
 });
@@ -416,7 +561,7 @@ describe("resolveLabelContent", () => {
   it("refuses to render an unnamed control", () => {
     expect(() =>
       resolveLabelContent(null, "  ", "Switch needs a label."),
-    ).toThrow("Switch needs a label.");
+    ).toThrow("signalk-nearlcrews-ui: Switch needs a label.");
   });
 });
 
@@ -545,6 +690,29 @@ describe("isRightToLeft", () => {
   it("reads left to right for an element in a document with no view", () => {
     const detached = document.implementation.createHTMLDocument("detached");
     expect(isRightToLeft(detached.createElement("div"))).toBe(false);
+  });
+});
+
+describe("isElementNode", () => {
+  it("tells an element from every other target", () => {
+    expect(isElementNode(document.createElement("div"))).toBe(true);
+    expect(isElementNode(document.createTextNode("text"))).toBe(false);
+    expect(isElementNode(null)).toBe(false);
+    expect(isElementNode(new EventTarget())).toBe(false);
+    // An element from another document in this window is still an element.
+    const other = document.implementation.createHTMLDocument("");
+    expect(isElementNode(other.createElement("span"))).toBe(true);
+  });
+
+  it("reads an element from another window, which fails the global Element check", () => {
+    // An iframe is a second window with its own Element constructor, as a
+    // panel rendered into a secondary window has.
+    withFrameDocument((frameDocument) => {
+      const span = frameDocument.createElement("span");
+      // The realm differs, so a global `instanceof Element` would refuse it.
+      expect(span instanceof Element).toBe(false);
+      expect(isElementNode(span)).toBe(true);
+    });
   });
 });
 
@@ -877,9 +1045,36 @@ describe("style fragments", () => {
     expect(moduleStyles("radio")).toContain(FIELD_DESCRIPTION_DECLARATIONS);
   });
 
-  it("states the bordered surface exactly as the shipped rules do", () => {
+  it("stretches a narrow button row's buttons and reason wrappers alike", () => {
+    const rules = stretchedActionRules(".snui-dialog__actions");
+    expect(rules).toContain(
+      ".snui-dialog__actions > :is(.snui-button, .snui-button-reason) {\n    flex: 1 1 auto;\n  }",
+    );
+    expect(rules).toContain(
+      ".snui-dialog__actions > .snui-button-reason {\n    align-items: stretch;\n  }",
+    );
+    expect(moduleStyles("dialog")).toContain(rules);
+    expect(PANEL_STYLES).toContain(
+      stretchedActionRules(".snui-action-bar__actions"),
+    );
+  });
+
+  it("states the bordered surfaces exactly as the shipped rules do", () => {
+    // Containers (Card, FieldGroup) take the plain surface; the segmented
+    // track and the data grid, whose edge is the only boundary of something a
+    // reader operates, take the control surface.
     expect(PANEL_STYLES).toContain(SURFACE_DECLARATIONS);
-    expect(moduleStyles("table")).toContain(SURFACE_DECLARATIONS);
+    expect(PANEL_STYLES).toContain(CONTROL_SURFACE_DECLARATIONS);
+    expect(moduleStyles("table")).toContain(CONTROL_SURFACE_DECLARATIONS);
+  });
+
+  it("outlines containers with the subtle border and controls with the boundary", () => {
+    expect(SURFACE_DECLARATIONS).toContain(
+      "border: 1px solid var(--snui-color-border-subtle);",
+    );
+    expect(CONTROL_SURFACE_DECLARATIONS).toContain(
+      "border: 1px solid var(--snui-color-border);",
+    );
   });
 
   it("states the checkbox and radio row exactly as the shipped rules do", () => {
@@ -961,6 +1156,27 @@ describe("toneBlockColorRules", () => {
     ).toBe(toneAccentBarRules("snui-card", "accent-"));
     expect(toneAccentBarRules("snui-card", "accent-")).toContain(
       ".snui-card--accent-danger { border-inline-start-color: var(--snui-color-danger); }",
+    );
+  });
+
+  it("outlines a toned container with the subtle border behind its tone bar", () => {
+    // A toned Card, CollapsibleSection, or Banner is a container in the page:
+    // its outline steps back with every other container, while the tone bar
+    // keeps its color.
+    expect(TONE_ACCENT_BAR_DECLARATIONS).toContain(
+      "border: 1px solid var(--snui-color-border-subtle);",
+    );
+    expect(ruleBody(PANEL_STYLES, ".snui-banner")).toContain(
+      TONE_ACCENT_BAR_DECLARATIONS,
+    );
+  });
+
+  it("keeps the boundary outline on the overlay tone bar", () => {
+    // A toast card lies over whatever the page shows beneath it, like a
+    // dialog, menu, or popover, so its outline keeps the boundary token. The
+    // toast spec pins that the card uses this fragment.
+    expect(OVERLAY_TONE_ACCENT_BAR_DECLARATIONS).toContain(
+      "border: 1px solid var(--snui-color-border);",
     );
   });
 

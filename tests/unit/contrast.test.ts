@@ -11,15 +11,8 @@ import {
   TOKEN_STYLES,
 } from "../../src/styles/tokens.js";
 import { ROOT_SELECTOR } from "../../src/version.js";
+import { hexChannels } from "../color-channels.js";
 import { ruleBody } from "../css-helpers.js";
-
-function channels(hex: string): [number, number, number] {
-  const value = hex.replace("#", "");
-  const [red = 0, green = 0, blue = 0] = [0, 2, 4].map((offset) =>
-    Number.parseInt(value.slice(offset, offset + 2), 16),
-  );
-  return [red, green, blue];
-}
 
 function channelToLinear(channel: number): number {
   const normalized = channel / 255;
@@ -29,7 +22,7 @@ function channelToLinear(channel: number): number {
 }
 
 function luminance(hex: string): number {
-  const [red, green, blue] = channels(hex).map(channelToLinear);
+  const [red, green, blue] = hexChannels(hex).map(channelToLinear);
   return 0.2126 * (red ?? 0) + 0.7152 * (green ?? 0) + 0.0722 * (blue ?? 0);
 }
 
@@ -46,7 +39,7 @@ function contrastRatio(foreground: string, background: string): number {
  */
 function apcaContrast(text: string, background: string): number {
   const screenLuminance = (hex: string): number => {
-    const [red, green, blue] = channels(hex);
+    const [red, green, blue] = hexChannels(hex);
     return (
       0.2126729 * (red / 255) ** 2.4 +
       0.7151522 * (green / 255) ** 2.4 +
@@ -100,10 +93,21 @@ const SUBTLE_FILLS = [
   "--snui-color-warning-subtle",
   "--snui-color-danger-subtle",
   "--snui-color-info-subtle",
+  "--snui-color-neutral-subtle",
 ] as const satisfies readonly ColorTokenName[];
 
 /** Every fill the package paints behind text, a boundary, or a control. */
 const ALL_FILLS = [...TEXT_SURFACES, ...SUBTLE_FILLS];
+
+/**
+ * Every fill a status or a link is read on: the plain surfaces, the tints,
+ * and the hovered selected row, where a Badge or a visited link inside the
+ * row the operator just selected is exactly the text they are reading.
+ */
+const READING_FILLS = [
+  ...ALL_FILLS,
+  "--snui-color-row-selected-hover",
+] as const satisfies readonly ColorTokenName[];
 
 describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
   it("keeps primary and muted text above WCAG AA on every surface", () => {
@@ -136,7 +140,7 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
 
   it("keeps semantic status text above WCAG AA", () => {
     for (const tone of STATUS_TONES) {
-      for (const surface of TEXT_SURFACES) {
+      for (const surface of READING_FILLS) {
         expect(
           contrastRatio(tokens[`--snui-color-${tone}`], tokens[surface]),
           `${tone} on ${surface}`,
@@ -151,7 +155,7 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
       "--snui-color-link-hover",
       "--snui-color-link-visited",
     ] as const) {
-      for (const surface of TEXT_SURFACES) {
+      for (const surface of READING_FILLS) {
         expect(
           contrastRatio(tokens[token], tokens[surface]),
           `${token} on ${surface}`,
@@ -222,6 +226,66 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
       contrastRatio(hovered, tokens["--snui-color-accent-subtle"]),
       "row-selected-hover against the resting selected fill",
     ).toBeGreaterThanOrEqual(1.05);
+  });
+
+  it("keeps the neutral tint visible, readable, and apart from the hover fills", () => {
+    const neutral = tokens["--snui-color-neutral-subtle"];
+    for (const surface of [
+      "--snui-color-surface",
+      "--snui-color-surface-raised",
+    ] as const) {
+      expect(
+        contrastRatio(neutral, tokens[surface]),
+        `neutral-subtle against ${surface}`,
+      ).toBeGreaterThanOrEqual(1.05);
+    }
+    for (const text of [
+      "--snui-color-text",
+      "--snui-color-text-muted",
+    ] as const) {
+      expect(
+        contrastRatio(tokens[text], neutral),
+        `${text} on neutral-subtle`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+    // A tinted tile is not interactive, so it must never match the fill a
+    // pointer paints on something that is.
+    for (const hover of [
+      "--snui-color-interactive-hover",
+      "--snui-color-hover-raised",
+    ] as const) {
+      expect(
+        contrastRatio(neutral, tokens[hover]),
+        `neutral-subtle against ${hover}`,
+      ).toBeGreaterThanOrEqual(1.04);
+    }
+  });
+
+  /**
+   * The subtle border outlines containers and draws dividers: never the only
+   * edge of a control, which keeps the 3:1 boundary token. It has to stay
+   * visible on every resting surface a container sits on, and quieter than
+   * the boundary it steps back from.
+   */
+  it("keeps container outlines visible and quieter than control boundaries", () => {
+    const subtle = tokens["--snui-color-border-subtle"];
+    for (const surface of [
+      "--snui-color-background",
+      "--snui-color-surface",
+      "--snui-color-surface-raised",
+      "--snui-color-surface-stripe",
+    ] as const) {
+      expect(
+        contrastRatio(subtle, tokens[surface]),
+        `border-subtle on ${surface}`,
+      ).toBeGreaterThanOrEqual(1.3);
+      expect(
+        contrastRatio(subtle, tokens[surface]),
+        `border-subtle quieter than border on ${surface}`,
+      ).toBeLessThan(
+        contrastRatio(tokens["--snui-color-border"], tokens[surface]),
+      );
+    }
   });
 
   it("keeps zebra stripes visible against the surface", () => {
@@ -399,6 +463,7 @@ describe("Night red preservation", () => {
     "--snui-color-text-muted",
     "--snui-color-text-disabled",
     "--snui-color-border",
+    "--snui-color-border-subtle",
     "--snui-color-track",
     "--snui-color-accent-fill",
     "--snui-color-accent-fill-hover",
@@ -430,8 +495,12 @@ describe("Night red preservation", () => {
   ] as const satisfies readonly ColorTokenName[];
 
   it("caps green and blue on every Night foreground and surface", () => {
-    for (const token of [...NIGHT_FOREGROUNDS, ...TEXT_SURFACES]) {
-      const [, green, blue] = channels(NIGHT_TOKENS[token]);
+    for (const token of [
+      ...NIGHT_FOREGROUNDS,
+      ...TEXT_SURFACES,
+      ...SUBTLE_FILLS,
+    ]) {
+      const [, green, blue] = hexChannels(NIGHT_TOKENS[token]);
       expect(green, `${token} green`).toBeLessThanOrEqual(0x40);
       expect(blue, `${token} blue`).toBeLessThanOrEqual(0x40);
     }
@@ -439,13 +508,24 @@ describe("Night red preservation", () => {
 
   it("keeps text-class Night tokens at full red", () => {
     for (const token of NIGHT_TEXT_CLASS) {
-      const [red] = channels(NIGHT_TOKENS[token]);
+      const [red] = hexChannels(NIGHT_TOKENS[token]);
       expect(red, `${token} red`).toBeGreaterThanOrEqual(0xe0);
     }
   });
 
+  it("keeps Night container outlines far dimmer than control boundaries", () => {
+    // Every container frame and divider takes the subtle border, so in Night
+    // it has to shed most of the light the boundary token emits, or the panel
+    // reads as a lattice of nearly text-bright rectangles.
+    expect(
+      luminance(NIGHT_TOKENS["--snui-color-border-subtle"]),
+    ).toBeLessThanOrEqual(luminance(NIGHT_TOKENS["--snui-color-border"]) / 2);
+  });
+
   it("keeps the Night on-accent foreground near black", () => {
-    const [red, green, blue] = channels(NIGHT_TOKENS["--snui-color-on-accent"]);
+    const [red, green, blue] = hexChannels(
+      NIGHT_TOKENS["--snui-color-on-accent"],
+    );
     expect(red).toBeLessThanOrEqual(32);
     expect(green).toBeLessThanOrEqual(32);
     expect(blue).toBeLessThanOrEqual(32);
@@ -466,7 +546,7 @@ describe("Night red preservation", () => {
     const block = nightBlock();
     let hexLiterals = 0;
     for (const match of block.matchAll(/#([0-9a-f]{6})\b/g)) {
-      const [, green, blue] = channels(`#${match[1] ?? ""}`);
+      const [, green, blue] = hexChannels(`#${match[1] ?? ""}`);
       hexLiterals += 1;
       expect(green, `${match[0]} green`).toBeLessThanOrEqual(0x40);
       expect(blue, `${match[0]} blue`).toBeLessThanOrEqual(0x40);
@@ -557,6 +637,7 @@ it("exports the complete public foundation token surface", () => {
     "--snui-content-width-wide",
     "--snui-color-focus-ring-band",
     "--snui-focus-ring",
+    "--snui-focus-ring-width",
     "--snui-shadow-flat",
     "--snui-shadow-raised",
     "--snui-shadow-overlay",

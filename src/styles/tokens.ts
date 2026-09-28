@@ -11,6 +11,7 @@ export type ColorTokenName =
   | "--snui-color-text-muted"
   | "--snui-color-text-disabled"
   | "--snui-color-border"
+  | "--snui-color-border-subtle"
   | "--snui-color-track"
   | "--snui-color-accent-fill"
   | "--snui-color-accent-fill-hover"
@@ -29,6 +30,7 @@ export type ColorTokenName =
   | "--snui-color-danger-subtle"
   | "--snui-color-info"
   | "--snui-color-info-subtle"
+  | "--snui-color-neutral-subtle"
   // The surface-first aliases are declared last here because they are emitted
   // last, so the union, the public name list, and the sheet read in one order.
   | "--snui-color-surface-hover"
@@ -38,6 +40,11 @@ type HoverAliasTokenName =
   | "--snui-color-surface-hover"
   | "--snui-color-surface-raised-hover";
 
+/**
+ * One theme's value for every color token.
+ *
+ * @internal
+ */
 export type ThemeTokenSet = Readonly<Record<ColorTokenName, string>>;
 
 type ThemeTokenSource = Readonly<
@@ -71,7 +78,12 @@ function withHoverAliases(tokens: ThemeTokenSource): ThemeTokenSet {
  * element (menu, popover, metric on a card) is distinguished by its border and
  * shadow, and zebra rows take surface-stripe instead. The subtle fills are
  * tints a hair above the hover fill so text and the tone's own color stay
- * readable on them.
+ * readable on them; the neutral tint differs from both hover fills, so a
+ * tinted tile never reads as hovered. Two border weights split the work: the
+ * border proper holds 3:1 for every control boundary, and the subtle border
+ * outlines containers and draws dividers at about 1.5:1.
+ *
+ * @internal
  */
 export const LIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-background": "#f4f6f8",
@@ -84,6 +96,7 @@ export const LIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-text-muted": "#596273",
   "--snui-color-text-disabled": "#7a8494",
   "--snui-color-border": "#7c8797",
+  "--snui-color-border-subtle": "#cbd3dd",
   "--snui-color-track": "#cbd3dd",
   "--snui-color-accent-fill": "#2563eb",
   "--snui-color-accent-fill-hover": "#1d4ed8",
@@ -100,16 +113,19 @@ export const LIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-warning-subtle": "#fbeed6",
   "--snui-color-danger": "#b42318",
   "--snui-color-danger-subtle": "#fbe5e2",
-  "--snui-color-info": "#0e7490",
+  "--snui-color-info": "#0b6a83",
   "--snui-color-info-subtle": "#cff4fc",
+  "--snui-color-neutral-subtle": "#e8ecf1",
 });
 
 /*
  * Dark accent fills are light enough for the dark on-accent label to clear
  * APCA Lc 60 as well as WCAG AA, so button labels read at body-text strength.
  * The border is light enough to hold 3:1 on the raised hover fill and on every
- * subtle fill, which is where a data-grid separator lands when a row is
- * hovered or selected.
+ * subtle fill, which is where a control inside a hovered or selected data-grid
+ * row lands.
+ *
+ * @internal
  */
 export const DARK_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-background": "#10131c",
@@ -122,6 +138,7 @@ export const DARK_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-text-muted": "#b3bac7",
   "--snui-color-text-disabled": "#7f8898",
   "--snui-color-border": "#78839a",
+  "--snui-color-border-subtle": "#3b4354",
   "--snui-color-track": "#3b4354",
   "--snui-color-accent-fill": "#83b3ff",
   "--snui-color-accent-fill-hover": "#9cc3ff",
@@ -140,6 +157,7 @@ export const DARK_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-danger-subtle": "#40201f",
   "--snui-color-info": "#67d3e8",
   "--snui-color-info-subtle": "#12333d",
+  "--snui-color-neutral-subtle": "#282f40",
 });
 
 /*
@@ -148,12 +166,16 @@ export const DARK_TOKENS: ThemeTokenSet = withHoverAliases({
  * eyes at a helm tolerate. Text-class tokens (text, muted text, links, focus,
  * the four tones, and the accent fills) also keep red at or above 0xe0 so they
  * stay readable; border and text-disabled deliberately carry less red, because
- * brightness is the only hierarchy the cap leaves. The tones and the subtle
- * fills therefore differ little or not at all, and focus reaches the same
- * value as text: shape, glyph, offset, and tone label carry status and focus
- * in Night, never hue. The cap also bounds contrast: the brightest allowed
- * text on the surface is 5.9:1, about APCA Lc 41, so Night is gated on WCAG AA
- * and the APCA column in the contrast tests is advisory.
+ * brightness is the only hierarchy the cap leaves, and the subtle border that
+ * outlines every container emits about a fifth of the border's light, so the
+ * frames around content stay far dimmer than the text in it. The tones and the
+ * subtle fills therefore differ little or not at all, and focus reaches the
+ * same value as text: shape, glyph, offset, and tone label carry status and
+ * focus in Night, never hue. The cap also bounds contrast: the brightest
+ * allowed text on the surface is 5.9:1, about APCA Lc 41, so Night is gated on
+ * WCAG AA and the APCA column in the contrast tests is advisory.
+ *
+ * @internal
  */
 export const NIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-background": "#050000",
@@ -166,6 +188,7 @@ export const NIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-text-muted": "#f23838",
   "--snui-color-text-disabled": "#bb3434",
   "--snui-color-border": "#c03030",
+  "--snui-color-border-subtle": "#5e1212",
   "--snui-color-track": "#5e1212",
   "--snui-color-accent-fill": "#ec3838",
   "--snui-color-accent-fill-hover": "#ff4040",
@@ -174,7 +197,7 @@ export const NIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-on-accent": "#100000",
   "--snui-color-link": "#ff3838",
   "--snui-color-link-hover": "#ff4040",
-  "--snui-color-link-visited": "#f03434",
+  "--snui-color-link-visited": "#f63a3a",
   "--snui-color-focus": "#ff4040",
   "--snui-color-success": "#f24040",
   "--snui-color-success-subtle": "#2c0000",
@@ -182,10 +205,13 @@ export const NIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
   "--snui-color-warning-subtle": "#2c0000",
   "--snui-color-danger": "#ff3030",
   "--snui-color-danger-subtle": "#2c0000",
-  "--snui-color-info": "#e84040",
-  // The cap leaves one usable tint, so every Night subtle fill, the accent one
+  "--snui-color-info": "#f04040",
+  // The cap leaves one usable tint, so every Night tone fill, the accent one
   // included, is this value; Light and Dark give the info tint its own hue.
   "--snui-color-info-subtle": "#2c0000",
+  // The neutral tint sits a step below it, so a tinted tile stays apart from
+  // the hover fills a pointer paints.
+  "--snui-color-neutral-subtle": "#290000",
 });
 
 /*
@@ -249,6 +275,8 @@ export const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
  * Duration of --snui-transition-fast in milliseconds. Exit timers that must
  * outlive the fast transition read this so the number cannot drift from the
  * token.
+ *
+ * @internal
  */
 export const TRANSITION_FAST_MS = 140;
 
@@ -263,6 +291,8 @@ export const TRANSITION_FAST_MS = 140;
  * {@link DATA_GRID_ROW_HEIGHTS_FINE} for the other set. Estimating a touch row
  * on a laptop leaves every row reporting a correction the first time it is
  * measured, which walks the scroll height during a fast scroll.
+ *
+ * @internal
  */
 export const DATA_GRID_ROW_HEIGHTS = {
   compact: 32,
@@ -272,6 +302,8 @@ export const DATA_GRID_ROW_HEIGHTS = {
 /**
  * The same estimates for a fine pointer, where `--snui-control-min-height` is
  * 2.5rem rather than 2.75rem.
+ *
+ * @internal
  */
 export const DATA_GRID_ROW_HEIGHTS_FINE = {
   compact: 28,
@@ -351,6 +383,7 @@ export const PUBLIC_FOUNDATION_TOKEN_NAMES = [
   "--snui-content-width-wide",
   "--snui-color-focus-ring-band",
   "--snui-focus-ring",
+  "--snui-focus-ring-width",
   "--snui-shadow-flat",
   "--snui-shadow-raised",
   "--snui-shadow-overlay",
@@ -381,6 +414,13 @@ export const PUBLIC_TOKEN_NAMES: readonly (
   ...PUBLIC_FOUNDATION_TOKEN_NAMES,
 ]);
 
+/** Ancestor markers a host sets on a dark page. */
+const DARK_HOST_MARKERS = [
+  '[data-bs-theme="dark"]',
+  '[data-coreui-theme="dark"]',
+  ".dark-mode",
+] as const;
+
 /**
  * The root class of `signalk-nearlcrews-ui/tokens.css`. See the design contract
  * for what the class guarantees.
@@ -403,6 +443,10 @@ export const TOKENS_ROOT_CLASS = "snui-tokens";
  * @internal
  */
 export function renderTokenStyles(rootSelector: string): string {
+  // A root with its own theme choice ignores the host's dark marker.
+  const darkHostSelectors = DARK_HOST_MARKERS.map(
+    (marker) => `${marker} ${rootSelector}:not([data-snui-theme])`,
+  );
   return `
 ${rootSelector} {
 ${LIGHT_BLOCK}
@@ -434,6 +478,7 @@ ${TYPE_BLOCK}
   --snui-focus-ring:
     0 0 0 2px var(--snui-color-focus-ring-band),
     0 0 0 6px color-mix(in srgb, var(--snui-color-focus) 38%, transparent);
+  --snui-focus-ring-width: 2px;
   --snui-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --snui-transition-fast: ${String(TRANSITION_FAST_MS)}ms var(--snui-ease-standard);
   --snui-transition-normal: 240ms var(--snui-ease-standard);
@@ -449,9 +494,7 @@ ${Z_LAYER_BLOCK}
  * one ancestor chain this rule is the only one that matches, which is the
  * result a light block placed ahead of it produced anyway.
  */
-[data-bs-theme="dark"] ${rootSelector}:not([data-snui-theme]),
-[data-coreui-theme="dark"] ${rootSelector}:not([data-snui-theme]),
-.dark-mode ${rootSelector}:not([data-snui-theme]) {
+${darkHostSelectors.join(",\n")} {
 ${DARK_BLOCK}
   color-scheme: dark;
 }
@@ -493,7 +536,32 @@ ${NIGHT_BLOCK}
     --snui-range-thumb-size: 2.75rem;
   }
 }
+
+/*
+ * Stronger contrast request: boundaries, container outlines, and muted text
+ * take the text color, and disabled text climbs toward it while keeping a step
+ * below the rest, because losing that step would leave a blocked control
+ * looking exactly like an available one. Every focus ring, which draws at
+ * --snui-focus-ring-width or one pixel wider, thickens by one pixel as the
+ * token rises from 2 to 3. The rule repeats every selector a palette is set
+ * with above, or one exactly as heavy, and comes after all of them, so it
+ * wins under every theme and host marker instead of losing to them on weight.
+ */
+@media (prefers-contrast: more) {
+  ${[rootSelector, ...darkHostSelectors, `${rootSelector}[data-snui-theme]`].join(",\n  ")} {
+    --snui-color-border: var(--snui-color-text);
+    --snui-color-border-subtle: var(--snui-color-text);
+    --snui-color-text-muted: var(--snui-color-text);
+    --snui-color-text-disabled: color-mix(in srgb, var(--snui-color-text) 80%, var(--snui-color-surface));
+    --snui-focus-ring-width: 3px;
+  }
+}
 `;
 }
 
+/**
+ * The token sheet for this package version's root selector.
+ *
+ * @internal
+ */
 export const TOKEN_STYLES = renderTokenStyles(ROOT_SELECTOR);

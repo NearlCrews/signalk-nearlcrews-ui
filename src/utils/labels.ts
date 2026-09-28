@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 
 import { hasReactContent } from "./react-node.js";
 
-/** Default accessible name announced while a button is loading. */
+/** Default busy description a loading button adds beside its unchanged name. */
 export const DEFAULT_LOADING_LABEL = "Working";
 
 /** Default accessible name for a dismiss button. */

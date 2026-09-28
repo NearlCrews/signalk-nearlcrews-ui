@@ -34,6 +34,8 @@ interface OverlayTriggerOpenProps {
  * rather than passed as undefined, because react-aria declares these props
  * without `| undefined` and the package compiles under
  * exactOptionalPropertyTypes. An absent `open` leaves the trigger uncontrolled.
+ *
+ * @internal
  */
 export function overlayOpenProps({
   open,

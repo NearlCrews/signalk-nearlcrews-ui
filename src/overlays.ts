@@ -18,6 +18,7 @@ export {
   type MenuSectionProps,
   MenuSeparator,
   type MenuSeparatorProps,
+  type MenuTriggerProps,
 } from "./components/Menu.js";
 export type {
   OverlayOpenState,

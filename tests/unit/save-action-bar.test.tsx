@@ -1,5 +1,6 @@
 import { act, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { createRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -11,7 +12,7 @@ import {
 import { panel, renderInPanel } from "../helpers.js";
 
 const LABELS: SaveActionBarLabels = {
-  clean: "All changes saved",
+  clean: "Nothing to save",
   discard: "Discard",
   save: "Save",
   saved: "Save sent to the server",
@@ -73,7 +74,7 @@ describe("resolveSaveActionBarState", () => {
       blocked: false,
       discardDisabled: true,
       live: "polite",
-      message: "All changes saved",
+      message: "Nothing to save",
       saveDisabled: true,
       tone: "neutral",
     });
@@ -137,6 +138,96 @@ describe("resolveSaveActionBarState", () => {
     ).toMatchObject({ blocked: false, tone: "info" });
   });
 
+  it("keeps Discard available for an invalid draft with nothing else to discard", () => {
+    // An invalid draft never commits, so a panel reporting it through
+    // invalidMessage is not dirty, and a refused Discard would leave the
+    // error on screen with no way back but retyping.
+    expect(
+      resolveSaveActionBarState({ ...BASE, invalidMessage: "Fix the port." }),
+    ).toEqual({
+      blocked: true,
+      discardDisabled: false,
+      live: "polite",
+      message: "Fix the port.",
+      saveDisabled: true,
+      tone: "danger",
+    });
+  });
+
+  it("reports a failed save and keeps Save available for a retry", () => {
+    const failure = {
+      message: "Save failed. Check the connection.",
+      tone: "danger",
+    } as const;
+    expect(resolveSaveActionBarState({ ...BASE, outcome: failure })).toEqual({
+      blocked: false,
+      discardDisabled: true,
+      live: "polite",
+      message: "Save failed. Check the connection.",
+      saveDisabled: false,
+      tone: "danger",
+    });
+    // Edits made after the failure do not hide it: the last request still
+    // did not apply, and the retry sends the edits with it.
+    expect(
+      resolveSaveActionBarState({ ...BASE, dirty: true, outcome: failure }),
+    ).toMatchObject({
+      discardDisabled: false,
+      message: "Save failed. Check the connection.",
+      saveDisabled: false,
+      tone: "danger",
+    });
+    // A form that cannot be sent says why first, and saving says so ahead of
+    // everything.
+    expect(
+      resolveSaveActionBarState({
+        ...BASE,
+        dirty: true,
+        invalidMessage: "Fix the port.",
+        outcome: failure,
+      }),
+    ).toMatchObject({ message: "Fix the port.", saveDisabled: true });
+    expect(
+      resolveSaveActionBarState({ ...BASE, outcome: failure, saving: true }),
+    ).toMatchObject({ message: "Saving changes" });
+  });
+
+  it("reports an accepted save in place of the saved message", () => {
+    const accepted = { message: "Saved at 14:02", tone: "success" } as const;
+    expect(
+      resolveSaveActionBarState({
+        ...BASE,
+        outcome: accepted,
+        saveRequestedAt: 1,
+      }),
+    ).toEqual({
+      blocked: false,
+      discardDisabled: true,
+      live: "polite",
+      message: "Saved at 14:02",
+      saveDisabled: true,
+      tone: "success",
+    });
+    expect(
+      resolveSaveActionBarState({
+        ...BASE,
+        outcome: accepted,
+        unconfigured: true,
+      }),
+    ).toMatchObject({ saveDisabled: false });
+    // A new edit is news the outcome of the last request is not.
+    expect(
+      resolveSaveActionBarState({ ...BASE, dirty: true, outcome: accepted }),
+    ).toMatchObject({ message: "Unsaved changes", tone: "info" });
+    // Blank text is no outcome.
+    expect(
+      resolveSaveActionBarState({
+        ...BASE,
+        outcome: { message: "  ", tone: "danger" },
+      }),
+    ).toMatchObject({ message: "Nothing to save", tone: "neutral" });
+  });
+
   it("blocks both actions while saving, ahead of every other state", () => {
     expect(
       resolveSaveActionBarState({
@@ -174,11 +265,11 @@ describe("SaveActionBar", () => {
     renderInPanel(
       saveBar({
         sticky: "bottom",
-        labels: { clean: "Nothing to save", save: "Apply", discard: "Reset" },
+        labels: { clean: "Up to date", save: "Apply", discard: "Reset" },
       }),
     );
 
-    expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
+    expect(screen.getByRole("status")).toHaveTextContent("Up to date");
     expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
   });
@@ -282,7 +373,7 @@ describe("SaveActionBar saved message window", () => {
     });
     // The bar falls back to the state underneath, which is what a panel used
     // to do by writing the timestamp back to null.
-    expect(status).toHaveTextContent("All changes saved");
+    expect(status).toHaveTextContent("Nothing to save");
     expect(vi.getTimerCount()).toBe(0);
 
     unmount();
@@ -307,7 +398,7 @@ describe("SaveActionBar saved message window", () => {
     act(() => {
       vi.advanceTimersByTime(500);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
+    expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
   });
 
   it("measures the window from the request, not from the mount", () => {
@@ -317,7 +408,7 @@ describe("SaveActionBar saved message window", () => {
 
     // A panel that remounts holding an old timestamp does not replay a save
     // the user finished minutes ago.
-    expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
+    expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
     const idleTimers = vi.getTimerCount();
 
     rerender(panel(saveBar({ saveRequestedAt: NOW })));
@@ -347,7 +438,7 @@ describe("SaveActionBar saved message window", () => {
     act(() => {
       vi.advanceTimersByTime(2_500);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
+    expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
   });
 
   it("honors a custom window and leaves zero to the consumer", () => {
@@ -364,7 +455,7 @@ describe("SaveActionBar saved message window", () => {
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
+    expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
 
     rerender(
       panel(
@@ -379,6 +470,162 @@ describe("SaveActionBar saved message window", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "Save sent to the server",
     );
+  });
+});
+
+describe("SaveActionBar focus targets", () => {
+  it("sends focus where a refused save points instead of the status", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn(
+      (): HTMLElement => screen.getByRole("textbox", { name: "Port" }),
+    );
+    const { container } = renderInPanel(
+      <>
+        <label>
+          Port
+          <input />
+        </label>
+        {saveBar({ dirty: true, onSave })}
+      </>,
+    );
+    const status = container.querySelector<HTMLElement>(
+      ".snui-action-bar__status",
+    );
+    const statusFocus = vi.fn();
+    status?.addEventListener("focus", statusFocus);
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    // Focus moves once, after the handler, to the field the save refused, so
+    // the status never takes it on the way.
+    expect(onSave).toHaveBeenCalledOnce();
+    expect(screen.getByRole("textbox", { name: "Port" })).toHaveFocus();
+    expect(statusFocus).not.toHaveBeenCalled();
+  });
+
+  it("follows a returned ref, from Discard too, whatever focusOnAction says", async () => {
+    const user = userEvent.setup();
+    const fieldRef = createRef<HTMLInputElement>();
+    renderInPanel(
+      <>
+        <input aria-label="Port" ref={fieldRef} />
+        {saveBar({
+          dirty: true,
+          focusOnAction: "none",
+          onDiscard: () => fieldRef,
+        })}
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    expect(fieldRef.current).toHaveFocus();
+  });
+
+  it("falls back to the status when the target cannot take focus", async () => {
+    const user = userEvent.setup();
+    const detached = document.createElement("input");
+    const { container, rerender } = renderInPanel(
+      saveBar({ dirty: true, onSave: () => detached }),
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    // A target that is not on the page cannot hold focus, and the pressed
+    // button is about to disable itself, so the status is still the place.
+    expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
+
+    rerender(
+      panel(saveBar({ dirty: true, onSave: () => createRef<HTMLElement>() })),
+    );
+    screen.getByRole("button", { name: "Save" }).focus();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
+  });
+
+  it("falls back to the status when a target on the page refuses focus", async () => {
+    const user = userEvent.setup();
+    const { container } = renderInPanel(
+      <>
+        <input aria-label="Port" disabled />
+        {saveBar({
+          dirty: true,
+          onSave: () => screen.getByRole("textbox", { name: "Port" }),
+        })}
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    // The target is connected but disabled, so focusing it does nothing. The
+    // bar checks where focus actually went rather than trusting the call, so
+    // the status still takes it before the pressed button disables itself.
+    expect(screen.getByRole("textbox", { name: "Port" })).not.toHaveFocus();
+    expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
+  });
+
+  it("moves an async handler's focus to the status without awaiting it", async () => {
+    const user = userEvent.setup();
+    const { container } = renderInPanel(
+      <>
+        <input aria-label="Port" />
+        <SaveActionBar
+          dirty
+          onDiscard={vi.fn()}
+          onSave={async () => {
+            await Promise.resolve();
+          }}
+        />
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    // A returned promise is not a target, so the bar's own rule applies.
+    expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
+  });
+
+  it("leaves focus where the handler itself put it", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <>
+        <input aria-label="Port" />
+        {saveBar({
+          dirty: true,
+          onSave: () => {
+            screen.getByRole("textbox", { name: "Port" }).focus();
+          },
+        })}
+      </>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    // The status takes focus only from the pressed button, so a handler that
+    // moved focus on its own keeps the destination it chose.
+    expect(screen.getByRole("textbox", { name: "Port" })).toHaveFocus();
+  });
+});
+
+describe("SaveActionBar outcome", () => {
+  it("shows a failed save in the bar's own status with Save still offered", () => {
+    const { container } = renderInPanel(
+      saveBar({
+        outcome: {
+          message: "Save failed. Check the connection.",
+          tone: "danger",
+        },
+      }),
+    );
+
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent(
+      "Error. Save failed. Check the connection.",
+    );
+    expect(container.querySelector(".snui-status--danger")).not.toBeNull();
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save).toBeEnabled();
+    expect(save).not.toHaveAttribute("aria-disabled");
+    expect(screen.getByRole("button", { name: "Discard" })).toBeDisabled();
   });
 });
 
@@ -408,7 +655,7 @@ describe("SaveActionBar focus and repeated requests", () => {
     act(() => {
       vi.advanceTimersByTime(2_500);
     });
-    expect(screen.getByRole("status")).toHaveTextContent("All changes saved");
+    expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
 
     // An edit and a second save inside the same millisecond carry the same
     // timestamp, and the second one is still its own request.

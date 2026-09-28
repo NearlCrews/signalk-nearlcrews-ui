@@ -7,25 +7,25 @@ import {
 
 import { joinIdReferences } from "../utils/aria.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
+import { UNSUPPORTED_BROWSER_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { hasReactContent } from "../utils/react-node.js";
 
 export interface UnsupportedBrowserNoticeProps
   extends Omit<HTMLAttributes<HTMLElement>, "children" | "role" | "title">,
     RefAttributes<HTMLElement> {
-  /** Optional body override. */
+  /**
+   * Explanation under the heading, default the package's browser advice.
+   * Pass `null` to show the heading alone.
+   */
   readonly children?: ReactNode | undefined;
   /** Level of the title heading, default 2, matching the other titled components. */
   readonly headingLevel?: HeadingLevel | undefined;
-  /** Heading shown above the compatibility explanation. */
+  /**
+   * Heading shown above the compatibility explanation, default "Browser
+   * update required".
+   */
   readonly title?: ReactNode | undefined;
 }
-
-const DEFAULT_TITLE = "Browser update required";
-// Leads with the plain need, then names both ways out: a kiosk or embedded
-// WebView user often cannot update the engine, but can update or replace the
-// app that opens Admin.
-const DEFAULT_BODY =
-  "This panel needs a newer browser. Update the browser, or the app that opens Signal K Admin, then open this panel again.";
 
 /**
  * Standalone compatibility notice for a consumer-controlled browser preflight.
@@ -35,10 +35,10 @@ const DEFAULT_BODY =
  */
 export function UnsupportedBrowserNotice({
   "aria-labelledby": ariaLabelledBy,
-  children = DEFAULT_BODY,
+  children = UNSUPPORTED_BROWSER_LABEL_DEFAULTS.description,
   headingLevel = 2,
   ref,
-  title = DEFAULT_TITLE,
+  title = UNSUPPORTED_BROWSER_LABEL_DEFAULTS.title,
   ...props
 }: UnsupportedBrowserNoticeProps): React.JSX.Element {
   const titleId = useId();

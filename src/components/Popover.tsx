@@ -11,6 +11,8 @@ import { DialogTrigger, Pressable } from "react-aria-components";
 import { POPOVER_STYLES } from "../styles/popover.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
+import { packageError } from "../utils/errors.js";
+import { SectionOutlineReset } from "../utils/heading-level.js";
 import { usePanelPortalContainerReady } from "../utils/portal.js";
 import { definedProps } from "../utils/props.js";
 import {
@@ -46,21 +48,21 @@ export interface PopoverProps
    */
   readonly trigger: ReactElement;
   /**
-   * Width as a CSS length string, such as `"18rem"` or
+   * Width as a CSS length string, such as `"18rem"`, `"240px"`, or
    * `"var(--snui-content-width-standard)"`; `"auto"` (the default) sizes to
-   * the content. A bare number is read as pixels and is deprecated.
+   * the content.
    */
   readonly width?: PopoverWidth | undefined;
 }
 
 /**
- * A CSS length string, or `"auto"` to size to the content. Numbers are
- * accepted as pixels for compatibility and are deprecated.
+ * A CSS length string, or `"auto"` to size to the content. A pixel width is
+ * written with its unit, `"240px"`.
  *
  * `"auto"` is spelled out so an editor suggests it; `string & {}` keeps every
  * other length accepted, which a bare `"auto" | string` would collapse away.
  */
-export type PopoverWidth = "auto" | (string & {}) | number;
+export type PopoverWidth = "auto" | (string & {});
 
 const INTERACTIVE_ROLES = new Set([
   "application",
@@ -130,13 +132,13 @@ export function Popover({
   useLayoutEffect(() => {
     const triggerElement = triggerRef.current;
     if (triggerElement === null) {
-      throw new Error(
+      throw packageError(
         "Popover trigger must forward its ref to a semantic interactive element.",
       );
     }
     if (triggerElement === validatedTrigger.current) return;
     if (!isSemanticInteractiveElement(triggerElement)) {
-      throw new Error(
+      throw packageError(
         "Popover trigger must render a semantic interactive element or an element with an interactive ARIA role.",
       );
     }
@@ -144,22 +146,22 @@ export function Popover({
     // react-aria gives its child a tabindex of 0, so a negative one is the
     // child overriding it rather than an element that was never focusable.
     if (triggerElement.tabIndex < 0) {
-      throw new Error(
+      throw packageError(
         "Popover trigger must be focusable: remove the negative tabIndex, or spread the injected props onto the element.",
       );
     }
     validatedTrigger.current = triggerElement;
   });
 
-  const surfaceStyle = useMemo<CSSProperties>(() => {
-    const length = typeof width === "number" ? `${String(width)}px` : width;
-    return {
+  const surfaceStyle = useMemo<CSSProperties>(
+    () => ({
       ...style,
       ...definedProps({
-        "--snui-popover-width": width === "auto" ? undefined : length,
+        "--snui-popover-width": width === "auto" ? undefined : width,
       }),
-    };
-  }, [style, width]);
+    }),
+    [style, width],
+  );
 
   return (
     <DialogTrigger {...overlayOpenProps({ open, defaultOpen, onOpenChange })}>
@@ -181,7 +183,12 @@ export function Popover({
         ready={portalReady}
         style={surfaceStyle}
       >
-        {children}
+        {/*
+          Portaled to the panel root, but React context still hands the
+          popover the outline of the section it was opened from, so its
+          content starts from a clean slate.
+        */}
+        <SectionOutlineReset>{children}</SectionOutlineReset>
       </OverlayPopover>
     </DialogTrigger>
   );

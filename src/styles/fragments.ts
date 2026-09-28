@@ -97,19 +97,42 @@ export const FORCED_COLORS_OUTLINE_DECLARATIONS = [
 ].join("\n");
 
 /**
- * The focus ring every interactive element paints. Inset rings (offset -2px)
- * suit rows and menu items; outset rings with the two-tone shadow suit
- * controls, where `--snui-focus-ring` fills the offset gap with
- * `--snui-color-focus-ring-band`, the fill behind the control, so the ring
- * keeps its own boundary next to a danger or accent edge.
+ * The width of every focus ring: 2 pixels, and 3 under `prefers-contrast:
+ * more`, which the token sheet raises. Under forced colors a danger button's
+ * ring adds one pixel to it: a solid ring that replaces the dashed state
+ * outline while the button holds keyboard focus. Anything positioned against
+ * a ring, such as the data grid selection bar inside a focused row, steps by
+ * it.
+ */
+export const FOCUS_RING_WIDTH = "var(--snui-focus-ring-width)";
+
+/**
+ * The offset of an inset focus ring, which lies just inside the edge: as far
+ * in as the ring is wide, so it tracks the width a contrast request raises.
+ */
+export const INSET_FOCUS_RING_OFFSET = `calc(-1 * ${FOCUS_RING_WIDTH})`;
+
+/**
+ * Where a focus ring sits. An inset ring, for rows and menu items, lies just
+ * inside the edge, so its offset follows the ring width; an outset ring, for
+ * controls, stands 2 pixels clear.
+ */
+export type FocusRingPlacement = "inset" | "outset";
+
+/**
+ * The focus ring every interactive element paints, at the shared ring width.
+ * Outset rings with the two-tone shadow suit controls, where
+ * `--snui-focus-ring` fills the offset gap with `--snui-color-focus-ring-band`,
+ * the fill behind the control, so the ring keeps its own boundary next to a
+ * danger or accent edge.
  */
 export function focusRingDeclarations(
-  offset: "-2px" | "2px",
+  placement: FocusRingPlacement,
   shadow: boolean,
 ): string {
   return [
-    "  outline: 2px solid var(--snui-color-focus);",
-    `  outline-offset: ${offset};`,
+    `  outline: ${FOCUS_RING_WIDTH} solid var(--snui-color-focus);`,
+    `  outline-offset: ${placement === "inset" ? INSET_FOCUS_RING_OFFSET : "2px"};`,
     ...(shadow ? ["  box-shadow: var(--snui-focus-ring);"] : []),
   ].join("\n");
 }
@@ -180,12 +203,33 @@ export const FIELD_DESCRIPTION_DECLARATIONS = [
   "  overflow-wrap: anywhere;",
 ].join("\n");
 
-/** The plain bordered surface a container paints on the panel background. */
-export const SURFACE_DECLARATIONS = [
-  "  border: 1px solid var(--snui-color-border);",
-  "  border-radius: var(--snui-radius-md);",
-  "  background: var(--snui-color-surface);",
-].join("\n");
+/** A bordered surface on the panel background, outlined with `borderToken`. */
+function surfaceDeclarations(borderToken: string): string {
+  return [
+    `  border: 1px solid var(${borderToken});`,
+    "  border-radius: var(--snui-radius-md);",
+    "  background: var(--snui-color-surface);",
+  ].join("\n");
+}
+
+/**
+ * The plain bordered surface a container paints on the panel background. Its
+ * outline is decorative, so it takes the subtle border and leaves the 3:1
+ * boundary to the controls inside it.
+ */
+export const SURFACE_DECLARATIONS = surfaceDeclarations(
+  "--snui-color-border-subtle",
+);
+
+/**
+ * The same surface where its edge is the only boundary of something a reader
+ * operates: the segmented group track and the data grid, a focusable scroll
+ * region. It keeps the 3:1 boundary token when container outlines step back
+ * to the subtle one.
+ */
+export const CONTROL_SURFACE_DECLARATIONS = surfaceDeclarations(
+  "--snui-color-border",
+);
 
 /**
  * The text a table caption takes, shared by Table and DataGrid so a panel
@@ -227,13 +271,54 @@ export const CONTROL_ROW_DECLARATIONS = [
 export const GLYPH_BASELINE_NUDGE = "0.125rem";
 
 /**
+ * The tone glyph's box, in ems of the glyph's own size. A factor rather than
+ * a length, so a slot set in another font size can be measured against it.
+ */
+export const TONE_GLYPH_BOX_EM = 1.125;
+
+/**
+ * The space a tone glyph keeps before its own text, in ems of the glyph's
+ * size. The card, metric, badge, field error, and freshness glyphs take it as
+ * a margin, and the CollapsibleSection tone slot holds it beside the toggle's
+ * own gap. Progress, StatusIndicator, Banner, and Toast space their glyphs
+ * with a spacing token instead.
+ */
+export const TONE_GLYPH_GAP_EM = 0.375;
+
+/**
+ * A glyph slot one line box tall at the top of its flex row, with the glyph
+ * centered in it, so the glyph sits on the first line of the text beside it
+ * however far that text wraps. Set on the text's baseline instead, a glyph
+ * smaller than the text centered on its own small text, below the middle of
+ * the line. Shared by the Progress tone mark and the CollapsibleSection tone
+ * slot.
+ */
+export const FIRST_LINE_GLYPH_SLOT_DECLARATIONS = [
+  "  display: flex;",
+  "  flex: none;",
+  "  align-self: flex-start;",
+  "  align-items: center;",
+  "  block-size: 1lh;",
+].join("\n");
+
+/** The required and optional markers a field or checkbox label may hold. */
+export const FIELD_MARKERS = ":is(.snui-optional-mark, .snui-required-mark)";
+
+/**
+ * Every descendant except a link and the link's own content, for a rule
+ * that recolors a label or legend's text but leaves an operable link to its
+ * own color.
+ */
+export const NON_LINK_DESCENDANTS = ":not(:any-link, :any-link *)";
+
+/**
  * Forced colors flattens a control that opts out of automatic adjustment to
  * preserve a selected or danger state, which takes the focus ring with it.
  * Rebuild it with system colors so the author theme token cannot blend into
  * Highlight. Indented for use inside a forced-colors media block.
  */
 export const FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS = [
-  "    outline: 2px solid CanvasText;",
+  `    outline: ${FOCUS_RING_WIDTH} solid CanvasText;`,
   "    outline-offset: 2px;",
   "    box-shadow: none;",
 ].join("\n");
@@ -300,6 +385,29 @@ export function bodyEdgeMarginRules(block: string): string {
 }
 
 /**
+ * The rules that stretch a button row's actions across a narrow panel, written
+ * for the inside of a container query block. Each button in the row grows,
+ * and so does the wrapper a button with a visible blocked reason sits in.
+ */
+export function stretchedActionRules(row: string): string {
+  return `  /*
+   * A button that draws its blocked reason sits inside a wrapper, which is
+   * then the row's child, so the stretch names both and the wrapper stretches
+   * its button in turn.
+   */
+  ${row} > :is(.snui-button, .snui-button-reason) {
+    flex: 1 1 auto;
+  }
+
+  ${row} > .snui-button-reason {
+    align-items: stretch;
+  }`;
+}
+
+/** The comfortable line length for prose, as a length. */
+const PROSE_MEASURE = "70ch";
+
+/**
  * Caps a prose block at a comfortable measure. A description, a body, or a
  * footnote runs the full width of its container otherwise, and on a wide nav
  * station monitor a `width="full"` panel gives it far more than the sixty to
@@ -307,7 +415,7 @@ export function bodyEdgeMarginRules(block: string): string {
  * hold a value, a control, or tabular content are not prose and keep the
  * width they are given.
  */
-export const PROSE_MEASURE_DECLARATION = "  max-width: 70ch;";
+export const PROSE_MEASURE_DECLARATION = `  max-width: ${PROSE_MEASURE};`;
 
 /**
  * The narrow-panel condition, written once. Both halves are constants, the

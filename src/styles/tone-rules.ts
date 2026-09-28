@@ -88,11 +88,31 @@ export function toneAccentBarRules(block: string, modifierPrefix = ""): string {
   );
 }
 
-/** Declarations for the bar itself, applied to the block. */
-export const TONE_ACCENT_BAR_DECLARATIONS = [
-  "  border: 1px solid var(--snui-color-border);",
-  `  border-inline-start-width: ${TONE_BAR_WIDTH};`,
-].join("\n");
+/** The bar itself, applied to the block, inside an outline of `borderToken`. */
+function toneAccentBarDeclarations(borderToken: string): string {
+  return [
+    `  border: 1px solid var(${borderToken});`,
+    `  border-inline-start-width: ${TONE_BAR_WIDTH};`,
+  ].join("\n");
+}
+
+/**
+ * The bar on a block that sits in the page, a toned Card, CollapsibleSection,
+ * or Banner. The rest of its outline is a container's, so it takes the subtle
+ * border.
+ */
+export const TONE_ACCENT_BAR_DECLARATIONS = toneAccentBarDeclarations(
+  "--snui-color-border-subtle",
+);
+
+/**
+ * The bar on a toast card, which floats over whatever the page shows beneath
+ * it. Like a dialog, menu, or popover, it keeps the boundary token around the
+ * rest of its outline.
+ */
+export const OVERLAY_TONE_ACCENT_BAR_DECLARATIONS = toneAccentBarDeclarations(
+  "--snui-color-border",
+);
 
 /**
  * The whole tone bar for one block: the bar declarations on every toned
@@ -108,11 +128,15 @@ ${toneAccentBarRules(block, modifierPrefix)}`;
 }
 
 /**
- * Dot shape per semantic tone. The info radius is proportional so the rounded
- * square never clamps to a circle at small dot sizes, which would make info
- * and neutral identical without color.
+ * One shape per semantic tone for the status dots, so a state never depends on
+ * color alone. The tone glyph reads the info, warning, and danger shapes; the
+ * success glyph draws its own check, where the success dot is a diamond. The
+ * info radius is proportional so the rounded square never clamps to a circle
+ * at small sizes, which would make info and neutral identical without color.
+ *
+ * @internal
  */
-const TONE_DOT_SHAPES: Readonly<Record<SemanticTone, string>> = {
+export const TONE_SHAPE_DECLARATIONS: Readonly<Record<SemanticTone, string>> = {
   info: "  border-radius: 20%;",
   success:
     "  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);\n  border-radius: 0;",
@@ -131,7 +155,7 @@ const TONE_DOT_SHAPES: Readonly<Record<SemanticTone, string>> = {
 export function toneDotShapeRules(block: string, dotClass: string): string {
   return SEMANTIC_TONES.map(
     (tone) =>
-      `${toneModifier(block, tone, "")} .${dotClass} {\n${TONE_DOT_SHAPES[tone]}\n}`,
+      `${toneModifier(block, tone, "")} .${dotClass} {\n${TONE_SHAPE_DECLARATIONS[tone]}\n}`,
   ).join("\n");
 }
 

@@ -7,12 +7,15 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import * as ReactActual from "react";
-import { createRef } from "react";
+import { createRef, useState } from "react";
 import * as JSXDevRuntime from "react/jsx-dev-runtime";
 import * as JSXRuntime from "react/jsx-runtime";
 import { describe, expect, it, vi } from "vitest";
-
-import { CollapsibleSection, SegmentedControl } from "../../src/index.js";
+import {
+  CollapsibleSection,
+  SegmentedControl,
+  type ThemeChoice,
+} from "../../src/index.js";
 
 const OPTIONS = [
   { label: "Metric", value: "metric" },
@@ -24,7 +27,9 @@ describe("SegmentedControl option validation", () => {
   it("rejects an empty option collection", () => {
     expect(() =>
       render(<SegmentedControl label="Units" options={[]} />),
-    ).toThrow("SegmentedControl requires at least one option.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: SegmentedControl requires at least one option.",
+    );
   });
 
   it("rejects options without an accessible label", () => {
@@ -35,7 +40,9 @@ describe("SegmentedControl option validation", () => {
           options={[{ label: "  ", value: "metric" }]}
         />,
       ),
-    ).toThrow("SegmentedControl options require non-empty labels.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: SegmentedControl options require non-empty labels.",
+    );
   });
 
   it("rejects duplicate option values", () => {
@@ -50,7 +57,7 @@ describe("SegmentedControl option validation", () => {
         />,
       ),
     ).toThrow(
-      'SegmentedControl option values must be unique; received duplicate value "metric".',
+      'signalk-nearlcrews-ui: SegmentedControl option values must be unique; received duplicate value "metric".',
     );
   });
 });
@@ -327,7 +334,9 @@ describe("SegmentedControl label and controlled value", () => {
   it("rejects a control with no label content", () => {
     expect(() =>
       render(<SegmentedControl label="  " options={OPTIONS} />),
-    ).toThrow("SegmentedControl requires a non-empty label.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: SegmentedControl requires a non-empty label.",
+    );
   });
 
   it("keeps the hidden input attached while the controlled value changes", () => {
@@ -497,8 +506,15 @@ describe("SegmentedControl read-only state", () => {
     const imperial = screen.getByRole("radio", { name: "Imperial" });
     // A save in flight must not drop the operator's focus on the body.
     expect(metric).toBeEnabled();
-    expect(metric).toHaveAttribute("aria-disabled", "true");
     expect(metric).toHaveAttribute("tabindex", "0");
+    // The group reads as fixed, the way RadioGroup's readOnly does, rather
+    // than as a set of unavailable options.
+    expect(screen.getByRole("radiogroup", { name: "Units" })).toHaveAttribute(
+      "aria-readonly",
+      "true",
+    );
+    expect(metric).not.toHaveAttribute("aria-disabled");
+    expect(imperial).not.toHaveAttribute("aria-disabled");
 
     metric.focus();
     fireEvent.click(imperial);
@@ -527,6 +543,258 @@ describe("SegmentedControl read-only state", () => {
     // A natively disabled control already reports its state.
     expect(metric).toBeDisabled();
     expect(metric).not.toHaveAttribute("aria-disabled");
+  });
+});
+
+describe("SegmentedControl blocked option", () => {
+  const BLOCKED = [
+    { label: "Metric", value: "metric" },
+    { label: "Imperial", value: "imperial", ariaDisabled: true },
+    { label: "Nautical", value: "nautical" },
+  ] as const;
+
+  it("keeps a blocked option focusable and refuses to select it", () => {
+    const onChange = vi.fn();
+    render(
+      <SegmentedControl
+        label="Units"
+        defaultValue="metric"
+        onValueChange={onChange}
+        options={BLOCKED}
+      />,
+    );
+
+    const metric = screen.getByRole("radio", { name: "Metric" });
+    const imperial = screen.getByRole("radio", { name: "Imperial" });
+    const nautical = screen.getByRole("radio", { name: "Nautical" });
+    expect(imperial).toBeEnabled();
+    expect(imperial).toHaveAttribute("aria-disabled", "true");
+    expect(metric).not.toHaveAttribute("aria-disabled");
+    expect(screen.getByRole("radiogroup")).not.toHaveAttribute("aria-readonly");
+
+    fireEvent.click(imperial);
+    fireEvent.keyDown(imperial, { key: " " });
+    expect(onChange).not.toHaveBeenCalled();
+
+    // Arrows reach the blocked option, so its state can be read, and leave
+    // the selection where it was; the next arrow selects past it.
+    metric.focus();
+    fireEvent.keyDown(metric, { key: "ArrowRight" });
+    expect(imperial).toHaveFocus();
+    expect(onChange).not.toHaveBeenCalled();
+    expect(metric).toHaveAttribute("aria-checked", "true");
+    fireEvent.keyDown(imperial, { key: "ArrowRight" });
+    expect(nautical).toHaveFocus();
+    expect(onChange).toHaveBeenCalledExactlyOnceWith("nautical");
+  });
+
+  it("keeps the tab stop on a selected option that becomes blocked", () => {
+    const { rerender } = render(
+      <SegmentedControl label="Units" value="imperial" options={OPTIONS} />,
+    );
+    const imperial = screen.getByRole("radio", { name: "Imperial" });
+    imperial.focus();
+
+    rerender(
+      <SegmentedControl label="Units" value="imperial" options={BLOCKED} />,
+    );
+    // Native disabled here would drop focus on the body.
+    expect(imperial).toHaveFocus();
+    expect(imperial).toHaveAttribute("tabindex", "0");
+    expect(imperial).toHaveAttribute("aria-disabled", "true");
+  });
+});
+
+describe("SegmentedControl blocked option reason", () => {
+  it("reads a blocked option's reason as its description and drops it once live", () => {
+    const { rerender } = render(
+      <SegmentedControl
+        label="Units"
+        defaultValue="metric"
+        options={[
+          { label: "Metric", value: "metric" },
+          {
+            label: "Imperial",
+            value: "imperial",
+            ariaDisabled: true,
+            disabledReason: "The chart set is metric only.",
+          },
+        ]}
+      />,
+    );
+
+    const imperial = screen.getByRole("radio", { name: "Imperial" });
+    // A description, so the option keeps the name it had before it was
+    // blocked.
+    expect(imperial).toHaveAccessibleDescription(
+      "The chart set is metric only.",
+    );
+
+    rerender(
+      <SegmentedControl
+        label="Units"
+        defaultValue="metric"
+        options={[
+          { label: "Metric", value: "metric" },
+          {
+            label: "Imperial",
+            value: "imperial",
+            disabledReason: "The chart set is metric only.",
+          },
+        ]}
+      />,
+    );
+    expect(
+      screen.getByRole("radio", { name: "Imperial" }),
+    ).not.toHaveAccessibleDescription();
+  });
+
+  it.each([
+    [
+      "the option",
+      false,
+      true,
+      // A reason beside the option's own native disabled is a mistake the
+      // consumer can fix, so development names it.
+      [
+        'SegmentedControl option "Imperial" has a disabledReason beside native disabled, which takes it out of the tab order, so no one reaches the reason. Use ariaDisabled instead: the option stays focusable and reads the reason.',
+      ],
+    ],
+    // A disabled group is an ordinary panel state, not a mistake.
+    ["the group", true, false, []],
+  ] as const)(
+    "drops the reason once %s is natively disabled",
+    (_, groupDisabled, optionDisabled, warnings) => {
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+      render(
+        <SegmentedControl
+          label="Units"
+          defaultValue="metric"
+          disabled={groupDisabled}
+          options={[
+            { label: "Metric", value: "metric" },
+            {
+              label: "Imperial",
+              value: "imperial",
+              ariaDisabled: true,
+              disabled: optionDisabled,
+              disabledReason: "The chart set is metric only.",
+            },
+          ]}
+        />,
+      );
+
+      // Native disabled takes the option out of the tab order, where the
+      // reason would reach no one.
+      const imperial = screen.getByRole("radio", { name: "Imperial" });
+      expect(imperial).toBeDisabled();
+      expect(imperial).not.toHaveAttribute("aria-describedby");
+      expect(imperial).not.toHaveAccessibleDescription();
+      expect(screen.queryByText("The chart set is metric only.")).toBeNull();
+      expect(warn.mock.calls.map(([message]) => String(message))).toEqual(
+        warnings,
+      );
+    },
+  );
+
+  it("asks a blocked option that says nothing to say why", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    render(
+      <SegmentedControl
+        label="Depth units"
+        defaultValue="meters"
+        options={[
+          { label: "Meters", value: "meters" },
+          { label: "Fathoms", value: "fathoms", ariaDisabled: true },
+          {
+            label: "Feet",
+            value: "feet",
+            disabled: true,
+            disabledReason: "Not offered here.",
+          },
+        ]}
+      />,
+    );
+
+    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+      'SegmentedControl option "Fathoms" is blocked with ariaDisabled but says nothing about why. Pass disabledReason on the option.',
+      'SegmentedControl option "Feet" has a disabledReason beside native disabled, which takes it out of the tab order, so no one reaches the reason. Use ariaDisabled instead: the option stays focusable and reads the reason.',
+    ]);
+  });
+});
+
+describe("SegmentedControl option data attribute values", () => {
+  it("writes numbers and booleans the way a data attribute on any element takes them", () => {
+    render(
+      <SegmentedControl
+        label="Waypoint"
+        defaultValue="first"
+        options={[
+          {
+            label: "First",
+            value: "first",
+            dataAttributes: { "data-index": 1, "data-default": true },
+          },
+        ]}
+      />,
+    );
+
+    const first = screen.getByRole("radio", { name: "First" });
+    expect(first).toHaveAttribute("data-index", "1");
+    expect(first).toHaveAttribute("data-default", "true");
+  });
+});
+
+describe("SegmentedControl option data attributes", () => {
+  it("passes an option's data attributes to its radio", () => {
+    render(
+      <SegmentedControl
+        label="Panel theme"
+        defaultValue="auto"
+        options={[
+          {
+            label: "Match Admin",
+            value: "auto",
+            dataAttributes: { "data-snui-theme-choice": "auto" },
+          },
+          {
+            label: "Night",
+            value: "night",
+            dataAttributes: { "data-snui-theme-choice": "night" },
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByRole("radio", { name: "Match Admin" })).toHaveAttribute(
+      "data-snui-theme-choice",
+      "auto",
+    );
+    expect(screen.getByRole("radio", { name: "Night" })).toHaveAttribute(
+      "data-snui-theme-choice",
+      "night",
+    );
+  });
+
+  it("accepts options a consumer typed with an interface", () => {
+    interface ViewOption {
+      readonly label: string;
+      readonly value: "list" | "map";
+    }
+    const views: readonly ViewOption[] = [
+      { label: "List", value: "list" },
+      { label: "Map", value: "map" },
+    ];
+    render(
+      <SegmentedControl label="View" defaultValue="list" options={views} />,
+    );
+
+    expect(screen.getByRole("radio", { name: "List" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
   });
 });
 
@@ -659,5 +927,122 @@ describe("SegmentedControl description and error", () => {
     expect(
       screen.getByRole("radiogroup", { name: "Units" }),
     ).not.toHaveAttribute("aria-errormessage");
+  });
+});
+
+describe("SegmentedControl", () => {
+  const DISPLAY_MODES = [
+    { label: "Auto", value: "auto" },
+    { label: "Light", value: "light", disabled: true },
+    { label: "Dark", value: "dark" },
+    { label: "Night", value: "night" },
+  ] as const;
+
+  function ControlledControl({
+    initial = "auto",
+  }: {
+    readonly initial?: ThemeChoice;
+  }): React.JSX.Element {
+    const [value, setValue] = useState<ThemeChoice>(initial);
+
+    return (
+      <SegmentedControl
+        label="Display mode"
+        value={value}
+        onValueChange={setValue}
+        options={DISPLAY_MODES}
+      />
+    );
+  }
+
+  it("uses radio semantics and supports roving arrow-key selection", async () => {
+    const user = userEvent.setup();
+    render(<ControlledControl />);
+
+    const auto = screen.getByRole("radio", { name: "Auto" });
+    auto.focus();
+    await user.keyboard("{ArrowRight}");
+
+    const dark = screen.getByRole("radio", { name: "Dark" });
+    expect(dark).toHaveAttribute("aria-checked", "true");
+    expect(dark).toHaveFocus();
+
+    await user.keyboard("{End}");
+    expect(screen.getByRole("radio", { name: "Night" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+
+    await user.keyboard("{Home}");
+    expect(auto).toHaveAttribute("aria-checked", "true");
+    expect(screen.getByRole("radio", { name: "Light" })).toBeDisabled();
+  });
+
+  it("moves backward from a disabled selected option", async () => {
+    const user = userEvent.setup();
+
+    render(<ControlledControl initial="light" />);
+    const auto = screen.getByRole("radio", { name: "Auto" });
+    expect(auto).toHaveAttribute("tabindex", "0");
+    expect(screen.getByRole("radio", { name: "Light" })).toHaveAttribute(
+      "tabindex",
+      "-1",
+    );
+    auto.focus();
+    await user.keyboard("{ArrowLeft}");
+
+    expect(screen.getByRole("radio", { name: "Night" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("reverses horizontal arrow navigation in right-to-left layouts", () => {
+    render(
+      <div dir="rtl">
+        <ControlledControl />
+      </div>,
+    );
+
+    const auto = screen.getByRole("radio", { name: "Auto" });
+    auto.focus();
+    fireEvent.keyDown(auto, { key: "ArrowRight" });
+
+    expect(screen.getByRole("radio", { name: "Night" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+  });
+
+  it("forwards native attributes and a root ref", () => {
+    const rootRef = createRef<HTMLDivElement>();
+    render(
+      <SegmentedControl
+        ref={rootRef}
+        data-testid="display-mode"
+        label="Display mode"
+        value="auto"
+        onValueChange={() => undefined}
+        options={[{ label: "Auto", value: "auto" }]}
+      />,
+    );
+
+    expect(rootRef.current).toBe(screen.getByTestId("display-mode"));
+    expect(rootRef.current).toHaveAttribute("aria-orientation", "horizontal");
+  });
+
+  it("rejects a whitespace-only legend", () => {
+    expect(() =>
+      render(
+        <SegmentedControl
+          label="  "
+          value="auto"
+          onValueChange={() => undefined}
+          options={[{ label: "Auto", value: "auto" }]}
+        />,
+      ),
+    ).toThrow(
+      "signalk-nearlcrews-ui: SegmentedControl requires a non-empty label.",
+    );
   });
 });

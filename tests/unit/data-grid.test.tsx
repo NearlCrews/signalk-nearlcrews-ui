@@ -1,124 +1,43 @@
-import {
-  type RenderResult,
-  render,
-  screen,
-  within,
-} from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, type ReactElement, StrictMode, useState } from "react";
 import { describe, expect, it, type Mock, vi } from "vitest";
-
 import {
   Cell,
   Column,
   DataGrid,
   type DataGridColumnProps,
-  type DataGridProps,
   Row,
-  type RowProps,
   type Selection,
   type SortDescriptor,
 } from "../../src/data-grid.js";
 import { PanelRoot } from "../../src/index.js";
+import {
+  CONTROL_SURFACE_DECLARATIONS,
+  FOCUS_RING_WIDTH,
+  focusRingDeclarations,
+} from "../../src/styles/fragments.js";
 import { TABLE_STYLES } from "../../src/styles/table.js";
+import { ruleBody } from "../css-helpers.js";
 import { panel, renderInPanel } from "../helpers.js";
-
-interface Boat {
-  readonly id: string;
-  readonly name: string;
-  readonly depth: number;
-}
-
-const BOATS: readonly Boat[] = [
-  { id: "a", name: "Aster", depth: 12 },
-  { id: "b", name: "Brine", depth: 4 },
-  { id: "c", name: "Coral", depth: 30 },
-  { id: "d", name: "Drift", depth: 8 },
-];
-
-/** Column entries for the specs that render the header or the cells dynamically. */
-const NAME_DEPTH_COLUMNS = [{ key: "name" }, { key: "depth" }] as const;
+import {
+  BOATS,
+  type Boat,
+  boatColumns,
+  boatGrid,
+  bodyRows,
+  cellAt,
+  type GridOverrides,
+  NAME_DEPTH_COLUMNS,
+  renderBoatRow,
+  renderGrid,
+  rowAt,
+  rowNames,
+} from "./lib/data-grid-fixture.js";
 
 /** A header column drawn through a consumer component rather than the package Column. */
 function WrappedColumn(props: DataGridColumnProps): ReactElement {
   return <Column {...props} />;
-}
-
-function renderBoatRow(boat: Boat): ReactElement<RowProps<Boat>> {
-  return (
-    <Row>
-      <Cell>{boat.name}</Cell>
-      <Cell>{boat.depth}</Cell>
-    </Row>
-  );
-}
-
-function boatColumns(): ReactElement {
-  return (
-    <>
-      <Column id="name" allowsSorting>
-        Name
-      </Column>
-      <Column id="depth" allowsSorting>
-        Depth
-      </Column>
-    </>
-  );
-}
-
-// The header shape is a union now, so the shared helper varies only the
-// props that sit outside it.
-type GridOverrides = Partial<Omit<DataGridProps<Boat>, "children" | "columns">>;
-
-function boatGrid(props: GridOverrides = {}): ReactElement {
-  return (
-    <DataGrid
-      aria-label="Boats"
-      items={BOATS}
-      renderRow={renderBoatRow}
-      {...props}
-    >
-      {boatColumns()}
-    </DataGrid>
-  );
-}
-
-function renderGrid(props: GridOverrides = {}): RenderResult {
-  return renderInPanel(boatGrid(props));
-}
-
-function bodyRows(container: HTMLElement): NodeListOf<HTMLElement> {
-  return container.querySelectorAll<HTMLElement>(
-    ".snui-data-grid__body [role='row']",
-  );
-}
-
-function rowNames(container: HTMLElement): string[] {
-  return [...bodyRows(container)].map(
-    (row) =>
-      row.querySelector("[role='rowheader'], [role='gridcell']")?.textContent ??
-      "",
-  );
-}
-
-function rowAt(container: HTMLElement, index: number): HTMLElement {
-  const row = [...bodyRows(container)][index];
-  if (row === undefined) {
-    throw new Error(`Expected a row at index ${String(index)}.`);
-  }
-  return row;
-}
-
-function cellAt(row: HTMLElement, index: number): HTMLElement {
-  const cell = [
-    ...row.querySelectorAll<HTMLElement>(
-      "[role='rowheader'], [role='gridcell']",
-    ),
-  ][index];
-  if (cell === undefined) {
-    throw new Error(`Expected a cell at index ${String(index)}.`);
-  }
-  return cell;
 }
 
 function lastSelection(
@@ -141,11 +60,11 @@ describe("DataGrid", () => {
           </DataGrid>,
         ),
       ).toThrow(
-        "DataGrid requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
+        "signalk-nearlcrews-ui: DataGrid requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
       );
 
       expect(() => renderGrid({ "aria-label": "  " })).toThrow(
-        "DataGrid requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
+        "signalk-nearlcrews-ui: DataGrid requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
       );
     });
 
@@ -305,9 +224,31 @@ describe("DataGrid", () => {
           </PanelRoot>,
         ),
       ).toThrow(
-        "DataGrid columns must be a readonly array so React can replay concurrent and StrictMode renders safely.",
+        "signalk-nearlcrews-ui: DataGrid columns must be an array; received a plain object. Pass a readonly array and replace it when the columns change.",
       );
       expect(acquisitions).toBe(0);
+    });
+
+    it("names the kind of value it received in place of the columns", () => {
+      const columns = new Set([{ key: "name" }]);
+      expect(() =>
+        render(
+          <PanelRoot>
+            <DataGrid
+              aria-label="Boats"
+              columns={
+                columns as unknown as readonly { readonly key: string }[]
+              }
+              items={BOATS}
+              renderRow={renderBoatRow}
+            >
+              {(column) => <Column id={column.key}>{column.key}</Column>}
+            </DataGrid>
+          </PanelRoot>,
+        ),
+      ).toThrow(
+        "signalk-nearlcrews-ui: DataGrid columns must be an array; received a Set. Pass a readonly array and replace it when the columns change.",
+      );
     });
 
     it("renders a replacement column array after commit", () => {
@@ -752,8 +693,27 @@ describe("DataGrid", () => {
 
     it("keeps EmptyState's empty-title throw", () => {
       expect(() => renderGrid({ emptyTitle: " ", items: [] })).toThrow(
-        "EmptyState requires a non-empty title.",
+        "signalk-nearlcrews-ui: EmptyState requires a non-empty title.",
       );
+    });
+
+    it("reads a blank bundle title as absent and shows the default", () => {
+      // A partial translation leaves the rest in English rather than taking
+      // the panel down the first time the grid is empty.
+      renderInPanel(boatGrid({ items: [] }), {
+        labels: { dataGrid: { emptyTitle: "   " } },
+      });
+
+      expect(screen.getByText("Nothing to show yet")).toBeInTheDocument();
+    });
+
+    it("prefers the caller's title to the bundle's", () => {
+      renderInPanel(boatGrid({ emptyTitle: "No boats underway", items: [] }), {
+        labels: { dataGrid: { emptyTitle: "Nog niets te tonen" } },
+      });
+
+      expect(screen.getByText("No boats underway")).toBeInTheDocument();
+      expect(screen.queryByText("Nog niets te tonen")).toBeNull();
     });
   });
 
@@ -847,568 +807,6 @@ describe("DataGrid", () => {
     });
   });
 
-  describe("virtualization", () => {
-    const fleet: readonly Boat[] = Array.from({ length: 20 }, (_, index) => ({
-      id: `boat-${String(index)}`,
-      name: `Boat ${String(index)}`,
-      depth: index,
-    }));
-
-    it("renders every row below the threshold", () => {
-      const { container } = renderGrid({
-        items: fleet.slice(0, 10),
-        virtualizeThreshold: 10,
-      });
-
-      expect(bodyRows(container)).toHaveLength(10);
-      expect(screen.getByRole("grid")).not.toHaveAttribute("aria-rowcount");
-      expect(
-        container.querySelector(".snui-data-grid--virtualized"),
-      ).toBeNull();
-    });
-
-    it("uses React Aria virtualization above the threshold and keeps the header mounted", () => {
-      const { container } = renderGrid({
-        items: fleet,
-        virtualizeThreshold: 10,
-      });
-
-      expect(
-        container.querySelector(".snui-data-grid--virtualized"),
-      ).not.toBeNull();
-      expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "21");
-      expect(
-        screen.getByRole("columnheader", { name: "Name" }),
-      ).toBeInTheDocument();
-    });
-
-    it("pins the body implementation when virtualize is not auto", () => {
-      const { container } = renderGrid({
-        items: fleet.slice(0, 4),
-        virtualize: "always",
-        virtualizeThreshold: 10,
-      });
-
-      expect(
-        container.querySelector(".snui-data-grid--virtualized"),
-      ).not.toBeNull();
-
-      const { container: never } = renderGrid({
-        items: fleet,
-        virtualize: "never",
-        virtualizeThreshold: 10,
-      });
-
-      expect(never.querySelector(".snui-data-grid--virtualized")).toBeNull();
-    });
-
-    it("keeps selection and the table itself across a row-count change when the mode is pinned", async () => {
-      const user = userEvent.setup();
-      const view = renderGrid({
-        items: fleet.slice(0, 4),
-        selectionMode: "multiple",
-        virtualize: "never",
-        virtualizeThreshold: 2,
-      });
-      const grid = screen.getByRole("grid");
-
-      await user.click(rowAt(view.container, 1));
-      expect(rowAt(view.container, 1)).toHaveAttribute("aria-selected", "true");
-
-      view.rerender(
-        panel(
-          boatGrid({
-            items: fleet,
-            selectionMode: "multiple",
-            virtualize: "never",
-            virtualizeThreshold: 2,
-          }),
-        ),
-      );
-
-      expect(screen.getByRole("grid")).toBe(grid);
-      expect(rowAt(view.container, 1)).toHaveAttribute("aria-selected", "true");
-    });
-
-    it("keeps the row wrappers a virtualized body renders from", () => {
-      // React Aria caches a rendered row against the wrapper it came from, so
-      // a render that leaves the rows and the row renderer alone must not
-      // rebuild the collection.
-      let rendered = 0;
-      const renderRow = (boat: Boat): ReactElement<RowProps<Boat>> => {
-        rendered += 1;
-        return renderBoatRow(boat);
-      };
-      const tree = (className: string): ReactElement =>
-        panel(
-          boatGrid({
-            className,
-            items: fleet,
-            renderRow,
-            virtualizeThreshold: 10,
-          }),
-        );
-      const view = render(tree("first"));
-      const afterMount = rendered;
-
-      view.rerender(tree("second"));
-
-      expect(afterMount).toBeGreaterThan(0);
-      expect(rendered).toBe(afterMount);
-    });
-
-    it("keeps the public ref on the outer container across threshold modes", () => {
-      const ref = createRef<HTMLDivElement>();
-      const view = renderGrid({
-        items: fleet.slice(0, 10),
-        ref,
-        virtualizeThreshold: 10,
-      });
-
-      expect(ref.current).toHaveClass("snui-data-grid");
-      expect(ref.current?.querySelector("[role='grid']")).toBeInTheDocument();
-
-      view.rerender(
-        panel(boatGrid({ items: fleet, ref, virtualizeThreshold: 10 })),
-      );
-
-      expect(ref.current).toHaveClass(
-        "snui-data-grid",
-        "snui-data-grid--virtualized",
-      );
-      expect(ref.current?.querySelector("[role='grid']")).toBeInTheDocument();
-    });
-
-    it("lets React Aria own complete row counts and rendered row indices", () => {
-      const { container } = renderGrid({
-        items: fleet,
-        virtualizeThreshold: 10,
-      });
-
-      expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "21");
-      expect(rowAt(container, 0)).toHaveAttribute("aria-rowindex", "2");
-      const indices = [...bodyRows(container)].map((row) =>
-        Number(row.getAttribute("aria-rowindex")),
-      );
-      expect(indices).toEqual([...indices].sort((a, b) => a - b));
-      indices.forEach((index, position) => {
-        expect(index).toBe(2 + position);
-      });
-    });
-
-    it("keeps explicit grid roles without relying on native table layout", () => {
-      const { container } = renderGrid({
-        items: fleet,
-        virtualizeThreshold: 10,
-      });
-
-      expect(
-        container.querySelector(".snui-data-grid__header"),
-      ).toHaveAttribute("role", "rowgroup");
-      expect(container.querySelector(".snui-data-grid__body")).toHaveAttribute(
-        "role",
-        "rowgroup",
-      );
-      for (const row of container.querySelectorAll("[role='row']")) {
-        expect(row).toHaveAttribute("role", "row");
-      }
-      const cells = [
-        ...container.querySelectorAll("[role='rowheader'], [role='gridcell']"),
-      ];
-      expect(cells.length).toBeGreaterThan(0);
-      const rowheaders = cells.filter(
-        (cell) => cell.getAttribute("role") === "rowheader",
-      );
-      const gridcells = cells.filter(
-        (cell) => cell.getAttribute("role") === "gridcell",
-      );
-      // RAC stamps rowheader on the row-header column; every other cell is a
-      // gridcell. No cell may carry a third value or none.
-      expect(rowheaders.length).toBeGreaterThan(0);
-      expect(gridcells.length).toBeGreaterThan(0);
-      expect(rowheaders.length + gridcells.length).toBe(cells.length);
-    });
-
-    it("preserves consumer row styles in virtualized mode", () => {
-      const { container } = renderGrid({
-        density: "compact",
-        items: fleet,
-        renderRow: (boat) => (
-          <Row {...(boat.id === "boat-0" ? { style: { height: 72 } } : {})}>
-            <Cell>{boat.name}</Cell>
-            <Cell>{boat.depth}</Cell>
-          </Row>
-        ),
-        virtualizeThreshold: 10,
-      });
-
-      expect(rowAt(container, 0)).toHaveStyle({ height: "72px" });
-    });
-
-    it("adds virtualized zebra parity when row style is a function", () => {
-      const { container } = renderGrid({
-        items: fleet,
-        renderRow: (boat) => (
-          <Row style={() => ({ color: "red" })}>
-            <Cell>{boat.name}</Cell>
-            <Cell>{boat.depth}</Cell>
-          </Row>
-        ),
-        virtualizeThreshold: 10,
-        zebra: true,
-      });
-
-      expect(rowAt(container, 0)).not.toHaveAttribute("data-snui-zebra-odd");
-      expect(rowAt(container, 1)).toHaveAttribute(
-        "data-snui-zebra-odd",
-        "true",
-      );
-    });
-
-    it("falls back to index keys for items without id", () => {
-      const anonymous = Array.from({ length: 20 }, (_, index) => ({
-        name: `Anon ${String(index)}`,
-      }));
-      const { container } = renderInPanel(
-        <DataGrid
-          aria-label="Anonymous"
-          items={anonymous}
-          renderRow={(item) => (
-            <Row>
-              <Cell>{item.name}</Cell>
-            </Row>
-          )}
-          virtualizeThreshold={10}
-        >
-          <Column id="name">Name</Column>
-        </DataGrid>,
-      );
-
-      expect(screen.getByRole("grid")).toHaveAttribute("aria-rowcount", "21");
-      expect(rowAt(container, 0)).toHaveAttribute("data-key", "0");
-    });
-
-    it("renders virtualized rows in document order matching the data", () => {
-      const { container } = renderGrid({
-        items: fleet,
-        virtualizeThreshold: 10,
-      });
-
-      const names = rowNames(container);
-      expect(names[0]).toBe("Boat 0");
-      const sequence = names.map((name) => Number(name.replace("Boat ", "")));
-      expect(sequence).toEqual([...sequence].sort((a, b) => a - b));
-    });
-
-    it("gives text-only virtualized cells a title and lets wrap columns wrap", () => {
-      const { container } = renderInPanel(
-        <DataGrid
-          aria-label="Boats"
-          items={fleet}
-          renderRow={(boat) => (
-            <Row>
-              <Cell>{boat.name}</Cell>
-              <Cell>{boat.depth} m</Cell>
-              <Cell>
-                <em>{boat.name}</em>
-              </Cell>
-            </Row>
-          )}
-          virtualizeThreshold={10}
-        >
-          <Column id="name" wrap>
-            Name
-          </Column>
-          <Column id="depth" numeric>
-            Depth
-          </Column>
-          <Column id="rich">Rich</Column>
-        </DataGrid>,
-      );
-
-      const firstRow = rowAt(container, 0);
-      // A wrap column keeps its text unwrapped and untitled.
-      const nameCell = cellAt(firstRow, 0);
-      expect(nameCell).toHaveAttribute("data-snui-wrap", "");
-      expect(nameCell.querySelector(".snui-data-grid__cell-text")).toBeNull();
-      // Text-only content, including mixed string and number children, is
-      // wrapped with its full value as the title.
-      const depthText = cellAt(firstRow, 1).querySelector(
-        ".snui-data-grid__cell-text",
-      );
-      expect(depthText).toHaveAttribute("title", "0 m");
-      expect(depthText).toHaveTextContent("0 m");
-      expect(cellAt(firstRow, 1)).toHaveAttribute("data-snui-numeric", "");
-      // Element content is left to the consumer.
-      expect(
-        cellAt(firstRow, 2).querySelector(".snui-data-grid__cell-text"),
-      ).toBeNull();
-      expect(
-        screen.getByRole("columnheader", { name: "Name" }),
-      ).toHaveAttribute("data-snui-wrap", "");
-    });
-
-    it("marks virtual zebra parity from the collection index", () => {
-      const { container } = renderGrid({
-        items: fleet,
-        virtualizeThreshold: 10,
-        zebra: true,
-      });
-
-      expect(rowAt(container, 0)).not.toHaveAttribute("data-snui-zebra-odd");
-      expect(rowAt(container, 1)).toHaveAttribute("data-snui-zebra-odd");
-      expect(rowAt(container, 2)).not.toHaveAttribute("data-snui-zebra-odd");
-    });
-
-    it("leaves parity off every row when zebra is off", () => {
-      const { container } = renderGrid({
-        items: fleet,
-        virtualizeThreshold: 10,
-      });
-
-      for (const row of bodyRows(container)) {
-        expect(row).not.toHaveAttribute("data-snui-zebra-odd");
-      }
-    });
-  });
-
-  describe("row cache", () => {
-    /** Renders the depth in the unit a panel's preference names. */
-    function depthRow(unit: string) {
-      return (boat: Boat): ReactElement<RowProps<Boat>> => (
-        <Row>
-          <Cell>{boat.name}</Cell>
-          <Cell>{`${String(boat.depth)} ${unit}`}</Cell>
-        </Row>
-      );
-    }
-
-    it.each(["never", "always"] as const)(
-      "rebuilds rows from a new renderRow over the same items (virtualize %s)",
-      (virtualize) => {
-        // The virtualizer decides which rows jsdom's empty viewport shows, so
-        // every rendered row is read rather than one by position.
-        const depths = (container: HTMLElement): string[] =>
-          [...bodyRows(container)].map((row) => cellAt(row, 1).textContent);
-        const view = renderGrid({ renderRow: depthRow("m"), virtualize });
-        expect(depths(view.container)).toContain("12 m");
-
-        view.rerender(
-          panel(boatGrid({ renderRow: depthRow("ft"), virtualize })),
-        );
-
-        const after = depths(view.container);
-        expect(after.length).toBeGreaterThan(0);
-        for (const depth of after) expect(depth).toMatch(/^\d+ ft$/);
-      },
-    );
-
-    it.each([
-      ["never", false],
-      ["never", true],
-      ["always", false],
-    ] as const)(
-      "rebuilds cells a row renders from a function when renderRow changes (virtualize %s, numeric %s)",
-      (virtualize, numeric) => {
-        const functionDepthRow =
-          (unit: string) =>
-          (boat: Boat): ReactElement<RowProps<Boat>> => (
-            <Row columns={NAME_DEPTH_COLUMNS}>
-              {(column) => (
-                <Cell>
-                  {column.key === "name"
-                    ? boat.name
-                    : `${String(boat.depth)} ${unit}`}
-                </Cell>
-              )}
-            </Row>
-          );
-        const tree = (unit: string): ReactElement =>
-          panel(
-            <DataGrid
-              aria-label="Boats"
-              columns={NAME_DEPTH_COLUMNS}
-              items={BOATS}
-              renderRow={functionDepthRow(unit)}
-              virtualize={virtualize}
-            >
-              {(column) => (
-                <Column
-                  id={column.key}
-                  numeric={numeric && column.key === "depth"}
-                >
-                  {column.key}
-                </Column>
-              )}
-            </DataGrid>,
-          );
-        const depths = (container: HTMLElement): string[] =>
-          [...bodyRows(container)].map((row) => cellAt(row, 1).textContent);
-        const view = render(tree("m"));
-        expect(depths(view.container)).toContain("12 m");
-
-        view.rerender(tree("ft"));
-
-        const after = depths(view.container);
-        expect(after.length).toBeGreaterThan(0);
-        for (const depth of after) expect(depth).toMatch(/^\d+ ft$/);
-      },
-    );
-
-    it("keeps a row's own dependency list one length as decoration comes and goes", () => {
-      // React compares a changed-size dependency list by its common prefix and
-      // reports the change, so the grid's entries must not come and go.
-      const error = vi
-        .spyOn(console, "error")
-        .mockImplementation(() => undefined);
-      const renderRow = (boat: Boat): ReactElement<RowProps<Boat>> => (
-        <Row columns={NAME_DEPTH_COLUMNS} dependencies={[boat.depth]}>
-          {(column) => (
-            <Cell>{column.key === "name" ? boat.name : boat.depth}</Cell>
-          )}
-        </Row>
-      );
-      const tree = (numeric: boolean): ReactElement =>
-        panel(
-          <DataGrid
-            aria-label="Boats"
-            columns={NAME_DEPTH_COLUMNS}
-            items={BOATS}
-            renderRow={renderRow}
-          >
-            {(column) => (
-              <Column
-                id={column.key}
-                numeric={numeric && column.key === "depth"}
-              >
-                {column.key}
-              </Column>
-            )}
-          </DataGrid>,
-        );
-      const view = render(tree(false));
-      view.rerender(tree(true));
-      view.rerender(tree(false));
-
-      const sizeChanges = error.mock.calls.filter((args) =>
-        args.some(
-          (arg) =>
-            typeof arg === "string" && arg.includes("changed size between"),
-        ),
-      );
-      expect(sizeChanges).toEqual([]);
-      expect(cellAt(rowAt(view.container, 0), 1)).not.toHaveAttribute(
-        "data-snui-numeric",
-      );
-    });
-
-    it("carries a column option change to cells over the same items", () => {
-      // The numeric column keeps the grid decorating on both renders, so the
-      // only change is the options themselves.
-      const tree = (nameWrap: boolean, depthWidth: number): ReactElement =>
-        panel(
-          <DataGrid aria-label="Boats" items={BOATS} renderRow={renderBoatRow}>
-            <Column id="name" wrap={nameWrap}>
-              Name
-            </Column>
-            <Column id="depth" numeric width={depthWidth}>
-              Depth
-            </Column>
-          </DataGrid>,
-        );
-      const view = render(tree(false, 48));
-      expect(cellAt(rowAt(view.container, 0), 0)).not.toHaveAttribute(
-        "data-snui-wrap",
-      );
-
-      view.rerender(tree(true, 64));
-
-      const firstRow = rowAt(view.container, 0);
-      expect(cellAt(firstRow, 0)).toHaveAttribute("data-snui-wrap", "");
-      expect(
-        cellAt(firstRow, 1).style.getPropertyValue(
-          "--snui-data-grid-column-min",
-        ),
-      ).toBe("64px");
-    });
-
-    it("carries a column option change to cells a row renders from a function", () => {
-      const renderRow = (boat: Boat): ReactElement<RowProps<Boat>> => (
-        <Row columns={NAME_DEPTH_COLUMNS}>
-          {(column) => (
-            <Cell>{column.key === "name" ? boat.name : boat.depth}</Cell>
-          )}
-        </Row>
-      );
-      const tree = (nameWrap: boolean): ReactElement =>
-        panel(
-          <DataGrid
-            aria-label="Boats"
-            columns={NAME_DEPTH_COLUMNS}
-            items={BOATS}
-            renderRow={renderRow}
-          >
-            {(column) => (
-              <Column
-                id={column.key}
-                numeric={column.key === "depth"}
-                wrap={column.key === "name" && nameWrap}
-              >
-                {column.key}
-              </Column>
-            )}
-          </DataGrid>,
-        );
-      const view = render(tree(false));
-      expect(cellAt(rowAt(view.container, 0), 0)).not.toHaveAttribute(
-        "data-snui-wrap",
-      );
-
-      view.rerender(tree(true));
-
-      expect(cellAt(rowAt(view.container, 0), 0)).toHaveAttribute(
-        "data-snui-wrap",
-        "",
-      );
-      expect(cellAt(rowAt(view.container, 0), 1)).toHaveAttribute(
-        "data-snui-numeric",
-        "",
-      );
-    });
-
-    it.each(["never", "always"] as const)(
-      "keeps cached rows for a stable renderRow and equal columns written afresh (virtualize %s)",
-      (virtualize) => {
-        const renderRow = vi.fn(renderBoatRow);
-        // A static header is new JSX on every parent render, so the grid must
-        // compare the options it carries rather than the elements.
-        const tree = (): ReactElement =>
-          panel(
-            <DataGrid
-              aria-label="Boats"
-              items={BOATS}
-              renderRow={renderRow}
-              virtualize={virtualize}
-            >
-              <Column id="name" wrap>
-                Name
-              </Column>
-              <Column id="depth" numeric width={64}>
-                Depth
-              </Column>
-            </DataGrid>,
-          );
-        const view = render(tree());
-        const afterMount = renderRow.mock.calls.length;
-        expect(afterMount).toBeGreaterThan(0);
-
-        view.rerender(tree());
-
-        expect(renderRow).toHaveBeenCalledTimes(afterMount);
-      },
-    );
-  });
-
   describe("grid semantics", () => {
     it("honors an explicit isRowHeader instead of defaulting the first column", () => {
       const { container } = renderInPanel(
@@ -1452,18 +850,217 @@ describe("DataGrid", () => {
 });
 
 describe("data grid style module", () => {
-  it("marks a selected row with a leading bar as well as a tint", () => {
-    expect(TABLE_STYLES.styles).toMatch(
-      /\[data-selected\][^{}]*:first-child \{\n {2}border-inline-start-color: var\(--snui-color-accent-fill\);/,
+  it("keeps the control boundary on the grid, a focusable scroll region", () => {
+    // Container outlines step back to the subtle border; the grid's edge is
+    // the only boundary of something the keyboard operates, so it keeps the
+    // 3:1 one.
+    expect(ruleBody(TABLE_STYLES.styles, ".snui-data-grid")).toContain(
+      CONTROL_SURFACE_DECLARATIONS,
     );
-    expect(TABLE_STYLES.styles).toMatch(
-      /border-inline-start: 0\.3rem solid transparent;/,
+  });
+
+  it("draws the header and row separators with the subtle border", () => {
+    for (const cell of [
+      '.snui-data-grid__header :is(th, [role="columnheader"])',
+      '.snui-data-grid__body :is(td, [role="rowheader"], [role="gridcell"])',
+    ]) {
+      expect(ruleBody(TABLE_STYLES.styles, cell)).toContain(
+        "border-block-end: 1px solid var(--snui-color-border-subtle);",
+      );
+    }
+    expect(TABLE_STYLES.styles).not.toContain(
+      "border-block-end: 1px solid var(--snui-color-border);",
     );
+  });
+
+  /**
+   * The selectors of every rule in the module that declares `declaration`,
+   * read from the shipped text, so a spec can run them against a rendered
+   * grid the way the browser would.
+   */
+  function selectorsDeclaring(declaration: string): string[] {
+    const selectors: string[] = [];
+    for (const chunk of TABLE_STYLES.styles.split("}")) {
+      const open = chunk.lastIndexOf("{");
+      if (open === -1 || !chunk.slice(open).includes(declaration)) continue;
+      const before = chunk.slice(0, open);
+      selectors.push(
+        before
+          .slice(before.lastIndexOf("{") + 1)
+          .replace(/\/\*[\s\S]*?\*\//g, "")
+          .trim(),
+      );
+    }
+    expect(selectors, `no rule declares ${declaration}`).not.toHaveLength(0);
+    return selectors;
+  }
+
+  it.each([
+    ["never", "default"],
+    ["always", "default"],
+    ["never", "compact"],
+    ["always", "compact"],
+  ] as const)(
+    "draws the selection bar in the first column only (virtualize %s, %s density)",
+    (virtualize, density) => {
+      // A virtualized grid wraps every cell in an element of its own, so a
+      // cell there is always its parent's first child: the first column is
+      // named by its index instead.
+      const [, selected] = BOATS;
+      if (selected === undefined) throw new Error("expected a second boat");
+      const { container } = renderInPanel(
+        boatGrid({
+          defaultSelectedKeys: [selected.id],
+          density,
+          items: BOATS,
+          selectionMode: "multiple",
+          virtualize,
+        }),
+      );
+      const rows = bodyRows(container);
+      const firstColumn = (element: Element): boolean =>
+        element.getAttribute("aria-colindex") === "1" ||
+        element.getAttribute("data-column-index") === "0";
+      // A rule that paints a pseudo-element is matched through the cell it
+      // hangs from.
+      const matches = (declaration: string): Element[] =>
+        selectorsDeclaring(declaration).flatMap((selector) => [
+          ...container.querySelectorAll(selector.replace(/::before$/, "")),
+        ]);
+
+      // The bar's width is added to the first column's inset once per row,
+      // the header row included, so selecting a row paints the bar without
+      // moving the row's text. Each density adds it to its own inset. A
+      // default grid matches only the default inset; a compact grid matches
+      // both, because the default inset's selector names no density, and the
+      // browser spec reads the compact inset winning that cascade.
+      const [defaultInset, compactInset] = [
+        "padding-inline-start: calc(var(--snui-space-3) + 0.3rem);",
+        "padding-inline-start: calc(var(--snui-space-2) + 0.3rem);",
+      ].map(matches);
+      const [ownInset, otherInset] =
+        density === "compact"
+          ? [compactInset, defaultInset]
+          : [defaultInset, compactInset];
+      expect(ownInset?.every(firstColumn)).toBe(true);
+      expect(ownInset).toHaveLength(rows.length + 1);
+      if (density === "default") expect(otherInset).toHaveLength(0);
+
+      // Only the selected row paints it, in its first cell, in the accent
+      // and under forced colors alike.
+      for (const paint of [
+        "border-inline-start: 0.3rem solid var(--snui-color-accent-fill);",
+        "border-inline-start-color: HighlightText;",
+      ]) {
+        // Every match counts, so a paint that reached a header cell too
+        // would fail here rather than be filtered away.
+        const [cell, ...others] = matches(paint);
+        expect(others, paint).toHaveLength(0);
+        if (cell === undefined) throw new Error(`nothing matches ${paint}`);
+        expect(firstColumn(cell)).toBe(true);
+        expect(cell.closest('[role="row"]')).toHaveAttribute(
+          "aria-selected",
+          "true",
+        );
+      }
+    },
+  );
+
+  it("draws the selection bar on a pseudo-element, so separators start at the edge", () => {
+    // A reserved inline-start border on the cell mitres against the one-pixel
+    // row separator and fades its first few pixels in, so no cell draws one:
+    // the bar is a pseudo-element over the cell's own inset. It is drawn as
+    // that pseudo-element's border, which snaps to whole pixels the way the
+    // Banner, Card, and Toast tone bars do, so the widths match.
+    const leadingBorders = selectorsDeclaring("border-inline-start");
+    expect(
+      leadingBorders.every((selector) => selector.endsWith("::before")),
+    ).toBe(true);
+    const bar = ruleBody(
+      TABLE_STYLES.styles,
+      '.snui-data-grid__body [role="row"][data-selected] :is(td, [role="rowheader"], [role="gridcell"])[data-column-index="0"]::before',
+    );
+    // Out of flow and spanning the cell, so it shows without moving text.
+    expect(bar).toContain("position: absolute;");
+    expect(bar).toContain("inset-block: 0;");
+    expect(bar).toContain("inset-inline-start: 0;");
+    expect(bar).toContain(
+      "border-inline-start: 0.3rem solid var(--snui-color-accent-fill);",
+    );
+    expect(bar).not.toMatch(/inline-size|background/);
+
+    // A row that holds keyboard focus paints its ring in the band just inside
+    // its edge, and the bar steps inside that band so the ring stays whole.
+    const insideRing = ruleBody(
+      TABLE_STYLES.styles,
+      '.snui-data-grid__body [role="row"][data-selected][data-focus-visible] :is(td, [role="rowheader"], [role="gridcell"])[data-column-index="0"]::before',
+    );
+    expect(insideRing).toContain(`inset-block: ${FOCUS_RING_WIDTH};`);
+    expect(insideRing).toContain(`inset-inline-start: ${FOCUS_RING_WIDTH};`);
+    // The ring the bar steps inside is the row's own, read from its rule
+    // rather than found anywhere in the module, where the header cell's ring
+    // would answer too.
+    const ring = ruleBody(
+      TABLE_STYLES.styles,
+      '.snui-data-grid__body [role="row"][data-focus-visible]',
+    );
+    expect(ring).toContain(focusRingDeclarations("inset", false));
+    // The header cell's ring reads the same width, so a contrast request
+    // widens both.
+    expect(
+      ruleBody(
+        TABLE_STYLES.styles,
+        '.snui-data-grid__header :is(th, [role="columnheader"])[data-focus-visible]',
+      ),
+    ).toContain(focusRingDeclarations("inset", true));
+    expect(FOCUS_RING_WIDTH).toBe("var(--snui-focus-ring-width)");
+  });
+
+  it("rings a focused selected row in HighlightText under forced colors", () => {
+    // Forced colors fills a selected row with Highlight, so the Highlight
+    // ring every other focused row takes would vanish into it.
+    const forced = TABLE_STYLES.styles.slice(
+      TABLE_STYLES.styles.indexOf("@media (forced-colors: active)"),
+    );
+    expect(
+      ruleBody(
+        forced,
+        '  .snui-data-grid__body [role="row"][data-selected][data-focus-visible]',
+      ),
+    ).toContain("outline-color: HighlightText;");
   });
 
   it("bounds the virtualized viewport through an overridable property", () => {
     expect(TABLE_STYLES.styles).toMatch(
       /\.snui-data-grid--virtualized \{[^}]*max-block-size: var\(--snui-data-grid-max-block-size, 60dvh\);/,
+    );
+  });
+
+  it("unwraps a truncated virtualized cell while it holds keyboard focus", () => {
+    // The title that carries the full value reaches only a pointer, so a
+    // keyboard user reads the value by focusing its cell.
+    expect(TABLE_STYLES.styles).toMatch(
+      /\.snui-data-grid--virtualized \.snui-data-grid__body :is\(\[role="rowheader"\], \[role="gridcell"\]\)\[data-focus-visible\],\n\.snui-data-grid--virtualized \.snui-data-grid__body :is\(\[role="rowheader"\], \[role="gridcell"\]\)\[data-focus-visible\] \.snui-data-grid__cell-text \{[^}]*overflow: visible;[^}]*text-overflow: clip;[^}]*white-space: normal;[^}]*overflow-wrap: anywhere;/,
+    );
+  });
+
+  it("keeps the forced-colors fill for selection and outlines a hovered row", () => {
+    const forced = TABLE_STYLES.styles.slice(
+      TABLE_STYLES.styles.indexOf("@media (forced-colors: active)"),
+    );
+    // Only a selected row takes the Highlight fill.
+    const fills = forced.match(/^\s*([^{}]+) \{\n\s*background: Highlight;/gm);
+    expect(fills).not.toBeNull();
+    for (const rule of fills ?? []) {
+      expect(rule).toContain("[data-selected]");
+    }
+    // A hovered row that is not selected, and not the keyboard's row, is
+    // outlined rather than filled, so it never reads as selected.
+    expect(forced).toMatch(
+      /\[data-selection-mode\]\[data-hovered\]:not\(\[data-selected\], \[data-focus-visible\]\) \{\n\s*outline: 2px dashed Highlight;\n\s*outline-offset: -2px;\n\s*\}/,
+    );
+    expect(forced).not.toMatch(
+      /\[data-selection-mode\]\[data-hovered\] \{[^}]*background: Highlight;/,
     );
   });
 

@@ -9,10 +9,15 @@ import {
   TableHeaderCell,
   TableScrollRegion,
 } from "../../src/composites.js";
+import {
+  FOCUS_RING_WIDTH,
+  INSET_FOCUS_RING_OFFSET,
+} from "../../src/styles/fragments.js";
 import { SIMPLE_TABLE_STYLES } from "../../src/styles/simple-table.js";
 import { TABLE_STYLES } from "../../src/styles/table.js";
 import { TABS_STYLES } from "../../src/styles/tabs.js";
 import { ROOT_SELECTOR } from "../../src/version.js";
+import { ruleBody } from "../css-helpers.js";
 import { renderInPanel } from "../helpers.js";
 
 describe("Table", () => {
@@ -92,7 +97,7 @@ describe("Table", () => {
           <tbody />
         </Table>,
       ),
-    ).toThrow("Table requires an accessible name");
+    ).toThrow("signalk-nearlcrews-ui: Table requires an accessible name");
   });
 });
 
@@ -141,7 +146,9 @@ describe("TableScrollRegion", () => {
           <div />
         </TableScrollRegion>,
       ),
-    ).toThrow("TableScrollRegion requires an accessible name");
+    ).toThrow(
+      "signalk-nearlcrews-ui: TableScrollRegion requires an accessible name",
+    );
   });
 });
 
@@ -192,6 +199,45 @@ describe("table and tabs style modules", () => {
       /\.snui-table--zebra tbody > tr:nth-of-type\(even\) > td,/,
     );
     expect(SIMPLE_TABLE_STYLES.styles).not.toMatch(/nth-child\(even\)/);
+  });
+
+  it("separates rows and tabs with the subtle border", () => {
+    // Row separators and the tablist rule are dividers, not the edge of
+    // anything a reader operates, so they take the decorative token.
+    expect(
+      ruleBody(SIMPLE_TABLE_STYLES.styles, ".snui-table th,\n.snui-table td"),
+    ).toContain("border-block-end: 1px solid var(--snui-color-border-subtle);");
+    expect(ruleBody(TABS_STYLES.styles, ".snui-tablist")).toContain(
+      "border-block-end: 1px solid var(--snui-color-border-subtle);",
+    );
+    expect(
+      ruleBody(TABS_STYLES.styles, ".snui-tabs--vertical .snui-tablist"),
+    ).toContain(
+      "border-inline-end: 1px solid var(--snui-color-border-subtle);",
+    );
+    // The narrow panel lays a vertical tablist out as a row, and its rule
+    // moves to the block end with the same token.
+    const narrow = TABS_STYLES.styles.slice(
+      TABS_STYLES.styles.indexOf("@container"),
+    );
+    expect(ruleBody(narrow, "  .snui-tabs--vertical .snui-tablist")).toContain(
+      "border-block-end: 1px solid var(--snui-color-border-subtle);",
+    );
+    for (const styles of [SIMPLE_TABLE_STYLES.styles, TABS_STYLES.styles]) {
+      expect(styles).not.toContain("var(--snui-color-border)");
+    }
+  });
+
+  it("rings a focused tab at the shared ring width under forced colors", () => {
+    // The system ring forced colors rebuilds a tab's focus with is a focus
+    // ring, so it takes the width a contrast request raises, inset like the
+    // package's other inset rings.
+    const forced = TABS_STYLES.styles.slice(
+      TABS_STYLES.styles.indexOf("@media (forced-colors: active)"),
+    );
+    const ring = ruleBody(forced, "  .snui-tab:focus-visible");
+    expect(ring).toContain(`outline: ${FOCUS_RING_WIDTH} solid CanvasText;`);
+    expect(ring).toContain(`outline-offset: ${INSET_FOCUS_RING_OFFSET};`);
   });
 
   it("declares cell text alignment once, on the table", () => {

@@ -1,10 +1,13 @@
 import { createDocumentRegistry, once } from "../utils/document-registry.js";
+import { ERROR_PREFIX, packageError } from "../utils/errors.js";
 import { windowGlobal } from "../utils/window-global.js";
 
 /**
  * One installable stylesheet. The root module ships with `PanelRoot`; overlay
  * and table modules are installed by the components that need them, so a panel
  * that renders no dialog carries no dialog CSS.
+ *
+ * @internal
  */
 export interface StyleModule {
   /** Stable identifier: one style element per document, version, nonce, and id. */
@@ -24,13 +27,17 @@ export class UnsupportedBrowserError extends Error {
 
   constructor() {
     super(
-      "signalk-nearlcrews-ui requires a browser with native CSS @scope support.",
+      `${ERROR_PREFIX}A browser with native CSS @scope support is required.`,
     );
     this.name = "UnsupportedBrowserError";
   }
 }
 
-/** The module `PanelRoot` installs. Every other module inherits its nonce. */
+/**
+ * The module `PanelRoot` installs. Every other module inherits its nonce.
+ *
+ * @internal
+ */
 export const ROOT_STYLE_MODULE_ID = "root";
 
 // The record shape changed with module ids, so the key moved to v2: a 0.8.x
@@ -79,9 +86,7 @@ function attachStyleElement(
   // callback ref that installs the sheet.
   const head = ownerDocument.head as HTMLHeadElement | null;
   if (head === null) {
-    throw new Error(
-      "signalk-nearlcrews-ui styles need a document with a <head> element.",
-    );
+    throw packageError("Styles need a document with a <head> element.");
   }
 
   const firstModuleSheet =
@@ -100,6 +105,8 @@ function attachStyleElement(
  * document, reference-counted and idempotent. Two copies of the same module
  * that disagree about its CSS while claiming the same version are rejected, so
  * a stale bundle cannot silently restyle a newer one.
+ *
+ * @internal
  */
 export function installStyleModule(
   ownerDocument: Document,
@@ -115,8 +122,8 @@ export function installStyleModule(
       candidate.version === version &&
       candidate.styles !== module.styles
     ) {
-      throw new Error(
-        `Conflicting signalk-nearlcrews-ui styles were loaded for version ${version}, module "${module.id}".`,
+      throw packageError(
+        `Conflicting styles were loaded for version ${version}, module "${module.id}".`,
       );
     }
   }
@@ -152,7 +159,11 @@ export function installStyleModule(
   });
 }
 
-/** Installs the root sheet; the entry point `PanelRoot` uses. */
+/**
+ * Installs the root sheet; the entry point `PanelRoot` uses.
+ *
+ * @internal
+ */
 export function installPanelStyles(
   ownerDocument: Document,
   version: string,
@@ -171,6 +182,8 @@ export function installPanelStyles(
  * The nonces under which the root sheet for `version` is installed in the
  * document. Module sheets install under the same nonces so a nonce-restricted
  * host authorizes them exactly as it authorized the root sheet.
+ *
+ * @internal
  */
 export function installedRootStyleNonces(
   ownerDocument: Document,

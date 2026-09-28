@@ -39,10 +39,11 @@ interface FieldGroupBaseProps
 }
 
 /**
- * `legend` names a real `<legend>` element inside the fieldset, which is why
- * the group takes that spelling as well as `label`. The radiogroup controls,
- * `RadioGroup` and `SegmentedControl`, are `div` groups with no `<legend>` to
- * name and take `label` alone.
+ * The group is named by `label`, or by its permanent alias `legend`, the
+ * spelling of the real `<legend>` element the fieldset renders; `label`
+ * decides when both carry content. The radiogroup controls, `RadioGroup` and
+ * `SegmentedControl`, are `div` groups with no `<legend>` to name and take
+ * `label` alone.
  */
 export type FieldGroupProps = FieldGroupBaseProps & WithLabel<"legend">;
 
@@ -63,7 +64,7 @@ export function FieldGroup({
   const groupLabel = resolveLabelContent(
     label,
     legend,
-    "FieldGroup requires a non-empty legend.",
+    "FieldGroup requires a non-empty label or legend.",
   );
 
   const generatedId = useId();

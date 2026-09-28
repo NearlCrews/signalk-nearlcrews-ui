@@ -12,16 +12,24 @@ import {
 
 import { useControllableState } from "../hooks/use-controllable-state.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
-import { blockedActivationProps } from "../utils/activation.js";
+import {
+  blockedActivationProps,
+  reportBlockedReason,
+} from "../utils/activation.js";
 import type { AnnouncementMode } from "../utils/announcement.js";
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { isRightToLeft } from "../utils/direction.js";
+import { isDevelopment } from "../utils/environment.js";
 import { resolveFieldRegions } from "../utils/field-error.js";
 import { observeFormReset } from "../utils/form-reset.js";
 import { requireNonEmptyUniqueOptions } from "../utils/options.js";
-import { definedProps } from "../utils/props.js";
-import { requireContent } from "../utils/react-node.js";
+import { type DataAttributes, definedProps } from "../utils/props.js";
+import {
+  hasReactContent,
+  reactNodeText,
+  requireContent,
+} from "../utils/react-node.js";
 import {
   mirrorsInRtl,
   nextRovingIndex,
@@ -29,6 +37,7 @@ import {
 } from "../utils/roving.js";
 import type { Orientation, Visibility } from "../utils/variants.js";
 import { FieldError } from "./FieldError.js";
+import { HiddenDescription } from "./HiddenDescription.js";
 
 /** Alias of the shared {@link Visibility} vocabulary. */
 export type SegmentedControlLabelVisibility = Visibility;
@@ -67,9 +76,52 @@ function focusOption(pressed: HTMLButtonElement, index: number): void {
 }
 
 export interface SegmentedControlOption<Value extends string> {
+  /**
+   * Blocks this option while it stays focusable, the way
+   * `CheckboxGroupOption.ariaDisabled` does: pressing it changes nothing, and
+   * arrow keys reach it without selecting it. Reach for it where the option
+   * cannot be chosen right now; `disabled` takes it out of the tab order
+   * instead, which destroys focus if the reader is standing on it.
+   */
+  readonly ariaDisabled?: boolean | undefined;
+  /**
+   * Data attributes for this option's radio, written in full, such as
+   * `{ "data-units": "metric" }`: a stable hook for a test or a style that
+   * does not depend on the label's wording. Names beginning `data-snui-` are
+   * the package's own test hooks, so a panel picks names of its own.
+   */
+  readonly dataAttributes?: DataAttributes | undefined;
   readonly disabled?: boolean | undefined;
+  /**
+   * Why the option refuses while `ariaDisabled` holds, read as its
+   * description and dropped once the option is live, the way
+   * `CheckboxGroupOption.disabledReason` is. Development says so once for a
+   * blocked option without one.
+   */
+  readonly disabledReason?: ReactNode | undefined;
   readonly label: ReactNode;
   readonly value: Value;
+}
+
+/** Reports a blocked option's reason mistakes, in development only. */
+function reportOptionReasons(
+  options: readonly SegmentedControlOption<string>[],
+  groupDisabled: boolean,
+): void {
+  for (const option of options) {
+    const nativeDisabled = option.disabled === true;
+    reportBlockedReason({
+      blocked:
+        option.ariaDisabled === true && !groupDisabled && !nativeDisabled,
+      component: "SegmentedControl option",
+      describedBy: undefined,
+      fix: "Pass disabledReason on the option.",
+      hasReason: hasReactContent(option.disabledReason),
+      name: reactNodeText(option.label).trim(),
+      nativeDisabled,
+      noun: "option",
+    });
+  }
 }
 
 export interface SegmentedControlProps<Value extends string>
@@ -108,7 +160,9 @@ export interface SegmentedControlProps<Value extends string>
    * and refuses activation. Reach for it where the choice is real but cannot
    * be changed right now, such as while a save is in flight; `disabled` takes
    * the group out of the tab order instead, which destroys focus if it lands
-   * on the option the user is standing on.
+   * on the option the user is standing on. The group reads as read only
+   * through `aria-readonly`, as `RadioGroup` does, rather than as a set of
+   * unavailable options.
    */
   readonly readOnly?: boolean | undefined;
   readonly value?: Value | undefined;
@@ -149,6 +203,7 @@ export function SegmentedControl<Value extends string>({
   }, [options]);
 
   const groupId = useId();
+  if (isDevelopment()) reportOptionReasons(options, disabled);
   const labelId = `${groupId}-label`;
   const regions = resolveFieldRegions(groupId, description, error, errorLive);
   const { descriptionId, hasDescription, hasError, referencedErrorId } =
@@ -237,9 +292,16 @@ export function SegmentedControl<Value extends string>({
     if (nextOption === undefined) return;
 
     event.preventDefault();
-    // The focus modifier moves focus without changing the selection, and a
-    // read-only group never changes it at all.
-    if (!readOnly && !event[FOCUS_MOVE_MODIFIER]) select(nextOption.value);
+    // The focus modifier moves focus without changing the selection, a
+    // read-only group never changes it at all, and a blocked option is
+    // reached without being chosen.
+    if (
+      !readOnly &&
+      !event[FOCUS_MOVE_MODIFIER] &&
+      nextOption.ariaDisabled !== true
+    ) {
+      select(nextOption.value);
+    }
     focusOption(event.currentTarget, options.indexOf(nextOption));
   };
 
@@ -250,6 +312,7 @@ export function SegmentedControl<Value extends string>({
       className={classNames("snui-segmented", className)}
       role="radiogroup"
       aria-disabled={disabled || undefined}
+      aria-readonly={(readOnly && !disabled) || undefined}
       aria-invalid={hasError || undefined}
       aria-orientation={orientation}
       aria-labelledby={joinIdReferences(ariaLabelledBy, labelId)}
@@ -279,25 +342,38 @@ export function SegmentedControl<Value extends string>({
           orientation === "vertical" && "snui-segmented__group--vertical",
         )}
       >
-        {options.map((option) => {
+        {options.map((option, index) => {
           const checked = option.value === effectiveValue;
           const optionDisabled = disabled || option.disabled === true;
+          const optionBlocked = option.ariaDisabled === true;
           const firstEnabled =
             !selectedEnabled && option.value === fallbackValue;
+          // Native disabled takes the option out of the tab order, where its
+          // reason would reach no one, so it is dropped there.
+          const showsReason =
+            optionBlocked &&
+            !optionDisabled &&
+            hasReactContent(option.disabledReason);
+          const reasonId = `${groupId}-option-${String(index)}-reason`;
 
           return (
             // biome-ignore lint/a11y/useSemanticElements: Button-backed ARIA radios provide roving focus and immediate keyboard selection.
             <button
+              {...option.dataAttributes}
               key={option.value}
               type="button"
               role="radio"
               className="snui-segmented__option"
               aria-checked={checked}
+              aria-describedby={showsReason ? reasonId : undefined}
               disabled={optionDisabled}
               tabIndex={!optionDisabled && (checked || firstEnabled) ? 0 : -1}
               {...blockedActivationProps<HTMLButtonElement>({
-                blocked: readOnly,
+                blocked: readOnly || optionBlocked,
                 disabled: optionDisabled,
+                // A read-only group says so once, on the group; a blocked
+                // option is unavailable in its own right.
+                exposeState: optionBlocked,
                 onClick: () => {
                   select(option.value);
                 },
@@ -306,6 +382,11 @@ export function SegmentedControl<Value extends string>({
                 },
               })}
             >
+              {showsReason ? (
+                <HiddenDescription id={reasonId}>
+                  {option.disabledReason}
+                </HiddenDescription>
+              ) : null}
               {option.label}
             </button>
           );

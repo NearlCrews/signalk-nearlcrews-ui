@@ -22,8 +22,7 @@ import {
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import {
   type AnnouncementMode,
-  announcesUpdates,
-  liveRegionProps,
+  messageLogAttributes,
 } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
 import {
@@ -32,16 +31,20 @@ import {
   once,
 } from "../utils/document-registry.js";
 import { createEmitter } from "../utils/emitter.js";
-import { focusPanelRoot } from "../utils/focus.js";
+import { packageError } from "../utils/errors.js";
+import { focusPanelRoot, isElementNode } from "../utils/focus.js";
 import {
   DEFAULT_DISMISS_LABEL,
   resolveBundledLabel,
   resolveLabel,
 } from "../utils/labels.js";
 import { prefersReducedMotion } from "../utils/motion.js";
+import { TOAST_REGION_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { usePanelPortalContainer } from "../utils/portal.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
+import { LIVE_REGION_BLANK_MS } from "../utils/repeat-announcement.js";
+import { joinSentences } from "../utils/text.js";
 import type { SemanticTone } from "../utils/tone.js";
 import {
   layoutMatches,
@@ -86,6 +89,12 @@ const LIVE_TOAST_CARD_SELECTOR = `${TOAST_CARD_SELECTOR}:not([data-exiting])`;
 const TOAST_DISMISS_SELECTOR = ".snui-toast__dismiss";
 /** The dismiss button of a card that is not already leaving. */
 const LIVE_TOAST_DISMISS_SELECTOR = `${LIVE_TOAST_CARD_SELECTOR} ${TOAST_DISMISS_SELECTOR}`;
+/** A notifications landmark in the host, which only a showing region places. */
+const TOAST_REGION_SELECTOR = ":scope > .snui-toast-region";
+const TOAST_TITLE_SELECTOR = ".snui-toast__title";
+const TOAST_DESCRIPTION_SELECTOR = ".snui-toast__description";
+/** What assistive technology skips inside a card's text. */
+const HIDDEN_FROM_READERS_SELECTOR = '[aria-hidden="true"], [hidden]';
 
 const FOCUSED_TOAST_COUNTS = new Map<string, number>();
 
@@ -147,7 +156,116 @@ function exitTransitionMs(view: Window, card: HTMLElement | null): number {
   return Number.isFinite(duration) ? duration : TRANSITION_FAST_MS;
 }
 
+/** The modes a toast is spoken in; "off" speaks nothing. */
+type ToastAnnouncementMode = Exclude<AnnouncementMode, "off">;
+
+/**
+ * Speaks a toast's words and returns the call that takes them away again.
+ * Called once per toast while it is queued.
+ */
+type AnnounceToast = (mode: ToastAnnouncementMode, text: string) => () => void;
+
+/**
+ * The words an element shows assistive technology: its text, less anything
+ * hidden from readers, such as the decorative tone glyph. Text nodes join as
+ * they render, so inline markup inside a word does not split it.
+ */
+function spokenText(element: Element | null): string {
+  if (element === null) return "";
+  let text = "";
+  for (const node of element.childNodes) {
+    if (node.nodeType === node.TEXT_NODE) {
+      text += node.textContent ?? "";
+    } else if (
+      isElementNode(node) &&
+      !node.matches(HIDDEN_FROM_READERS_SELECTOR)
+    ) {
+      text += spokenText(node);
+    }
+  }
+  return text;
+}
+
+/** The persistent regions a host speaks through, and their lifecycle. */
+interface ToastAnnouncer {
+  readonly announce: AnnounceToast;
+  readonly dispose: () => void;
+  readonly regions: readonly HTMLDivElement[];
+  /** Starts the blank beat again, for regions that were just inserted. */
+  readonly restart: () => void;
+}
+
+function createAnnouncementRegion(
+  ownerDocument: Document,
+  mode: ToastAnnouncementMode,
+): HTMLDivElement {
+  const region = ownerDocument.createElement("div");
+  // A message log, like the panel announcer's: each toast adds a line of its
+  // own, and only that line is read.
+  const attributes = messageLogAttributes(mode);
+  region.className = attributes.className;
+  region.setAttribute("role", attributes.role);
+  region.setAttribute("aria-atomic", attributes["aria-atomic"]);
+  return region;
+}
+
+/**
+ * One polite and one assertive region, mounted with the host and empty until
+ * a toast arrives. A region created together with its words is not announced
+ * reliably, and a card is created together with its toast, so the words are
+ * spoken from here rather than from the card. A region that was inserted
+ * less than a beat ago holds its lines back until the beat has passed.
+ */
+function createToastAnnouncer(
+  ownerDocument: Document,
+  ownerWindow: Window | null,
+): ToastAnnouncer {
+  const regions: Record<ToastAnnouncementMode, HTMLDivElement> = {
+    polite: createAnnouncementRegion(ownerDocument, "polite"),
+    assertive: createAnnouncementRegion(ownerDocument, "assertive"),
+  };
+  // Lines waiting for the beat, in arrival order, with the region each joins.
+  const pending = new Map<HTMLElement, HTMLDivElement>();
+  // A document with no window has no clock to wait on and no reader.
+  let settled = ownerWindow === null;
+  let beat: TimerId | null = null;
+
+  const settle = (): void => {
+    beat = null;
+    settled = true;
+    for (const [line, region] of pending) region.append(line);
+    pending.clear();
+  };
+
+  return {
+    announce: (mode, text) => {
+      const line = ownerDocument.createElement("div");
+      line.textContent = text;
+      if (settled) regions[mode].append(line);
+      else pending.set(line, regions[mode]);
+      return () => {
+        pending.delete(line);
+        line.remove();
+      };
+    },
+    dispose: () => {
+      if (beat !== null) ownerWindow?.clearTimeout(beat);
+      beat = null;
+      pending.clear();
+    },
+    regions: [regions.polite, regions.assertive],
+    restart: () => {
+      if (ownerWindow === null) return;
+      settled = false;
+      if (beat !== null) ownerWindow.clearTimeout(beat);
+      beat = ownerWindow.setTimeout(settle, LIVE_REGION_BLANK_MS);
+    },
+  };
+}
+
 interface ToastHostHandle {
+  /** Speaks a toast through the host's persistent region for its mode. */
+  readonly announce: AnnounceToast;
   readonly element: HTMLDivElement;
   /**
    * Measures the panel's visible rectangle now. The host measures nothing
@@ -194,16 +312,23 @@ function createToastHost(
   // reach them. Without it a toast raised while a Dialog is open is neither
   // announced nor dismissable.
   element.setAttribute("data-react-aria-top-layer", "");
+  // The announcing regions lead the host, so they exist before any toast and
+  // sit outside every notifications landmark. Both are visually hidden and
+  // out of flow, so the stack lays out as it did without them.
+  const announcer = createToastAnnouncer(ownerDocument, ownerWindow);
+  element.append(...announcer.regions);
   // The registry attaches the record itself whenever an acquire finds the
   // element disconnected, so the insertion keeps one owner. The host precedes
   // the panel content so the notifications landmark is one Tab from the panel
   // start; it is fixed-positioned, so the position changes only the focus
-  // order.
+  // order. Every insertion is new to a screen reader, so the regions wait
+  // out the blank beat again.
   const attach = (): void => {
     panelRoot.insertBefore(
       element,
       panelRoot.querySelector(":scope > .snui-root__content"),
     );
+    announcer.restart();
   };
 
   if (ownerWindow === null) {
@@ -214,6 +339,7 @@ function createToastHost(
       },
       element,
       value: {
+        announce: announcer.announce,
         element,
         measure: () => undefined,
         restoreFocus: () => {
@@ -226,9 +352,10 @@ function createToastHost(
   let placement: ToastHostPlacement | null = null;
 
   const measure = (): void => {
-    // An empty host paints nothing, so a panel whose queue has never held a
-    // toast pays no panel rectangle and no style write on a scroll frame.
-    if (element.firstElementChild === null) return;
+    // A host with no notifications landmark paints nothing, so a panel whose
+    // queue has never held a toast pays no panel rectangle and no style write
+    // on a scroll frame.
+    if (element.querySelector(TOAST_REGION_SELECTOR) === null) return;
     const viewport = readViewportEdges(ownerWindow);
     const panelRect = panelRoot.getBoundingClientRect();
     const visibleTop = Math.max(viewport.top, panelRect.top);
@@ -324,20 +451,21 @@ function createToastHost(
   return {
     attach,
     dispose: () => {
+      announcer.dispose();
       stopObserving();
       element.removeEventListener("focusin", rememberFocusOrigin);
       ownerDocument.removeEventListener("keydown", handleLandmarkKey);
       element.remove();
     },
     element,
-    value: { element, measure, restoreFocus },
+    value: { announce: announcer.announce, element, measure, restoreFocus },
   };
 }
 
-// Version 2 of the key: the record shape stored on the document changed with
-// the shared registry, so a 0.8.x copy in the same document never reads it.
+// Version 3 of the key: the host handle gained `announce`, so this copy never
+// reads a host a 0.12.x copy in the same document created without one.
 const TOAST_HOSTS = createDocumentRegistry<HTMLElement, ToastHostHandle>(
-  "signalk-nearlcrews-ui.toast-host-registry.v2",
+  "signalk-nearlcrews-ui.toast-host-registry.v3",
 );
 
 /** A server render has no document to host toasts in. */
@@ -379,8 +507,9 @@ export interface ToastContent {
    */
   readonly duration?: number | undefined;
   /**
-   * Announcement mode. Defaults to assertive for the danger tone, polite
-   * otherwise.
+   * Announcement mode: which of the host's two regions speaks the toast, or
+   * "off" to show it without speaking. Defaults to assertive for the danger
+   * tone, polite otherwise.
    */
   readonly live?: AnnouncementMode | undefined;
   /** Overrides the localized tone name announced to assistive technology. */
@@ -574,9 +703,6 @@ function ToastCardImpl<T extends ToastContent>({
   const { content, key } = item;
   const tone = resolveToastTone(content);
   const duration = resolveToastDuration(content, defaultDuration);
-  const live = resolveToastLive(content);
-  const region = liveRegionProps(live);
-  const announcing = announcesUpdates(region);
   const titleId = useId();
 
   // The queue already rejected a blank title in enqueue; this guards content
@@ -584,8 +710,6 @@ function ToastCardImpl<T extends ToastContent>({
   requireContent(content.title, TOAST_TITLE_MESSAGE);
 
   const [exiting, setExiting] = useState(false);
-  // A region that announces nothing has no reason to mount empty first.
-  const [contentReady, setContentReady] = useState(!announcing);
   const cardRef = useRef<HTMLDivElement | null>(null);
   // Every timer and computed style reads the card's own view, so a panel in a
   // secondary window keeps its own clock. The view outlives the node, because
@@ -662,20 +786,6 @@ function ToastCardImpl<T extends ToastContent>({
     else startCountdown();
   };
 
-  // The roled region mounts empty and its text lands one tick later, because
-  // a live region created together with its message is not announced
-  // reliably. A toast that announces nothing skips the blank commit.
-  useEffect(() => {
-    const view = viewRef.current;
-    if (!announcing || view === null) return undefined;
-    const id = view.setTimeout(() => {
-      setContentReady(true);
-    }, 0);
-    return () => {
-      view.clearTimeout(id);
-    };
-  }, [announcing]);
-
   useEffect(() => {
     startCountdown();
     return () => {
@@ -725,27 +835,22 @@ function ToastCardImpl<T extends ToastContent>({
       <span className="snui-toast__tone" aria-hidden="true">
         <span className="snui-toast__tone-dot" />
       </span>
-      <div
-        className="snui-toast__text"
-        role={region.role}
-        aria-live={region["aria-live"]}
-      >
-        {contentReady ? (
-          <>
-            <div className="snui-toast__title" id={titleId}>
-              <ToneMark
-                tone={tone}
-                toneLabel={content.toneLabel}
-                className="snui-toast__tone-glyph"
-              />
-              {content.title}
-            </div>
-            {hasReactContent(content.description) ? (
-              <div className="snui-toast__description">
-                {content.description}
-              </div>
-            ) : null}
-          </>
+      {/*
+        Not a live region: the host speaks these words from a region that
+        already existed, and a card that announced itself would be read again
+        when focus enters it.
+      */}
+      <div className="snui-toast__text">
+        <div className="snui-toast__title" id={titleId}>
+          <ToneMark
+            tone={tone}
+            toneLabel={content.toneLabel}
+            className="snui-toast__tone-glyph"
+          />
+          {content.title}
+        </div>
+        {hasReactContent(content.description) ? (
+          <div className="snui-toast__description">{content.description}</div>
         ) : null}
       </div>
       <Button
@@ -779,9 +884,6 @@ function ToastCardImpl<T extends ToastContent>({
  * The cast restores the generic signature that `memo` erases.
  */
 const ToastCard = memo(ToastCardImpl) as typeof ToastCardImpl;
-
-/** Landmark name for a region whose caller and panel bundle both leave it out. */
-const DEFAULT_TOAST_REGION_LABEL = "Notifications";
 
 /** The card that holds focus inside a region. */
 interface FocusedToastCard {
@@ -824,6 +926,10 @@ export interface ToastRegionProps<T extends ToastContent = ToastContent>
  * outside a PanelRoot throws because a body portal would lose scoped styles
  * and tokens.
  *
+ * A toast is spoken once, as text, through one polite and one assertive
+ * region that the panel's toast host mounts before any toast arrives; the
+ * cards themselves are not live regions, so focus entering one reads it once.
+ *
  * One queue feeds one region: a second region bound to the same queue renders,
  * announces, and times out every toast in it a second time.
  */
@@ -844,10 +950,13 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
   // bundle and the package default fill an absent one.
   const effectiveLabel =
     label === undefined
-      ? resolveLabel(bundledRegionLabels?.label, DEFAULT_TOAST_REGION_LABEL)
+      ? resolveLabel(
+          bundledRegionLabels?.label,
+          TOAST_REGION_LABEL_DEFAULTS.label,
+        )
       : label.trim();
   if (!effectiveLabel) {
-    throw new Error("ToastRegion requires a non-empty label.");
+    throw packageError("ToastRegion requires a non-empty label.");
   }
   const effectiveDismissLabel = resolveBundledLabel(
     dismissLabel,
@@ -912,6 +1021,49 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
       if (focusedCardRef.current !== null) host?.restoreFocus();
     };
   }, [host]);
+
+  // Each toast is spoken once, through the host's region for its mode, in
+  // the order the queue received it: cards stack newest first, so a burst
+  // spoken card by card would read backwards. The words are read from the
+  // rendered card, which has resolved the tone name and any component in the
+  // title, and only text is copied, never a control. A toast's line leaves
+  // with the toast.
+  const [spoken] = useState(() => new Map<string, () => void>());
+  useEffect(() => {
+    const queued = new Set<string>();
+    for (const item of toasts) {
+      queued.add(item.key);
+      if (host === null || spoken.has(item.key)) continue;
+      const live = resolveToastLive(item.content);
+      const card =
+        regionRef.current?.querySelector(
+          `[data-snui-toast-key="${item.key}"]`,
+        ) ?? null;
+      if (live === "off" || card === null) {
+        spoken.set(item.key, () => undefined);
+        continue;
+      }
+      const text = joinSentences([
+        spokenText(card.querySelector(TOAST_TITLE_SELECTOR)),
+        spokenText(card.querySelector(TOAST_DESCRIPTION_SELECTOR)),
+      ]);
+      spoken.set(item.key, host.announce(live, text));
+    }
+    for (const [key, silence] of spoken) {
+      if (queued.has(key)) continue;
+      silence();
+      spoken.delete(key);
+    }
+  }, [host, spoken, toasts]);
+
+  // A region that unmounts, or moves to another host, takes its lines along.
+  useEffect(
+    () => () => {
+      for (const silence of spoken.values()) silence();
+      spoken.clear();
+    },
+    [host, spoken],
+  );
 
   if (host === null || !showing) return null;
 

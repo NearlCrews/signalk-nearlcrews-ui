@@ -171,6 +171,11 @@ interface Boat {
   readonly name: string;
   readonly depth: number;
   readonly wind: number;
+  /**
+   * Where the readings come from. The first vessel's is longer than its column
+   * is wide, so a virtualized grid truncates it until the cell holds focus.
+   */
+  readonly source: string;
   /** Renders this row taller than the layout estimate. */
   readonly expanded?: boolean;
 }
@@ -183,6 +188,12 @@ const BOATS: readonly Boat[] = Array.from({ length: 240 }, (_, index) => ({
   name: `Vessel ${String(index + 1).padStart(3, "0")}`,
   depth: 1.5 + ((index * 17) % 60) / 10,
   wind: 4 + ((index * 7) % 28),
+  source:
+    index === 0
+      ? "Depth sounder on the NMEA 2000 backbone, through the chart table gateway"
+      : index % 2 === 0
+        ? "Depth sounder"
+        : "Masthead unit",
 }));
 
 function compareBoats(a: Boat, b: Boat, descriptor: SortDescriptor): number {
@@ -514,6 +525,7 @@ function Showcase(): React.JSX.Element {
                 </Cell>
                 <Cell>{boat.depth.toFixed(1)} m</Cell>
                 <Cell>{boat.wind} kn</Cell>
+                <Cell>{boat.source}</Cell>
               </Row>
             )}
             selectionMode="multiple"
@@ -533,6 +545,7 @@ function Showcase(): React.JSX.Element {
             <Column id="wind" allowsSorting>
               Wind
             </Column>
+            <Column id="source">Source</Column>
           </DataGrid>
         </Section>
 
@@ -605,7 +618,7 @@ function Showcase(): React.JSX.Element {
               trigger={
                 <Button variant="secondary">About this anchorage</Button>
               }
-              width={280}
+              width="280px"
             >
               <p style={FLUSH_PARAGRAPH}>
                 Popovers anchor free-form content to a trigger and flip when

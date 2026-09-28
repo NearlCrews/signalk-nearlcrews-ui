@@ -1,4 +1,5 @@
 import { createContext, type ReactNode, useContext } from "react";
+import { packageError } from "./errors.js";
 
 /**
  * A context reduced to the two things every reader of one needs.
@@ -63,7 +64,9 @@ export function createRequiredContext<T>(
     useValue: (component: string): T => {
       const value = useContext(Context);
       if (value === null) {
-        throw new Error(`${component} must be rendered inside ${displayName}.`);
+        throw packageError(
+          `${component} must be rendered inside ${displayName}.`,
+        );
       }
       return value;
     },

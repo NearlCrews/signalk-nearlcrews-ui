@@ -2,6 +2,7 @@ import { type ReactNode, useCallback, useMemo } from "react";
 import { usePanelTheme } from "../theme/context.js";
 import { THEME_CHOICES, type ThemeChoice } from "../theme/contract.js";
 import { resolveBundledContent, resolveLabel } from "../utils/labels.js";
+import { THEME_TOGGLE_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import {
   SegmentedControl,
@@ -14,65 +15,44 @@ export interface ThemeToggleProps
     "defaultValue" | "label" | "onValueChange" | "options" | "value"
   > {
   /**
+   * Visible name per theme choice, keyed by choice. A blank or missing entry
+   * falls back to the panel bundle's `themeToggle.choiceLabels`, then to the
+   * package default.
+   */
+  readonly choiceLabels?:
+    | Partial<Readonly<Record<ThemeChoice, ReactNode>>>
+    | undefined;
+  /**
    * The themes to offer, default all five. The active theme is always offered
    * even when it is left out, so the control can never show a panel whose
    * theme has no segment; an empty list is a caller error and throws.
    */
   readonly choices?: readonly ThemeChoice[] | undefined;
   /**
-   * Guidance under the group name. It defaults to a sentence saying what the
-   * host-following choice resolves to, whenever that choice is offered,
-   * because Signal K Admin publishes no theme marker today and the choice
-   * therefore looks identical to Light. Pass `null` to drop it.
+   * Guidance under the group name. It defaults to a sentence saying what
+   * Match Admin resolves to, whenever that choice is offered, because Signal K
+   * Admin shares no theme today and the choice therefore looks identical to
+   * Light. Pass `null` to drop it.
    */
   readonly description?: ReactNode | undefined;
   /** Accessible name of the theme group. Blank falls back to "Panel theme". */
   readonly label?: ReactNode | undefined;
-  /** Visible label per theme choice. Blank entries fall back to the default. */
-  readonly labels?:
-    | Partial<Readonly<Record<ThemeChoice, ReactNode>>>
-    | undefined;
   /** Receives the chosen theme after the shared preference has been updated. */
   readonly onValueChange?: ((theme: ThemeChoice) => void) | undefined;
 }
 
-const DEFAULT_THEME_TOGGLE_LABEL = "Panel theme";
-
-/*
- * What "Match Admin" resolves to. Signal K Admin sets no theme marker today,
- * so an operator picking it after dark gets the Light palette and has no way
- * to tell from the segment alone.
- */
-const HOST_THEME_DESCRIPTION =
-  "Match Admin follows the host's theme marker, and shows Light where the host sets none.";
-
-/*
- * Both automatic choices are named for what they follow. "Auto" and "System"
- * on their own read as the same offer, and an operator picking the wrong one
- * after dark gets the Light palette: Auto follows a host theme marker, which
- * is the Admin theme where one is set and Light where none is, while System
- * follows the device's own light or dark setting.
- */
-const THEME_LABELS: Readonly<Record<ThemeChoice, string>> = {
-  auto: "Match Admin",
-  system: "Match device",
-  light: "Light",
-  dark: "Dark",
-  night: "Night",
-};
-
 export function ThemeToggle({
+  choiceLabels,
   choices = THEME_CHOICES,
   description,
   label,
-  labels,
   labelVisibility = "visible",
   onValueChange,
   ...props
 }: ThemeToggleProps): React.JSX.Element {
   const { setTheme, theme } = usePanelTheme();
   const bundledLabels = usePanelLabels()?.themeToggle;
-  const bundledChoiceLabels = bundledLabels?.choices;
+  const bundledChoiceLabels = bundledLabels?.choiceLabels;
 
   const options = useMemo(() => {
     // The panel renders in one theme whatever the consumer offers, and a
@@ -85,14 +65,17 @@ export function ThemeToggle({
         ? choices
         : [...choices, theme];
     return offered.map((value) => ({
+      // A supported test hook, so a consumer test finds a theme by its value
+      // rather than by wording a translation or a copy change can move.
+      dataAttributes: { "data-snui-theme-choice": value },
       label: resolveBundledContent(
-        labels?.[value],
+        choiceLabels?.[value],
         bundledChoiceLabels?.[value],
-        THEME_LABELS[value],
+        THEME_TOGGLE_LABEL_DEFAULTS.choiceLabels[value],
       ),
       value,
     }));
-  }, [bundledChoiceLabels, choices, labels, theme]);
+  }, [bundledChoiceLabels, choiceLabels, choices, theme]);
 
   const handleValueChange = useCallback(
     (value: ThemeChoice): void => {
@@ -111,13 +94,16 @@ export function ThemeToggle({
         description === undefined && offersHostTheme
           ? // Blank bundle text reads as absent here too, so one empty entry
             // in a partial translation does not blank the guidance.
-            resolveLabel(bundledLabels?.description, HOST_THEME_DESCRIPTION)
+            resolveLabel(
+              bundledLabels?.description,
+              THEME_TOGGLE_LABEL_DEFAULTS.description,
+            )
           : description
       }
       label={resolveBundledContent(
         label,
         bundledLabels?.label,
-        DEFAULT_THEME_TOGGLE_LABEL,
+        THEME_TOGGLE_LABEL_DEFAULTS.label,
       )}
       labelVisibility={labelVisibility}
       options={options}

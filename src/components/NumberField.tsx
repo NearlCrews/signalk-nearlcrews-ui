@@ -8,7 +8,7 @@ import {
 import { joinIdReferences } from "../utils/aria.js";
 import { resolveBundledContent } from "../utils/labels.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
-import { hasReactContent } from "../utils/react-node.js";
+import { hasUnitContent, renderUnit, type UnitContent } from "../utils/unit.js";
 import { NumberInput, type NumberInputProps } from "./Inputs.js";
 import {
   LabeledField,
@@ -22,9 +22,30 @@ import {
   type InputGroupControlWidth,
 } from "./Layout.js";
 
+/** What a validation message can name: the reason and the rules it broke. */
+export interface NumberFieldMessageContext {
+  readonly exclusiveMax: boolean;
+  readonly exclusiveMin: boolean;
+  readonly integer: boolean;
+  readonly max: number | undefined;
+  readonly min: number | undefined;
+  readonly reason: NumberDraftInvalidReason;
+  /** The field's own `unit`, so a message can name what it measures. */
+  readonly unit: UnitContent;
+}
+
+/**
+ * One validation message. Text may carry `{min}` and `{max}`, which are
+ * replaced with the field's bounds printed the way the input accepts them
+ * back; a function builds the message from the rules, including the unit.
+ */
+export type NumberFieldMessage =
+  | ReactNode
+  | ((context: NumberFieldMessageContext) => ReactNode);
+
 /** Validation messages keyed by the reason a draft cannot be committed. */
 export type NumberFieldMessages = Partial<
-  Readonly<Record<NumberDraftInvalidReason, ReactNode>>
+  Readonly<Record<NumberDraftInvalidReason, NumberFieldMessage>>
 >;
 
 /** Input attributes the field does not own itself. */
@@ -50,19 +71,35 @@ interface NumberFieldBaseProps
   readonly inputProps?: NumberFieldInputProps | undefined;
   /** Reaches the `<input>`; `ref` reaches the field root. */
   readonly inputRef?: Ref<HTMLInputElement> | undefined;
-  /** Replaces the default message for a reason. */
+  /**
+   * Replaces the default message for a reason, ahead of the panel's
+   * `labels.numberField` bundle, whose text takes the same `{min}` and
+   * `{max}` placeholders.
+   */
   readonly messages?: NumberFieldMessages | undefined;
-  /** Called when the draft crosses between valid and invalid. */
+  /**
+   * Called on the keystroke that moves the draft between valid and invalid,
+   * so a Save gated on it stays exact while the message itself waits for the
+   * edit to finish. A panel reset through `useResetDrafts` also reports an
+   * invalid draft valid, from the Discard event, for a field in a collapsed
+   * section and for one that left the tree while invalid, so keep bookkeeping
+   * that a repeated report cannot unbalance, such as a set of names.
+   */
   readonly onValidityChange?: ((valid: boolean) => void) | undefined;
-  /** Changing it drops an in-progress draft, for a Discard action. */
+  /**
+   * Changing it drops this field's in-progress draft. A panel's Discard
+   * drops every draft at once through `useResetDrafts`.
+   */
   readonly resetKey?: string | number | undefined;
   /**
-   * Unit shown after the input and read as part of its description. Source
-   * the string, and any conversion behind it, from the consumer's own
+   * Unit shown after the input and read as part of its description, never as
+   * part of its name. Pass `{ symbol, name }` to draw a compact symbol and
+   * read its name, so "kn" is heard as "knots" rather than spelled out.
+   * Source the unit, and any conversion behind it, from the consumer's own
    * resolution of the server's unit preferences: this package neither fetches
    * nor selects units.
    */
-  readonly unit?: ReactNode | undefined;
+  readonly unit?: UnitContent | undefined;
   /** How the input slot shares the row when a unit is shown. Defaults to grow. */
   readonly controlWidth?: InputGroupControlWidth | undefined;
 }
@@ -126,6 +163,20 @@ const BOUND_FORMAT = new Intl.NumberFormat("en", {
   useGrouping: false,
 });
 
+const BOUND_PLACEHOLDER = /\{(min|max)\}/g;
+
+/**
+ * Fills the bound placeholders in a message given as text. A placeholder for
+ * a bound the field does not have is left as written, so the gap shows in
+ * review rather than reading as a blank.
+ */
+function fillBounds(text: string, rules: NumberDraftOptions): string {
+  return text.replace(BOUND_PLACEHOLDER, (placeholder, bound: string) => {
+    const value = bound === "min" ? rules.min : rules.max;
+    return value === undefined ? placeholder : BOUND_FORMAT.format(value);
+  });
+}
+
 function defaultMessage(
   reason: NumberDraftInvalidReason,
   rules: NumberDraftOptions,
@@ -156,19 +207,53 @@ function defaultMessage(
       if (reason === "belowMin") {
         return exclusiveMin
           ? `Enter ${noun} greater than ${lower}.`
-          : `Enter ${noun} of ${lower} or more.`;
+          : `Enter ${lower} or more.`;
       }
       return exclusiveMax
         ? `Enter ${noun} less than ${upper}.`
-        : `Enter ${noun} of ${upper} or less.`;
+        : `Enter ${upper} or less.`;
     }
   }
 }
 
 /**
+ * The message for a reason, in the order a panel expects: the field's own,
+ * then the panel's bundle, then the English default.
+ */
+function resolveMessage(
+  reason: NumberDraftInvalidReason,
+  rules: NumberDraftOptions,
+  unit: UnitContent,
+  own: NumberFieldMessage,
+  bundled: string | undefined,
+): ReactNode {
+  const content =
+    typeof own === "function"
+      ? own({
+          exclusiveMax: rules.exclusiveMax === true,
+          exclusiveMin: rules.exclusiveMin === true,
+          integer: rules.integer === true,
+          max: rules.max,
+          min: rules.min,
+          reason,
+          unit,
+        })
+      : typeof own === "string"
+        ? fillBounds(own, rules)
+        : own;
+  return resolveBundledContent(
+    content,
+    bundled === undefined ? undefined : fillBounds(bundled, rules),
+    defaultMessage(reason, rules),
+  );
+}
+
+/**
  * A labeled numeric field with a draft-while-editing buffer. The value is
  * always a number (or `undefined` under `allowEmpty`); the text the user is
- * typing lives in the field until it commits. See {@link useNumberDraft} for
+ * typing lives in the field until it commits. An invalid draft shows its
+ * message and `aria-invalid` once the edit finishes, on blur or Enter, and
+ * drops them the moment the draft turns valid. See {@link useNumberDraft} for
  * the validate and clamp modes.
  */
 export function NumberField({
@@ -226,12 +311,14 @@ export function NumberField({
   const draftMessage =
     invalidReason === undefined
       ? undefined
-      : resolveBundledContent(
+      : resolveMessage(
+          invalidReason,
+          rules,
+          unit,
           messages?.[invalidReason],
           bundledMessages?.[invalidReason],
-          defaultMessage(invalidReason, rules),
         );
-  const showUnit = hasReactContent(unit);
+  const showUnit = hasUnitContent(unit);
   // The keyboard hints are defaults a caller may replace, so they are applied
   // before the caller's own attributes; everything else in the draft's props
   // belongs to the field and is applied after.
@@ -266,7 +353,7 @@ export function NumberField({
             <InputGroupControl controlWidth={controlWidth}>
               {input}
             </InputGroupControl>
-            <InputGroupAddon id={unitId}>{unit}</InputGroupAddon>
+            <InputGroupAddon id={unitId}>{renderUnit(unit)}</InputGroupAddon>
           </InputGroup>
         );
       }}

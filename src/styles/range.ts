@@ -162,8 +162,11 @@ ${DISABLED_DECLARATIONS}
 }
 
 @media (forced-colors: active) {
-  /* The invalid outline the root sheet reconstructs for every field. */
-  .snui-range[aria-invalid="true"] {
+  /*
+   * The invalid outline the root sheet reconstructs for every field, which
+   * stands aside while the focus ring owns the outline.
+   */
+  .snui-range[aria-invalid="true"]:not(:focus-visible) {
 ${FORCED_COLORS_INVALID_DECLARATIONS}
   }
 

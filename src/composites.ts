@@ -28,8 +28,11 @@ export {
 export {
   resolveSaveActionBarState,
   SaveActionBar,
+  type SaveActionBarAction,
   type SaveActionBarFocus,
+  type SaveActionBarFocusTarget,
   type SaveActionBarLabels,
+  type SaveActionBarOutcome,
   type SaveActionBarProps,
   type SaveActionBarState,
   type SaveActionBarStateInput,

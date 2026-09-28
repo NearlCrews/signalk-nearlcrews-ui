@@ -281,7 +281,7 @@ describe("Disclosure", () => {
         </Disclosure>,
       ),
     ).toThrow(
-      'useDisclosure id must be a non-empty string holding no whitespace; received "engine drawer".',
+      'signalk-nearlcrews-ui: useDisclosure id must be a non-empty string holding no whitespace; received "engine drawer".',
     );
     expect(() =>
       renderInPanel(
@@ -290,17 +290,23 @@ describe("Disclosure", () => {
           <DisclosurePanel>Body</DisclosurePanel>
         </Disclosure>,
       ),
-    ).toThrow("useDisclosure idPrefix must be a non-empty string");
+    ).toThrow(
+      "signalk-nearlcrews-ui: useDisclosure idPrefix must be a non-empty string",
+    );
   });
 
   it("rejects a trigger or panel outside the provider", () => {
     vi.spyOn(console, "error").mockImplementation(() => undefined);
     expect(() =>
       renderInPanel(<DisclosureTrigger>Orphan</DisclosureTrigger>),
-    ).toThrow("DisclosureTrigger must be rendered inside Disclosure.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: DisclosureTrigger must be rendered inside Disclosure.",
+    );
     expect(() =>
       renderInPanel(<DisclosurePanel>Orphan</DisclosurePanel>),
-    ).toThrow("DisclosurePanel must be rendered inside Disclosure.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: DisclosurePanel must be rendered inside Disclosure.",
+    );
   });
 
   it("returns focus to the trigger when the panel closes itself", async () => {

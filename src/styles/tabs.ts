@@ -1,6 +1,7 @@
 import {
   DISABLED_DECLARATIONS,
-  FORCED_COLORS_OUTLINE_DECLARATIONS,
+  FOCUS_RING_WIDTH,
+  INSET_FOCUS_RING_OFFSET,
   NARROW_PANEL_QUERY,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
@@ -29,13 +30,13 @@ export const TABS_STYLES: StyleModule = {
   min-width: 0;
   flex-wrap: wrap;
   gap: var(--snui-space-1);
-  border-block-end: 1px solid var(--snui-color-border);
+  border-block-end: 1px solid var(--snui-color-border-subtle);
 }
 
 .snui-tabs--vertical .snui-tablist {
   flex-direction: column;
   border-block-end: 0;
-  border-inline-end: 1px solid var(--snui-color-border);
+  border-inline-end: 1px solid var(--snui-color-border-subtle);
 }
 
 /*
@@ -130,7 +131,7 @@ ${NARROW_PANEL_QUERY} {
 
   .snui-tabs--vertical .snui-tablist {
     flex-direction: row;
-    border-block-end: 1px solid var(--snui-color-border);
+    border-block-end: 1px solid var(--snui-color-border-subtle);
     border-inline-end: 0;
   }
 
@@ -166,8 +167,14 @@ ${NARROW_PANEL_QUERY} {
     color: HighlightText;
   }
 
+  /*
+   * The system ring forced colors rebuilds a tab's focus with is still a
+   * focus ring, so it takes the shared width a contrast request raises,
+   * inset like the package's other inset rings.
+   */
   .snui-tab:focus-visible {
-${FORCED_COLORS_OUTLINE_DECLARATIONS}
+    outline: ${FOCUS_RING_WIDTH} solid CanvasText;
+    outline-offset: ${INSET_FOCUS_RING_OFFSET};
   }
 }
 `),

@@ -8,6 +8,12 @@ import {
   MenuSection,
   MenuSeparator,
 } from "../../src/overlays.js";
+import {
+  focusRingDeclarations,
+  RAISED_OVERLAY_DECLARATIONS,
+} from "../../src/styles/fragments.js";
+import { MENU_STYLES } from "../../src/styles/menu.js";
+import { ruleBody } from "../css-helpers.js";
 import { panel, renderInPanel } from "../helpers.js";
 
 /** Opens a menu from its trigger with the keyboard, landing on the first item. */
@@ -27,7 +33,7 @@ describe("Menu", () => {
           <MenuItem id="open">Open</MenuItem>
         </Menu>,
       ),
-    ).toThrow("Menu must be rendered inside PanelRoot.");
+    ).toThrow("signalk-nearlcrews-ui: Menu must be rendered inside PanelRoot.");
   });
 
   it("throws when the label is empty", () => {
@@ -37,7 +43,9 @@ describe("Menu", () => {
           <MenuItem id="open">Open</MenuItem>
         </Menu>,
       ),
-    ).toThrow("Menu requires a non-empty label to name its trigger button.");
+    ).toThrow(
+      "signalk-nearlcrews-ui: Menu requires a non-empty label to name its trigger button.",
+    );
   });
 
   it("opens on click and portals the menu into the panel root", async () => {
@@ -468,7 +476,7 @@ describe("Menu", () => {
         </Menu>,
       ),
     ).toThrow(
-      "Menu requires a triggerLabel when its label renders no text, so the trigger button is not left unnamed.",
+      "signalk-nearlcrews-ui: Menu requires a triggerLabel when its label renders no text, so the trigger button is not left unnamed.",
     );
   });
 
@@ -505,6 +513,189 @@ describe("Menu", () => {
     expect(screen.getByRole("button", { name: "File" })).toHaveClass(
       "snui-button--primary",
       "snui-button--size-compact",
+    );
+  });
+
+  it("styles the trigger through triggerProps, including a square icon target", async () => {
+    const user = userEvent.setup();
+    const triggerRef = createRef<HTMLButtonElement>();
+    renderInPanel(
+      <Menu
+        label={<span aria-hidden="true">⋯</span>}
+        triggerLabel="Row actions"
+        triggerProps={{
+          className: "plugin-row-actions",
+          "data-testid": "row-actions",
+          iconOnly: true,
+          ref: triggerRef,
+        }}
+      >
+        <MenuItem id="rename">Rename</MenuItem>
+      </Menu>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Row actions" });
+    expect(trigger).toHaveClass(
+      "snui-button",
+      "snui-button--icon-only",
+      "plugin-row-actions",
+    );
+    expect(trigger).toHaveAttribute("data-testid", "row-actions");
+    // The consumer's ref and the one React Aria positions the menu from both
+    // reach the button.
+    expect(triggerRef.current).toBe(trigger);
+    await user.click(trigger);
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+  });
+
+  it("names the trigger from aria-labelledby in triggerProps", () => {
+    renderInPanel(
+      <>
+        <span id="row-actions-name">Anchor actions</span>
+        <Menu
+          label={<span aria-hidden="true">⋯</span>}
+          triggerProps={{ "aria-labelledby": "row-actions-name" }}
+        >
+          <MenuItem id="rename">Rename</MenuItem>
+        </Menu>
+      </>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Anchor actions" }),
+    ).toBeInTheDocument();
+  });
+
+  it("keeps a blocked trigger focusable and explains it", () => {
+    renderInPanel(
+      <Menu
+        label="Route actions"
+        triggerProps={{
+          ariaDisabled: true,
+          disabledReason: "Select a route first.",
+        }}
+      >
+        <MenuItem id="rename">Rename</MenuItem>
+      </Menu>,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Route actions" });
+    expect(trigger).toHaveAttribute("aria-disabled", "true");
+    expect(trigger).not.toBeDisabled();
+    expect(trigger).toHaveAccessibleDescription("Select a route first.");
+    trigger.focus();
+    expect(trigger).toHaveFocus();
+  });
+
+  // Every way a menu trigger opens: a press, the activation keys, and the
+  // arrows React Aria's menu trigger answers on its own. Each is tried on a
+  // freshly rendered trigger, so one refused key cannot hide another that
+  // opened the menu and a later key that then activated an item.
+  const OPENING_INPUTS = [
+    ["a click", null],
+    ["Enter", "{Enter}"],
+    ["Space", " "],
+    ["ArrowDown", "{ArrowDown}"],
+    ["ArrowUp", "{ArrowUp}"],
+    ["Alt+ArrowDown", "{Alt>}{ArrowDown}{/Alt}"],
+    ["Alt+ArrowUp", "{Alt>}{ArrowUp}{/Alt}"],
+  ] as const;
+
+  const BLOCKED_TRIGGERS = [
+    [
+      "a blocked trigger",
+      { ariaDisabled: true, disabledReason: "Select a route first." },
+    ],
+    ["a busy trigger", { loading: true }],
+    ["a natively aria-disabled trigger", { "aria-disabled": true }],
+  ] as const;
+
+  for (const [triggerName, triggerProps] of BLOCKED_TRIGGERS) {
+    it.each(OPENING_INPUTS)(
+      `opens nothing from ${triggerName} on %s`,
+      async (_input, keys) => {
+        const user = userEvent.setup();
+        const onAction = vi.fn();
+        renderInPanel(
+          <Menu
+            label="Route actions"
+            onAction={onAction}
+            triggerProps={triggerProps}
+          >
+            <MenuItem id="rename">Rename</MenuItem>
+          </Menu>,
+        );
+        const trigger = screen.getByRole("button", { name: "Route actions" });
+
+        if (keys === null) {
+          await user.click(trigger);
+        } else {
+          trigger.focus();
+          await user.keyboard(keys);
+        }
+
+        expect(screen.queryByRole("menu")).toBeNull();
+        expect(trigger).toHaveAttribute("aria-expanded", "false");
+        expect(trigger).toHaveFocus();
+        expect(onAction).not.toHaveBeenCalled();
+      },
+    );
+  }
+
+  it("still hands a blocked trigger's keys to the consumer's capture handler", async () => {
+    const user = userEvent.setup();
+    const onKeyDownCapture = vi.fn();
+    renderInPanel(
+      <Menu
+        label="Route actions"
+        triggerProps={{ loading: true, onKeyDownCapture }}
+      >
+        <MenuItem id="rename">Rename</MenuItem>
+      </Menu>,
+    );
+    screen.getByRole("button", { name: "Route actions" }).focus();
+    await user.keyboard("{ArrowDown}");
+
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(onKeyDownCapture).toHaveBeenCalledTimes(1);
+    expect(onKeyDownCapture.mock.calls[0]?.[0]).toMatchObject({
+      defaultPrevented: true,
+      key: "ArrowDown",
+    });
+  });
+
+  it.each(OPENING_INPUTS.filter(([, keys]) => keys !== null))(
+    "still opens a live trigger on %s",
+    async (_input, keys) => {
+      const user = userEvent.setup();
+      renderInPanel(
+        <Menu label="Route actions">
+          <MenuItem id="rename">Rename</MenuItem>
+        </Menu>,
+      );
+      screen.getByRole("button", { name: "Route actions" }).focus();
+      await user.keyboard(keys ?? "");
+
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+    },
+  );
+
+  it("lets triggerVariant and triggerSize name the look beside triggerProps", () => {
+    renderInPanel(
+      <Menu
+        label="File"
+        triggerVariant="ghost"
+        triggerSize="compact"
+        triggerProps={{ fullWidth: true }}
+      >
+        <MenuItem id="open">Open</MenuItem>
+      </Menu>,
+    );
+
+    expect(screen.getByRole("button", { name: "File" })).toHaveClass(
+      "snui-button--ghost",
+      "snui-button--size-compact",
+      "snui-button--full-width",
     );
   });
 
@@ -553,5 +744,28 @@ describe("Menu", () => {
 
     await user.click(screen.getByRole("button", { name: "File" }));
     expect(screen.getByRole("menu")).toHaveClass("snui-menu", "plugin-menu");
+  });
+});
+
+describe("menu style module", () => {
+  it("draws section dividers with the subtle border and keeps the overlay outline", () => {
+    for (const selector of [
+      ".snui-menu__separator",
+      ".snui-menu__section + .snui-menu__section",
+    ]) {
+      expect(ruleBody(MENU_STYLES.styles, selector)).toContain(
+        "border-block-start: 1px solid var(--snui-color-border-subtle);",
+      );
+    }
+    // An item's inset ring reads the shared ring width, which a contrast
+    // request raises to 3px.
+    expect(
+      ruleBody(MENU_STYLES.styles, ".snui-menu__item[data-focus-visible]"),
+    ).toContain(focusRingDeclarations("inset", false));
+    // The menu floats over arbitrary content, so its own outline keeps the
+    // boundary token that separates it from whatever lies beneath.
+    expect(ruleBody(MENU_STYLES.styles, ".snui-menu-popover")).toContain(
+      RAISED_OVERLAY_DECLARATIONS,
+    );
   });
 });

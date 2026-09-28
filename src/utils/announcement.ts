@@ -1,18 +1,24 @@
 export type AnnouncementMode = "off" | "polite" | "assertive";
 
+/** The live-region role that speaks at each announcing mode. */
+const ANNOUNCEMENT_ROLES = {
+  assertive: "alert",
+  polite: "status",
+} as const satisfies Readonly<Record<Exclude<AnnouncementMode, "off">, string>>;
+
 /** The live-region role that speaks at a mode, and none for "off". */
 function announcementRole(
   mode: AnnouncementMode,
 ): "alert" | "status" | undefined {
-  if (mode === "assertive") return "alert";
-  if (mode === "polite") return "status";
-  return undefined;
+  return mode === "off" ? undefined : ANNOUNCEMENT_ROLES[mode];
 }
 
 /**
  * The attribute pair an announcing element carries. Named for the attributes
  * rather than for the props, because `LiveRegionProps` is the public prop type
  * of the `LiveRegion` component and the two are not the same shape.
+ *
+ * @internal
  */
 export interface LiveRegionAttributes {
   readonly "aria-live": AnnouncementMode | undefined;
@@ -34,6 +40,8 @@ const LIVE_REGION_ROLES = new Set(["alert", "log", "status"]);
  * announces nothing on its own, a landmark or a grouping among them, so the
  * requested mode still reaches the element rather than being dropped for a
  * role that cannot carry it. Neither is set when no mode and no role is given.
+ *
+ * @internal
  */
 export function liveRegionProps(
   mode: AnnouncementMode | undefined,
@@ -52,6 +60,8 @@ export function liveRegionProps(
  * that owns one reads this to mount an empty shell instead of appearing with
  * its first message. A region states its mode through either half of the
  * pair, so both spellings are read here.
+ *
+ * @internal
  */
 export function announcesUpdates(region: LiveRegionAttributes): boolean {
   const mode = region["aria-live"];
@@ -59,7 +69,11 @@ export function announcesUpdates(region: LiveRegionAttributes): boolean {
   return region.role !== undefined && LIVE_REGION_ROLES.has(region.role);
 }
 
-/** A resolved region together with what its owner should render right now. */
+/**
+ * A resolved region together with what its owner should render right now.
+ *
+ * @internal
+ */
 export interface AnnouncingRegion {
   /** Whether the region announces its own updates. */
   readonly announcing: boolean;
@@ -77,6 +91,8 @@ export interface AnnouncingRegion {
  * renders nothing inside until there is something to say: no tone glyph, no
  * dot, no unit standing where there is no message yet. The stylesheet takes an
  * empty region out of the flow rather than out of the accessibility tree.
+ *
+ * @internal
  */
 export function resolveAnnouncingRegion(
   mode: AnnouncementMode | undefined,
@@ -86,4 +102,53 @@ export function resolveAnnouncingRegion(
   const attributes = liveRegionProps(mode, suppliedRole);
   const announcing = announcesUpdates(attributes);
   return { announcing, attributes, silent: announcing && !hasContent };
+}
+
+/**
+ * Whether an announcing element holds the content it mounts with for a beat.
+ *
+ * `requested` is the consumer's `deferFirstMessage`. Left unset, a polite
+ * region holds, because a status inserted together with its text is often not
+ * announced at all, and an assertive one does not: an alert inserted with its
+ * content is announced on insertion, and a failure it reports should not
+ * appear a beat late. An element that announces nothing never holds.
+ *
+ * @internal
+ */
+export function defersFirstMessage(
+  region: LiveRegionAttributes,
+  requested: boolean | undefined,
+): boolean {
+  if (!announcesUpdates(region)) return false;
+  if (requested !== undefined) return requested;
+  return region.role !== "alert" && region["aria-live"] !== "assertive";
+}
+
+/**
+ * A visually hidden log of announcements: one child per message, and only
+ * the message just added is read. `status` and `alert` are atomic by
+ * default, which would read every message still in the region again with
+ * each arrival, so the region turns that off.
+ *
+ * @internal
+ */
+export interface MessageLogAttributes {
+  readonly "aria-atomic": "false";
+  readonly className: string;
+  readonly role: "alert" | "status";
+}
+
+/**
+ * The attributes of a polite or assertive message log.
+ *
+ * @internal
+ */
+export function messageLogAttributes(
+  mode: "assertive" | "polite",
+): MessageLogAttributes {
+  return {
+    "aria-atomic": "false",
+    className: "snui-visually-hidden",
+    role: ANNOUNCEMENT_ROLES[mode],
+  };
 }

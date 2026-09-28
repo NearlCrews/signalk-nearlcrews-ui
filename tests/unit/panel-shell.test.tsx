@@ -1,6 +1,12 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef } from "react";
+import { createRef, useEffect } from "react";
 import {
   afterEach,
   beforeEach,
@@ -10,53 +16,96 @@ import {
   type MockInstance,
   vi,
 } from "vitest";
-
 import {
   CollapsibleSection,
-  PanelErrorBoundary,
-  type PanelErrorBoundaryFallbackProps,
   PanelShell,
   Section,
-  UnsupportedBrowserNotice,
   usePanelAnnouncer,
-  useUnsavedChangesGuard,
 } from "../../src/index.js";
-import { expectNoAxeViolations, follows, renderInPanel } from "../helpers.js";
+import { Dialog } from "../../src/overlays.js";
+import type * as ReactVersion from "../../src/utils/react-version.js";
+import { follows, renderInPanel } from "../helpers.js";
+import { Bomb, failure } from "./lib/failing-content.js";
+
+/** Whether the shell should read the host's React as below the floor. */
+let reactTooOld = false;
+
+vi.mock("../../src/utils/react-version.js", async (importOriginal) => {
+  const original = await importOriginal<typeof ReactVersion>();
+  return {
+    ...original,
+    reactBelowFloor: (reactVersion: string) =>
+      reactTooOld || original.reactBelowFloor(reactVersion),
+  };
+});
 
 /** The shell's theme selector, found by the group name it always carries. */
 function themeGroup(): HTMLElement {
   return screen.getByRole("radiogroup", { name: "Panel theme" });
 }
 
-/** Whether the panel content throws on its next render. */
-let armed = true;
-
-/** Panel content that fails to render while armed. */
-function Bomb(): React.JSX.Element {
-  if (armed) throw new Error("Panel content failed.");
-  return <p>Recovered content</p>;
-}
-
 afterEach(() => {
-  armed = true;
+  failure.armed = true;
+  reactTooOld = false;
 });
 
 interface AnnounceProps {
   readonly assertive?: boolean | undefined;
+  /** Name of the button, default "Announce". */
+  readonly label?: string | undefined;
   readonly message: string;
 }
 
 /** A panel child that speaks through the shell's own regions. */
 function Announce({
   assertive = false,
+  label = "Announce",
   message,
 }: AnnounceProps): React.JSX.Element {
   const announce = usePanelAnnouncer();
   return (
     <button type="button" onClick={() => announce(message, { assertive })}>
-      Announce
+      {label}
     </button>
   );
+}
+
+/** A panel child that speaks as soon as it mounts. */
+function AnnounceOnMount({ message }: AnnounceProps): React.JSX.Element {
+  const announce = usePanelAnnouncer();
+  useEffect(() => {
+    announce(message);
+  }, [announce, message]);
+  return <p>Mounted</p>;
+}
+
+/**
+ * Whether assistive technology can reach an element: neither it nor any
+ * ancestor is inert or hidden with aria-hidden, which is how React Aria takes
+ * the rest of the page away while a modal overlay is open.
+ */
+function isExposed(element: Element): boolean {
+  for (
+    let node: Element | null = element;
+    node !== null;
+    node = node.parentElement
+  ) {
+    if (node.getAttribute("aria-hidden") === "true") return false;
+    if (node instanceof HTMLElement && node.inert) return false;
+  }
+  return true;
+}
+
+/** The text of each message node inside a region, in order. */
+function regionMessages(region: HTMLElement): string[] {
+  return [...region.children].map((node) => node.textContent);
+}
+
+/** Waits out the beat the shell's regions exist empty before speaking. */
+function settleRegions(): void {
+  act(() => {
+    vi.advanceTimersByTime(100);
+  });
 }
 
 describe("PanelShell", () => {
@@ -196,6 +245,220 @@ describe("PanelShell", () => {
       expect(screen.getByRole("alert")).toHaveTextContent("Provider offline."),
     );
     expect(screen.getByRole("status").textContent).toBe("");
+  });
+
+  describe("announcer", () => {
+    it("keeps both regions exposed while a modal dialog is open", async () => {
+      const user = userEvent.setup();
+      render(
+        <PanelShell themeToggle="none">
+          <p>Body</p>
+          <Dialog title="First run" defaultOpen>
+            <Announce message="Two sources found." />
+          </Dialog>
+        </PanelShell>,
+      );
+
+      // React Aria hides everything outside the open dialog, and the regions
+      // sit beside the panel content it hides. They carry the marker React
+      // Aria spares, as its own announcer does, so a message spoken while the
+      // dialog is open is not lost in an inert region.
+      const polite = screen.getByRole("status", { hidden: true });
+      const assertive = screen.getByRole("alert", { hidden: true });
+      await waitFor(() =>
+        expect(isExposed(screen.getByText("Body"))).toBe(false),
+      );
+      expect(polite).toHaveAttribute("data-live-announcer", "true");
+      expect(assertive).toHaveAttribute("data-live-announcer", "true");
+      expect(isExposed(polite)).toBe(true);
+      expect(isExposed(assertive)).toBe(true);
+
+      await user.click(screen.getByRole("button", { name: "Announce" }));
+      await waitFor(() =>
+        expect(polite).toHaveTextContent("Two sources found."),
+      );
+      expect(isExposed(polite)).toBe(true);
+    });
+
+    it("speaks every message of one handler rather than the last alone", async () => {
+      const user = userEvent.setup();
+      function AnnounceTwice(): React.JSX.Element {
+        const announce = usePanelAnnouncer();
+        return (
+          <button
+            type="button"
+            onClick={() => {
+              announce("Scan finished.");
+              announce("Three paths detected.");
+            }}
+          >
+            Scan
+          </button>
+        );
+      }
+      render(
+        <PanelShell themeToggle="none">
+          <AnnounceTwice />
+        </PanelShell>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Scan" }));
+      const polite = screen.getByRole("status");
+      await waitFor(() =>
+        expect(regionMessages(polite)).toEqual([
+          "Scan finished.",
+          "Three paths detected.",
+        ]),
+      );
+    });
+
+    it("reads only the message just added, not the ones still queued", async () => {
+      const user = userEvent.setup();
+      render(
+        <PanelShell themeToggle="none">
+          <Announce label="Loading" message="Loading conversions." />
+          <Announce label="Loaded" message="Conversions loaded." />
+        </PanelShell>,
+      );
+
+      // Both regions are marked before anything is said, since a message
+      // added later is read according to how the region was marked.
+      expect(screen.getByRole("status")).toHaveAttribute(
+        "aria-atomic",
+        "false",
+      );
+      expect(screen.getByRole("alert")).toHaveAttribute("aria-atomic", "false");
+
+      // The second message arrives while the first is still in the region, its
+      // seven seconds not yet up. The region is not atomic, so the reader says
+      // only the node just added rather than both messages again.
+      await user.click(screen.getByRole("button", { name: "Loading" }));
+      await user.click(screen.getByRole("button", { name: "Loaded" }));
+      const polite = screen.getByRole("status");
+      await waitFor(() =>
+        expect(regionMessages(polite)).toEqual([
+          "Loading conversions.",
+          "Conversions loaded.",
+        ]),
+      );
+      expect(polite).toHaveAttribute("aria-atomic", "false");
+    });
+
+    it("adds the same words again as a message of their own", async () => {
+      const user = userEvent.setup();
+      render(
+        <PanelShell themeToggle="none">
+          <Announce message="Saved." />
+        </PanelShell>,
+      );
+
+      const button = screen.getByRole("button", { name: "Announce" });
+      await user.click(button);
+      await user.click(button);
+
+      // A region whose text did not change says nothing, so a repeat is a new
+      // node rather than the old one left in place.
+      const polite = screen.getByRole("status");
+      await waitFor(() =>
+        expect(regionMessages(polite)).toEqual(["Saved.", "Saved."]),
+      );
+    });
+
+    it("clears each message once it has been spoken", () => {
+      vi.useFakeTimers();
+      render(
+        <PanelShell themeToggle="none">
+          <Announce label="Loading" message="Loading conversions." />
+          <Announce label="Failure" assertive message="Provider offline." />
+        </PanelShell>,
+      );
+      settleRegions();
+
+      fireEvent.click(screen.getByRole("button", { name: "Loading" }));
+      act(() => {
+        vi.advanceTimersByTime(3_000);
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Failure" }));
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Loading conversions.",
+      );
+      expect(screen.getByRole("alert")).toHaveTextContent("Provider offline.");
+
+      // Outdated status left in a hidden region is the first thing a reader
+      // meets at the top of the panel in browse mode, so each message leaves
+      // on its own clock, the way React Aria's announcer retires its own.
+      act(() => {
+        vi.advanceTimersByTime(4_000);
+      });
+      expect(screen.getByRole("status").textContent).toBe("");
+      expect(screen.getByRole("alert")).toHaveTextContent("Provider offline.");
+
+      act(() => {
+        vi.advanceTimersByTime(3_000);
+      });
+      expect(screen.getByRole("alert").textContent).toBe("");
+    });
+
+    it("holds a message spoken in the regions' first beat until they settle", () => {
+      vi.useFakeTimers();
+      render(
+        <PanelShell themeToggle="none">
+          <AnnounceOnMount message="Status unavailable." />
+        </PanelShell>,
+      );
+
+      // The regions mounted in the same commit as the message, which is the
+      // arrangement a reader misses, so they stay empty for one beat first.
+      const polite = screen.getByRole("status");
+      expect(polite.textContent).toBe("");
+      act(() => {
+        vi.advanceTimersByTime(99);
+      });
+      expect(polite.textContent).toBe("");
+      settleRegions();
+      expect(polite).toHaveTextContent("Status unavailable.");
+    });
+
+    it("ignores a blank message", async () => {
+      const user = userEvent.setup();
+      render(
+        <PanelShell themeToggle="none">
+          <Announce message="   " />
+        </PanelShell>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Announce" }));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      });
+      expect(screen.getByRole("status").children).toHaveLength(0);
+    });
+
+    it("warns once when a message has no shell to speak through", async () => {
+      const warn = vi
+        .spyOn(console, "warn")
+        .mockImplementation(() => undefined);
+      const user = userEvent.setup();
+      renderInPanel(
+        <>
+          <Announce label="First" message="Saved." />
+          <Announce label="Second" message="Saved again." />
+        </>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "First" }));
+      await user.click(screen.getByRole("button", { name: "Second" }));
+
+      // PanelRoot alone mounts no regions, so the message is dropped, and the
+      // developer hears why instead of wondering where it went.
+      expect(warn).toHaveBeenCalledOnce();
+      // The package's own announcing components speak through the same hook,
+      // so the warning names every caller rather than only the hook.
+      expect(warn.mock.calls[0]?.[0]).toMatch(
+        /^A panel announcement from usePanelAnnouncer, FreshnessNote, or the PanelErrorBoundary fallback found no PanelShell/,
+      );
+      expect(screen.queryByRole("status")).toBeNull();
+    });
   });
 
   it("resolves a between placement with no title to the trailing edge", () => {
@@ -342,9 +605,11 @@ describe("PanelShell", () => {
           id="chart-locker"
           className="host-panel"
           data-testid="shell"
-          unsupportedLabels={{
-            title: "Update the vessel browser",
-            children: "Open Signal K Admin in a newer browser.",
+          labels={{
+            unsupportedBrowser: {
+              description: "Open Signal K Admin in a newer browser.",
+              title: "Update the vessel browser",
+            },
           }}
         >
           <p>Body</p>
@@ -364,6 +629,23 @@ describe("PanelShell", () => {
       ).toBeVisible();
     });
 
+    it("keeps the English notice for blank bundle text", () => {
+      render(
+        <PanelShell
+          labels={{ unsupportedBrowser: { description: " ", title: "" } }}
+        >
+          <p>Body</p>
+        </PanelShell>,
+      );
+
+      expect(
+        screen.getByRole("region", { name: "Browser update required" }),
+      ).toBeVisible();
+      expect(
+        screen.getByText(/^This panel needs a newer browser\./),
+      ).toBeVisible();
+    });
+
     it("renders a consumer notice when one is supplied", () => {
       render(
         <PanelShell unsupported={<p>Open this page in the vessel browser.</p>}>
@@ -376,6 +658,34 @@ describe("PanelShell", () => {
       ).toBeVisible();
       expect(screen.queryByRole("region")).toBeNull();
     });
+  });
+});
+
+describe("PanelShell below the React floor", () => {
+  it("names both versions rather than the translated browser advice", () => {
+    reactTooOld = true;
+    render(
+      <PanelShell
+        labels={{
+          unsupportedBrowser: {
+            description: "Werk de browser bij.",
+            title: "Update vereist",
+          },
+        }}
+      >
+        <p>Body</p>
+      </PanelShell>,
+    );
+
+    // The browser advice, translated or not, cannot help when the host's
+    // React is the reason, so the notice names what actually has to change.
+    expect(
+      screen.getByRole("region", { name: "Signal K update required" }),
+    ).toBeVisible();
+    expect(screen.queryByText("Update vereist")).toBeNull();
+    expect(screen.getByText(/^This panel needs React /)).toBeVisible();
+    expect(screen.queryByText("Werk de browser bij.")).toBeNull();
+    expect(screen.queryByText("Body")).toBeNull();
   });
 });
 
@@ -442,7 +752,7 @@ describe("PanelShell error boundary", () => {
     // the reader arrives on the recovery action instead of on the body.
     expect(document.activeElement).toBe(fallback);
 
-    armed = false;
+    failure.armed = false;
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(screen.getByText("Recovered content")).toBeVisible();
   });
@@ -500,7 +810,7 @@ describe("PanelShell error boundary", () => {
   });
 
   it("announces the failure rather than taking focus that sits elsewhere", async () => {
-    armed = false;
+    failure.armed = false;
     // Built fresh per render: React skips re-rendering a subtree handed the
     // very same element, and this test needs the second render to run.
     const tree = (): React.JSX.Element => (
@@ -517,7 +827,7 @@ describe("PanelShell error boundary", () => {
     const outside = screen.getByTestId("outside");
     outside.focus();
 
-    armed = true;
+    failure.armed = true;
     rerender(tree());
 
     // Nothing was pulled out from under the operator, so the panel's own
@@ -550,197 +860,5 @@ describe("PanelShell error boundary", () => {
     expect(container.querySelector(".snui-stack")).toHaveClass(
       "snui-stack--gap-4",
     );
-  });
-});
-
-describe("PanelErrorBoundary", () => {
-  beforeEach(() => {
-    vi.spyOn(console, "error").mockImplementation(() => undefined);
-  });
-
-  it("catches a render error, reports it, and recovers on Try again", async () => {
-    const user = userEvent.setup();
-    const onError = vi.fn();
-    const { container } = renderInPanel(
-      <PanelErrorBoundary onError={onError}>
-        <Bomb />
-      </PanelErrorBoundary>,
-    );
-
-    expect(container.querySelector(".snui-banner--danger")).toHaveTextContent(
-      "This panel stopped working",
-    );
-    expect(onError).toHaveBeenCalledOnce();
-    expect(onError.mock.calls[0]?.[0]).toBeInstanceOf(Error);
-    expect(screen.queryByRole("button", { name: "Reload page" })).toBeNull();
-
-    armed = false;
-    await user.click(screen.getByRole("button", { name: "Try again" }));
-    expect(screen.getByText("Recovered content")).toBeVisible();
-    expect(container.querySelector(".snui-banner--danger")).toBeNull();
-  });
-
-  it("offers the secondary reload action only when a handler is given", async () => {
-    const user = userEvent.setup();
-    const onReload = vi.fn();
-    const { container } = renderInPanel(
-      <PanelErrorBoundary
-        onReload={onReload}
-        reloadLabel="Reload Admin"
-        retryLabel="Retry"
-        title="Panel error"
-        description="Reload if it keeps failing."
-      >
-        <Bomb />
-      </PanelErrorBoundary>,
-    );
-
-    expect(container.querySelector(".snui-banner--danger")).toHaveTextContent(
-      "Panel error. Reload if it keeps failing.",
-    );
-    expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Reload Admin" }));
-    expect(onReload).toHaveBeenCalledOnce();
-  });
-
-  it("warns about discarded changes only where the reload is offered", () => {
-    const { container } = renderInPanel(
-      <>
-        <PanelErrorBoundary>
-          <Bomb />
-        </PanelErrorBoundary>
-        <PanelErrorBoundary onReload={() => undefined}>
-          <Bomb />
-        </PanelErrorBoundary>
-      </>,
-    );
-
-    // The warning belongs to the action that certainly throws unsaved entries
-    // away, and the retry, which only rebuilds the panel, carries none.
-    const fallbacks = container.querySelectorAll(".snui-banner--danger");
-    expect(fallbacks[0]).toHaveTextContent(
-      "Try again rebuilds this panel's content.",
-    );
-    expect(fallbacks[0]).not.toHaveTextContent("Reloading the page");
-    expect(fallbacks[1]).toHaveTextContent(
-      "Reloading the page discards unsaved changes in every panel.",
-    );
-  });
-
-  it("hands a custom fallback the error and both actions", async () => {
-    const user = userEvent.setup();
-    const onReload = vi.fn();
-    const fallback = vi.fn(
-      ({ error, reload, reset }: PanelErrorBoundaryFallbackProps) => (
-        <div>
-          <p>{error instanceof Error ? error.message : "Unknown"}</p>
-          <button type="button" onClick={reset}>
-            Reset
-          </button>
-          <button type="button" onClick={reload}>
-            Reload
-          </button>
-        </div>
-      ),
-    );
-    renderInPanel(
-      <PanelErrorBoundary fallback={fallback} onReload={onReload}>
-        <Bomb />
-      </PanelErrorBoundary>,
-    );
-
-    expect(screen.getByText("Panel content failed.")).toBeVisible();
-    await user.click(screen.getByRole("button", { name: "Reload" }));
-    expect(onReload).toHaveBeenCalledOnce();
-    armed = false;
-    await user.click(screen.getByRole("button", { name: "Reset" }));
-    expect(screen.getByText("Recovered content")).toBeVisible();
-  });
-
-  it("renders children untouched while nothing throws", () => {
-    armed = false;
-    renderInPanel(
-      <PanelErrorBoundary>
-        <Bomb />
-      </PanelErrorBoundary>,
-    );
-
-    expect(screen.getByText("Recovered content")).toBeVisible();
-    expect(screen.queryByRole("alert")).toBeNull();
-  });
-});
-
-describe("UnsupportedBrowserNotice", () => {
-  it("passes an accessibility audit with its defaults and with overrides", async () => {
-    const { container } = render(
-      <main>
-        <UnsupportedBrowserNotice />
-        <UnsupportedBrowserNotice
-          headingLevel={3}
-          title="Update the vessel browser"
-        >
-          Open Signal K Admin in a newer browser.
-        </UnsupportedBrowserNotice>
-      </main>,
-    );
-
-    await expectNoAxeViolations(container);
-  });
-
-  it("keeps its own heading beside a consumer's label reference", () => {
-    render(
-      <>
-        <span id="host-name">Chart locker</span>
-        <UnsupportedBrowserNotice aria-labelledby="host-name" />
-      </>,
-    );
-
-    // Every other titled surface joins the two references, so a consumer
-    // adding context does not silently drop the words on screen.
-    expect(
-      screen.getByRole("region", {
-        name: "Chart locker Browser update required",
-      }),
-    ).toBeVisible();
-  });
-
-  it("renders the heading alone when the body is suppressed", () => {
-    const { container } = render(
-      <UnsupportedBrowserNotice>{null}</UnsupportedBrowserNotice>,
-    );
-
-    const notice = screen.getByRole("region", {
-      name: "Browser update required",
-    });
-    expect(notice).toHaveAttribute("data-snui-unsupported");
-    expect(notice).toHaveAttribute("data-browser-compatibility-message");
-    expect(container.querySelector("section > div")).toBeNull();
-  });
-});
-
-describe("useUnsavedChangesGuard", () => {
-  function Guard({ dirty }: { readonly dirty: boolean }): null {
-    useUnsavedChangesGuard(dirty);
-    return null;
-  }
-
-  function dispatchBeforeUnload(): boolean {
-    const event = new Event("beforeunload", { cancelable: true });
-    fireEvent(window, event);
-    return event.defaultPrevented;
-  }
-
-  it("asks the browser to confirm unloading only while dirty", () => {
-    const { rerender, unmount } = render(<Guard dirty />);
-    expect(dispatchBeforeUnload()).toBe(true);
-
-    rerender(<Guard dirty={false} />);
-    expect(dispatchBeforeUnload()).toBe(false);
-
-    rerender(<Guard dirty />);
-    expect(dispatchBeforeUnload()).toBe(true);
-
-    unmount();
-    expect(dispatchBeforeUnload()).toBe(false);
   });
 });

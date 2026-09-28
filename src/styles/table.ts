@@ -1,6 +1,7 @@
 import {
+  CONTROL_SURFACE_DECLARATIONS,
+  FOCUS_RING_WIDTH,
   focusRingDeclarations,
-  SURFACE_DECLARATIONS,
   TABLE_CAPTION_DECLARATIONS,
   TONE_BAR_WIDTH,
   visuallyHiddenDeclarations,
@@ -23,6 +24,15 @@ const SELECTED_ROW = `${BODY_ROW}[data-selected]`;
 const FOCUSED_ROW = `${BODY_ROW}[data-focus-visible]`;
 const VIRTUALIZED_BODY_CELL =
   '.snui-data-grid--virtualized .snui-data-grid__body :is([role="rowheader"], [role="gridcell"])';
+/*
+ * The first column, by the index React Aria writes on every cell in both
+ * layouts rather than by position: a virtualized grid wraps each cell in an
+ * element of its own, where every cell is its parent's first child. Header
+ * cells carry the one-based aria-colindex, body cells the zero-based
+ * data-column-index.
+ */
+const FIRST_HEADER_CELL = `${HEADER_CELL}[aria-colindex="1"]`;
+const FIRST_COLUMN = '[data-column-index="0"]';
 
 /**
  * Floor a column may not shrink below, as a custom property so a column pinned
@@ -40,7 +50,9 @@ const TABLE_CSS = scopeStyles(`
   /* A sideways flick that reaches the end of the grid must not scroll the
      panel or the host page behind it. */
   overscroll-behavior-x: contain;
-${SURFACE_DECLARATIONS}
+  /* The grid is a focusable scroll region, so its edge keeps the boundary
+     token when container outlines step back to the subtle one. */
+${CONTROL_SURFACE_DECLARATIONS}
   color: var(--snui-color-text);
 }
 
@@ -66,7 +78,7 @@ ${HEADER_CELL} {
   z-index: var(--snui-z-sticky);
   height: var(--snui-control-min-height);
   padding: var(--snui-space-2) var(--snui-space-3);
-  border-block-end: 1px solid var(--snui-color-border);
+  border-block-end: 1px solid var(--snui-color-border-subtle);
   background: var(--snui-color-surface-raised);
   color: var(--snui-color-text);
   font-weight: var(--snui-font-weight-bold);
@@ -86,7 +98,7 @@ ${SORTABLE_HEADER}[data-pressed] {
 }
 
 ${HEADER_CELL}[data-focus-visible] {
-${focusRingDeclarations("-2px", true)}
+${focusRingDeclarations("inset", true)}
 }
 
 /*
@@ -116,7 +128,7 @@ ${HEADER_CELL}[data-sort-direction="descending"]::after {
 ${BODY_CELL} {
   box-sizing: border-box;
   padding: var(--snui-space-2) var(--snui-space-3);
-  border-block-end: 1px solid var(--snui-color-border);
+  border-block-end: 1px solid var(--snui-color-border-subtle);
   min-width: ${COLUMN_MIN};
   /* Live values tick over without shifting their neighbors. Tabular figures
      are an OpenType feature most faces carry for Western Arabic digits alone,
@@ -162,18 +174,44 @@ ${SELECTED_ROW} {
 /*
  * Selection also carries a leading bar, because the Night tint sits about
  * 1.1:1 against the surface behind it and hue alone is never the signal. The
- * bar is reserved on every first cell in transparent, so selecting a row
- * paints it rather than shifting the row's text.
+ * first column's inset is widened by the bar's width on every row and in the
+ * header, so selecting a row paints the bar there rather than shifting the
+ * row's text. The bar is drawn over that inset rather than as the cell's own
+ * border: a leading border on the cell mitres against the row separator and
+ * fades its first pixels in.
  */
-${HEADER_CELL}:first-child,
-${BODY_CELL}:first-child {
-  /* The width the tone bar takes on Banner, Card, and Toast. The header
-     reserves it too, so the first column measures the same in both. */
-  border-inline-start: ${TONE_BAR_WIDTH} solid transparent;
+${FIRST_HEADER_CELL},
+${BODY_CELL}${FIRST_COLUMN} {
+  /* The width the tone bar takes on Banner, Card, and Toast. */
+  padding-inline-start: calc(var(--snui-space-3) + ${TONE_BAR_WIDTH});
 }
 
-${SELECTED_ROW} ${CELL_ROLES}:first-child {
-  border-inline-start-color: var(--snui-color-accent-fill);
+${BODY_CELL}${FIRST_COLUMN} {
+  position: relative;
+}
+
+/*
+ * The bar is the pseudo-element's own border rather than its box, so it snaps
+ * to whole pixels the way the Banner, Card, and Toast tone bars do and paints
+ * exactly as wide as theirs.
+ */
+${SELECTED_ROW} ${CELL_ROLES}${FIRST_COLUMN}::before {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-inline-start: ${TONE_BAR_WIDTH} solid var(--snui-color-accent-fill);
+  content: "";
+  pointer-events: none;
+}
+
+/*
+ * A row that holds keyboard focus paints its ring in the band just inside its
+ * edge, and the positioned bar would paint over that band, so the bar steps
+ * inside the ring and the ring stays whole.
+ */
+${SELECTED_ROW}[data-focus-visible] ${CELL_ROLES}${FIRST_COLUMN}::before {
+  inset-block: ${FOCUS_RING_WIDTH};
+  inset-inline-start: ${FOCUS_RING_WIDTH};
 }
 
 ${SELECTED_ROW}[data-hovered] {
@@ -181,7 +219,7 @@ ${SELECTED_ROW}[data-hovered] {
 }
 
 ${FOCUSED_ROW} {
-${focusRingDeclarations("-2px", false)}
+${focusRingDeclarations("inset", false)}
 }
 
 .snui-data-grid--zebra:not(.snui-data-grid--virtualized) .snui-data-grid__body > tr:nth-of-type(even):not([data-selected]):not([data-hovered]),
@@ -192,6 +230,11 @@ ${focusRingDeclarations("-2px", false)}
 .snui-data-grid--compact ${HEADER_CELL},
 .snui-data-grid--compact ${BODY_CELL} {
   padding: var(--snui-space-1) var(--snui-space-2);
+}
+
+.snui-data-grid--compact ${FIRST_HEADER_CELL},
+.snui-data-grid--compact ${BODY_CELL}${FIRST_COLUMN} {
+  padding-inline-start: calc(var(--snui-space-2) + ${TONE_BAR_WIDTH});
 }
 
 .snui-data-grid--compact ${HEADER_CELL} {
@@ -279,6 +322,20 @@ ${VIRTUALIZED_BODY_CELL}[data-snui-wrap] {
   white-space: normal;
 }
 
+/*
+ * The title that carries a truncated value reaches a pointer alone, so the
+ * cell that holds keyboard focus shows its whole value instead. DataGrid
+ * rebuilds the rows focus moves between, so the virtualizer measures them
+ * again: the row grows to fit and settles back when focus moves on.
+ */
+${VIRTUALIZED_BODY_CELL}[data-focus-visible],
+${VIRTUALIZED_BODY_CELL}[data-focus-visible] .snui-data-grid__cell-text {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 @media (forced-colors: active) {
   /*
    * Forced colors flattens the tint, so reconstruct selection and focus with
@@ -293,7 +350,8 @@ ${VIRTUALIZED_BODY_CELL}[data-snui-wrap] {
     color: HighlightText;
   }
 
-  ${SELECTED_ROW} ${CELL_ROLES}:first-child {
+  ${SELECTED_ROW} ${CELL_ROLES}${FIRST_COLUMN}::before {
+    forced-color-adjust: none;
     border-inline-start-color: HighlightText;
   }
 
@@ -303,18 +361,28 @@ ${VIRTUALIZED_BODY_CELL}[data-snui-wrap] {
 
   /*
    * The unselected hover fill is a tint too, so it disappears the same way.
-   * Reconstructed with the system pair, which also keeps the row's own text
-   * readable against it.
+   * It is rebuilt as an inset outline rather than a fill, because the
+   * Highlight fill is the selection mark and a pointer crossing the grid must
+   * not paint rows that look selected. Dashed, so it never reads as the solid
+   * keyboard ring, which keeps its own row.
    */
-  ${SELECTABLE_ROW}[data-hovered] {
-    forced-color-adjust: none;
-    background: Highlight;
-    color: HighlightText;
+  ${SELECTABLE_ROW}[data-hovered]:not([data-selected], [data-focus-visible]) {
+    outline: 2px dashed Highlight;
+    outline-offset: -2px;
   }
 
   ${FOCUSED_ROW},
   .snui-data-grid__header [role="columnheader"][data-focus-visible] {
     outline-color: Highlight;
+  }
+
+  /*
+   * A selected row is filled with Highlight, where a Highlight ring would
+   * vanish, so a selected row that holds focus rings in HighlightText, the
+   * color its bar and text already take.
+   */
+  ${SELECTED_ROW}[data-focus-visible] {
+    outline-color: HighlightText;
   }
 
   .snui-data-grid__header [role="columnheader"][data-allows-sorting]::after,

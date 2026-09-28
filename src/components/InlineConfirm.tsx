@@ -14,8 +14,13 @@ import { useNodeRef } from "../hooks/use-node-ref.js";
 import { joinIdReferences, landmarkLabel } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { revealElement } from "../utils/focus.js";
-import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
+import type { HeadingLevel } from "../utils/heading.js";
+import {
+  SectionOutlineProvider,
+  useContentHeading,
+} from "../utils/heading-level.js";
 import { resolveBundledContent } from "../utils/labels.js";
+import { INLINE_CONFIRM_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { hasReactContent } from "../utils/react-node.js";
 import { warnOnce } from "../utils/warn-once.js";
@@ -23,14 +28,10 @@ import { Button, type ButtonVariant } from "./Button.js";
 
 export type InlineConfirmCancelReason = "cancel" | "escape";
 
-const DEFAULT_CANCEL_LABEL = "Cancel";
-const DEFAULT_CONFIRM_LABEL = "Confirm";
-const DEFAULT_TITLE = "Confirm action";
-
 function warnGenericDestructiveConfirm(): void {
   warnOnce(
     "inline-confirm-generic-destructive",
-    `InlineConfirm renders a destructive confirmation labeled "${DEFAULT_CONFIRM_LABEL}", which names no consequence. Pass confirmLabel, such as "Delete route", wherever the region reaches a user.`,
+    `InlineConfirm renders a destructive confirmation labeled "${INLINE_CONFIRM_LABEL_DEFAULTS.confirm}", which names no consequence. Pass confirmLabel, such as "Delete route", wherever the region reaches a user.`,
   );
 }
 
@@ -67,12 +68,12 @@ export interface InlineConfirmProps
   /** Sets the initial state only. Pass `open` to control the confirmation. */
   readonly defaultOpen?: boolean | undefined;
   /**
-   * The title used when `title` is blank or absent. It exists so a localized
-   * panel can replace the built-in "Confirm action" once, in a shared prop
-   * bag, while each confirmation still passes the question it is asking as
-   * its own `title`.
+   * Level of the title. It defaults to the level below the `Section` or
+   * `CollapsibleSection` the confirmation sits in, which contains it; inside
+   * a `Dialog` or `AlertDialog`, to the level below the dialog's title; and
+   * elsewhere to the level a section in the same place would take: below a
+   * `PanelShell` title, else 2. A derived level stops at 6.
    */
-  readonly fallbackTitle?: ReactNode | undefined;
   readonly headingLevel?: HeadingLevel | undefined;
   /** Focused on open instead of the region container. */
   readonly initialFocusRef?: RefObject<HTMLElement | null> | undefined;
@@ -90,7 +91,10 @@ export interface InlineConfirmProps
   readonly open?: boolean | undefined;
   /** Receives focus after close instead of the previously focused element. */
   readonly returnFocusRef?: RefObject<HTMLElement | null> | undefined;
-  /** The question being asked. A blank title falls back to `fallbackTitle`. */
+  /**
+   * The question being asked. A blank or absent title falls back to the
+   * panel's `labels.inlineConfirm.fallbackTitle`, then to "Confirm action".
+   */
   readonly title?: ReactNode | undefined;
 }
 
@@ -104,8 +108,7 @@ export function InlineConfirm({
   confirmLabel,
   confirmVariant = "danger",
   defaultOpen = false,
-  fallbackTitle,
-  headingLevel = 2,
+  headingLevel,
   initialFocusRef,
   landmark = true,
   message,
@@ -130,25 +133,23 @@ export function InlineConfirm({
   // Each string falls back once: a blank prop reads the same as an absent one,
   // and the panel's bundle stands between a missing prop and the default.
   const bundledLabels = usePanelLabels()?.inlineConfirm;
-  const effectiveTitle = hasReactContent(title)
-    ? title
-    : resolveBundledContent(
-        fallbackTitle,
-        bundledLabels?.fallbackTitle,
-        DEFAULT_TITLE,
-      );
+  const effectiveTitle = resolveBundledContent(
+    title,
+    bundledLabels?.fallbackTitle,
+    INLINE_CONFIRM_LABEL_DEFAULTS.fallbackTitle,
+  );
   const effectiveCancelLabel = resolveBundledContent(
     cancelLabel,
     bundledLabels?.cancel,
-    DEFAULT_CANCEL_LABEL,
+    INLINE_CONFIRM_LABEL_DEFAULTS.cancel,
   );
   const hasConfirmLabel = hasReactContent(confirmLabel);
   const effectiveConfirmLabel = resolveBundledContent(
     confirmLabel,
     bundledLabels?.confirm,
-    DEFAULT_CONFIRM_LABEL,
+    INLINE_CONFIRM_LABEL_DEFAULTS.confirm,
   );
-  const Heading = HEADING_ELEMENTS[headingLevel];
+  const { Heading, level } = useContentHeading(headingLevel);
 
   if (confirmVariant === "danger" && !hasConfirmLabel) {
     warnGenericDestructiveConfirm();
@@ -215,9 +216,11 @@ export function InlineConfirm({
       <Heading id={titleId} className="snui-inline-confirm__title">
         {effectiveTitle}
       </Heading>
-      <div id={messageId} className="snui-inline-confirm__message">
-        {message}
-      </div>
+      <SectionOutlineProvider landmark={landmark} level={level}>
+        <div id={messageId} className="snui-inline-confirm__message">
+          {message}
+        </div>
+      </SectionOutlineProvider>
       <div className="snui-inline-confirm__actions">
         <Button
           variant={cancelVariant}

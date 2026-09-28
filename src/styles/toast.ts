@@ -8,7 +8,7 @@ import {
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 import {
-  TONE_ACCENT_BAR_DECLARATIONS,
+  OVERLAY_TONE_ACCENT_BAR_DECLARATIONS,
   toneAccentBarRules,
   toneDescendantColorRules,
   toneDotShapeRules,
@@ -77,7 +77,12 @@ ${visuallyHiddenDeclarations()}
   pointer-events: none;
 }
 
-.snui-toast-region:first-child {
+/*
+ * The first landmark takes the free space, so the stack sits at the bottom.
+ * The host's announcing regions precede it, so it is the first of its type
+ * rather than the first child.
+ */
+.snui-toast-region:first-of-type {
   margin-block-start: auto;
 }
 
@@ -88,7 +93,9 @@ ${RAISED_SURFACE_TOKEN_DECLARATIONS}
   align-items: flex-start;
   gap: var(--snui-space-2);
   padding: var(--snui-space-2) var(--snui-space-3);
-${TONE_ACCENT_BAR_DECLARATIONS}
+  /* The card floats over the page, so its outline keeps the boundary token
+     the dialog, menu, and popover outlines keep. */
+${OVERLAY_TONE_ACCENT_BAR_DECLARATIONS}
   border-radius: var(--snui-radius-md);
   background: var(--snui-color-surface-raised);
   box-shadow: var(--snui-shadow-overlay);

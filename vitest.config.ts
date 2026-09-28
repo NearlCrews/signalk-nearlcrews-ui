@@ -28,7 +28,7 @@ function typescript7Checker(): string {
 }
 
 /**
- * The five published entry points plus the root barrel. Every one is a pure
+ * The six published entry points plus the root barrel. Every one is a pure
  * re-export file with nothing to execute, so they report zero totals and only
  * pad the file count the coverage gate prints. They are excluded together, so
  * a new entry point is added here rather than appearing as a 0 percent row.
@@ -39,27 +39,51 @@ const ENTRY_BARRELS = [
   "src/data-grid.ts",
   "src/format.ts",
   "src/forms.ts",
+  "src/host-harness.ts",
   "src/overlays.ts",
 ];
 
 export default defineConfig({
   test: {
-    environment: "jsdom",
-    // Node's own localStorage would shadow the jsdom implementation that
-    // tests/setup.ts clears between tests, so it stays off.
-    execArgv: ["--no-experimental-webstorage"],
-    include: ["tests/unit/**/*.test.{ts,tsx,mjs}"],
-    setupFiles: ["./tests/setup.ts"],
-    // The jsdom axe pass exceeds the 5 second default on a cold coverage run.
+    // Every project inherits these through `extends`. The jsdom axe pass
+    // exceeds the 5 second default on a cold coverage run, and the tooling
+    // specs that spawn a CLI or a build need the same room.
     testTimeout: 20_000,
-    typecheck: {
-      checker: typescript7Checker(),
-      enabled: true,
-      include: ["tests/types/**/*.test-d.ts"],
-      // Narrower than tsconfig.json: npm run type-check already compiles the
-      // whole project, so this pass covers the type tests and what they reach.
-      tsconfig: "./tsconfig.vitest.json",
-    },
+    projects: [
+      {
+        extends: true,
+        test: {
+          // The scripts and the published CLI run under Node, and their specs
+          // build any browser globals they need in their own `node:vm`
+          // contexts, so a jsdom window per file would be setup time and
+          // nothing else.
+          name: "tooling",
+          environment: "node",
+          include: ["tests/unit/**/*.test.mjs"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "components",
+          environment: "jsdom",
+          // Node's own localStorage would shadow the jsdom implementation that
+          // tests/setup.ts clears between tests, so it stays off.
+          execArgv: ["--no-experimental-webstorage"],
+          include: ["tests/unit/**/*.test.{ts,tsx}"],
+          setupFiles: ["./tests/setup.ts"],
+          typecheck: {
+            checker: typescript7Checker(),
+            enabled: true,
+            include: ["tests/types/**/*.test-d.ts"],
+            // Narrower than tsconfig.json: npm run type-check already compiles
+            // the whole project, so this pass covers the type tests and what
+            // they reach.
+            tsconfig: "./tsconfig.vitest.json",
+          },
+        },
+      },
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "html", "lcov", "json-summary"],

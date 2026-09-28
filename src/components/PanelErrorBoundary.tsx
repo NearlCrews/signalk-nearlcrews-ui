@@ -9,7 +9,9 @@ import {
 
 import { usePanelAnnouncer } from "../utils/announcer.js";
 import { focusedElement, focusIsOnBody } from "../utils/focus.js";
-import { useResolvedHeading } from "../utils/heading-level.js";
+import { useContentHeading } from "../utils/heading-level.js";
+import { resolveBundledContent } from "../utils/labels.js";
+import { PANEL_ERROR_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { reactNodeText } from "../utils/react-node.js";
 import { joinSentences } from "../utils/text.js";
@@ -26,7 +28,10 @@ export interface PanelErrorBoundaryFallbackProps {
 
 export interface PanelErrorBoundaryProps {
   readonly children: ReactNode;
-  /** Body text of the default fallback. */
+  /**
+   * Body text of the default fallback when it offers Try again alone. Blank
+   * text reads as absent, like every other label here.
+   */
   readonly description?: ReactNode | undefined;
   /**
    * Replaces the default fallback. Receives the error and the two actions.
@@ -47,11 +52,16 @@ export interface PanelErrorBoundaryProps {
    * reloading the Admin page. The boundary never reloads on its own.
    */
   readonly onReload?: (() => void) | undefined;
+  /**
+   * Body text of the default fallback when it also offers the reload action,
+   * which is where the warning about unsaved changes belongs.
+   */
+  readonly reloadDescription?: ReactNode | undefined;
   /** Label of the reload action, default "Reload page". */
   readonly reloadLabel?: ReactNode | undefined;
   /** Label of the retry action, default "Try again". */
   readonly retryLabel?: ReactNode | undefined;
-  /** Title of the default fallback. */
+  /** Title of the default fallback, default "This panel stopped working". */
   readonly title?: ReactNode | undefined;
 }
 
@@ -60,50 +70,64 @@ interface PanelErrorBoundaryState {
   readonly failed: boolean;
 }
 
-const DEFAULT_TITLE = "This panel stopped working";
-/*
- * Each sentence describes the action beside it. Rebuilding the panel is the
- * light one and is offered alone; reloading the page is the one that throws
- * away every unsaved entry on the Admin page, so it carries the warning and
- * the warning is absent when the action is.
- */
-const DEFAULT_DESCRIPTION = "Try again rebuilds this panel's content.";
-const DEFAULT_RELOAD_DESCRIPTION = `${DEFAULT_DESCRIPTION} Reloading the page discards unsaved changes in every panel.`;
-const DEFAULT_RETRY_LABEL = "Try again";
-const DEFAULT_RELOAD_LABEL = "Reload page";
-
-interface PanelErrorFallbackProps {
-  readonly description: ReactNode | undefined;
-  readonly onReload: (() => void) | undefined;
+type PanelErrorFallbackProps = Pick<
+  PanelErrorBoundaryProps,
+  | "description"
+  | "onReload"
+  | "reloadDescription"
+  | "reloadLabel"
+  | "retryLabel"
+  | "title"
+> & {
   readonly onRetry: () => void;
-  readonly reloadLabel: ReactNode | undefined;
-  readonly retryLabel: ReactNode | undefined;
-  readonly title: ReactNode | undefined;
-}
+};
 
 function PanelErrorFallback({
   description: suppliedDescription,
   onReload,
   onRetry,
+  reloadDescription: suppliedReloadDescription,
   reloadLabel: suppliedReloadLabel,
   retryLabel: suppliedRetryLabel,
   title: suppliedTitle,
 }: PanelErrorFallbackProps): React.JSX.Element {
   // Resolved here rather than in the boundary, because a class component
   // cannot read the panel's label bundle and the fallback is the only place
-  // these four strings are used.
+  // these strings are used. Blank text reads as absent at each step, so a
+  // partial translation can never leave the recovery action unnamed.
   const bundledLabels = usePanelLabels()?.panelError;
-  const title = suppliedTitle ?? bundledLabels?.title ?? DEFAULT_TITLE;
-  const retryLabel =
-    suppliedRetryLabel ?? bundledLabels?.retry ?? DEFAULT_RETRY_LABEL;
-  const reloadLabel =
-    suppliedReloadLabel ?? bundledLabels?.reload ?? DEFAULT_RELOAD_LABEL;
+  const defaults = PANEL_ERROR_LABEL_DEFAULTS;
+  const title = resolveBundledContent(
+    suppliedTitle,
+    bundledLabels?.title,
+    defaults.title,
+  );
+  const retryLabel = resolveBundledContent(
+    suppliedRetryLabel,
+    bundledLabels?.retry,
+    defaults.retry,
+  );
+  const reloadLabel = resolveBundledContent(
+    suppliedReloadLabel,
+    bundledLabels?.reload,
+    defaults.reload,
+  );
+  // Each description names only the actions on screen, so the one that
+  // warns about the reload appears only beside the reload action.
   const description =
-    suppliedDescription ??
-    bundledLabels?.description ??
-    (onReload === undefined ? DEFAULT_DESCRIPTION : DEFAULT_RELOAD_DESCRIPTION);
+    onReload === undefined
+      ? resolveBundledContent(
+          suppliedDescription,
+          bundledLabels?.description,
+          defaults.description,
+        )
+      : resolveBundledContent(
+          suppliedReloadDescription,
+          bundledLabels?.reloadDescription,
+          defaults.reloadDescription,
+        );
   const announce = usePanelAnnouncer();
-  const { level: headingLevel } = useResolvedHeading();
+  const { level: headingLevel } = useContentHeading();
   const fallbackElement = useRef<HTMLDivElement | null>(null);
 
   const reportFailure = useEffectEvent((): void => {
@@ -147,9 +171,10 @@ function PanelErrorFallback({
       tabIndex={-1}
       tone="danger"
       title={title}
-      // The fallback stands where the panel's own sections were, so its title
-      // takes their place in the outline rather than leaving the panel with a
-      // heading and nothing under it.
+      // The fallback stands where the content it replaced was, so its title
+      // takes that place in the outline: a section's level under the shell,
+      // one level below the section when a section encloses the boundary, and
+      // one level below the title of a dialog it sits in.
       headingLevel={headingLevel}
       actions={
         <>
@@ -206,6 +231,7 @@ export class PanelErrorBoundary extends Component<
       description,
       fallback,
       onReload,
+      reloadDescription,
       reloadLabel,
       retryLabel,
       title,
@@ -225,6 +251,7 @@ export class PanelErrorBoundary extends Component<
         description={description}
         onReload={onReload}
         onRetry={this.reset}
+        reloadDescription={reloadDescription}
         reloadLabel={reloadLabel}
         retryLabel={retryLabel}
         title={title}

@@ -22,7 +22,10 @@ import { DEFAULT_DISMISS_LABEL, resolveBundledLabel } from "../utils/labels.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { definedProps } from "../utils/props.js";
 import { hasReactContent } from "../utils/react-node.js";
-import { useRepeatAnnouncement } from "../utils/repeat-announcement.js";
+import {
+  useAnnouncingTiming,
+  useRepeatAnnouncement,
+} from "../utils/repeat-announcement.js";
 import type { StatusTone } from "../utils/tone.js";
 import { Button } from "./Button.js";
 import { ToneMark } from "./ToneMark.js";
@@ -42,6 +45,16 @@ export interface BannerProps
    * Meaningful only on an announcing banner.
    */
   readonly announceKey?: string | number | undefined;
+  /**
+   * Holds a message the banner mounts with for one beat, so its region exists
+   * before the words arrive and a screen reader observes them; actions stay
+   * on screen throughout. Defaults to true on a polite banner and false on an
+   * assertive one, which is announced on insertion and should not appear
+   * late. Set it to false where the message at mount is not news, such as a
+   * notice present when the panel loads. Meaningful only on an announcing
+   * banner.
+   */
+  readonly deferFirstMessage?: boolean | undefined;
   /**
    * Where focus goes when the banner takes it away: the Dismiss press, and any
    * other change that removes the banner, or the actions inside it, while the
@@ -86,6 +99,7 @@ export function Banner({
   announceKey,
   children,
   className,
+  deferFirstMessage,
   dismissFocusRef,
   dismissLabel,
   headingLevel,
@@ -100,6 +114,7 @@ export function Banner({
 }: BannerProps): React.JSX.Element {
   const hasActions = hasReactContent(actions) || onDismiss !== undefined;
   const hasTitle = hasReactContent(title);
+  const hasMessage = hasTitle || hasReactContent(children);
   const effectiveDismissLabel = resolveBundledLabel(
     dismissLabel,
     usePanelLabels()?.banner?.dismiss,
@@ -117,12 +132,22 @@ export function Banner({
   const { announcing, attributes, silent } = resolveAnnouncingRegion(
     live,
     suppliedRole,
-    hasActions || hasTitle || hasReactContent(children),
+    hasActions || hasMessage,
   );
-  // The message alone goes for the repeat beat. Actions stay: hiding a
-  // focusable control, even for a tenth of a second, would strand whoever was
-  // standing on it.
+  // A message present on the first render is held for a beat, so the region
+  // exists empty before the words arrive.
+  const { holding } = useAnnouncingTiming(attributes, {
+    deferFirstMessage,
+    hasContent: hasMessage,
+    settleMs: undefined,
+  });
+  // The message alone goes for the repeat beat and the first hold. Actions
+  // stay: hiding a focusable control, even for a tenth of a second, would
+  // strand whoever was standing on it.
   const withholding = useRepeatAnnouncement(announceKey, announcing && !silent);
+  // A banner holding its only content waits as the same empty shell a banner
+  // with nothing to say does.
+  const shell = silent || (holding && !hasActions);
 
   const generatedTitleId = useId();
   /*
@@ -196,9 +221,9 @@ export function Banner({
       role={attributes.role}
       aria-live={attributes["aria-live"]}
     >
-      {silent ? null : (
+      {shell ? null : (
         <>
-          {withholding ? null : (
+          {withholding || holding ? null : (
             <div className="snui-banner__content">
               <ToneMark
                 className="snui-banner__tone-icon"

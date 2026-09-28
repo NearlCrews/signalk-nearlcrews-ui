@@ -2,17 +2,20 @@ import { SPINNER_ANIMATION_NAME } from "../version.js";
 import {
   BLOCKED_SELECTOR,
   CONTROL_ROW_DECLARATIONS,
+  CONTROL_SURFACE_DECLARATIONS,
   DISABLED_DECLARATIONS,
   FIELD_DESCRIPTION_DECLARATIONS,
   FIELD_ERROR_DECLARATIONS,
+  FIELD_MARKERS,
+  FOCUS_RING_WIDTH,
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
   FORCED_COLORS_INVALID_DECLARATIONS,
   GLYPH_BASELINE_NUDGE,
   GROUP_LEGEND_DECLARATIONS,
   NARROW_PANEL_QUERY,
+  NON_LINK_DESCENDANTS,
   PRESSED_FILL_DECLARATION,
   SELECTION_GLYPH_SIZE,
-  SURFACE_DECLARATIONS,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 
@@ -64,6 +67,12 @@ ${scopeStyles(`
   padding: var(--snui-space-2) var(--snui-space-4);
   border: 1px solid transparent;
   border-radius: var(--snui-radius-sm);
+  /*
+   * A button states its own type size rather than inheriting the surface's,
+   * so an action in a small-text slot such as a card footer stays the size of
+   * every other button.
+   */
+  font-size: var(--snui-font-size);
   font-weight: var(--snui-font-weight-semibold);
   line-height: 1.2;
   text-align: center;
@@ -198,6 +207,8 @@ ${PRESSED_FILL_DECLARATION}
   border-color: transparent;
   background: transparent;
   color: var(--snui-color-text);
+  /* A list line reads as part of its row, at the row's own size. */
+  font-size: inherit;
   font-weight: var(--snui-font-weight-medium);
   text-align: start;
 }
@@ -207,10 +218,41 @@ ${PRESSED_FILL_DECLARATION}
   text-align: start;
 }
 
+/*
+ * A button whose blocked reason is drawn: the button and a muted line under
+ * it travel as one item, so a row of actions keeps each reason beside its own
+ * button.
+ */
+.snui-button-reason {
+  display: inline-flex;
+  max-width: 100%;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--snui-space-1);
+}
+
+.snui-button-reason--full-width {
+  display: flex;
+  width: 100%;
+  align-items: stretch;
+}
+
+.snui-button-reason__text {
+${FIELD_DESCRIPTION_DECLARATIONS}
+  text-wrap: pretty;
+}
+
+/*
+ * The control floor sets the height of a single-line field, as it does a
+ * button's, so the block padding is the small step rather than the gap token
+ * that grows on a coarse pointer: an input and the button beside it stand at
+ * exactly the same 40 or 44 pixels, and the text stays centered. Textarea
+ * restores its own inset.
+ */
 .snui-input {
   width: 100%;
   min-height: var(--snui-control-min-height);
-  padding: var(--snui-space-2) var(--snui-space-3);
+  padding: var(--snui-space-1) var(--snui-space-3);
   border: 1px solid var(--snui-color-border);
   border-radius: var(--snui-radius-sm);
   background: var(--snui-color-surface);
@@ -359,7 +401,8 @@ ${CONTROL_ROW_DECLARATIONS}
   overflow-wrap: anywhere;
 }
 
-.snui-checkbox__description {
+.snui-checkbox__description,
+.snui-checkbox__reason {
 ${FIELD_DESCRIPTION_DECLARATIONS}
   padding-inline-start: ${CHECKBOX_MESSAGE_INSET};
   text-wrap: pretty;
@@ -371,7 +414,7 @@ ${FIELD_ERROR_DECLARATIONS}
 }
 
 /* Nothing occupies the box column, so the messages start at the edge. */
-.snui-checkbox--label-hidden > :is(.snui-checkbox__description, .snui-checkbox__error) {
+.snui-checkbox--label-hidden > :is(.snui-checkbox__description, .snui-checkbox__reason, .snui-checkbox__error) {
   padding-inline-start: 0;
 }
 
@@ -406,8 +449,12 @@ ${FIELD_ERROR_DECLARATIONS}
   margin-block-start: var(--snui-space-2);
 }
 
+/*
+ * The track is the only edge of an interactive control, so it keeps the
+ * control boundary token rather than the subtle container outline.
+ */
 .snui-segmented__group {
-${SURFACE_DECLARATIONS}
+${CONTROL_SURFACE_DECLARATIONS}
   display: inline-flex;
   max-width: 100%;
   padding: ${SEGMENTED_INSET};
@@ -515,12 +562,24 @@ ${DISABLED_DECLARATIONS}
 
 ${BLOCKED_CHECKBOX} > .snui-checkbox__control,
 ${BLOCKED_CHECKBOX} .snui-checkbox__input,
-.snui-segmented[aria-disabled="true"] .snui-segmented__option {
+.snui-segmented[aria-disabled="true"] .snui-segmented__option,
+.snui-segmented[aria-readonly="true"] .snui-segmented__option {
   cursor: not-allowed;
 }
 
 .snui-checkbox__input${BLOCKED_SELECTOR} {
   border-color: var(--snui-color-text-disabled);
+}
+
+/*
+ * The label sets its own text color, so it does not inherit the blocked
+ * block's; it dims with the box, the way a blocked field's label does. The
+ * required and optional markers set colors of their own too, so they are
+ * named here rather than left stronger than the text they annotate.
+ */
+${BLOCKED_CHECKBOX} .snui-checkbox__label,
+${BLOCKED_CHECKBOX} .snui-checkbox__label ${FIELD_MARKERS} {
+  color: var(--snui-color-text-disabled);
 }
 
 .snui-checkbox__input${BLOCKED_SELECTOR}:checked,
@@ -537,6 +596,36 @@ ${BLOCKED_CHECKBOX} .snui-checkbox__input,
 .snui-segmented[aria-disabled="true"] .snui-segmented__option[aria-checked="true"] {
   background: var(--snui-color-text-disabled);
   color: var(--snui-color-surface);
+}
+
+/*
+ * An option blocked through ariaDisabled keeps its tab stop and paints as a
+ * natively disabled one, through hover and press as well, because nothing it
+ * would do on a press is going to happen. The :not(:disabled) weight puts
+ * these after the live hover and press rules they replace.
+ */
+.snui-segmented__option[aria-disabled="true"]:not(:disabled),
+.snui-segmented__option[aria-disabled="true"]:not(:disabled):active {
+  background: transparent;
+${DISABLED_DECLARATIONS}
+}
+
+.snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled),
+.snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled):active {
+  background: var(--snui-color-text-disabled);
+  color: var(--snui-color-surface);
+}
+
+@media (hover: hover) {
+  .snui-segmented__option[aria-disabled="true"]:not(:disabled):hover {
+    background: transparent;
+    color: var(--snui-color-text-disabled);
+  }
+
+  .snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled):hover {
+    background: var(--snui-color-text-disabled);
+    color: var(--snui-color-surface);
+  }
 }
 
 @media (forced-colors: active) {
@@ -559,6 +648,14 @@ ${BLOCKED_CHECKBOX} .snui-checkbox__input,
     border-color: ButtonText;
     background: Canvas;
     color: ButtonText;
+  }
+
+  /*
+   * The dashed outline sits on the resting rule alone: restated with the
+   * hover colors, it would outweigh the focus ring below and bring the
+   * dashes back over it while the pointer rests on a focused button.
+   */
+  .snui-button--danger {
     outline: 2px dashed ButtonText;
     outline-offset: 1px;
   }
@@ -585,13 +682,41 @@ ${BLOCKED_CHECKBOX} .snui-checkbox__input,
     color: ButtonText;
   }
 
-  .snui-button--secondary:disabled,
-  .snui-button--secondary[aria-disabled="true"],
-  .snui-button--ghost:disabled,
-  .snui-button--ghost[aria-disabled="true"] {
+  /*
+   * A blocked button paints GrayText in every variant. The rule takes the
+   * blocked rules' own weight, so the theme's disabled token never reaches
+   * the system palette, and it leaves a busy button its variant, as every
+   * theme does. Primary drops its highlight fill with the state.
+   */
+  ${blockedIdle(".snui-button")} {
     border-color: GrayText;
     color: GrayText;
     opacity: 1;
+  }
+
+  ${blockedIdle(".snui-button--primary")} {
+    background: ButtonFace;
+  }
+
+  /*
+   * Danger's dashed outline dims with its text, except while the focus ring
+   * owns the outline; a natively disabled button takes no focus.
+   */
+  .snui-button--danger:disabled,
+  .snui-button--danger[aria-disabled="true"]:not([aria-busy="true"]):not(:focus-visible) {
+    outline-color: GrayText;
+  }
+
+  /*
+   * Every piece of label text takes the system color, the markers included,
+   * except a link: a disabled box does not disable it, so it keeps the
+   * system link color. Nothing opts out of forced colors here: that opt-out
+   * inherits, and it would hand the label's descendants their theme colors
+   * back. A system color the author names paints as it is either way.
+   */
+  ${BLOCKED_CHECKBOX} .snui-checkbox__label,
+  ${BLOCKED_CHECKBOX} .snui-checkbox__label ${NON_LINK_DESCENDANTS} {
+    color: GrayText;
   }
 
   /*
@@ -606,8 +731,13 @@ ${BLOCKED_CHECKBOX} .snui-checkbox__input,
 ${FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS}
   }
 
+  /*
+   * While focused, danger's solid ring replaces its dashed state outline. It
+   * is one pixel wider than the shared width and set further out, so focus
+   * reads as a new line rather than as the state outline turning solid.
+   */
   .snui-button--danger:focus-visible {
-    outline: 3px solid CanvasText;
+    outline: calc(${FOCUS_RING_WIDTH} + 1px) solid CanvasText;
     outline-offset: 3px;
     box-shadow: none;
   }
@@ -636,11 +766,13 @@ ${FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS}
   /*
    * Forced colors flattens the danger border to a system color, which erases
    * the valid versus invalid distinction. Reconstruct it with an outline,
-   * which forced colors preserves, rather than with color.
+   * which forced colors preserves, rather than with color. It stands aside
+   * while the control has visible focus, because the ring owns the outline
+   * there and this rule would otherwise outweigh it. A select carries the
+   * input class, so the first selector covers it.
    */
-  .snui-input[aria-invalid="true"],
-  .snui-select[aria-invalid="true"],
-  .snui-checkbox__input[aria-invalid="true"] {
+  .snui-input[aria-invalid="true"]:not(:focus-visible),
+  .snui-checkbox__input[aria-invalid="true"]:not(:focus-visible) {
 ${FORCED_COLORS_INVALID_DECLARATIONS}
   }
 
@@ -650,6 +782,13 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
+  }
+
+  /* The system grays a natively disabled option; a blocked one is told to. */
+  .snui-segmented__option[aria-disabled="true"]:not([aria-checked="true"]):not(:disabled),
+  .snui-segmented__option[aria-disabled="true"]:not([aria-checked="true"]):not(:disabled):hover,
+  .snui-segmented__option[aria-disabled="true"]:not([aria-checked="true"]):not(:disabled):active {
+    color: GrayText;
   }
 }
 `)}

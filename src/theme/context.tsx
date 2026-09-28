@@ -7,6 +7,7 @@ import {
 } from "react";
 
 import { createEmitter } from "../utils/emitter.js";
+import { packageError } from "../utils/errors.js";
 import {
   isThemeChoice,
   THEME_STORAGE_KEY,
@@ -214,7 +215,7 @@ export function ThemeProvider({
 export function usePanelTheme(): ThemeContextValue {
   const value = useContext(ThemeContext);
   if (value === null) {
-    throw new Error(
+    throw packageError(
       "usePanelTheme must be called inside PanelRoot, which provides the theme context.",
     );
   }

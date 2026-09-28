@@ -1,3 +1,5 @@
+import { packageError } from "./errors.js";
+
 /** The one field an options array is validated on. */
 interface IdentifiedOption<Value extends string> {
   readonly value: Value;
@@ -15,12 +17,12 @@ export function requireNonEmptyUniqueOptions<Value extends string>(
   componentName: string,
 ): void {
   if (options.length === 0) {
-    throw new Error(`${componentName} requires at least one option.`);
+    throw packageError(`${componentName} requires at least one option.`);
   }
   const seen = new Set<Value>();
   for (const option of options) {
     if (seen.has(option.value)) {
-      throw new Error(
+      throw packageError(
         `${componentName} option values must be unique; received duplicate value "${option.value}".`,
       );
     }
