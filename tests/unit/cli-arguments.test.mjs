@@ -122,4 +122,8 @@ describe("the command line's copies of the package wording helpers", () => {
       );
     }
   });
+
+  it("leaves large counts ungrouped, as the byte counts beside them are", () => {
+    expect(formatCount(54532, "byte")).toBe("54532 bytes");
+  });
 });

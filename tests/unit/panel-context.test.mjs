@@ -3,6 +3,7 @@ import vm from "node:vm";
 import { describe, expect, it } from "vitest";
 
 import {
+  createDomStubs,
   createPanelContext,
   disposePanelContext,
   renderPanelRemote,
@@ -54,14 +55,48 @@ describe("a remote that never settles", () => {
         bundles: [{ name: "remoteEntry.js", source: HUNG_CONTAINER }],
         containerName: "probe_panel",
         exposedModule: "./PluginConfigurationPanel",
-        props: {},
         react: REACT,
         reactDom: { version: "19.3.0" },
         renderToStaticMarkup: () => "",
+        states: [],
         timeoutMs: 50,
       }),
     ).rejects.toThrow(
       "remoteEntry.js did not finish initializing the share scope within 50ms.",
+    );
+  });
+});
+
+describe("the stylesheet link a CSS chunk loader appends", () => {
+  it("builds the link and answers its load once it is in the head", async () => {
+    const { document } = createDomStubs(
+      "http://localhost/panel/remoteEntry.js",
+    );
+    const link = document.createElement("LINK");
+    link.setAttribute("data-webpack-loading", 1);
+    const loaded = new Promise((resolve) => {
+      link.onload = resolve;
+    });
+
+    expect(document.getElementsByTagName("link")).toEqual([]);
+    expect(link.getAttribute("data-webpack-loading")).toBe("1");
+    expect(document.head.appendChild(link)).toBe(link);
+    expect(link.parentNode).toBe(document.head);
+    await expect(loaded).resolves.toEqual({ target: link, type: "load" });
+
+    link.removeAttribute("data-webpack-loading");
+    expect(link.getAttribute("data-webpack-loading")).toBeNull();
+    document.head.removeChild(link);
+    expect(link.parentNode).toBeNull();
+  });
+
+  it("still refuses every other element", () => {
+    const { document } = createDomStubs(
+      "http://localhost/panel/remoteEntry.js",
+    );
+
+    expect(() => document.createElement("script")).toThrow(
+      "The panel asked the document for an element.",
     );
   });
 });

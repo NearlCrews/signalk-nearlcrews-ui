@@ -15,8 +15,10 @@ import {
   setNativeCssScope,
 } from "../../bin/lib/panel-runtime.mjs";
 import {
+  CONTAINER_RUNTIME,
   checkConsumer,
   createConsumer,
+  EXPOSES,
   manifest,
   removeConsumers,
   SHARE_REGISTRATIONS,
@@ -55,6 +57,8 @@ function panelRemote({
 };
 `,
     "remoteEntry.js": `${SHARE_REGISTRATIONS}
+${CONTAINER_RUNTIME}
+${EXPOSES}
 ${entryPrelude}var publicPath = document.currentScript.src.replace(/[^/]+$/, "");
 if (document.readyState !== "loading") {
   var patchedFocus = HTMLElement.prototype.focus;
@@ -99,6 +103,12 @@ function remoteExposing(moduleSource) {
   });
 }
 
+/** The first state the host opens a panel in, as the CLI describes it. */
+const UNCONFIGURED = {
+  description: "configuration undefined",
+  props: { configuration: undefined },
+};
+
 /**
  * Renders the fixture remote in this process, the way the CLI does after it
  * spawns, so the renderer's own branches are measured rather than only
@@ -109,10 +119,10 @@ function renderInProcess(options = {}) {
     bundles: bundlesOf(panelRemote()),
     containerName: "consumer_fixture",
     exposedModule: EXPOSED_MODULE,
-    props: { configuration: null },
     react: React,
     reactDom: ReactDOM,
     renderToStaticMarkup,
+    states: [UNCONFIGURED],
     ...options,
   });
 }
@@ -252,24 +262,67 @@ describe("snui-check-consumer --runtime", () => {
     );
   });
 
-  it("passes the configuration the host holds through --props", () => {
+  it("opens the panel with configuration undefined, as a fresh install does", () => {
+    // Written against a null configuration, which the host never passes.
     const root = createConsumer({
       assets: panelRemote({
-        panel: `React.createElement("div", { "data-snui-root": "", "data-snui-version": "${STAMP}" }, props.configuration.label)`,
+        panel: `React.createElement("div", { "data-snui-root": "", "data-snui-version": "${STAMP}" }, props.configuration === null ? "Unconfigured" : props.configuration.label)`,
       }),
       link: REACT_PACKAGES,
     });
 
-    expect(runRuntimeCli(root).status, "a null configuration").not.toBe(0);
-    expect(
-      runRuntimeCli(
-        root,
-        "--props",
-        '{"configuration":{"label":"Two conversions"}}',
-        "--expect",
-        "Two conversions",
-      ).status,
-    ).toBe(0);
+    const result = runRuntimeCli(
+      root,
+      "--props",
+      '{"configuration":{"label":"Two conversions"}}',
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "The panel did not render with configuration undefined, which the Signal K Admin passes a plugin nobody has configured: Cannot read properties of undefined (reading 'label').",
+    );
+  });
+
+  it("opens the panel with configuration {}, as a package enabled by default does", () => {
+    const root = createConsumer({
+      assets: panelRemote({
+        panel: `React.createElement("div", { "data-snui-root": "", "data-snui-version": "${STAMP}" }, props.configuration === undefined ? "Unconfigured" : props.configuration.limits.depth)`,
+      }),
+      link: REACT_PACKAGES,
+    });
+
+    const result = runRuntimeCli(root);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "The panel did not render with configuration {}, which the Signal K Admin passes a package enabled by default before its first save:",
+    );
+  });
+
+  it("passes the configuration the host holds through --props", () => {
+    const root = createConsumer({
+      assets: panelRemote({
+        panel: `React.createElement("div", { "data-snui-root": "", "data-snui-version": "${STAMP}" }, props.configuration?.label ?? "Unconfigured")`,
+      }),
+      link: REACT_PACKAGES,
+    });
+
+    const unconfigured = runRuntimeCli(root, "--expect", "Unconfigured");
+    expect(unconfigured.status, unconfigured.stderr).toBe(0);
+    expect(unconfigured.stdout).toContain(
+      "with configuration undefined and {}.",
+    );
+    const configured = runRuntimeCli(
+      root,
+      "--props",
+      '{"configuration":{"label":"Two conversions"}}',
+      "--expect",
+      "Two conversions",
+    );
+    expect(configured.status, configured.stderr).toBe(0);
+    expect(configured.stdout).toContain(
+      "with configuration undefined and {} and --props.",
+    );
     expect(runRuntimeCli(root, "--props", "not json").stderr).toContain(
       "--props is not valid JSON",
     );
@@ -288,8 +341,27 @@ describe("snui-check-consumer --runtime", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(
-      "The panel called save 1 time in each render",
+      "The panel called save while it rendered without native CSS @scope, with configuration undefined, and with configuration {}.",
     );
+  });
+
+  it("reports a save made only while the panel renders with configuration {}", () => {
+    // Normalizing {} through the plugin's defaults is the path most likely
+    // to save during render, so the {} render counts saves like every other.
+    const root = createConsumer({
+      assets: panelRemote({
+        panel: `(props.configuration !== undefined && props.save({ normalized: true }), ${PANEL})`,
+      }),
+      link: REACT_PACKAGES,
+    });
+
+    const result = runRuntimeCli(root);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "The panel called save while it rendered with configuration {}.",
+    );
+    expect(result.stderr).toContain("The host passes save for a user action");
   });
 
   it("names the container global a remote entry did not assign", () => {
@@ -303,7 +375,7 @@ describe("snui-check-consumer --runtime", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(
-      "remoteEntry.js did not assign a container to window.other_consumer",
+      "remoteEntry.js did not assign a container with get and init to window.other_consumer",
     );
     expect(runRuntimeCli(root, "--container", "consumer_fixture").status).toBe(
       0,
@@ -466,21 +538,23 @@ describe("renderPanelRemote in process", () => {
   it("renders the compatibility notice, then the panel, counting saves per render", async () => {
     const result = await renderInProcess();
 
-    expect(result.compatibilityMarkup).toContain(COMPATIBILITY_NOTICE_MARKER);
-    expect(result.markup).toContain(`data-snui-version="${STAMP}"`);
-    expect(result.markup).toContain("Loading conversions");
-    expect(result.saveCalls).toEqual([0, 0]);
+    expect(result.compatibility.markup).toContain(COMPATIBILITY_NOTICE_MARKER);
+    expect(result.renders[0].markup).toContain(`data-snui-version="${STAMP}"`);
+    expect(result.renders[0].markup).toContain("Loading conversions");
+    expect(result.compatibility.saves).toBe(0);
+    expect(result.renders.map((render) => render.saves)).toEqual([0]);
   });
 
   it("skips the compatibility render on request and counts a save in each render", async () => {
     const skipped = await renderInProcess({ renderCompatibilityNotice: false });
-    expect(skipped.compatibilityMarkup).toBeUndefined();
-    expect(skipped.saveCalls).toEqual([0]);
+    expect(skipped.compatibility).toBeUndefined();
+    expect(skipped.renders.map((render) => render.saves)).toEqual([0]);
 
     const saving = await renderInProcess({
       bundles: bundlesOf(panelRemote({ saveDuringRender: true })),
     });
-    expect(saving.saveCalls).toEqual([1, 1]);
+    expect(saving.compatibility.saves).toBe(1);
+    expect(saving.renders.map((render) => render.saves)).toEqual([1]);
   });
 
   it("renders a module that is itself the component, as memo returns one", async () => {
@@ -491,7 +565,7 @@ describe("renderPanelRemote in process", () => {
       renderCompatibilityNotice: false,
     });
 
-    expect(result.markup).toContain("Memo panel");
+    expect(result.renders[0].markup).toContain("Memo panel");
   });
 
   it("names each way a remote fails to load", async () => {
@@ -505,7 +579,7 @@ describe("renderPanelRemote in process", () => {
     await expect(
       renderInProcess({ containerName: "other_consumer" }),
     ).rejects.toThrow(
-      "remoteEntry.js did not assign a container to window.other_consumer.",
+      "remoteEntry.js did not assign a container with get and init to window.other_consumer",
     );
     await expect(
       renderInProcess({ exposedModule: "./Missing" }),
@@ -514,7 +588,9 @@ describe("renderPanelRemote in process", () => {
       renderInProcess({
         bundles: [{ name: "remoteEntry.js", source: "export default {};" }],
       }),
-    ).rejects.toThrow("remoteEntry.js is an ES module.");
+    ).rejects.toThrow(
+      'remoteEntry.js is an ES module, but package.json does not set "type": "module"',
+    );
     // A syntax error that is not module syntax is reported as it stands.
     await expect(
       renderInProcess({
@@ -550,19 +626,21 @@ describe("renderPanelRemote in process", () => {
       });
 
     await expect(renderFailure("return undefinedGlobal();")).rejects.toThrow(
-      "The panel did not render: undefinedGlobal is not defined. A global the panel reached for at import time may be missing",
+      "The panel did not render with configuration undefined: undefinedGlobal is not defined. A global the panel reached for at import time may be missing",
     );
     await expect(renderFailure("return null.member;")).rejects.toThrow(
       "the DOM stubs in bin/lib/panel-runtime.mjs are where one goes.",
     );
     await expect(
       renderFailure('throw new TypeError("Wrong kind of panel!");'),
-    ).rejects.toThrow(/^The panel did not render: Wrong kind of panel!$/);
+    ).rejects.toThrow(
+      /^The panel did not render with configuration undefined: Wrong kind of panel!$/,
+    );
     await expect(renderFailure('throw new Error("Boom");')).rejects.toThrow(
-      /^The panel did not render: Boom\.$/,
+      /^The panel did not render with configuration undefined: Boom\.$/,
     );
     await expect(renderFailure('throw "plain";')).rejects.toThrow(
-      /^The panel did not render: plain\.$/,
+      /^The panel did not render with configuration undefined: plain\.$/,
     );
   });
 });

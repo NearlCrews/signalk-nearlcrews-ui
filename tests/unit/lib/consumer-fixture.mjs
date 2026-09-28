@@ -65,8 +65,48 @@ export const SHARE_REGISTRATIONS = `var l={${SHARED_NAMES.map((name, index) => {
   return `${String(90 + index)}:()=>s("default","${name}",!1,${versionTuple(share.requiredVersion)})`;
 }).join(",")}};`;
 
+/**
+ * The error text Webpack's container runtime builds, which is how the check
+ * recognizes a Webpack remote entry.
+ */
+export const CONTAINER_RUNTIME =
+  'var containerError="Container initialization failed as it has already been initialized with a different share scope";';
+
+/** The module map a remote entry carries, keyed by the name the Admin asks for. */
+export const EXPOSES =
+  'var exposes={"./PluginConfigurationPanel":()=>Promise.resolve(()=>({}))};';
+
+/**
+ * A classic remote entry: the share registrations, the container runtime, the
+ * exposed module map, and the container assigned to the global the Admin reads
+ * for a package named consumer-fixture.
+ */
+export const CLASSIC_ENTRY = `${SHARE_REGISTRATIONS}
+${CONTAINER_RUNTIME}
+${EXPOSES}
+var consumer_fixture={get:function(){return Promise.reject(new Error("not loaded"))},init:function(){}};
+`;
+
+/** The same entry built as an ES module, which exports the container instead. */
+export const MODULE_ENTRY = `${SHARE_REGISTRATIONS}
+${CONTAINER_RUNTIME}
+${EXPOSES}
+const get=()=>Promise.reject(new Error("not loaded")),init=()=>{};export{get,init};
+`;
+
 /** The chunk the library lands in, carrying the PanelRoot version stamp. */
 export const CHUNK = `jsx("div",{"data-snui-root":"","data-snui-version":"${STAMP}"});`;
+
+/**
+ * The installed release's token sheet, cut down to the names the fixtures
+ * reference: the real sheet declares every public token and nothing else.
+ */
+const TOKENS_CSS = `.snui-tokens {
+  --snui-color-border: #7c8797;
+  --snui-color-text-muted: #596273;
+  --snui-space-2: 0.5rem;
+}
+`;
 
 const workspaces = [];
 
@@ -77,20 +117,33 @@ export function removeConsumers() {
   }
 }
 
+/** The keyword the Signal K server mounts a configuration panel by. */
+const CONFIGURATOR_KEYWORDS = Object.freeze([
+  "signalk-node-server-plugin",
+  "signalk-plugin-configurator",
+]);
+
 /**
  * Writes one consumer workspace and returns its root. `assets` are the files of
- * the built remote, keyed by name; they default to a remote entry that consumes
- * the published share map and a chunk carrying the version stamp. `link` names
- * packages to borrow from this repository's own node_modules, as `npm ci` would
- * have installed them beside the consumer.
+ * the built remote, keyed by name; they default to a classic remote entry that
+ * loads the way the Admin loads it and consumes the published share map, and a
+ * chunk carrying the version stamp. `link` names packages to borrow from this
+ * repository's own node_modules, as `npm ci` would have installed them beside
+ * the consumer. `manifest` holds further consumer package.json fields, such as
+ * `type`, merged over the defaults, and `pinField` names the dependency field
+ * the exact pin sits in. `files` are further files to write, keyed by their
+ * path from the root.
  */
 export function createConsumer({
-  assets = { "main.chunk.js": CHUNK, "remoteEntry.js": SHARE_REGISTRATIONS },
+  assets = { "main.chunk.js": CHUNK, "remoteEntry.js": CLASSIC_ENTRY },
   baseline,
   config,
   configName = "webpack.config.cjs",
+  files = {},
   link = [],
+  manifest: manifestFields = {},
   name = "consumer-fixture",
+  pinField = "devDependencies",
 } = {}) {
   const root = mkdtempSync(join(tmpdir(), "snui-consumer-"));
   workspaces.push(root);
@@ -99,12 +152,15 @@ export function createConsumer({
   mkdirSync(join(installed, "dist"), { recursive: true });
   writeFileSync(join(installed, "package.json"), JSON.stringify(manifest));
   writeFileSync(join(installed, "dist", "federation.cjs"), FEDERATION_ENTRY);
+  writeFileSync(join(installed, "dist", "tokens.css"), TOKENS_CSS);
   writeFileSync(
     join(root, "package.json"),
     JSON.stringify({
       name,
       private: true,
-      devDependencies: { [manifest.name]: manifest.version },
+      keywords: CONFIGURATOR_KEYWORDS,
+      [pinField]: { [manifest.name]: manifest.version },
+      ...manifestFields,
     }),
   );
 
@@ -128,6 +184,10 @@ export function createConsumer({
   }
   if (baseline !== undefined) {
     writeFileSync(join(root, "size-baseline.json"), JSON.stringify(baseline));
+  }
+  for (const [path, source] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
+    writeFileSync(join(root, path), source);
   }
   return root;
 }

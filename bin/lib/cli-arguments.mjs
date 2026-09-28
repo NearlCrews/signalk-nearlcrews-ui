@@ -28,7 +28,9 @@ export function joinNames(names, conjunction = "and") {
  * Counts a noun: "1 bundle", "3 bundles". A noun the trailing "s" does not
  * pluralize passes its own plural. The package's own `formatCount` is
  * TypeScript that `bin` cannot import, so this is the copy the command line
- * uses, kept in step with it by a unit assertion.
+ * uses, kept in step with it by a unit assertion. Unlike the package's, it
+ * does not group digits: the counts it prints sit beside raw byte counts and
+ * the values of a size baseline file, which read and copy better ungrouped.
  */
 export function formatCount(count, singular, plural) {
   const noun = count === 1 ? singular : (plural ?? `${singular}s`);

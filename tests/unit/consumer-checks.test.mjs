@@ -7,6 +7,7 @@ import {
   assertConfiguredShares,
   assertConsumedShares,
   assertExactPin,
+  assertNoHostHarness,
   assertNoReactRuntime,
   assertProductionJsxRuntime,
   assertSizeBaseline,
@@ -16,8 +17,10 @@ import {
   findConsumedShares,
   findVersionStamps,
   gzipBytesOf,
+  HOST_HARNESS_MARKER,
   REACT_RUNTIME_MARKERS,
 } from "../../bin/lib/consumer-checks.mjs";
+import { HOST_HARNESS_MARKER as HARNESS_SOURCE_MARKER } from "../../src/host-harness/marker.js";
 
 const shared = {
   react: { singleton: true, requiredVersion: "^19.2.0", import: false },
@@ -38,12 +41,81 @@ describe("exact pin", () => {
         installed,
       ),
     ).toBe("0.9.0");
+  });
+
+  it("refuses a runtime placement unless the caller accepts its cost", () => {
+    for (const field of ["dependencies", "optionalDependencies"]) {
+      const manifest = { [field]: { "signalk-nearlcrews-ui": "0.9.0" } };
+      expect(() => assertExactPin(manifest, installed)).toThrow(
+        `package.json declares signalk-nearlcrews-ui in ${field}.`,
+      );
+      expect(
+        assertExactPin(manifest, installed, { allowRuntimeDependency: true }),
+      ).toBe("0.9.0");
+    }
+    expect(
+      () =>
+        assertExactPin(
+          {
+            dependencies: { "signalk-nearlcrews-ui": "0.9.0" },
+            devDependencies: { "signalk-nearlcrews-ui": "0.9.0" },
+          },
+          installed,
+        ),
+      "a development pin does not excuse a runtime one",
+    ).toThrow("belongs in devDependencies");
+  });
+
+  it("treats a required peer dependency as a runtime placement", () => {
+    // npm 7 and later install a plugin's peers when the App Store installs it.
+    const manifest = {
+      devDependencies: { "signalk-nearlcrews-ui": "0.9.0" },
+      peerDependencies: { "signalk-nearlcrews-ui": "0.9.0" },
+    };
+    expect(() => assertExactPin(manifest, installed)).toThrow(
+      "package.json declares signalk-nearlcrews-ui in peerDependencies.",
+    );
+    expect(
+      assertExactPin(manifest, installed, { allowRuntimeDependency: true }),
+    ).toBe("0.9.0");
     expect(
       assertExactPin(
-        { dependencies: { "signalk-nearlcrews-ui": "0.9.0" } },
+        {
+          ...manifest,
+          peerDependenciesMeta: { "signalk-nearlcrews-ui": { optional: true } },
+        },
         installed,
       ),
+      "npm does not install an optional peer",
     ).toBe("0.9.0");
+  });
+
+  it("holds an accepted runtime pin to the same exact version", () => {
+    const allow = { allowRuntimeDependency: true };
+    expect(() =>
+      assertExactPin(
+        {
+          dependencies: { "signalk-nearlcrews-ui": "^0.9.0" },
+          devDependencies: { "signalk-nearlcrews-ui": "0.9.0" },
+        },
+        installed,
+        allow,
+      ),
+    ).toThrow(
+      "signalk-nearlcrews-ui in package.json dependencies must be pinned to an exact version such as 0.9.0, got ^0.9.0.",
+    );
+    expect(() =>
+      assertExactPin(
+        {
+          dependencies: { "signalk-nearlcrews-ui": "0.9.1" },
+          devDependencies: { "signalk-nearlcrews-ui": "0.9.0" },
+        },
+        installed,
+        allow,
+      ),
+    ).toThrow(
+      "package.json declares signalk-nearlcrews-ui 0.9.0 in devDependencies and 0.9.1 in dependencies.",
+    );
   });
 
   it("rejects ranges, missing declarations, and installed drift", () => {
@@ -54,7 +126,7 @@ describe("exact pin", () => {
       ),
     ).toThrow("must be pinned to an exact version such as 0.9.0, got ^0.9.0");
     expect(() => assertExactPin({ devDependencies: {} }, installed)).toThrow(
-      "does not declare signalk-nearlcrews-ui",
+      "package.json does not declare signalk-nearlcrews-ui in devDependencies.",
     );
     expect(() =>
       assertExactPin(
@@ -118,6 +190,25 @@ describe("React runtime markers", () => {
         `The chunk bundled a React runtime marker: ${marker}.`,
       );
     }
+  });
+});
+
+describe("host harness marker", () => {
+  it("is the marker the harness source carries", () => {
+    expect(HOST_HARNESS_MARKER).toBe(HARNESS_SOURCE_MARKER);
+  });
+
+  it("names the file that bundled the harness and passes clean files", () => {
+    expect(() =>
+      assertNoHostHarness([{ name: "main.js", source: "clean" }]),
+    ).not.toThrow();
+    expect(() =>
+      assertNoHostHarness([
+        { name: "main.js", source: `x"${HOST_HARNESS_MARKER}"y` },
+      ]),
+    ).toThrow(
+      "The built remote bundled signalk-nearlcrews-ui/host-harness: main.js contains data-snui-host-harness.",
+    );
   });
 });
 

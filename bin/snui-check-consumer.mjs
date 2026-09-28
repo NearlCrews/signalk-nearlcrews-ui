@@ -1,31 +1,52 @@
 #!/usr/bin/env node
 /**
  * Checks a consumer plugin's build against the signalk-nearlcrews-ui release
- * it installed.
+ * it installed and against the Signal K Admin that will load it.
  *
  *   snui-check-consumer --root <consumerDir> --remote <builtRemoteEntry>
  *                       [--asset <name>] [--baseline <size-baseline.json>]
  *                       [--webpack-config <webpack.config.cjs>]
+ *                       [--container <global>] [--runtime-dependency]
+ *                       [--stats <webpack-stats.json>] [--styles <sourceDir>]
  *                       [--runtime --expose <module> [runtime options]]
  *
- * Asserts, in order: the consumer pins an exact version and the installed
- * package is that version; every JavaScript file beside the remote entry
- * carries that version's data-snui-version stamp and no other; no React
- * runtime and no development JSX runtime was bundled; the remote consumes
- * exactly the published share map (and the Webpack configuration declares it,
- * when one is found); and, with a baseline, the gzip size of the remote's
- * assets stays within the recorded growth allowance or approved ceiling.
+ * Asserts, in order: the consumer pins an exact version as a development
+ * dependency (with --runtime-dependency, a runtime placement that pins the
+ * same exact version is accepted) and the installed package is that version;
+ * the package carries the configurator keyword and the entry sits at
+ * public/remoteEntry.js, where the server serves it; the entry is a Webpack
+ * container whose format matches the script tag the server writes for the
+ * package type (a classic entry, evaluated alone, leaves a container on the
+ * global the Admin reads, and a module entry exports get and init) and that
+ * exposes ./PluginConfigurationPanel; the entry itself carries none of the
+ * library; the remote's JavaScript files, taken together, carry that
+ * version's data-snui-version stamp and no other version's; no React
+ * runtime, no development JSX runtime, and nothing of the host harness was
+ * bundled; the remote consumes exactly the published share map (and the
+ * Webpack configuration declares it, when one is found); every CSS asset
+ * references only the installed release's public tokens, documented hooks,
+ * and container name; with --stats, the Webpack module graph holds only the
+ * JSX runtime from React, nothing from React DOM or the scheduler, exactly
+ * one copy of this package, and at most one copy each of the React Aria
+ * packages; with --styles, no CSS module class overrides a package
+ * component through a single class selector; and, with a baseline, the gzip
+ * size of the remote's assets stays within the recorded growth allowance or
+ * approved ceiling.
  *
  * With --runtime it then renders the panel the way the Signal K Admin host
- * does and asserts the compatibility notice a browser without native CSS
- * @scope gets and the version stamp on the markup the panel actually produced.
+ * does, in every state the host first opens it in, and asserts the
+ * compatibility notice a browser without native CSS @scope gets and the
+ * version stamp on the markup the panel actually produced. A module remote
+ * renders in a worker thread.
  *
  * The check runs the consumer's own code: it loads the installed package's
- * federation entry, and it requires and calls the Webpack configuration it
- * finds. With --runtime it also evaluates the built remote, in a context that
- * answers browser globals but is not a security boundary. Point the check at a
- * build and a working tree the operator trusts.
+ * federation entry, requires and calls the Webpack configuration it finds,
+ * and evaluates a classic remote entry. With --runtime it evaluates the whole
+ * built remote, in a context that answers browser globals but is not a
+ * security boundary. Point the check at a build and a working tree the
+ * operator trusts.
  */
+import { Buffer } from "node:buffer";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
@@ -42,26 +63,51 @@ import {
   assertConfiguredShares,
   assertConsumedShares,
   assertExactPin,
+  assertNoHostHarness,
   assertNoReactRuntime,
   assertProductionJsxRuntime,
   assertSizeBaseline,
   assertVersionStamp,
   gzipBytesOf,
   PACKAGE_NAME,
+  RUNTIME_DEPENDENCY_COST,
+  runtimeDependencyFieldOf,
 } from "./lib/consumer-checks.mjs";
+import {
+  assertConfiguratorKeyword,
+  assertEntryCarriesNoLibrary,
+  assertExposesPanel,
+  assertModuleContainer,
+  assertRemoteLocation,
+  assertWebpackContainer,
+  remoteFormatOf,
+  toSafeModuleId,
+} from "./lib/host-loading.mjs";
+import { assertModuleGraph } from "./lib/module-graph.mjs";
+import { renderModulePanelRemote } from "./lib/module-runtime.mjs";
+import {
+  assertPackageTokens,
+  CONSUMER_HOOK_NAMES,
+  declaredTokenNames,
+} from "./lib/package-tokens.mjs";
 import {
   assertMarkupIncludes,
   assertMarkupVersionStamp,
   COMPATIBILITY_NOTICE_MARKER,
+  createPanelContext,
+  disposePanelContext,
+  evaluateClassicContainer,
+  failureOf,
+  HOST_STATES,
   renderPanelRemote,
 } from "./lib/panel-runtime.mjs";
+import { assertDoubledOverrides } from "./lib/style-overrides.mjs";
 
 const USAGE =
-  "Usage: snui-check-consumer --root <consumerDir> --remote <builtRemoteEntry> [--asset <name>] [--baseline <json>] [--webpack-config <path>] [--runtime --expose <module>]. --root resolves against the working directory, and every other path resolves against --root.";
+  "Usage: snui-check-consumer --root <consumerDir> --remote <builtRemoteEntry> [--asset <name>] [--baseline <json>] [--webpack-config <path>] [--container <global>] [--runtime-dependency] [--stats <json>] [--styles <dir>] [--runtime --expose <module>]. --root resolves against the working directory, and every other path resolves against --root.";
 
 /** Options that mean nothing without --runtime, so a typo cannot pass quietly. */
 const RUNTIME_OPTIONS = Object.freeze([
-  "--container",
   "--expect",
   "--expect-unsupported",
   "--expose",
@@ -73,15 +119,22 @@ const RUNTIME_OPTIONS = Object.freeze([
 const OPTIONS = Object.freeze([
   "--asset",
   "--baseline",
+  "--container",
   "--remote",
   "--root",
   "--runtime",
+  "--runtime-dependency",
+  "--stats",
+  "--styles",
   "--webpack-config",
   ...RUNTIME_OPTIONS,
 ]);
 
 /** The JavaScript files of a remote, which the stamp and runtime scans read. */
 const SCRIPT_FILE = /\.[cm]?js$/;
+
+/** The stylesheets of a remote, which the token scan reads. */
+const STYLESHEET_FILE = /\.css$/;
 
 /** Every file a remote that owns its output directory is made of. */
 const REMOTE_ASSET_FILE = /\.(?:[cm]?js|css)$/;
@@ -90,30 +143,22 @@ function readJson(path) {
   return JSON.parse(readFileSync(path, "utf8"));
 }
 
-/** The props the host passes a configuration panel, with --props merged in. */
+/** The props --props names, or undefined when it was not given. */
 function readProps(argv) {
   const value = readOption(argv, "--props", "a JSON object");
-  let parsed = {};
-  if (value !== undefined) {
-    try {
-      parsed = JSON.parse(value);
-    } catch (cause) {
-      throw new Error(`--props is not valid JSON: ${cause.message}`, {
-        cause,
-      });
-    }
-    if (
-      parsed === null ||
-      typeof parsed !== "object" ||
-      Array.isArray(parsed)
-    ) {
-      throw new Error("--props must be a JSON object.");
-    }
+  if (value === undefined) return undefined;
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch (cause) {
+    throw new Error(`--props is not valid JSON: ${cause.message}`, {
+      cause,
+    });
   }
-  // The host passes `save` for a user action, so JSON cannot express it and
-  // the render harness supplies it. A panel that calls it while it renders is
-  // reported rather than silently saved.
-  return { configuration: null, ...parsed };
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("--props must be a JSON object.");
+  }
+  return parsed;
 }
 
 function findSharedOption(config) {
@@ -155,6 +200,162 @@ function readParseRange(consumerRequire) {
   }
 }
 
+/**
+ * Asserts the entry loads the way the Admin will load it, for the script tag
+ * the server writes for this package's type. Returns a clause for the summary.
+ */
+function assertHostLoading({ argv, consumerManifest, entryName, entrySource }) {
+  const format = remoteFormatOf(consumerManifest);
+  const containerOption = readOption(argv, "--container", "a global name");
+  if (format === "module") {
+    if (containerOption !== undefined) {
+      throw new Error(
+        '--container names the global a classic container assigns itself to. package.json sets "type": "module", so the Admin reads this container from the module\'s exports instead.',
+      );
+    }
+    assertModuleContainer(entrySource, entryName);
+    return { clause: "module remote exporting get and init", format };
+  }
+  const containerName =
+    containerOption ?? toSafeModuleId(consumerManifest.name ?? "");
+  const context = createPanelContext();
+  try {
+    evaluateClassicContainer({
+      containerName,
+      context,
+      entryName,
+      source: entrySource,
+    });
+  } catch (cause) {
+    throw new Error(
+      `${entryName} does not load as the classic remote the Signal K Admin expects: ${failureOf(cause)}`,
+      { cause },
+    );
+  } finally {
+    disposePanelContext(context);
+  }
+  return {
+    clause: `classic remote assigning window.${containerName}`,
+    containerName,
+    format,
+  };
+}
+
+/**
+ * Renders the panel in every host state, and in the --props state when one is
+ * given, and asserts what each render must show. Returns a clause for the
+ * summary.
+ */
+async function assertRuntime({
+  argv,
+  consumerRequire,
+  entryName,
+  hostLoading,
+  remoteEntry,
+  root,
+  scripts,
+  version,
+}) {
+  const exposedModule = readOption(argv, "--expose", "a module name");
+  if (exposedModule === undefined) {
+    throw new Error(
+      "--runtime needs --expose <module>, the name the remote exposes the panel under, such as ./PluginConfigurationPanel.",
+    );
+  }
+
+  let react;
+  let reactDom;
+  let renderToStaticMarkup;
+  try {
+    react = consumerRequire("react");
+    reactDom = consumerRequire("react-dom");
+    ({ renderToStaticMarkup } = consumerRequire("react-dom/server"));
+  } catch (cause) {
+    throw new Error(
+      `--runtime renders the panel with the consumer's own React, which is not installed: ${cause.message}`,
+      { cause },
+    );
+  }
+
+  // The host states come first, so a panel that cannot open on a fresh
+  // install fails before a configured render can hide it.
+  const props = readProps(argv);
+  const states =
+    props === undefined
+      ? HOST_STATES
+      : [
+          ...HOST_STATES,
+          {
+            description: "the --props configuration",
+            label: "with the --props configuration",
+            props,
+          },
+        ];
+  const renderCompatibilityNotice = !readFlag(
+    argv,
+    "--no-compatibility-render",
+  );
+  const { compatibility, renders } =
+    hostLoading.format === "module"
+      ? await renderModulePanelRemote({
+          entryPath: remoteEntry,
+          exposedModule,
+          renderCompatibilityNotice,
+          root,
+          states,
+        })
+      : await renderPanelRemote({
+          bundles: scripts,
+          containerName: hostLoading.containerName,
+          entryName,
+          exposedModule,
+          react,
+          reactDom,
+          renderCompatibilityNotice,
+          renderToStaticMarkup,
+          states,
+        });
+
+  if (compatibility !== undefined) {
+    // A consumer that replaces the notice knows its own words; every other
+    // panel gets this package's own, which carries the marker attribute.
+    const expected = readValues(argv, "--expect-unsupported", "text");
+    assertMarkupIncludes(
+      compatibility.markup,
+      expected.length > 0 ? expected : [COMPATIBILITY_NOTICE_MARKER],
+      "The panel rendered for a browser without native CSS @scope",
+    );
+  }
+  // The {} render is held to no stamp or text: a package enabled by default
+  // normalizes it through its own defaults, which is not this check's to
+  // judge. It still counts saves below, like every render.
+  const [unconfigured, , configured] = renders;
+  const asserted =
+    configured === undefined ? [unconfigured] : [unconfigured, configured];
+  for (const { markup } of asserted) {
+    assertMarkupVersionStamp(markup, version);
+  }
+  assertMarkupIncludes(
+    asserted.at(-1).markup,
+    readValues(argv, "--expect", "text"),
+    "The rendered panel",
+  );
+  // Named by render, because the check renders the panel more than once and
+  // a total would report one call site as though it were several.
+  const saving = [
+    ...((compatibility?.saves ?? 0) > 0 ? ["without native CSS @scope"] : []),
+    ...renders.flatMap((render, index) =>
+      render.saves > 0 ? [states[index].label] : [],
+    ),
+  ];
+  if (saving.length > 0) {
+    throw new Error(
+      `The panel called save while it rendered ${joinNames(saving)}. The host passes save for a user action, and a panel that saves during render saves on every host render.`,
+    );
+  }
+  return `, panel rendered from ${formatCount(scripts.length, "bundle")} with configuration undefined and {}${configured === undefined ? "" : " and --props"}`;
+}
+
 async function main() {
   const argv = process.argv.slice(2);
   assertKnownOptions(argv, OPTIONS, `\n${USAGE}`);
@@ -176,13 +377,20 @@ async function main() {
   const entryName = basename(remoteEntry);
   const baselineOption = readOption(argv, "--baseline", "a path");
   const webpackConfigOption = readOption(argv, "--webpack-config", "a path");
+  const statsOption = readOption(argv, "--stats", "a path");
+  const stylesOption = readOption(argv, "--styles", "a directory");
+  const allowRuntimeDependency = readFlag(argv, "--runtime-dependency");
 
   const consumerRequire = createRequire(join(root, "package.json"));
   const consumerManifest = readJson(join(root, "package.json"));
   const installedManifest = readJson(
     consumerRequire.resolve(`${PACKAGE_NAME}/package.json`),
   );
-  const version = assertExactPin(consumerManifest, installedManifest);
+  const version = assertExactPin(consumerManifest, installedManifest, {
+    allowRuntimeDependency,
+  });
+  assertConfiguratorKeyword(consumerManifest);
+  assertRemoteLocation(root, remoteEntry);
 
   // Without --asset the whole directory is the remote, which is what a panel
   // build that owns its output directory produces. A plugin that serves other
@@ -198,12 +406,31 @@ async function main() {
       : readdirSync(remoteDirectory).filter((name) =>
           REMOTE_ASSET_FILE.test(name),
         );
-  const scripts = assetNames
-    .filter((name) => SCRIPT_FILE.test(name))
-    .map((name) => ({
-      name,
-      source: readFileSync(join(remoteDirectory, name), "utf8"),
-    }));
+  const readAssets = (pattern) =>
+    assetNames
+      .filter((name) => pattern.test(name))
+      .map((name) => ({
+        name,
+        source: readFileSync(join(remoteDirectory, name), "utf8"),
+      }));
+  const scripts = readAssets(SCRIPT_FILE);
+  const entrySource = scripts.find(({ name }) => name === entryName)?.source;
+  if (entrySource === undefined) {
+    throw new Error(`The panel build produced no ${entryName}.`);
+  }
+
+  // The static reads come before the entry runs, so a finding they can name
+  // is not reported as whatever the evaluation tripped over first.
+  assertWebpackContainer(entrySource, entryName);
+  assertExposesPanel(entrySource, entryName);
+  assertEntryCarriesNoLibrary(entrySource, entryName);
+  const hostLoading = assertHostLoading({
+    argv,
+    consumerManifest,
+    entryName,
+    entrySource,
+  });
+
   assertVersionStamp(
     scripts.map((script) => script.source),
     version,
@@ -214,14 +441,10 @@ async function main() {
   // A substring scan over files already read, so every run gets it and not
   // only the runs that also render the panel.
   assertProductionJsxRuntime(scripts);
+  assertNoHostHarness(scripts);
 
   // The installed package's own share map is the published one for this version.
   const { shared } = consumerRequire(`${PACKAGE_NAME}/federation`);
-  // The scripts above already hold the entry whenever it has a script
-  // extension; only an entry without one is read here.
-  const entrySource =
-    scripts.find(({ name }) => name === entryName)?.source ??
-    readFileSync(remoteEntry, "utf8");
   assertConsumedShares(entrySource, shared, readParseRange(consumerRequire));
 
   const webpackConfigPath =
@@ -241,85 +464,70 @@ async function main() {
     configuredMessage = ", Webpack configuration shares match";
   }
 
-  let sizeMessage = "";
+  // The installed release's own token sheet declares exactly its public
+  // tokens, so the allowed names come from the release the remote bundled.
+  const stylesheets = readAssets(STYLESHEET_FILE);
+  let tokensMessage = "";
+  if (stylesheets.length > 0) {
+    const allowedNames = new Set([
+      ...declaredTokenNames(
+        readFileSync(
+          consumerRequire.resolve(`${PACKAGE_NAME}/tokens.css`),
+          "utf8",
+        ),
+      ),
+      ...CONSUMER_HOOK_NAMES,
+    ]);
+    assertPackageTokens(stylesheets, allowedNames);
+    tokensMessage = `, package names in ${formatCount(stylesheets.length, "CSS file")}`;
+  }
+
+  let graphMessage = "";
+  if (statsOption !== undefined) {
+    const modules = assertModuleGraph(readJson(resolve(root, statsOption)));
+    graphMessage = `, module graph of ${formatCount(modules, "module")}`;
+  }
+
+  let stylesMessage = "";
+  if (stylesOption !== undefined) {
+    const cssModules = assertDoubledOverrides(
+      resolve(root, stylesOption),
+      root,
+    );
+    stylesMessage = `, doubled overrides in ${formatCount(cssModules, "CSS module")}`;
+  }
+
+  // The entry loads on every Admin page, so its own size is reported beside
+  // the total, which loads only when the panel opens.
+  const entryGzipBytes = gzipBytesOf([Buffer.from(entrySource)]);
+  let sizeMessage = `, remote entry ${entryGzipBytes} gzip bytes`;
   if (baselineOption !== undefined) {
     const baseline = readJson(resolve(root, baselineOption));
     const gzipBytes = gzipBytesOf(
       assetNames.map((name) => readFileSync(join(remoteDirectory, name))),
     );
-    sizeMessage = `, ${assertSizeBaseline(gzipBytes, baseline)}`;
+    sizeMessage = `, ${assertSizeBaseline(gzipBytes, baseline)}${sizeMessage} of them`;
   }
 
-  let runtimeMessage = "";
-  if (runtime) {
-    const exposedModule = readOption(argv, "--expose", "a module name");
-    if (exposedModule === undefined) {
-      throw new Error(
-        "--runtime needs --expose <module>, the name the remote exposes the panel under, such as ./PluginConfigurationPanel.",
-      );
-    }
-    // The Signal K Admin loader resolves a classic panel container as a global
-    // named after the consumer package, which is what every panel remote
-    // assigns its container to.
-    const containerName =
-      readOption(argv, "--container", "a global name") ??
-      consumerManifest.name?.replaceAll(/[-@/]/g, "_");
+  const runtimeMessage = runtime
+    ? await assertRuntime({
+        argv,
+        consumerRequire,
+        entryName,
+        hostLoading,
+        remoteEntry,
+        root,
+        scripts,
+        version,
+      })
+    : "";
 
-    let react;
-    let reactDom;
-    let renderToStaticMarkup;
-    try {
-      react = consumerRequire("react");
-      reactDom = consumerRequire("react-dom");
-      ({ renderToStaticMarkup } = consumerRequire("react-dom/server"));
-    } catch (cause) {
-      throw new Error(
-        `--runtime renders the panel with the consumer's own React, which is not installed: ${cause.message}`,
-        { cause },
-      );
-    }
-
-    const { compatibilityMarkup, markup, saveCalls } = await renderPanelRemote({
-      bundles: scripts,
-      containerName,
-      entryName,
-      exposedModule,
-      props: readProps(argv),
-      react,
-      reactDom,
-      renderCompatibilityNotice: !readFlag(argv, "--no-compatibility-render"),
-      renderToStaticMarkup,
-    });
-
-    if (compatibilityMarkup !== undefined) {
-      // A consumer that replaces the notice knows its own words; every other
-      // panel gets this package's own, which carries the marker attribute.
-      const expected = readValues(argv, "--expect-unsupported", "text");
-      assertMarkupIncludes(
-        compatibilityMarkup,
-        expected.length > 0 ? expected : [COMPATIBILITY_NOTICE_MARKER],
-        "The panel rendered for a browser without native CSS @scope",
-      );
-    }
-    assertMarkupVersionStamp(markup, version);
-    assertMarkupIncludes(
-      markup,
-      readValues(argv, "--expect", "text"),
-      "The rendered panel",
-    );
-    // Per render, because the check renders the panel more than once and a
-    // total would report one call site as though it were several.
-    const saves = Math.max(0, ...saveCalls);
-    if (saves > 0) {
-      throw new Error(
-        `The panel called save ${formatCount(saves, "time")} in each render. The host passes save for a user action, and a panel that saves during render saves on every host render.`,
-      );
-    }
-    runtimeMessage = `, panel rendered from ${formatCount(scripts.length, "bundle")}`;
-  }
-
+  const pinMessage =
+    runtimeDependencyFieldOf(consumerManifest) === undefined
+      ? "exact pin"
+      : `exact pin as a runtime dependency (${RUNTIME_DEPENDENCY_COST})`;
   process.stdout.write(
-    `${PACKAGE_NAME} ${version} consumer check passed: exact pin, version stamp, no React runtime, production JSX runtime, host shares ${Object.keys(shared).join(" and ")}${configuredMessage}${sizeMessage}${runtimeMessage}.\n`,
+    `${PACKAGE_NAME} ${version} consumer check passed: ${pinMessage}, ${hostLoading.clause}, version stamp, no React runtime, production JSX runtime, host shares ${Object.keys(shared).join(" and ")}${configuredMessage}${tokensMessage}${graphMessage}${stylesMessage}${sizeMessage}${runtimeMessage}.\n`,
   );
 }
 

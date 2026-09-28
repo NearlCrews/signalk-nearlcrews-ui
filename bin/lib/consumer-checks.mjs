@@ -57,19 +57,88 @@ function assertExactVersion(version, source) {
 }
 
 /**
+ * The dependency fields npm installs when it installs the consumer itself.
+ * The App Store runs npm without `--legacy-peer-deps`, so npm 7 and later
+ * install a required peer dependency too.
+ */
+const RUNTIME_DEPENDENCY_FIELDS = Object.freeze([
+  "dependencies",
+  "optionalDependencies",
+  "peerDependencies",
+]);
+
+/**
+ * Whether `field` of the manifest makes npm install the package on the
+ * server. A peer dependency marked optional in `peerDependenciesMeta` is not
+ * installed.
+ */
+function installsAtRuntime(consumerManifest, field) {
+  if (consumerManifest[field]?.[PACKAGE_NAME] === undefined) return false;
+  return (
+    field !== "peerDependencies" ||
+    consumerManifest.peerDependenciesMeta?.[PACKAGE_NAME]?.optional !== true
+  );
+}
+
+/** The runtime dependency field that declares the package, if any. */
+export function runtimeDependencyFieldOf(consumerManifest) {
+  return RUNTIME_DEPENDENCY_FIELDS.find((field) =>
+    installsAtRuntime(consumerManifest, field),
+  );
+}
+
+/**
+ * What a runtime placement costs, said where the check refuses one and where
+ * `--runtime-dependency` accepts one.
+ */
+export const RUNTIME_DEPENDENCY_COST = `every App Store install fetches ${PACKAGE_NAME}, React Aria, and, because npm installs peer dependencies, React and React DOM into the Signal K server's node_modules`;
+
+/**
  * Asserts the consumer pins an exact version and the installed package is that
  * version. Returns the version.
+ *
+ * The pin belongs in devDependencies: the panel remote bundles the package, so
+ * nothing on the server needs it at run time. `allowRuntimeDependency` accepts
+ * a runtime placement for a plugin whose server code imports the package
+ * itself, such as `signalk-nearlcrews-ui/format`. Every field that declares
+ * the package must then pin the same exact version, because the remote
+ * bundles the development pin and the server installs the runtime one.
  */
-export function assertExactPin(consumerManifest, installedManifest) {
-  const pinned =
-    consumerManifest.devDependencies?.[PACKAGE_NAME] ??
-    consumerManifest.dependencies?.[PACKAGE_NAME];
-  if (pinned === undefined) {
+export function assertExactPin(
+  consumerManifest,
+  installedManifest,
+  { allowRuntimeDependency = false } = {},
+) {
+  const runtimeFields = RUNTIME_DEPENDENCY_FIELDS.filter((field) =>
+    installsAtRuntime(consumerManifest, field),
+  );
+  if (runtimeFields.length > 0 && !allowRuntimeDependency) {
     throw new Error(
-      `package.json does not declare ${PACKAGE_NAME} in devDependencies or dependencies.`,
+      `package.json declares ${PACKAGE_NAME} in ${runtimeFields[0]}. The panel remote bundles it, so it belongs in devDependencies: a runtime entry means ${RUNTIME_DEPENDENCY_COST}. Pass --runtime-dependency only when the plugin's server code imports the package itself.`,
     );
   }
-  assertExactVersion(pinned, "package.json");
+  const pins = ["devDependencies", ...runtimeFields]
+    .filter((field) => consumerManifest[field]?.[PACKAGE_NAME] !== undefined)
+    .map((field) => ({
+      field,
+      version: consumerManifest[field][PACKAGE_NAME],
+    }));
+  if (pins.length === 0) {
+    throw new Error(
+      `package.json does not declare ${PACKAGE_NAME} in devDependencies.`,
+    );
+  }
+  for (const { field, version } of pins) {
+    assertExactVersion(version, `package.json ${field}`);
+  }
+  const [first, ...others] = pins;
+  const differing = others.find(({ version }) => version !== first.version);
+  if (differing !== undefined) {
+    throw new Error(
+      `package.json declares ${PACKAGE_NAME} ${first.version} in ${first.field} and ${differing.version} in ${differing.field}. The remote bundles one version and the server installs the other; pin both to the same exact version.`,
+    );
+  }
+  const pinned = first.version;
   const installed = installedManifest?.version;
   if (installed !== pinned) {
     throw new Error(
@@ -151,6 +220,29 @@ export function assertProductionJsxRuntime(files, label = "The built remote") {
     if (marker !== undefined) {
       throw new Error(
         `${label} uses the React development JSX runtime: ${name} contains ${marker}. Build the panel with the automatic runtime in production mode.`,
+      );
+    }
+  }
+}
+
+/**
+ * The string every export of `signalk-nearlcrews-ui/host-harness` carries,
+ * which the harness sets as an attribute on what it renders and injects.
+ * `src/host-harness/marker.ts` defines the same value; a unit test holds the
+ * two together.
+ */
+export const HOST_HARNESS_MARKER = "data-snui-host-harness";
+
+/**
+ * Asserts the remote bundled nothing from the host harness, the browser test
+ * tooling that stands in for the Admin loader. It belongs in a consumer's test
+ * fixture and never in the panel the Admin loads.
+ */
+export function assertNoHostHarness(files, label = "The built remote") {
+  for (const { name, source } of files) {
+    if (source.includes(HOST_HARNESS_MARKER)) {
+      throw new Error(
+        `${label} bundled ${PACKAGE_NAME}/host-harness: ${name} contains ${HOST_HARNESS_MARKER}. The harness stands in for the Signal K Admin loader in a browser test fixture; import it from the fixture, never from the panel.`,
       );
     }
   }

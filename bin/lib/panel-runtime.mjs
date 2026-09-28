@@ -2,6 +2,8 @@
  * Renders a built panel remote the way the Signal K Admin host does: run
  * remoteEntry.js as a classic script, initialize the share scope with the
  * consumer's React, get the exposed module, and render it to static markup.
+ * A remote built as an ES module takes the same steps in a worker thread,
+ * through module-runtime.mjs, which shares the stubs and the renders below.
  *
  * The checks in consumer-checks.mjs read the built files without running them.
  * These assertions need the panel to evaluate and render, which is what catches
@@ -68,7 +70,29 @@ const CONTEXT_TIMERS = new WeakMap();
  * a bound it stops the check rather than failing it. Callers can pass their
  * own `timeoutMs`.
  */
-const DEFAULT_TIMEOUT_MS = 10_000;
+export const DEFAULT_TIMEOUT_MS = 10_000;
+
+/**
+ * A `<link rel="stylesheet">` as Webpack's CSS chunk loader builds one: it sets
+ * attributes, assigns `onload` and `onerror`, and appends the link to the
+ * document head.
+ */
+function createStylesheetLink() {
+  const attributes = new Map();
+  return {
+    getAttribute: (name) => attributes.get(name) ?? null,
+    onerror: null,
+    onload: null,
+    parentNode: null,
+    removeAttribute: (name) => {
+      attributes.delete(name);
+    },
+    setAttribute: (name, value) => {
+      attributes.set(name, String(value));
+    },
+    tagName: "LINK",
+  };
+}
 
 /**
  * The DOM members a panel remote touches before anything renders, in one
@@ -80,21 +104,37 @@ const DEFAULT_TIMEOUT_MS = 10_000;
  * context defines `document` and `window`, so it also has to answer what that
  * setup touches. Measured against this package's own federation fixture and a
  * consumer panel, the remote reads every member below while it evaluates,
- * apart from the two guards, which turn a network call and a chunk load into a
- * finding rather than a confusing failure. `document.documentElement`,
- * `localStorage`, and `matchMedia`, which an earlier copy of this harness
- * carried, are read by neither, and this library feature-detects the last two
- * itself, so their absence is a state it supports rather than a hole here.
- * Rendering happens server-side, so these are inert listeners and not a DOM
+ * apart from the two guards, which turn a network call and a stray element
+ * into a finding rather than a confusing failure. The one element the
+ * document builds is the stylesheet link Webpack's CSS chunk loader appends
+ * for a panel that ships CSS modules, and the head answers its load at once:
+ * rendering happens server-side, so no stylesheet would ever apply.
+ * `document.documentElement`, `localStorage`, and `matchMedia`, which an
+ * earlier copy of this harness carried, are read by neither, and this library
+ * feature-detects the last two itself, so their absence is a state it
+ * supports rather than a hole here. These are inert listeners and not a DOM
  * implementation.
  *
  * Recheck this list on a React Aria upgrade: a failing load names the member.
  */
-function createDomStubs(scriptUrl) {
+export function createDomStubs(scriptUrl) {
   const eventTarget = () => ({
     addEventListener: () => {},
     removeEventListener: () => {},
   });
+  const head = {
+    appendChild: (node) => {
+      node.parentNode = head;
+      queueMicrotask(() => {
+        node.onload?.({ target: node, type: "load" });
+      });
+      return node;
+    },
+    removeChild: (node) => {
+      node.parentNode = null;
+      return node;
+    },
+  };
   return {
     document: {
       // Webpack's automatic public path resolves the chunk base from the
@@ -107,9 +147,17 @@ function createDomStubs(scriptUrl) {
       body: eventTarget(),
       // The focus-visible setup binds keydown, keyup, and click here.
       ...eventTarget(),
-      // Every chunk beside the remote entry is pre-registered below, so the
-      // webpack chunk loader should never reach for a script element.
-      createElement: () => {
+      // The CSS chunk loader looks for a link it already added, then appends
+      // one here.
+      getElementsByTagName: () => [],
+      head,
+      // Every JavaScript chunk beside a classic entry is pre-registered below,
+      // and a module remote imports its chunks, so the webpack chunk loader
+      // should never reach for a script element.
+      createElement: (tagName) => {
+        if (String(tagName).toLowerCase() === "link") {
+          return createStylesheetLink();
+        }
         throw new Error(
           "The panel asked the document for an element. The runtime check pre-registers every chunk beside the remote entry, so a chunk it did not find was requested, or the panel builds DOM while it renders.",
         );
@@ -188,27 +236,49 @@ export function disposePanelContext(context) {
 
 /**
  * Adds or removes the interface this package's `supportsNativeCssScope`
- * preflight looks for, so one context can render both the panel and the
- * compatibility notice a browser without native CSS `@scope` gets.
+ * preflight looks for, so one global can render both the panel and the
+ * compatibility notice a browser without native CSS `@scope` gets. Defined
+ * rather than assigned, because a worker's global is Node's own, whose
+ * properties an assignment does not always reach.
  */
-export function setNativeCssScope(context, supported) {
+export function setNativeCssScope(target, supported) {
   if (supported) {
-    context.CSSScopeRule = class CSSScopeRule {};
+    Object.defineProperty(target, "CSSScopeRule", {
+      configurable: true,
+      value: class CSSScopeRule {},
+      writable: true,
+    });
     return;
   }
-  Reflect.deleteProperty(context, "CSSScopeRule");
+  Reflect.deleteProperty(target, "CSSScopeRule");
 }
 
-/** One entry in a Module Federation share scope, as a host provides it. */
+/**
+ * One entry in a Module Federation share scope, exactly as the Admin loader's
+ * fallback registers it, `from: "adminUI"` included, so a remote's version
+ * warnings read here as they do in the Admin.
+ */
 function shareEntry(module, version) {
   return {
     [version]: {
       get: () => Promise.resolve(() => module),
       loaded: true,
-      from: "snui-check-consumer",
+      from: "adminUI",
       eager: true,
       shareConfig: { singleton: true, requiredVersion: `^${version}` },
     },
+  };
+}
+
+/**
+ * The share scope the Admin's loader falls back to, with the consumer's React.
+ * The host harness builds the same shape as `createHostShareScope`; a unit
+ * test holds the two equal.
+ */
+export function createShareScope(react, reactDom) {
+  return {
+    react: shareEntry(react, react.version),
+    "react-dom": shareEntry(reactDom, reactDom.version),
   };
 }
 
@@ -221,17 +291,18 @@ const MODULE_SYNTAX =
   /(?:^|[\s;}])(?:export\s*(?:\{|\*|default[\s({[]|(?:const|let|var|function|class|async)\b)|import\s*(?:\{|\*|["'])|import\s+[\w$]+\s*(?:,|from\b))/;
 
 /**
- * Compiles one built file as the classic script the Signal K Admin host loads.
- * An output-module remote is a supported build that this check cannot run, so
- * it is named as such rather than left as a bare SyntaxError.
+ * Compiles one built file as the classic script the Signal K Admin host loads
+ * for a package without `"type": "module"`. An ES module there is a build the
+ * Admin cannot run, so it is named as such rather than left as a bare
+ * SyntaxError.
  */
-function compileBundle(name, source) {
+function compileClassicScript(name, source) {
   try {
     return new vm.Script(source, { filename: name });
   } catch (cause) {
     if (MODULE_SYNTAX.test(source)) {
       throw new Error(
-        `${name} is an ES module. This check loads a remote the way the Admin host loads a classic container, so it cannot run a remote built with a library type of "module". Run the check without --runtime, which reads the same build without evaluating it.`,
+        `${name} is an ES module, but package.json does not set "type": "module", so the Signal K server writes a classic <script> tag for it, which cannot run module syntax. Build the remote with a library type of "var" or "window", or give the package the module type if its server code allows.`,
         { cause },
       );
     }
@@ -240,11 +311,40 @@ function compileBundle(name, source) {
 }
 
 /**
+ * Runs a classic remote entry in the context and returns the container it
+ * assigned to `containerName`, the global the Admin reads it from. The entry
+ * is the small container runtime and loads no chunk while it evaluates.
+ */
+export function evaluateClassicContainer({
+  containerName,
+  context,
+  entryName,
+  source,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+}) {
+  compileClassicScript(entryName, source).runInContext(context, {
+    timeout: timeoutMs,
+  });
+  const container = context[containerName];
+  if (
+    container === null ||
+    typeof container !== "object" ||
+    typeof container.get !== "function" ||
+    typeof container.init !== "function"
+  ) {
+    throw new Error(
+      `${entryName} did not assign a container with get and init to window.${containerName}, the global the Signal K Admin reads a classic remote from: the package name with -, @, and / replaced by underscores. Name the Webpack container ${containerName}, or pass --container for a host that loads it under another name.`,
+    );
+  }
+  return container;
+}
+
+/**
  * Bounds a step the remote controls. A container whose init or get never
  * settles is a bug in the build being checked, and without a bound it stops
  * the check rather than failing it.
  */
-function withTimeout(work, timeoutMs, description) {
+export function withTimeout(work, timeoutMs, description) {
   let timer;
   const bound = new Promise((_resolve, reject) => {
     timer = globalThis.setTimeout(() => {
@@ -258,12 +358,47 @@ function withTimeout(work, timeoutMs, description) {
 }
 
 /**
+ * Initializes a container with the consumer's React and loads the exposed
+ * module out of it, as the Admin loader does for either remote format.
+ * `beforeGet` runs between the two, which is where a classic remote's chunks
+ * are registered.
+ */
+export async function loadExposedModule({
+  beforeGet = () => {},
+  container,
+  entryName,
+  exposedModule,
+  react,
+  reactDom,
+  timeoutMs,
+}) {
+  await withTimeout(
+    Promise.resolve(container.init(createShareScope(react, reactDom))),
+    timeoutMs,
+    `${entryName} did not finish initializing the share scope`,
+  );
+  beforeGet();
+  const factory = await withTimeout(
+    container.get(exposedModule),
+    timeoutMs,
+    `The remote did not answer ${exposedModule}`,
+  );
+  if (typeof factory !== "function") {
+    throw new Error(`The remote exposes no ${exposedModule} module.`);
+  }
+  return await withTimeout(
+    Promise.resolve(factory()),
+    timeoutMs,
+    `${exposedModule} did not finish loading`,
+  );
+}
+
+/**
  * Loads the exposed module out of a built classic container. `bundles` are the
  * JavaScript files beside the remote entry, which are pre-registered after the
  * container runtime exists: the browser loads them on demand, and registering
  * them here keeps the check deterministic without a networked script loader.
- * `entryName` is the file the caller pointed the check at, because a consumer
- * may give its container any filename.
+ * `entryName` is the file the caller pointed the check at.
  */
 async function loadPanelModule({
   bundles,
@@ -279,44 +414,30 @@ async function loadPanelModule({
   if (remoteEntry === undefined) {
     throw new Error(`The panel build produced no ${entryName}.`);
   }
-  compileBundle(entryName, remoteEntry.source).runInContext(context, {
-    timeout: timeoutMs,
+  const container = evaluateClassicContainer({
+    containerName,
+    context,
+    entryName,
+    source: remoteEntry.source,
+    timeoutMs,
   });
-
-  const container = context[containerName];
-  if (container === null || typeof container !== "object") {
-    throw new Error(
-      `${entryName} did not assign a container to window.${containerName}. Pass --container when the Webpack library name is not the package name with its punctuation replaced by underscores.`,
-    );
-  }
-
-  await withTimeout(
-    container.init({
-      react: shareEntry(react, react.version),
-      "react-dom": shareEntry(reactDom, reactDom.version),
-    }),
+  return await loadExposedModule({
+    beforeGet: () => {
+      for (const { name, source } of bundles) {
+        if (name !== entryName) {
+          compileClassicScript(name, source).runInContext(context, {
+            timeout: timeoutMs,
+          });
+        }
+      }
+    },
+    container,
+    entryName,
+    exposedModule,
+    react,
+    reactDom,
     timeoutMs,
-    `${entryName} did not finish initializing the share scope`,
-  );
-  for (const { name, source } of bundles) {
-    if (name !== entryName) {
-      compileBundle(name, source).runInContext(context, { timeout: timeoutMs });
-    }
-  }
-
-  const factory = await withTimeout(
-    container.get(exposedModule),
-    timeoutMs,
-    `The remote did not answer ${exposedModule}`,
-  );
-  if (typeof factory !== "function") {
-    throw new Error(`The remote exposes no ${exposedModule} module.`);
-  }
-  return await withTimeout(
-    Promise.resolve(factory()),
-    timeoutMs,
-    `${exposedModule} did not finish loading`,
-  );
+  });
 }
 
 /**
@@ -334,7 +455,7 @@ function isElementType(value) {
 }
 
 /** The component the host renders out of an exposed panel module. */
-function panelComponentOf(panelModule, exposedModule) {
+export function panelComponentOf(panelModule, exposedModule) {
   const component = isElementType(panelModule)
     ? panelModule
     : panelModule?.default;
@@ -394,7 +515,7 @@ const MISSING_MEMBER =
  * type error out of the sandbox, whose intrinsics are its own, so the name
  * rather than `instanceof` is what identifies it.
  */
-function failureOf(cause) {
+export function failureOf(cause) {
   const reason =
     typeof cause?.message === "string" ? cause.message : String(cause);
   const sentence = /[!.?]$/.test(reason) ? reason : `${reason}.`;
@@ -407,22 +528,96 @@ function failureOf(cause) {
 }
 
 /**
- * Renders the exposed panel twice: once without native CSS `@scope`, which is
- * what this package's preflight turns into a compatibility notice, and once
- * with it, which is the panel itself. Returns both markups and the number of
- * times the panel called `save` in each render.
+ * The states the Signal K Admin opens a configuration panel in before anyone
+ * saves. The host seeds `configuration` from the plugin's options file, which
+ * holds none for a plugin nobody has configured, and the server writes `{}`
+ * for a package that enables itself by default. It never passes null.
+ */
+export const HOST_STATES = Object.freeze([
+  Object.freeze({
+    description:
+      "configuration undefined, which the Signal K Admin passes a plugin nobody has configured",
+    label: "with configuration undefined",
+    props: Object.freeze({ configuration: undefined }),
+  }),
+  Object.freeze({
+    description:
+      "configuration {}, which the Signal K Admin passes a package enabled by default before its first save",
+    label: "with configuration {}",
+    props: Object.freeze({ configuration: {} }),
+  }),
+]);
+
+/**
+ * Renders the panel component once per host state, after an optional first
+ * render without native CSS `@scope`, which is what this package's preflight
+ * turns into a compatibility notice. `states` are `{ description, props }`
+ * pairs; the compatibility render takes the first state's props, the state the
+ * host opens a panel in first. Each render gets its own `save`, counted
+ * separately, because a panel with one call site saves once per render and a
+ * total would report it as though it had several.
+ */
+export function renderPanelStates({
+  component,
+  react,
+  renderCompatibilityNotice,
+  renderToStaticMarkup,
+  scopeTarget,
+  states,
+}) {
+  const render = ({ description, props }) => {
+    let saves = 0;
+    const renderProps = {
+      ...props,
+      save: () => {
+        saves += 1;
+      },
+    };
+    try {
+      const markup = renderToStaticMarkup(
+        react.createElement(component, renderProps),
+      );
+      return { markup, saves };
+    } catch (cause) {
+      throw new Error(
+        `The panel did not render with ${description}: ${failureOf(cause)}`,
+        { cause },
+      );
+    }
+  };
+
+  let compatibility;
+  if (renderCompatibilityNotice) {
+    setNativeCssScope(scopeTarget, false);
+    try {
+      compatibility = render({
+        description: `${states[0].description}, in a browser without native CSS @scope`,
+        props: states[0].props,
+      });
+    } finally {
+      setNativeCssScope(scopeTarget, true);
+    }
+  }
+  return { compatibility, renders: states.map(render) };
+}
+
+/**
+ * Renders the exposed panel of a classic remote: once without native CSS
+ * `@scope` for the compatibility notice, then once per host state. Returns the
+ * compatibility render, if any, and one render per state, each with its markup
+ * and the number of times the panel called `save` while it rendered.
  */
 export async function renderPanelRemote({
   bundles,
   containerName,
   entryName = "remoteEntry.js",
   exposedModule,
-  props,
   react,
   reactDom,
   renderCompatibilityNotice = true,
   renderToStaticMarkup,
   scriptUrl,
+  states,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }) {
   const context = createPanelContext({ scriptUrl });
@@ -444,37 +639,14 @@ export async function renderPanelRemote({
         cause,
       });
     }
-    const component = panelComponentOf(panelModule, exposedModule);
-    // The host passes `save` for a user action, so the check supplies it and
-    // counts each render separately: a panel with one call site saves once per
-    // render, and a total would report it as though it had two.
-    const saveCalls = [];
-    const renderProps = {
-      ...props,
-      save: () => {
-        saveCalls[saveCalls.length - 1] += 1;
-      },
-    };
-    const render = () => {
-      saveCalls.push(0);
-      try {
-        return renderToStaticMarkup(
-          react.createElement(component, renderProps),
-        );
-      } catch (cause) {
-        throw new Error(`The panel did not render: ${failureOf(cause)}`, {
-          cause,
-        });
-      }
-    };
-
-    let compatibilityMarkup;
-    if (renderCompatibilityNotice) {
-      setNativeCssScope(context, false);
-      compatibilityMarkup = render();
-      setNativeCssScope(context, true);
-    }
-    return { compatibilityMarkup, markup: render(), saveCalls };
+    return renderPanelStates({
+      component: panelComponentOf(panelModule, exposedModule),
+      react,
+      renderCompatibilityNotice,
+      renderToStaticMarkup,
+      scopeTarget: context,
+      states,
+    });
   } finally {
     disposePanelContext(context);
   }
