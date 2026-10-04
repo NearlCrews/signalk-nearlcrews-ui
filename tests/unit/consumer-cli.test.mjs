@@ -33,6 +33,11 @@ function pluginConfig(source) {
   return `const { shared } = require("${FEDERATION_REQUEST}");\nmodule.exports = ${source};\n`;
 }
 
+/** The same configuration written as an ES module. */
+function moduleConfig(source) {
+  return `import federation from "${FEDERATION_REQUEST}";\nconst { shared } = federation;\nexport default ${source};\n`;
+}
+
 afterAll(removeConsumers);
 
 describe("snui-check-consumer", () => {
@@ -109,6 +114,79 @@ describe("snui-check-consumer", () => {
     expect(result.stdout).toContain("Webpack configuration shares match");
   });
 
+  it("reads an ES module webpack.config.js in a module package", () => {
+    // In a package with "type": "module" the file is an ES module, whose
+    // configuration is its default export.
+    const root = createConsumer({
+      assets: { "main.chunk.js": CHUNK, "remoteEntry.js": MODULE_ENTRY },
+      config: moduleConfig(
+        "{ plugins: [{ options: { shared: { ...shared } } }] }",
+      ),
+      configName: "webpack.config.js",
+      manifest: { type: "module" },
+    });
+
+    const result = checkConsumer(root);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("Webpack configuration shares match");
+  });
+
+  it("discovers webpack.config.mjs and awaits its function form", () => {
+    const root = createConsumer({
+      config: moduleConfig(
+        `async (environment, argv) => {
+  if (argv.mode !== "production") throw new Error("Expected the production mode.");
+  return { plugins: [{ options: { shared: { ...shared } } }] };
+}`,
+      ),
+      configName: "webpack.config.mjs",
+    });
+
+    const result = checkConsumer(root);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("Webpack configuration shares match");
+  });
+
+  it("unwraps the default export a compiled configuration keeps", () => {
+    // TypeScript and Babel compile `export default` into exports.default of
+    // a CommonJS file, and Webpack's own CLI reads the configuration there.
+    for (const exported of [
+      "{ plugins: [{ options: { shared: { ...shared } } }] }",
+      "async () => ({ plugins: [{ options: { shared: { ...shared } } }] })",
+    ]) {
+      const root = createConsumer({
+        config: `const { shared } = require("${FEDERATION_REQUEST}");
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.default = ${exported};
+`,
+      });
+
+      const result = checkConsumer(root);
+
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("Webpack configuration shares match");
+    }
+  });
+
+  it("settles a promised configuration and each entry of an array, as Webpack does", () => {
+    const matching = "{ plugins: [{ options: { shared: { ...shared } } }] }";
+    for (const exported of [
+      `Promise.resolve(${matching})`,
+      `Promise.resolve(() => (${matching}))`,
+      `[() => ({ plugins: [] }), async () => (${matching})]`,
+      `[Promise.resolve(${matching})]`,
+    ]) {
+      const root = createConsumer({ config: pluginConfig(exported) });
+
+      const result = checkConsumer(root);
+
+      expect(result.status, `${exported}: ${result.stderr}`).toBe(0);
+      expect(result.stdout).toContain("Webpack configuration shares match");
+    }
+  });
+
   it("checks the built remote alone when the consumer ships no configuration", () => {
     const root = createConsumer();
 
@@ -145,6 +223,31 @@ describe("snui-check-consumer", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("--root requires a path.");
+  });
+
+  it("refuses an argument no option reads rather than checking less", () => {
+    const root = createConsumer();
+
+    // --asset takes one value each time, so the second name was never read
+    // and the scans covered fewer files than the caller named.
+    const second = checkConsumer(
+      root,
+      "--asset",
+      "main.chunk.js",
+      "other.chunk.js",
+    );
+    expect(second.status).not.toBe(0);
+    expect(second.stderr).toContain(
+      "other.chunk.js is neither an option nor the value of one.",
+    );
+    expect(second.stderr).toContain("Usage: snui-check-consumer");
+
+    // An option typed without its dashes skipped the check it names.
+    const bare = checkConsumer(root, "runtime-dependency");
+    expect(bare.status).not.toBe(0);
+    expect(bare.stderr).toContain(
+      "runtime-dependency is neither an option nor the value of one.",
+    );
   });
 });
 

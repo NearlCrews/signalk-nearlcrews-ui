@@ -66,17 +66,24 @@ describe("joinNames", () => {
 });
 
 describe("assertKnownOptions", () => {
-  const known = ["--root", "--remote"];
+  const known = ["--root", "--remote", "--runtime"];
+  const valued = ["--root", "--remote"];
 
   it("passes an argument list of known options and their values", () => {
     expect(() =>
-      assertKnownOptions(["--root", ".", "--remote", "public/x.js"], known),
+      assertKnownOptions(
+        ["--root", ".", "--runtime", "--remote", "public/x.js"],
+        known,
+        { valued },
+      ),
     ).not.toThrow();
   });
 
   it("refuses a misspelled option, which would otherwise skip a check", () => {
     expect(() =>
-      assertKnownOptions(["--root", ".", "--basline", "size.json"], known),
+      assertKnownOptions(["--root", ".", "--basline", "size.json"], known, {
+        valued,
+      }),
     ).toThrow("--basline is not an option this check takes.");
   });
 
@@ -85,10 +92,47 @@ describe("assertKnownOptions", () => {
       assertKnownOptions(
         ["--one", "a", "--two", "b", "--one", "c", "--three", "d"],
         known,
-        " Read the usage.",
+        { hint: " Read the usage." },
       ),
     ).toThrow(
       "--one, --two, and --three are not options this check takes. Read the usage.",
+    );
+  });
+
+  it("refuses a second value, which the option before it never reads", () => {
+    // Silently dropping it checks less than the caller asked for.
+    expect(() =>
+      assertKnownOptions(["--root", ".", "plugins/foo"], known, { valued }),
+    ).toThrow(
+      "plugins/foo is neither an option nor the value of one. An option starts with --, and one that takes a value takes only the argument after it.",
+    );
+  });
+
+  it("refuses an option typed without its dashes", () => {
+    expect(() =>
+      assertKnownOptions(["runtime", "--root", "."], known, { valued }),
+    ).toThrow("runtime is neither an option nor the value of one.");
+    // A flag takes no value, so what follows it is not one.
+    expect(() =>
+      assertKnownOptions(["--runtime", "remote"], known, { valued }),
+    ).toThrow("remote is neither an option nor the value of one.");
+  });
+
+  it("takes no values at all unless the caller names an option that does", () => {
+    expect(() => assertKnownOptions(["--runtime"], known)).not.toThrow();
+    expect(() => assertKnownOptions(["--root", "."], known)).toThrow(
+      ". is neither an option nor the value of one.",
+    );
+  });
+
+  it("names every stray argument once, and adds the hint it was given", () => {
+    expect(() =>
+      assertKnownOptions(["--root", ".", "one", "two", "one"], known, {
+        hint: " Read the usage.",
+        valued,
+      }),
+    ).toThrow(
+      "one and two are neither options nor the values of options. An option starts with --, and one that takes a value takes only the argument after it. Read the usage.",
     );
   });
 });

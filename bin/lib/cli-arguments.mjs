@@ -81,18 +81,42 @@ export function readValues(argv, name, requires = "a value") {
 }
 
 /**
- * Rejects a flag the caller does not know. A misspelled option is otherwise
- * dropped without a word, which skips the check it names while the run still
- * reports a pass. No value can be flag-shaped, so every flag-shaped argument
- * is an option.
+ * Rejects an argument the caller would never read: a flag it does not know, or
+ * anything else that is not the one value after an option named in `valued`.
+ * A misspelled option, a second value, or an option typed without its dashes
+ * is otherwise dropped without a word, which skips or narrows the check it
+ * names while the run still reports a pass. No value can be flag-shaped, so
+ * every flag-shaped argument is an option. `hint` ends the message.
  */
-export function assertKnownOptions(argv, known, hint = "") {
-  const unknown = [
-    ...new Set(
-      argv.filter((argument) => isFlag(argument) && !known.includes(argument)),
-    ),
-  ];
-  if (unknown.length === 0) return;
-  const subject = unknown.length === 1 ? "is not an option" : "are not options";
-  throw new Error(`${joinNames(unknown)} ${subject} this check takes.${hint}`);
+export function assertKnownOptions(
+  argv,
+  known,
+  { hint = "", valued = [] } = {},
+) {
+  const unknown = new Set();
+  const stray = new Set();
+  for (const [index, argument] of argv.entries()) {
+    if (isFlag(argument)) {
+      if (!known.includes(argument)) unknown.add(argument);
+    } else if (!valued.includes(argv[index - 1])) {
+      stray.add(argument);
+    }
+  }
+  // Unknown options come first: the argument after a misspelled option is
+  // only stray because the option is.
+  if (unknown.size > 0) {
+    const subject = unknown.size === 1 ? "is not an option" : "are not options";
+    throw new Error(
+      `${joinNames([...unknown])} ${subject} this check takes.${hint}`,
+    );
+  }
+  if (stray.size > 0) {
+    const subject =
+      stray.size === 1
+        ? "is neither an option nor the value of one"
+        : "are neither options nor the values of options";
+    throw new Error(
+      `${joinNames([...stray])} ${subject}. An option starts with --, and one that takes a value takes only the argument after it.${hint}`,
+    );
+  }
 }

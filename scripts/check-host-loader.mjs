@@ -27,7 +27,9 @@ import {
 import { repositoryPath } from "./lib/paths.mjs";
 
 const argv = process.argv.slice(2);
-assertKnownOptions(argv, ["--baseline", "--source", "--tag", "--update"]);
+assertKnownOptions(argv, ["--baseline", "--source", "--tag", "--update"], {
+  valued: ["--baseline", "--source", "--tag"],
+});
 const baselinePath = resolve(
   readOption(argv, "--baseline", "a path") ??
     repositoryPath("tests", "host-loader.baseline.json"),

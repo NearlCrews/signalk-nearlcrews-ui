@@ -21,7 +21,7 @@ import { bulletList } from "./lib/text.mjs";
 
 const OPTIONS = ["--variant"];
 const argv = process.argv.slice(2);
-assertKnownOptions(argv, OPTIONS);
+assertKnownOptions(argv, OPTIONS, { valued: OPTIONS });
 
 const [specs, ciWorkflow] = await Promise.all([
   readSnapshotSpecs(repositoryPath),

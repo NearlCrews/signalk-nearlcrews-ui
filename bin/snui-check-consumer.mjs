@@ -40,7 +40,7 @@
  * renders in a worker thread.
  *
  * The check runs the consumer's own code: it loads the installed package's
- * federation entry, requires and calls the Webpack configuration it finds,
+ * federation entry, loads and calls the Webpack configuration it finds,
  * and evaluates a classic remote entry. With --runtime it evaluates the whole
  * built remote, in a context that answers browser globals but is not a
  * security boundary. Point the check at a build and a working tree the
@@ -50,6 +50,7 @@ import { Buffer } from "node:buffer";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import {
   assertKnownOptions,
@@ -130,6 +131,25 @@ const OPTIONS = Object.freeze([
   ...RUNTIME_OPTIONS,
 ]);
 
+/**
+ * The options that take the argument after them. Any other argument that is
+ * not an option fails, because nothing would read it.
+ */
+const VALUE_OPTIONS = Object.freeze([
+  "--asset",
+  "--baseline",
+  "--container",
+  "--expect",
+  "--expect-unsupported",
+  "--expose",
+  "--props",
+  "--remote",
+  "--root",
+  "--stats",
+  "--styles",
+  "--webpack-config",
+]);
+
 /** The JavaScript files of a remote, which the stamp and runtime scans read. */
 const SCRIPT_FILE = /\.[cm]?js$/;
 
@@ -170,6 +190,33 @@ function findSharedOption(config) {
     }
   }
   return undefined;
+}
+
+/**
+ * The configuration a Webpack configuration file holds, settled the way
+ * Webpack's own CLI settles one. The file is imported rather than required,
+ * so one written as an ES module loads too: the default export is that
+ * module's configuration, and it is module.exports for a CommonJS file. A
+ * CommonJS file compiled from an ES module keeps its configuration on a
+ * `default` of its own. The configuration, or each entry of an array of them,
+ * may be a promise or a function, and a function is called as Webpack calls
+ * it for a production build.
+ */
+async function loadWebpackConfig(path) {
+  const { default: exported } = await import(pathToFileURL(path).href);
+  const loaded =
+    exported !== null && typeof exported === "object" && "default" in exported
+      ? exported.default
+      : exported;
+  const settle = async (entry) => {
+    const config = await entry;
+    return typeof config === "function"
+      ? await config({}, { mode: "production" })
+      : config;
+  };
+  return Array.isArray(loaded)
+    ? await Promise.all(loaded.map(settle))
+    : await settle(loaded);
 }
 
 /** Whether the consumer has Webpack installed at all. */
@@ -295,6 +342,14 @@ async function assertRuntime({
     argv,
     "--no-compatibility-render",
   );
+  // Read before the render, so text the skipped render would have been held
+  // to fails here rather than passing unchecked.
+  const expectedUnsupported = readValues(argv, "--expect-unsupported", "text");
+  if (!renderCompatibilityNotice && expectedUnsupported.length > 0) {
+    throw new Error(
+      "--expect-unsupported needs the compatibility render that --no-compatibility-render skips.",
+    );
+  }
   const { compatibility, renders } =
     hostLoading.format === "module"
       ? await renderModulePanelRemote({
@@ -319,10 +374,11 @@ async function assertRuntime({
   if (compatibility !== undefined) {
     // A consumer that replaces the notice knows its own words; every other
     // panel gets this package's own, which carries the marker attribute.
-    const expected = readValues(argv, "--expect-unsupported", "text");
     assertMarkupIncludes(
       compatibility.markup,
-      expected.length > 0 ? expected : [COMPATIBILITY_NOTICE_MARKER],
+      expectedUnsupported.length > 0
+        ? expectedUnsupported
+        : [COMPATIBILITY_NOTICE_MARKER],
       "The panel rendered for a browser without native CSS @scope",
     );
   }
@@ -358,7 +414,10 @@ async function assertRuntime({
 
 async function main() {
   const argv = process.argv.slice(2);
-  assertKnownOptions(argv, OPTIONS, `\n${USAGE}`);
+  assertKnownOptions(argv, OPTIONS, {
+    hint: `\n${USAGE}`,
+    valued: VALUE_OPTIONS,
+  });
   const rootOption = readOption(argv, "--root", "a path");
   const remoteOption = readOption(argv, "--remote", "a path");
   if (rootOption === undefined || remoteOption === undefined) {
@@ -449,17 +508,13 @@ async function main() {
 
   const webpackConfigPath =
     webpackConfigOption === undefined
-      ? ["webpack.config.cjs", "webpack.config.js"]
+      ? ["webpack.config.cjs", "webpack.config.js", "webpack.config.mjs"]
           .map((name) => join(root, name))
           .find((path) => existsSync(path))
       : resolve(root, webpackConfigOption);
   let configuredMessage = "";
   if (webpackConfigPath !== undefined) {
-    const loaded = consumerRequire(webpackConfigPath);
-    const config =
-      typeof loaded === "function"
-        ? await loaded({}, { mode: "production" })
-        : loaded;
+    const config = await loadWebpackConfig(webpackConfigPath);
     assertConfiguredShares(findSharedOption(config), shared);
     configuredMessage = ", Webpack configuration shares match";
   }

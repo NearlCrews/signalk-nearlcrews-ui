@@ -248,6 +248,30 @@ describe("snui-check-consumer --runtime", () => {
     expect(runRuntimeCli(root).status).not.toBe(0);
   });
 
+  it("refuses --expect-unsupported beside the option that skips its render", () => {
+    // The pair would assert nothing about the text it names and still pass.
+    const root = createConsumer({
+      assets: panelRemote(),
+      link: REACT_PACKAGES,
+    });
+
+    const result = runRuntimeCli(
+      root,
+      "--no-compatibility-render",
+      "--expect-unsupported",
+      "Browser update required",
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(
+      "--expect-unsupported needs the compatibility render that --no-compatibility-render skips.",
+    );
+    expect(
+      runRuntimeCli(root, "--no-compatibility-render", "--expect-unsupported")
+        .stderr,
+    ).toContain("--expect-unsupported requires text.");
+  });
+
   it("reports every --expect the rendered panel is missing", () => {
     const root = createConsumer({
       assets: panelRemote(),

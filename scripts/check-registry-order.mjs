@@ -15,7 +15,7 @@ import { resolveDistTag } from "./lib/release-checks.mjs";
 
 const OPTIONS = ["--candidate", "--latest"];
 const argv = process.argv.slice(2);
-assertKnownOptions(argv, OPTIONS);
+assertKnownOptions(argv, OPTIONS, { valued: OPTIONS });
 
 // The shared reader answers undefined for an option nobody passed, so the
 // required half is stated here where the usage line is.
