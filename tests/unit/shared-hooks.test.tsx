@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import {
   createRef,
   type Ref,
@@ -26,6 +26,7 @@ import {
   HeadingLevelProvider,
   useResolvedHeading,
 } from "../../src/utils/heading-level.js";
+import { withFrameDocument } from "./lib/frame-document.js";
 
 describe("useNodeRef", () => {
   interface NodeRefProbeProps {
@@ -178,6 +179,22 @@ describe("useFocusWithin", () => {
     });
     expect(holdsFocus?.current).toBe(false);
   });
+
+  it("samples focus in a second window, whose elements are not this window's", () => {
+    withFrameDocument((frameDocument) => {
+      const container = frameDocument.createElement("div");
+      frameDocument.body.append(container);
+      const view = render(<FocusWithinProbe />, { container });
+      try {
+        act(() => {
+          within(container).getByTestId("inside").focus();
+        });
+        expect(holdsFocus?.current).toBe(true);
+      } finally {
+        view.unmount();
+      }
+    });
+  });
 });
 
 describe("useFocusReturnOnClose", () => {
@@ -238,6 +255,25 @@ describe("useFocusReturnOnClose", () => {
 
     view.rerender(<RegionProbe open={false} />);
     expect(document.activeElement).toBe(screen.getByTestId("elsewhere"));
+  });
+
+  it("returns focus to the trigger in a second window", () => {
+    withFrameDocument((frameDocument) => {
+      const container = frameDocument.createElement("div");
+      frameDocument.body.append(container);
+      const view = render(<RegionProbe open />, { container });
+      try {
+        const region = within(container);
+        act(() => {
+          region.getByTestId("close").focus();
+        });
+
+        view.rerender(<RegionProbe open={false} />);
+        expect(frameDocument.activeElement).toBe(region.getByTestId("trigger"));
+      } finally {
+        view.unmount();
+      }
+    });
   });
 
   it("returns focus to whatever opened the region when nothing names a destination", () => {

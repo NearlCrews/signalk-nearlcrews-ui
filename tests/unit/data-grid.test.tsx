@@ -823,6 +823,64 @@ describe("DataGrid", () => {
       expect(cellAt(firstRow, 1)).toHaveAttribute("role", "rowheader");
     });
 
+    it("honors an explicit isRowHeader in a dynamic header instead of defaulting the first column", () => {
+      const { container } = renderInPanel(
+        <DataGrid
+          aria-label="Boats"
+          columns={NAME_DEPTH_COLUMNS}
+          items={BOATS}
+          renderRow={renderBoatRow}
+        >
+          {(column) =>
+            column.key === "depth" ? (
+              <Column id="depth" isRowHeader>
+                Depth
+              </Column>
+            ) : (
+              <Column id={column.key}>Name</Column>
+            )
+          }
+        </DataGrid>,
+      );
+
+      const firstRow = rowAt(container, 0);
+      expect(cellAt(firstRow, 0)).toHaveAttribute("role", "gridcell");
+      expect(cellAt(firstRow, 1)).toHaveAttribute("role", "rowheader");
+    });
+
+    it.each([
+      [
+        "a wrapper component draws",
+        (key: string) => <WrappedColumn id={key}>{key}</WrappedColumn>,
+      ],
+      [
+        "the consumer opted out of",
+        (key: string) => (
+          <Column id={key} isRowHeader={false}>
+            {key}
+          </Column>
+        ),
+      ],
+    ])(
+      "defaults the first column of a dynamic header that %s",
+      (_case, renderColumn) => {
+        const { container } = renderInPanel(
+          <DataGrid
+            aria-label="Boats"
+            columns={NAME_DEPTH_COLUMNS}
+            items={BOATS}
+            renderRow={renderBoatRow}
+          >
+            {(column) => renderColumn(column.key)}
+          </DataGrid>,
+        );
+
+        const firstRow = rowAt(container, 0);
+        expect(cellAt(firstRow, 0)).toHaveAttribute("role", "rowheader");
+        expect(cellAt(firstRow, 1)).toHaveAttribute("role", "gridcell");
+      },
+    );
+
     it("exposes explicit roles on rows, cells, and header", () => {
       const { container } = renderGrid();
 

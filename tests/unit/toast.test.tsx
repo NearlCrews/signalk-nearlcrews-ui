@@ -29,6 +29,7 @@ import {
   headSheets,
   installVisualViewport,
   MODULE_SHEET,
+  panel,
   ROOT_SHEET,
   renderInPanel,
 } from "../helpers.js";
@@ -340,6 +341,37 @@ describe("ToastRegion", () => {
     fireEvent.click(within(card).getByRole("button", { name: "Dismiss" }));
     advance(EXIT_MS);
     expectNoCards();
+  });
+
+  it.each([
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["NaN", Number.NaN],
+    ["a delay past the timer cap", 2_147_483_648],
+  ])(
+    "keeps a toast whose duration no timer can wait until dismissed (%s)",
+    (_case, duration) => {
+      const queue = createToastQueue();
+      renderToastRegion(queue);
+      enqueue(queue, { title: "Anchor watch", duration });
+
+      advance(60_000);
+      expect(toastCard()).not.toHaveAttribute("data-exiting");
+
+      fireEvent.click(
+        within(toastCard()).getByRole("button", { name: "Dismiss" }),
+      );
+      advance(EXIT_MS);
+      expectNoCards();
+    },
+  );
+
+  it("keeps the toasts of a region whose default no timer can wait", () => {
+    const queue = createToastQueue();
+    renderToastRegion(queue, { defaultDuration: Number.POSITIVE_INFINITY });
+    enqueue(queue, { title: "Synced" });
+
+    advance(60_000);
+    expect(toastCard()).not.toHaveAttribute("data-exiting");
   });
 
   it("pauses auto-dismiss while hovered and resumes with the remaining time", () => {
@@ -1095,6 +1127,46 @@ describe("ToastRegion", () => {
     expect(cardOf("Save failed")).not.toHaveAttribute("data-exiting");
   });
 
+  it("keeps a mounted toast on the duration it arrived with when the region default changes", () => {
+    const queue = createToastQueue();
+    const view = renderToastRegion(queue, { defaultDuration: 0 });
+    enqueue(queue, { title: "Synced" });
+
+    view.rerender(panel(<ToastRegion queue={queue} defaultDuration={5000} />));
+    flush();
+    expect(cardOf("Synced")).not.toHaveAttribute("data-exiting");
+    advance(60_000);
+    expect(cardOf("Synced")).not.toHaveAttribute("data-exiting");
+
+    // The new default times the toasts that arrive under it.
+    enqueue(queue, { title: "Saved" });
+    advance(5000);
+    expect(cardOf("Saved")).toHaveAttribute("data-exiting", "true");
+  });
+
+  it("keeps a focused toast paused and retained when the region default changes", () => {
+    const queue = createToastQueue();
+    const view = renderToastRegion(queue, { defaultDuration: 1000 });
+    for (const title of ["One", "Two", "Three", "Four", "Five"]) {
+      enqueue(queue, { title });
+    }
+    const dismiss = within(cardOf("One")).getByRole("button", {
+      name: "Dismiss",
+    });
+    act(() => {
+      dismiss.focus();
+    });
+
+    view.rerender(panel(<ToastRegion queue={queue} defaultDuration={2000} />));
+    enqueue(queue, { title: "Six" });
+    expect(screen.getByText("One")).toBeInTheDocument();
+    expect(screen.queryByText("Two")).toBeNull();
+
+    advance(60_000);
+    expect(cardOf("One")).not.toHaveAttribute("data-exiting");
+    expect(dismiss).toHaveFocus();
+  });
+
   it("names each dismiss button with the notification it closes", () => {
     const queue = createToastQueue();
     renderToastRegion(queue);
@@ -1142,6 +1214,28 @@ describe("ToastRegion", () => {
     expect(screen.getByText("Held")).toBeInTheDocument();
     expect(screen.queryByText("Two")).toBeNull();
   });
+
+  it.each([
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["NaN", Number.NaN],
+    ["a negative delay", -1],
+    ["a delay past the timer cap", 2_147_483_648],
+  ])(
+    "ranks a toast whose duration no timer can wait as sticky when the queue overflows (%s)",
+    (_case, duration) => {
+      // No region is rendered, so nothing counts down and the queue's own
+      // reading of the duration is the only thing that decides who goes.
+      const queue = createToastQueue();
+      queue.enqueue({ title: "Held", duration });
+      for (const title of ["Two", "Three", "Four", "Five", "Six"]) {
+        queue.enqueue({ title });
+      }
+
+      expect(queue.getSnapshot().map((queued) => queued.content.title)).toEqual(
+        ["Held", "Three", "Four", "Five", "Six"],
+      );
+    },
+  );
 
   it("refuses a routine toast rather than dropping an unread failure", () => {
     const evictions: string[] = [];

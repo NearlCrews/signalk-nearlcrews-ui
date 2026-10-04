@@ -44,6 +44,7 @@ import { usePanelLabels } from "../utils/panel-labels.js";
 import { usePanelPortalContainer } from "../utils/portal.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { LIVE_REGION_BLANK_MS } from "../utils/repeat-announcement.js";
+import { isTimerDelay } from "../utils/shared-clock.js";
 import { joinSentences } from "../utils/text.js";
 import type { SemanticTone } from "../utils/tone.js";
 import {
@@ -120,16 +121,18 @@ function resolveToastTone(content: ToastContent): SemanticTone {
 
 /**
  * Sticky for warning and danger, and otherwise the toast's own duration, the
- * region's default, or five seconds, in that order.
+ * region's default, or five seconds, in that order. A delay no timer can wait
+ * would fire at once, so it reads as zero here, where the countdown and the
+ * queue's eviction both take their answer, and the toast is sticky to both.
  */
 function resolveToastDuration(
   content: ToastContent,
   defaultDuration: number = DEFAULT_TOAST_DURATION_MS,
 ): number {
-  return (
+  const duration =
     content.duration ??
-    (STICKY_TONES.has(resolveToastTone(content)) ? 0 : defaultDuration)
-  );
+    (STICKY_TONES.has(resolveToastTone(content)) ? 0 : defaultDuration);
+  return isTimerDelay(duration) ? duration : 0;
 }
 
 /** Assertive only for danger; a warning in a configuration panel can wait. */
@@ -503,7 +506,8 @@ export interface ToastContent {
   /**
    * Auto-dismiss delay in milliseconds. Defaults to 5000 for the info and
    * success tones and to zero for warning and danger. Zero keeps the toast
-   * until it is dismissed explicitly.
+   * until it is dismissed explicitly, and so does a delay no timer can wait:
+   * a negative, NaN, Infinity, or more than 2,147,483,647.
    */
   readonly duration?: number | undefined;
   /**
@@ -702,7 +706,12 @@ function ToastCardImpl<T extends ToastContent>({
 }: ToastCardProps<T>): React.JSX.Element {
   const { content, key } = item;
   const tone = resolveToastTone(content);
-  const duration = resolveToastDuration(content, defaultDuration);
+  // Latched as the card mounts, so a region default that changes later times
+  // the toasts raised after it and leaves this one's countdown, and whatever
+  // is holding it paused, alone.
+  const [duration] = useState(() =>
+    resolveToastDuration(content, defaultDuration),
+  );
   const titleId = useId();
 
   // The queue already rejected a blank title in enqueue; this guards content
@@ -911,9 +920,11 @@ export interface ToastRegionProps<T extends ToastContent = ToastContent>
    * Auto-dismiss delay, in milliseconds, for this region's toasts that carry
    * no `duration` of their own and whose tone is not sticky. Defaults to 5000.
    * Raise it for a panel read at arm's length on a helm tablet, where a touch
-   * pointer cannot hover to hold a notice open. Zero keeps those toasts until
-   * they are dismissed; queue eviction still reads each toast's own duration,
-   * so a toast held open this way does not become sticky-critical.
+   * pointer cannot hover to hold a notice open. Zero, or a delay no timer can
+   * wait, keeps those toasts until they are dismissed; queue eviction still
+   * reads each toast's own duration, so a toast held open this way does not
+   * become sticky-critical. A change applies to the toasts raised after it:
+   * one already showing keeps the delay it arrived with.
    */
   readonly defaultDuration?: number | undefined;
 }

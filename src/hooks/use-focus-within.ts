@@ -1,5 +1,7 @@
 import { type RefObject, useEffect, useRef } from "react";
 
+import { isElementNode } from "../utils/focus.js";
+
 /**
  * Tracks whether focus sits inside a node, sampled as focus moves rather than
  * read when the answer is needed.
@@ -34,10 +36,9 @@ export function useFocusWithin<T extends Element>(
       // ancestor chain.
       const target = event.target;
       holdsFocus.current =
-        (target instanceof Node && node.contains(target)) ||
-        (target instanceof Element &&
-          target.shadowRoot !== null &&
-          event.composedPath().includes(node));
+        isElementNode(target) &&
+        (node.contains(target) ||
+          (target.shadowRoot !== null && event.composedPath().includes(node)));
     };
     ownerDocument.addEventListener("focusin", trackFocus);
     return () => {

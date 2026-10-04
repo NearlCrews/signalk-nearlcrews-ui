@@ -288,21 +288,32 @@ function DialogSurface({
   // Built once and reading only refs, so the node keeps one listener and one
   // measurement per mount.
   const onDialogAttached = useCallback((node: HTMLElement): (() => void) => {
+    const view = node.ownerDocument.defaultView;
+    let forgetEscape: number | undefined;
     // react-aria closes on Escape from the overlay above the dialog and
     // reports no reason for the close, so the key is recorded here on the way
     // up. A native listener on the dialog element sees it before React
     // dispatches the synthetic event that closes, which is what makes the
     // order reliable.
     const recordEscape = (event: KeyboardEvent): void => {
-      if (keyboardDismissableRef.current && event.key === "Escape") {
-        cancelReasonRef.current = "escape";
-      }
+      if (!keyboardDismissableRef.current || event.key !== "Escape") return;
+      cancelReasonRef.current = "escape";
+      // The close this key causes reads the route before the dispatch ends.
+      // A key the content kept for itself, or one that only ended a
+      // composition, closes nothing, so the route is forgotten once the press
+      // is over rather than left for the next scrim press to report. A
+      // microtask would run too early, between this listener and React's.
+      view?.clearTimeout(forgetEscape);
+      forgetEscape = view?.setTimeout(() => {
+        cancelReasonRef.current = "scrim";
+      }, 0);
     };
     node.addEventListener("keydown", recordEscape);
     const stopMeasuring = trackVisualViewportHeight(node);
     return () => {
       stopMeasuring();
       node.removeEventListener("keydown", recordEscape);
+      view?.clearTimeout(forgetEscape);
     };
   }, []);
 

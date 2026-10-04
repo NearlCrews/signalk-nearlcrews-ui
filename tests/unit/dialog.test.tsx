@@ -1,5 +1,6 @@
 import {
   act,
+  fireEvent,
   type RenderResult,
   render,
   screen,
@@ -10,7 +11,12 @@ import { createRef, useState } from "react";
 import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { describe, expect, it, vi } from "vitest";
 
-import { Button, PanelRoot, type PanelRootProps } from "../../src/index.js";
+import {
+  Button,
+  InlineConfirm,
+  PanelRoot,
+  type PanelRootProps,
+} from "../../src/index.js";
 import {
   AlertDialog,
   type AlertDialogProps,
@@ -249,6 +255,48 @@ describe("Dialog", () => {
     expect(onCancel).toHaveBeenCalledTimes(2);
     expect(onCancel).toHaveBeenLastCalledWith("scrim");
     expect(scrimView.queryByRole("dialog")).toBeNull();
+  });
+
+  it("reports a scrim press as itself after a confirmation inside the dialog took an Escape", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    const onDecline = vi.fn();
+    const { container } = renderInPanel(
+      <Dialog title="Connection settings" defaultOpen onCancel={onCancel}>
+        <InlineConfirm
+          defaultOpen
+          confirmLabel="Delete route"
+          message="This cannot be undone."
+          onCancel={onDecline}
+          onConfirm={() => undefined}
+        />
+      </Dialog>,
+    );
+
+    // The confirmation keeps the key for itself, so the dialog stays open.
+    screen.getByRole("region", { name: "Confirm action" }).focus();
+    await user.keyboard("{Escape}");
+    expect(onDecline).toHaveBeenCalledExactlyOnceWith("escape");
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.click(getScrim(container));
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith("scrim");
+  });
+
+  it("reports a scrim press as itself after an Escape that only ended a composition", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    const { container } = renderDialog({ defaultOpen: true, onCancel });
+
+    fireEvent.keyDown(screen.getByRole("dialog"), {
+      isComposing: true,
+      key: "Escape",
+    });
+    expect(onCancel).not.toHaveBeenCalled();
+
+    await user.click(getScrim(container));
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith("scrim");
   });
 
   it("keeps reporting cancellations after an action closes an already closed dialog", async () => {

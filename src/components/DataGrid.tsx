@@ -648,33 +648,35 @@ function resolveDynamicHeader<TColumn>(
   children: (column: TColumn) => ReactElement,
   columns: readonly TColumn[],
 ): ResolvedHeader<TColumn> {
-  const firstColumnItem = columns[0];
-  const headerChildren = (column: TColumn): ReactElement => {
-    const element = children(column);
-    // RAC requires one row-header column and throws without it; default the
-    // first column when the consumer did not opt one in.
-    if (
-      column === firstColumnItem &&
-      isColumnElement(element) &&
-      element.props.isRowHeader === undefined
-    ) {
-      return cloneElement(element, { isRowHeader: true });
-    }
-    return element;
-  };
-
   // The render function is pure by contract, so reading the column options
   // costs one extra call per column. A column the function declines to render
   // keeps its slot here, so a later column's key is still read from the entry
   // it was rendered from.
   const decorations: ColumnDecoration[] = [];
   const keys: (Key | undefined)[] = [];
+  let hasRowHeader = false;
   columns.forEach((column) => {
     const element = children(column);
     if (!isHeaderColumnElement(element)) return;
+    hasRowHeader ||= element.props.isRowHeader === true;
     decorations.push(decorationOf(element));
     keys.push(element.props.id ?? getItemKey(column));
   });
+
+  const firstColumnItem = columns[0];
+  const headerChildren = (column: TColumn): ReactElement => {
+    const element = children(column);
+    // The same default the static header takes: the first column, whatever
+    // component drew it, when the consumer opted no column in.
+    if (
+      !hasRowHeader &&
+      column === firstColumnItem &&
+      isHeaderColumnElement(element)
+    ) {
+      return cloneElement(element, { isRowHeader: true });
+    }
+    return element;
+  };
 
   return { ...resolvedDecorations(keys, decorations), headerChildren };
 }
