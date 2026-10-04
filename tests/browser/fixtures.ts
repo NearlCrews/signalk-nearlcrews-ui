@@ -156,6 +156,56 @@ export function tokenColor(anchor: Locator, token: string): Promise<string> {
   }, token);
 }
 
+/** An element's rendered pixels, as the page decoded them. */
+export interface Pixels {
+  readonly height: number;
+  readonly width: number;
+  /** The red, green, and blue channels at a pixel. */
+  at(x: number, y: number): readonly [number, number, number];
+}
+
+/**
+ * An element's pixels as it renders. The page decodes its own screenshot
+ * through a canvas, so a check reads the pixels the browser painted, native
+ * parts included, which no computed style reaches.
+ */
+export async function renderedPixels(
+  page: Page,
+  target: Locator,
+): Promise<Pixels> {
+  const png = (await target.screenshot()).toString("base64");
+  const { height, rgba, width } = await page.evaluate(async (encoded) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${encoded}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    if (context === null) throw new Error("The canvas has no 2D context.");
+    context.drawImage(image, 0, 0);
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    let binary = "";
+    for (let start = 0; start < data.length; start += 0x8000) {
+      binary += String.fromCharCode(...data.subarray(start, start + 0x8000));
+    }
+    return {
+      height: canvas.height,
+      rgba: btoa(binary),
+      width: canvas.width,
+    };
+  }, png);
+  const bytes = Buffer.from(rgba, "base64");
+  return {
+    height,
+    width,
+    at: (x, y) => {
+      const index = (y * width + x) * 4;
+      return [bytes[index] ?? 0, bytes[index + 1] ?? 0, bytes[index + 2] ?? 0];
+    },
+  };
+}
+
 /** Fails unless the element draws a solid outline of the given width. */
 export async function expectSolidOutline(
   target: Locator,

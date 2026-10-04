@@ -176,6 +176,30 @@ ${FIELD_ERROR_DECLARATIONS}
     background: HighlightText;
   }
 
+  /*
+   * A disabled switch paints GrayText: the track's border and the thumb while
+   * it is off, the track's fill under a Canvas thumb while it is on. Each
+   * rule restates a themed disabled rule selector for selector, so it takes
+   * that rule's weight and the theme's disabled token never reaches the
+   * system palette through the opt-out above. The border rule follows the
+   * selected one because the two tie on a disabled selected track.
+   */
+  .snui-switch__button[data-disabled] .snui-switch__track {
+    border-color: GrayText;
+  }
+
+  .snui-switch__button[data-disabled] .snui-switch__thumb {
+    background: GrayText;
+  }
+
+  .snui-switch__button[data-disabled][data-selected] .snui-switch__track {
+    background: GrayText;
+  }
+
+  .snui-switch__button[data-disabled][data-selected] .snui-switch__thumb {
+    background: Canvas;
+  }
+
   .snui-switch__button[data-focus-visible] .snui-switch__track {
 ${FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS}
   }

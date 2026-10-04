@@ -251,7 +251,7 @@ describe("TextInput calendar types", () => {
   });
 });
 
-describe("Controlled text and numeric form reset", () => {
+describe("Controlled text, numeric, and select form reset", () => {
   it("restores the controlled value after a native form reset", async () => {
     renderInPanel(
       <form>
@@ -279,6 +279,67 @@ describe("Controlled text and numeric form reset", () => {
       expect(host).toHaveValue("mqtt.local");
       expect(port).toHaveValue(1883);
     });
+  });
+
+  it("restores a controlled select after a native form reset", async () => {
+    renderInPanel(
+      <form>
+        <Select aria-label="Units" value="imperial" onChange={() => undefined}>
+          <option value="metric">Metric</option>
+          <option value="imperial">Imperial</option>
+        </Select>
+        <Select
+          aria-label="Layers"
+          multiple
+          value={["lights", "wrecks"]}
+          onChange={() => undefined}
+        >
+          <option value="buoys">Buoys</option>
+          <option value="lights">Lights</option>
+          <option value="wrecks">Wrecks</option>
+        </Select>
+        <Select aria-label="Datum" value="unlisted" onChange={() => undefined}>
+          <option value="wgs84">WGS 84</option>
+          <option value="nad83">NAD 83</option>
+        </Select>
+      </form>,
+    );
+
+    const units = screen.getByRole("combobox", { name: "Units" });
+    const layers = screen.getByRole("listbox", { name: "Layers" });
+    const datum = screen.getByRole("combobox", { name: "Datum" });
+    expect(units).toHaveValue("imperial");
+    expect(layers).toHaveValue(["lights", "wrecks"]);
+
+    // React marks no option of a controlled select as its default, so a
+    // native reset returns a single select to its first option and empties a
+    // multiple one, and no render follows to put the selection back.
+    formOf(units).reset();
+    await waitFor(() => {
+      expect(units).toHaveValue("imperial");
+      expect(layers).toHaveValue(["lights", "wrecks"]);
+    });
+    // A value no option carries shows the first option, as React renders it,
+    // rather than an empty select.
+    expect(datum).toHaveValue("wgs84");
+  });
+
+  it("leaves an uncontrolled select to the native reset", async () => {
+    renderInPanel(
+      <form>
+        <Select aria-label="Units" defaultValue="imperial">
+          <option value="metric">Metric</option>
+          <option value="imperial">Imperial</option>
+        </Select>
+      </form>,
+    );
+
+    const units = screen.getByRole("combobox", { name: "Units" });
+    fireEvent.change(units, { target: { value: "metric" } });
+    expect(units).toHaveValue("metric");
+
+    formOf(units).reset();
+    await waitFor(() => expect(units).toHaveValue("imperial"));
   });
 
   it("leaves an uncontrolled control to the native reset", async () => {

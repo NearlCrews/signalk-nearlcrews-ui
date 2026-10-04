@@ -10,8 +10,23 @@ import {
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 
-/** A field whose control is held either way, natively or by aria-disabled. */
-const BLOCKED_FIELD = `.snui-field:has(> .snui-field__control ${BLOCKED_SELECTOR})`;
+/*
+ * A control that holds a value the reader edits. A plain button and a hidden
+ * input hold none, so neither one keeps a label live.
+ */
+const VALUE_CONTROL =
+  ':is(input:not([type="hidden"]), select, textarea, [role="radio"])';
+
+/**
+ * A field whose slot holds a control held either way, natively or by
+ * aria-disabled, and no value control that is still live. The label names the
+ * value controls in its slot, so a blocked button beside a live input, one
+ * disabled option of a select or a segmented control, and a disabled
+ * secondary input each leave the label live. The second half sits inside
+ * :where(), so the selector keeps the weight of the first and a consumer rule
+ * that outweighed the label rules before it was added still does.
+ */
+const BLOCKED_FIELD = `.snui-field:has(> .snui-field__control ${BLOCKED_SELECTOR}):where(:not(:has(> .snui-field__control ${VALUE_CONTROL}:not(${BLOCKED_SELECTOR}))))`;
 
 export const FORM_STYLES = scopeStyles(`
 .snui-field__control {
@@ -209,10 +224,11 @@ ${FIELD_ERROR_DECLARATIONS}
 }
 
 /*
- * The field's own label dims with the control it names. A field whose control
- * is held either way reads as editable at a glance otherwise, while its input
- * is not, and the group and the checkbox beside it already say so. The
- * markers set colors of their own, so they are named to dim with it.
+ * The field's own label dims with the control it names, once no value control
+ * in its slot is left to edit. A field whose control is held either way reads
+ * as editable at a glance otherwise, while its input is not, and the group
+ * and the checkbox beside it already say so. The markers set colors of their
+ * own, so they are named to dim with it.
  */
 ${BLOCKED_FIELD} > .snui-field__label,
 ${BLOCKED_FIELD} > .snui-field__label ${FIELD_MARKERS} {

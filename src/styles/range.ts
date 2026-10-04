@@ -52,6 +52,7 @@ const TRACK_COLORS = [
   "var(--snui-range-track-color)",
 ] as const;
 const FORCED_TRACK_COLORS = ["Highlight", "ButtonText"] as const;
+const FORCED_DISABLED_TRACK_COLORS = ["GrayText", "ButtonText"] as const;
 
 /**
  * Range slider styles. Installed by `RangeInput` through
@@ -201,6 +202,34 @@ ${FORCED_COLORS_THUMB_DECLARATIONS}
 
   .snui-range::-moz-range-thumb {
 ${FORCED_COLORS_THUMB_DECLARATIONS}
+  }
+
+  /*
+   * A disabled slider paints its thumb and its filled half GrayText. The
+   * thumb rules restate the themed disabled ones selector for selector, so
+   * they take that weight and the theme's disabled token never reaches the
+   * system palette through the opt-out above. The track names its system
+   * colors outright, so the dimmed progress token never reaches it and the
+   * fill is restated here, the mirrored form last because it weighs more.
+   */
+  .snui-range:disabled::-webkit-slider-runnable-track {
+${trackFill("right", FORCED_DISABLED_TRACK_COLORS, "    ")}
+  }
+
+  .snui-range:disabled:dir(rtl)::-webkit-slider-runnable-track {
+${trackFill("left", FORCED_DISABLED_TRACK_COLORS, "    ")}
+  }
+
+  .snui-range:disabled::-webkit-slider-thumb {
+    background: GrayText;
+  }
+
+  .snui-range:disabled::-moz-range-progress {
+    background: GrayText;
+  }
+
+  .snui-range:disabled::-moz-range-thumb {
+    background: GrayText;
   }
 }
 `),

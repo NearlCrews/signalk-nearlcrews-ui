@@ -81,6 +81,12 @@ import { mountFixture } from "./mount.js";
 const showcaseParameters = new URLSearchParams(window.location.search);
 /** Mirrors the Admin's fixed header and sidebar around the panel. */
 const showHostChrome = showcaseParameters.has("host-chrome");
+/**
+ * Adds the disabled and blocked selection controls and the fields whose
+ * labels dim with them. They sit behind a flag so the baselines, which never
+ * set it, keep the page they were captured from.
+ */
+const showDisabledControls = showcaseParameters.has("disabled-controls");
 
 /** The tones banners, status indicators, and badges each render in turn. */
 const FEEDBACK_TONES = [
@@ -782,6 +788,191 @@ function Showcase(): React.JSX.Element {
             />
           </Stack>
         </Section>
+
+        {showDisabledControls ? (
+          <Section
+            title="Disabled selection controls"
+            description="A switch, a radio group, a slider, and segmented controls that cannot be changed."
+          >
+            <Stack gap={3}>
+              <Switch disabled>Anchor light</Switch>
+              <Switch disabled defaultChecked>
+                Deck light
+              </Switch>
+              <RadioGroup label="Chart datum" defaultValue="wgs84" disabled>
+                <Radio value="wgs84">WGS 84</Radio>
+                <Radio value="nad83">NAD 83</Radio>
+              </RadioGroup>
+              <LabeledField label="Backlight level">
+                <RangeInput disabled defaultValue={60} min={0} max={100} />
+              </LabeledField>
+              <SegmentedControl
+                label="Chart orientation"
+                labelVisibility="visible"
+                disabled
+                defaultValue="north"
+                onValueChange={ignore}
+                options={[
+                  { value: "north", label: "North up" },
+                  { value: "course", label: "Course up" },
+                ]}
+              />
+              <SegmentedControl
+                label="Depth units"
+                labelVisibility="visible"
+                defaultValue="meters"
+                onValueChange={ignore}
+                options={[
+                  {
+                    value: "meters",
+                    label: "Meters",
+                    ariaDisabled: true,
+                    disabledReason: "Depth units follow the server.",
+                  },
+                  { value: "feet", label: "Feet" },
+                ]}
+              />
+              <SegmentedControl
+                label="Wind reference"
+                labelVisibility="visible"
+                defaultValue="true"
+                onValueChange={ignore}
+                options={[
+                  { value: "true", label: "True wind", disabled: true },
+                  { value: "apparent", label: "Apparent wind" },
+                ]}
+              />
+            </Stack>
+          </Section>
+        ) : null}
+
+        {showDisabledControls ? (
+          <Section
+            title="Field labels beside blocked controls"
+            description="A label dims once its slot holds no value control left to edit."
+          >
+            <Stack gap={3}>
+              <LabeledField label="Anchor alarm radius">
+                {(controlProps) => (
+                  <InputGroup>
+                    <InputGroupControl controlWidth="grow">
+                      <RangeInput
+                        {...controlProps}
+                        defaultValue={30}
+                        min={10}
+                        max={100}
+                      />
+                    </InputGroupControl>
+                    <InputGroupControl controlWidth="fixed">
+                      <NumberInput
+                        aria-label="Anchor alarm radius exact value"
+                        disabled
+                        defaultValue={30}
+                        min={10}
+                        max={100}
+                      />
+                      <InputGroupAddon>m</InputGroupAddon>
+                    </InputGroupControl>
+                  </InputGroup>
+                )}
+              </LabeledField>
+              <LabeledField label="Route name">
+                {(controlProps) => (
+                  <InputGroup>
+                    <InputGroupControl controlWidth="grow">
+                      <TextInput
+                        {...controlProps}
+                        defaultValue="Harbor approach"
+                      />
+                    </InputGroupControl>
+                    <Button
+                      ariaDisabled
+                      disabledReason="Sharing needs a saved route."
+                    >
+                      Share
+                    </Button>
+                  </InputGroup>
+                )}
+              </LabeledField>
+              <LabeledField label="Vessel name">
+                {(controlProps) => (
+                  <InputGroup>
+                    <InputGroupControl controlWidth="grow">
+                      <TextInput
+                        {...controlProps}
+                        disabled
+                        defaultValue="Kestrel"
+                      />
+                    </InputGroupControl>
+                    <Button>Edit</Button>
+                  </InputGroup>
+                )}
+              </LabeledField>
+              <LabeledField label="Chart detail">
+                {({ id }) => (
+                  <SegmentedControl
+                    id={id}
+                    label="Chart detail"
+                    defaultValue="standard"
+                    onValueChange={ignore}
+                    options={[
+                      { value: "standard", label: "Standard" },
+                      { value: "full", label: "Full", disabled: true },
+                    ]}
+                  />
+                )}
+              </LabeledField>
+              <LabeledField label="Chart palette">
+                {({ id }) => (
+                  <SegmentedControl
+                    id={id}
+                    label="Chart palette"
+                    defaultValue="day"
+                    onValueChange={ignore}
+                    options={[
+                      { value: "day", label: "Day", disabled: true },
+                      { value: "dusk", label: "Dusk", disabled: true },
+                    ]}
+                  />
+                )}
+              </LabeledField>
+              <LabeledField label="Chart rotation">
+                {({ id }) => (
+                  <SegmentedControl
+                    id={id}
+                    label="Chart rotation"
+                    disabled
+                    defaultValue="smooth"
+                    onValueChange={ignore}
+                    options={[
+                      { value: "smooth", label: "Smooth" },
+                      { value: "stepped", label: "Stepped" },
+                    ]}
+                  />
+                )}
+              </LabeledField>
+              <LabeledField label="Compass calibration">
+                {({ id }) => (
+                  <Button
+                    id={id}
+                    ariaDisabled
+                    disabledReason="Calibration needs the vessel under way."
+                  >
+                    Calibrate
+                  </Button>
+                )}
+              </LabeledField>
+              <LabeledField label="Tide station">
+                <Select defaultValue="">
+                  <option value="" disabled>
+                    Choose a station
+                  </option>
+                  <option value="harbor">Harbor entrance</option>
+                </Select>
+              </LabeledField>
+            </Stack>
+          </Section>
+        ) : null}
 
         <ActionBar
           sticky="bottom"

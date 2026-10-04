@@ -258,7 +258,11 @@ function useButtonState<Props extends ButtonProps>(
   const baseId = useId();
   const loadingId = `${baseId}-loading`;
   const reasonId = `${baseId}-reason`;
-  const showsReason = isAriaDisabled && hasReactContent(disabledReason);
+  // Only the button form has a native disabled state. It takes the button out
+  // of the tab order, where the reason would reach no one, so it is dropped.
+  const nativeDisabled = (props as { disabled?: boolean }).disabled === true;
+  const showsReason =
+    isAriaDisabled && !nativeDisabled && hasReactContent(disabledReason);
   const drawsReason = disabledReasonVisibility === "visible";
 
   if (isDevelopment()) {
@@ -269,8 +273,7 @@ function useButtonState<Props extends ButtonProps>(
       disabledReason,
       isAriaDisabled,
       loading,
-      // Only the button form has a native disabled state.
-      nativeDisabled: (props as { disabled?: boolean }).disabled === true,
+      nativeDisabled,
     });
   }
 

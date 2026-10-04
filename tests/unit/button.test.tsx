@@ -562,6 +562,37 @@ describe("Button visible blocked reason", () => {
       screen.getByRole("link", { name: "Docs" }),
     ).toHaveAccessibleDescription("Offline.");
   });
+
+  it("drops the reason beside native disabled, hidden or drawn", () => {
+    // Development names this combination; the reason is what is under test.
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <>
+        <Button disabled ariaDisabled disabledReason="No key set.">
+          Check API key
+        </Button>
+        <Button
+          disabled
+          ariaDisabled
+          disabledReason="No source chosen."
+          disabledReasonVisibility="visible"
+        >
+          Check source
+        </Button>
+      </>,
+    );
+
+    // Native disabled takes the button out of the tab order, where the reason
+    // reaches no one, so it is neither wired nor drawn, as Checkbox and
+    // SegmentedControl drop theirs.
+    for (const name of ["Check API key", "Check source"]) {
+      const button = screen.getByRole("button", { name });
+      expect(button).toBeDisabled();
+      expect(button).not.toHaveAccessibleDescription();
+    }
+    expect(screen.queryByText("No key set.")).toBeNull();
+    expect(screen.queryByText("No source chosen.")).toBeNull();
+  });
 });
 
 describe("Button development checks", () => {

@@ -537,7 +537,7 @@ ${PRESSED_FILL_DECLARATION}
  */
 ${blockedIdle(".snui-button")},
 .snui-input:disabled,
-.snui-segmented:not([aria-disabled="true"]) .snui-segmented__option:disabled {
+.snui-segmented__option:disabled {
 ${DISABLED_DECLARATIONS}
 }
 
@@ -782,6 +782,21 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
     forced-color-adjust: none;
     background: Highlight;
     color: HighlightText;
+  }
+
+  /*
+   * A selected option that is disabled or blocked keeps its fill, in
+   * GrayText. The rule restates the themed disabled fills selector for
+   * selector, so it takes their weight and the theme's disabled token never
+   * reaches the system palette through the opt-out above.
+   */
+  .snui-segmented__option:disabled[aria-checked="true"],
+  .snui-segmented[aria-disabled="true"] .snui-segmented__option[aria-checked="true"],
+  .snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled),
+  .snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled):hover,
+  .snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled):active {
+    background: GrayText;
+    color: Canvas;
   }
 
   /* The system grays a natively disabled option; a blocked one is told to. */

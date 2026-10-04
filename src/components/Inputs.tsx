@@ -91,16 +91,19 @@ function inputClassNames(
  * been reset.
  *
  * A native reset restores a control from its `value` and `checked` content
- * attributes, which a React-controlled control does not carry, and React
- * neither re-renders nor fires a change afterwards, so each control says here
- * how to restore itself. The resync is an effect event, so it reads current
- * props without registering again. The caller's own ref is composed
- * separately, because rebuilding the callback ref every render would detach
- * the node on every commit, which an ordinary inline consumer ref would
- * otherwise cause. The registration is keyed on the `form` attribute, because
- * a control moved to another form has to listen to the form it now belongs to.
+ * attributes, and a select from its options' `selected` ones, which a
+ * React-controlled control does not carry, and React neither re-renders nor
+ * fires a change afterwards, so each control says here how to restore itself.
+ * The resync is an effect event, so it reads current props without
+ * registering again. The caller's own ref is composed separately, because
+ * rebuilding the callback ref every render would detach the node on every
+ * commit, which an ordinary inline consumer ref would otherwise cause. The
+ * registration is keyed on the `form` attribute, because a control moved to
+ * another form has to listen to the form it now belongs to.
  */
-function useResettableControl<Control extends HTMLInputElement>(
+function useResettableControl<
+  Control extends HTMLInputElement | HTMLSelectElement,
+>(
   ref: Ref<Control> | undefined,
   formId: string | undefined,
   onReset: (node: Control) => void,
@@ -133,6 +136,28 @@ function restoreControlledValue(
     if (typeof value !== "string" && typeof value !== "number") return;
     const restored = String(value);
     if (node.value !== restored) node.value = restored;
+  };
+}
+
+/**
+ * Puts a controlled selection back after a native form reset. React marks no
+ * option of a controlled select as its default, so the reset returns a single
+ * select to its first option and empties a multiple one.
+ */
+function restoreControlledSelection(
+  value: SelectHTMLAttributes<HTMLSelectElement>["value"],
+): (node: HTMLSelectElement) => void {
+  return (node) => {
+    // An uncontrolled select has no value to restore: its options carry
+    // their defaults, which the native reset already put back.
+    if (value === undefined) return;
+    // Option by option, the way React applies the value, so a value no option
+    // carries leaves the first option the reset chose, where assigning the
+    // select's own value would leave it showing none.
+    const selected = (Array.isArray(value) ? value : [value]).map(String);
+    for (const option of node.options) {
+      option.selected = selected.includes(option.value);
+    }
   };
 }
 
@@ -317,12 +342,20 @@ export const Select = /* @__PURE__ */ markForwardsFieldControlProps(
     className,
     monospace = false,
     ref,
+    value,
     ...props
   }: SelectProps): React.JSX.Element {
+    const [, attachSelect] = useResettableControl(
+      ref,
+      props.form,
+      restoreControlledSelection(value),
+    );
+
     return (
       <select
         {...withoutFieldLookupIds(props)}
-        ref={ref}
+        ref={attachSelect}
+        value={value}
         className={inputClassNames(monospace, className, "snui-select")}
       />
     );

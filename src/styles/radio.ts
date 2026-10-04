@@ -172,6 +172,25 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
     background: HighlightText;
   }
 
+  /*
+   * A disabled dial paints GrayText, with a Canvas dot when it is selected.
+   * Each rule restates a themed disabled rule selector for selector, so it
+   * takes that rule's weight and the theme's disabled token never reaches the
+   * system palette through the opt-out above. The border rule follows the
+   * selected one because the two tie on a disabled selected dial.
+   */
+  .snui-radio__button[data-disabled] .snui-radio__control {
+    border-color: GrayText;
+  }
+
+  .snui-radio__button[data-disabled][data-selected] .snui-radio__control {
+    background: GrayText;
+  }
+
+  .snui-radio__button[data-disabled][data-selected] .snui-radio__control::before {
+    background: Canvas;
+  }
+
   .snui-radio__button[data-focus-visible] .snui-radio__control {
 ${FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS}
   }
