@@ -19,7 +19,8 @@ export interface FormatCountOptions {
   readonly locale?: PanelLocale | undefined;
 }
 
-const numberFormatters = createFormatterCache<Intl.NumberFormat>();
+const numberFormatters =
+  /* @__PURE__ */ createFormatterCache<Intl.NumberFormat>();
 
 function buildNumberFormat(
   locales: readonly string[] | undefined,

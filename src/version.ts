@@ -29,4 +29,5 @@ export function versionedAnimationName(suffix: string): string {
  *
  * @internal
  */
-export const SPINNER_ANIMATION_NAME = versionedAnimationName("spin");
+export const SPINNER_ANIMATION_NAME =
+  /* @__PURE__ */ versionedAnimationName("spin");

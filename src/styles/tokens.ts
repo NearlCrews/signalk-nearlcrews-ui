@@ -85,7 +85,7 @@ function withHoverAliases(tokens: ThemeTokenSource): ThemeTokenSet {
  *
  * @internal
  */
-export const LIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
+export const LIGHT_TOKENS: ThemeTokenSet = /* @__PURE__ */ withHoverAliases({
   "--snui-color-background": "#f4f6f8",
   "--snui-color-surface": "#ffffff",
   "--snui-color-surface-raised": "#ffffff",
@@ -127,7 +127,7 @@ export const LIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
  *
  * @internal
  */
-export const DARK_TOKENS: ThemeTokenSet = withHoverAliases({
+export const DARK_TOKENS: ThemeTokenSet = /* @__PURE__ */ withHoverAliases({
   "--snui-color-background": "#10131c",
   "--snui-color-surface": "#181d29",
   "--snui-color-surface-raised": "#202737",
@@ -177,7 +177,7 @@ export const DARK_TOKENS: ThemeTokenSet = withHoverAliases({
  *
  * @internal
  */
-export const NIGHT_TOKENS: ThemeTokenSet = withHoverAliases({
+export const NIGHT_TOKENS: ThemeTokenSet = /* @__PURE__ */ withHoverAliases({
   "--snui-color-background": "#050000",
   "--snui-color-surface": "#100000",
   "--snui-color-surface-raised": "#190000",
@@ -249,9 +249,18 @@ const NIGHT_SHADOW_BLOCK = `  --snui-shadow-flat: none;
   --snui-shadow-overlay: 0 0.5rem 1.5rem rgb(90 0 0 / 42%);
   --snui-color-scrim: rgb(12 0 0 / 92%);`;
 
-const LIGHT_BLOCK = renderThemeBlock(LIGHT_TOKENS, LIGHT_SHADOW_BLOCK);
-const DARK_BLOCK = renderThemeBlock(DARK_TOKENS, DARK_SHADOW_BLOCK);
-const NIGHT_BLOCK = renderThemeBlock(NIGHT_TOKENS, NIGHT_SHADOW_BLOCK);
+const LIGHT_BLOCK = /* @__PURE__ */ renderThemeBlock(
+  LIGHT_TOKENS,
+  LIGHT_SHADOW_BLOCK,
+);
+const DARK_BLOCK = /* @__PURE__ */ renderThemeBlock(
+  DARK_TOKENS,
+  DARK_SHADOW_BLOCK,
+);
+const NIGHT_BLOCK = /* @__PURE__ */ renderThemeBlock(
+  NIGHT_TOKENS,
+  NIGHT_SHADOW_BLOCK,
+);
 
 /**
  * The `container-name` `PanelRoot` sets on itself, together with
@@ -402,17 +411,24 @@ export const PUBLIC_FOUNDATION_TOKEN_NAMES = [
 export type FoundationTokenName =
   (typeof PUBLIC_FOUNDATION_TOKEN_NAMES)[number];
 
-export const PUBLIC_COLOR_TOKEN_NAMES = Object.freeze(
-  Object.keys(LIGHT_TOKENS) as ColorTokenName[],
+export const PUBLIC_COLOR_TOKEN_NAMES = /* @__PURE__ */ Object.freeze(
+  /* @__PURE__ */ Object.keys(LIGHT_TOKENS) as ColorTokenName[],
 );
 
+// Joined with concat rather than two spreads: a bundler keeps a call whose
+// argument spreads, even one marked pure, and that would hold all three
+// palettes in every entry that reads nothing but a container name from here.
 export const PUBLIC_TOKEN_NAMES: readonly (
   | ColorTokenName
   | FoundationTokenName
-)[] = Object.freeze([
-  ...PUBLIC_COLOR_TOKEN_NAMES,
-  ...PUBLIC_FOUNDATION_TOKEN_NAMES,
-]);
+)[] = /* @__PURE__ */ Object.freeze(
+  /* @__PURE__ */ (
+    PUBLIC_COLOR_TOKEN_NAMES as readonly (
+      | ColorTokenName
+      | FoundationTokenName
+    )[]
+  ).concat(PUBLIC_FOUNDATION_TOKEN_NAMES),
+);
 
 /** Ancestor markers a host sets on a dark page. */
 const DARK_HOST_MARKERS = [
@@ -564,4 +580,4 @@ ${NIGHT_BLOCK}
  *
  * @internal
  */
-export const TOKEN_STYLES = renderTokenStyles(ROOT_SELECTOR);
+export const TOKEN_STYLES = /* @__PURE__ */ renderTokenStyles(ROOT_SELECTOR);

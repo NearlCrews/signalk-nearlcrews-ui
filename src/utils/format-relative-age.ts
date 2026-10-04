@@ -102,7 +102,8 @@ function selectUnit(ageSeconds: number): RelativeUnit {
   return selected;
 }
 
-const relativeTimeFormatters = createFormatterCache<Intl.RelativeTimeFormat>();
+const relativeTimeFormatters =
+  /* @__PURE__ */ createFormatterCache<Intl.RelativeTimeFormat>();
 
 function getFormatter(
   locale: PanelLocale | undefined,

@@ -6,6 +6,15 @@
  * is unchanged. Only the declarations are written once.
  */
 
+/*
+ * Every constant here is a plain literal, or a call marked pure where it has
+ * to interpolate, so a bundler drops the fragments an entry never reads. An
+ * unmarked call such as `[...].join("\n")` is kept whether or not anything
+ * uses it. A block of declarations is widened with `as string`, which keeps
+ * its whole text out of the emitted declarations; an annotation would do the
+ * same, but the lint rule against inferrable types removes one.
+ */
+
 import { CONTAINER_BREAKPOINT_NARROW, PANEL_CONTAINER_NAME } from "./tokens.js";
 
 const VISUALLY_HIDDEN_PROPERTIES: readonly (readonly [string, string])[] = [
@@ -35,25 +44,24 @@ export function visuallyHiddenDeclarations(important = false): string {
 }
 
 /** Shared presentation for every field error message. */
-export const FIELD_ERROR_DECLARATIONS = [
-  "  min-width: 0;",
-  "  color: var(--snui-color-danger);",
-  "  font-size: var(--snui-font-size-sm);",
-  "  font-weight: var(--snui-font-weight-medium);",
-  "  overflow-wrap: anywhere;",
-].join("\n");
+export const FIELD_ERROR_DECLARATIONS = `  min-width: 0;
+  color: var(--snui-color-danger);
+  font-size: var(--snui-font-size-sm);
+  font-weight: var(--snui-font-weight-medium);
+  overflow-wrap: anywhere;` as string;
 
 /** The raised surface every anchored overlay paints. */
-export const RAISED_OVERLAY_DECLARATIONS = [
-  "  border: 1px solid var(--snui-color-border);",
-  "  border-radius: var(--snui-radius-md);",
-  "  background: var(--snui-color-surface-raised);",
-  "  box-shadow: var(--snui-shadow-overlay);",
-  "  color: var(--snui-color-text);",
-  "  opacity: 1;",
-  "  transform: none;",
-  "  transition:\n    opacity var(--snui-transition-fast),\n    transform var(--snui-transition-fast);",
-].join("\n");
+export const RAISED_OVERLAY_DECLARATIONS =
+  `  border: 1px solid var(--snui-color-border);
+  border-radius: var(--snui-radius-md);
+  background: var(--snui-color-surface-raised);
+  box-shadow: var(--snui-shadow-overlay);
+  color: var(--snui-color-text);
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--snui-transition-fast),
+    transform var(--snui-transition-fast);` as string;
 
 /**
  * The hover step and focus ring band every raised overlay surface remaps for
@@ -62,39 +70,33 @@ export const RAISED_OVERLAY_DECLARATIONS = [
  * vanish without the raised step, and the ring band has to match the fill
  * behind the control.
  */
-export const RAISED_SURFACE_TOKEN_DECLARATIONS = [
-  "  --snui-color-interactive-hover: var(--snui-color-hover-raised);",
-  "  --snui-color-focus-ring-band: var(--snui-color-surface-raised);",
-].join("\n");
+export const RAISED_SURFACE_TOKEN_DECLARATIONS =
+  `  --snui-color-interactive-hover: var(--snui-color-hover-raised);
+  --snui-color-focus-ring-band: var(--snui-color-surface-raised);` as string;
 
 /**
  * Padding that keeps a fixed, viewport-sized layer clear of the device safe
  * areas and never tighter than the standard gutter. Safe-area insets are
  * physical edges, so the shorthand stays physical.
  */
-export const SAFE_AREA_PADDING_DECLARATIONS = [
-  "  padding:",
-  "    max(var(--snui-space-4), env(safe-area-inset-top, 0px))",
-  "    max(var(--snui-space-4), env(safe-area-inset-right, 0px))",
-  "    max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))",
-  "    max(var(--snui-space-4), env(safe-area-inset-left, 0px));",
-].join("\n");
+export const SAFE_AREA_PADDING_DECLARATIONS = `  padding:
+    max(var(--snui-space-4), env(safe-area-inset-top, 0px))
+    max(var(--snui-space-4), env(safe-area-inset-right, 0px))
+    max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))
+    max(var(--snui-space-4), env(safe-area-inset-left, 0px));` as string;
 
 /** The entering and exiting state of an anchored overlay. */
-export const OVERLAY_TRANSITION_DECLARATIONS = [
-  "  opacity: 0;",
-  "  transform: translateY(-0.25rem);",
-].join("\n");
+export const OVERLAY_TRANSITION_DECLARATIONS = `  opacity: 0;
+  transform: translateY(-0.25rem);` as string;
 
 /**
  * Forced colors flattens the overlay's border and shadow, so the surface
  * boundary is redrawn with a system color. Indented for use inside a
  * forced-colors media block.
  */
-export const FORCED_COLORS_OUTLINE_DECLARATIONS = [
-  "    outline: 2px solid CanvasText;",
-  "    outline-offset: -2px;",
-].join("\n");
+export const FORCED_COLORS_OUTLINE_DECLARATIONS =
+  `    outline: 2px solid CanvasText;
+    outline-offset: -2px;` as string;
 
 /**
  * The width of every focus ring: 2 pixels, and 3 under `prefers-contrast:
@@ -143,13 +145,11 @@ export function focusRingDeclarations(
  * unmeasurable amount. Opacity stays for icon-only children, and a filled
  * control restates its own disabled fill beside this block.
  */
-export const DISABLED_DECLARATIONS = [
-  "  cursor: not-allowed;",
-  "  color: var(--snui-color-text-disabled);",
-  // Chromium dims a disabled select to 0.7 opacity in its own stylesheet; the
-  // token above carries the disabled state, so the control stays fully opaque.
-  "  opacity: 1;",
-].join("\n");
+// Chromium dims a disabled select to 0.7 opacity in its own stylesheet; the
+// color token carries the disabled state, so the control stays fully opaque.
+export const DISABLED_DECLARATIONS = `  cursor: not-allowed;
+  color: var(--snui-color-text-disabled);
+  opacity: 1;` as string;
 
 /**
  * A control blocked either way: natively disabled, or held focusable through
@@ -168,40 +168,32 @@ export const PRESSED_FILL_DECLARATION =
  * The stacked body of a field: its label, its control, and its messages.
  * Shared by the field, the radio group, and the progress bar.
  */
-export const FIELD_STACK_DECLARATIONS = [
-  "  display: grid;",
-  "  min-width: 0;",
-  "  gap: var(--snui-space-1);",
-].join("\n");
+export const FIELD_STACK_DECLARATIONS = `  display: grid;
+  min-width: 0;
+  gap: var(--snui-space-1);` as string;
 
 /** Shared presentation for the label a control names itself with. */
-export const CONTROL_LABEL_DECLARATIONS = [
-  "  min-width: 0;",
-  "  color: var(--snui-color-text);",
-  "  font-weight: var(--snui-font-weight-semibold);",
-  "  overflow-wrap: anywhere;",
-].join("\n");
+export const CONTROL_LABEL_DECLARATIONS = `  min-width: 0;
+  color: var(--snui-color-text);
+  font-weight: var(--snui-font-weight-semibold);
+  overflow-wrap: anywhere;` as string;
 
 /**
  * The visible name of a group of controls: a fieldset legend, or the label a
  * radiogroup draws in its place.
  */
-export const GROUP_LEGEND_DECLARATIONS = [
-  "  max-width: 100%;",
-  "  min-width: 0;",
-  "  padding: 0;",
-  "  color: var(--snui-color-text);",
-  "  font-weight: var(--snui-font-weight-bold);",
-  "  overflow-wrap: anywhere;",
-].join("\n");
+export const GROUP_LEGEND_DECLARATIONS = `  max-width: 100%;
+  min-width: 0;
+  padding: 0;
+  color: var(--snui-color-text);
+  font-weight: var(--snui-font-weight-bold);
+  overflow-wrap: anywhere;` as string;
 
 /** Shared presentation for the muted description under a label. */
-export const FIELD_DESCRIPTION_DECLARATIONS = [
-  "  min-width: 0;",
-  "  color: var(--snui-color-text-muted);",
-  "  font-size: var(--snui-font-size-sm);",
-  "  overflow-wrap: anywhere;",
-].join("\n");
+export const FIELD_DESCRIPTION_DECLARATIONS = `  min-width: 0;
+  color: var(--snui-color-text-muted);
+  font-size: var(--snui-font-size-sm);
+  overflow-wrap: anywhere;` as string;
 
 /** A bordered surface on the panel background, outlined with `borderToken`. */
 function surfaceDeclarations(borderToken: string): string {
@@ -217,7 +209,7 @@ function surfaceDeclarations(borderToken: string): string {
  * outline is decorative, so it takes the subtle border and leaves the 3:1
  * boundary to the controls inside it.
  */
-export const SURFACE_DECLARATIONS = surfaceDeclarations(
+export const SURFACE_DECLARATIONS = /* @__PURE__ */ surfaceDeclarations(
   "--snui-color-border-subtle",
 );
 
@@ -227,7 +219,7 @@ export const SURFACE_DECLARATIONS = surfaceDeclarations(
  * region. It keeps the 3:1 boundary token when container outlines step back
  * to the subtle one.
  */
-export const CONTROL_SURFACE_DECLARATIONS = surfaceDeclarations(
+export const CONTROL_SURFACE_DECLARATIONS = /* @__PURE__ */ surfaceDeclarations(
   "--snui-color-border",
 );
 
@@ -235,12 +227,10 @@ export const CONTROL_SURFACE_DECLARATIONS = surfaceDeclarations(
  * The text a table caption takes, shared by Table and DataGrid so a panel
  * moving between them keeps its caption.
  */
-export const TABLE_CAPTION_DECLARATIONS = [
-  "  color: var(--snui-color-text);",
-  "  font-weight: var(--snui-font-weight-semibold);",
-  "  text-align: start;",
-  "  overflow-wrap: anywhere;",
-].join("\n");
+export const TABLE_CAPTION_DECLARATIONS = `  color: var(--snui-color-text);
+  font-weight: var(--snui-font-weight-semibold);
+  text-align: start;
+  overflow-wrap: anywhere;` as string;
 
 /**
  * The width of the leading tone bar on Banner, Card, Toast, and a toned
@@ -253,15 +243,13 @@ export const TONE_BAR_WIDTH = "0.3rem";
  * and the target height the whole row carries, because the element the user
  * presses is the label rather than the box inside it.
  */
-export const CONTROL_ROW_DECLARATIONS = [
-  "  display: grid;",
-  "  grid-template-columns: auto minmax(0, 1fr);",
-  "  gap: var(--snui-space-1) var(--snui-space-3);",
-  "  align-items: start;",
-  "  min-height: var(--snui-control-min-height);",
-  "  padding-block: var(--snui-space-2);",
-  "  cursor: pointer;",
-].join("\n");
+export const CONTROL_ROW_DECLARATIONS = `  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--snui-space-1) var(--snui-space-3);
+  align-items: start;
+  min-height: var(--snui-control-min-height);
+  padding-block: var(--snui-space-2);
+  cursor: pointer;` as string;
 
 /**
  * The optical nudge a square glyph takes to sit on a line of text beside it,
@@ -293,13 +281,11 @@ export const TONE_GLYPH_GAP_EM = 0.375;
  * the line. Shared by the Progress tone mark and the CollapsibleSection tone
  * slot.
  */
-export const FIRST_LINE_GLYPH_SLOT_DECLARATIONS = [
-  "  display: flex;",
-  "  flex: none;",
-  "  align-self: flex-start;",
-  "  align-items: center;",
-  "  block-size: 1lh;",
-].join("\n");
+export const FIRST_LINE_GLYPH_SLOT_DECLARATIONS = `  display: flex;
+  flex: none;
+  align-self: flex-start;
+  align-items: center;
+  block-size: 1lh;` as string;
 
 /** The required and optional markers a field or checkbox label may hold. */
 export const FIELD_MARKERS = ":is(.snui-optional-mark, .snui-required-mark)";
@@ -317,7 +303,7 @@ export const NON_LINK_DESCENDANTS = ":not(:any-link, :any-link *)";
  * Rebuild it with system colors so the author theme token cannot blend into
  * Highlight. Indented for use inside a forced-colors media block.
  */
-export const FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS = [
+export const FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS = /* @__PURE__ */ [
   `    outline: ${FOCUS_RING_WIDTH} solid CanvasText;`,
   "    outline-offset: 2px;",
   "    box-shadow: none;",
@@ -328,10 +314,9 @@ export const FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS = [
  * flattens the danger border to a system color and would otherwise erase the
  * valid versus invalid distinction. Indented for a forced-colors media block.
  */
-export const FORCED_COLORS_INVALID_DECLARATIONS = [
-  "    outline: 2px dashed CanvasText;",
-  "    outline-offset: 1px;",
-].join("\n");
+export const FORCED_COLORS_INVALID_DECLARATIONS =
+  `    outline: 2px dashed CanvasText;
+    outline-offset: 1px;` as string;
 
 /**
  * The size of the glyph a selection control paints: the checkbox box and the
@@ -351,7 +336,7 @@ const TONE_DOT_SIZE = "0.75rem";
  * The circle the per-tone shapes in `tone-rules.ts` refine. Both dots start
  * from it; a block adds only what its own layout needs beside it.
  */
-export const TONE_DOT_DECLARATIONS = [
+export const TONE_DOT_DECLARATIONS = /* @__PURE__ */ [
   `  width: ${TONE_DOT_SIZE};`,
   `  height: ${TONE_DOT_SIZE};`,
   "  border: 2px solid currentColor;",
@@ -404,9 +389,6 @@ export function stretchedActionRules(row: string): string {
   }`;
 }
 
-/** The comfortable line length for prose, as a length. */
-const PROSE_MEASURE = "70ch";
-
 /**
  * Caps a prose block at a comfortable measure. A description, a body, or a
  * footnote runs the full width of its container otherwise, and on a wide nav
@@ -415,7 +397,7 @@ const PROSE_MEASURE = "70ch";
  * hold a value, a control, or tabular content are not prose and keep the
  * width they are given.
  */
-export const PROSE_MEASURE_DECLARATION = `  max-width: ${PROSE_MEASURE};`;
+export const PROSE_MEASURE_DECLARATION = "  max-width: 70ch;";
 
 /**
  * The narrow-panel condition, written once. Both halves are constants, the
