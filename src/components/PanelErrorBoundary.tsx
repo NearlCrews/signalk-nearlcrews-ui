@@ -158,10 +158,16 @@ function PanelErrorFallback({
     if (spoken.length > 0) announce(spoken, { assertive: true });
   });
 
-  // Mounting the fallback is the moment the boundary caught: the effect runs
-  // once, and a later render of the same fallback neither re-announces the
-  // failure nor takes focus a second time.
+  // Mounting the fallback is the moment the boundary caught, so the failure is
+  // reported once: a later render of the same fallback neither re-announces
+  // it nor takes focus a second time. The latch is what holds that through a
+  // replayed mount effect, which StrictMode makes at once and a retained
+  // CollapsibleSection makes on every expand. A retry that fails again mounts
+  // a new fallback, which reports again.
+  const reported = useRef(false);
   useEffect(() => {
+    if (reported.current) return;
+    reported.current = true;
     reportFailure();
   }, []);
 

@@ -16,6 +16,7 @@ import {
 import { resolveBundledLabels, trimmedText } from "../utils/labels.js";
 import { SAVE_ACTION_BAR_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
+import { isTimerDelay } from "../utils/shared-clock.js";
 import type { SemanticTone, StatusTone } from "../utils/tone.js";
 import { ActionBar, type ActionBarProps } from "./ActionBar.js";
 import { Button, type ButtonAsButtonProps } from "./Button.js";
@@ -165,7 +166,9 @@ export interface SaveActionBarProps
   /**
    * How long the saved message stays up after a save request. Zero leaves it
    * up until `saveRequestedAt` changes, for a panel that ends the window on
-   * something other than the clock, such as a server confirmation.
+   * something other than the clock, such as a server confirmation. A value
+   * no timer can wait out (not a number, endless, or past 2,147,483,647)
+   * reads as zero.
    */
   readonly savedMessageDurationMs?: number | undefined;
   readonly saving?: boolean | undefined;
@@ -352,9 +355,10 @@ function resolveStateWithLabels(
 /**
  * Milliseconds left of the window a save request opened, or null where no
  * window is running: no request, an unusable timestamp, or a consumer that
- * keeps the window itself with a duration of zero. A timestamp ahead of this
- * clock counts as now, so skew between the host and the panel lengthens no
- * window.
+ * keeps the window itself with a duration of zero. A duration no timer can
+ * wait out, which would close the window the moment it opened, reads as zero.
+ * A timestamp ahead of this clock counts as now, so skew between the host and
+ * the panel lengthens no window.
  */
 function remainingWindowMs(
   saveRequestedAt: number | null | undefined,
@@ -362,7 +366,9 @@ function remainingWindowMs(
   nowMs: number,
 ): number | null {
   if (saveRequestedAt === null || saveRequestedAt === undefined) return null;
-  if (!Number.isFinite(saveRequestedAt) || durationMs <= 0) return null;
+  if (!Number.isFinite(saveRequestedAt) || !isTimerDelay(durationMs)) {
+    return null;
+  }
   return Math.max(0, durationMs - Math.max(0, nowMs - saveRequestedAt));
 }
 

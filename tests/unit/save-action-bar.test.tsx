@@ -471,6 +471,25 @@ describe("SaveActionBar saved message window", () => {
       "Save sent to the server",
     );
   });
+
+  it.each([
+    ["an endless window", Number.POSITIVE_INFINITY],
+    ["a window that is not a number", Number.NaN],
+    ["a window longer than one timer holds", 2_147_483_648],
+  ])("arms no timer for %s", (_window, savedMessageDurationMs) => {
+    renderInPanel(saveBar({ saveRequestedAt: NOW, savedMessageDurationMs }));
+
+    // A timer handed any of these fires at once, which would take the message
+    // down as it appeared. Each reads as zero instead: the message stays up
+    // until the panel ends the window.
+    act(() => {
+      vi.advanceTimersByTime(600_000);
+    });
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Save sent to the server",
+    );
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 describe("SaveActionBar focus targets", () => {

@@ -3,6 +3,7 @@ import {
   type ReactNode,
   useContext,
   useMemo,
+  useState,
   useSyncExternalStore,
 } from "react";
 
@@ -88,7 +89,7 @@ function fallbackTheme(): ThemeChoice {
  * stored preference always wins over a seed, and seeding writes nothing, so
  * the operator's own choice is never manufactured for them.
  */
-function seedTheme(theme: ThemeChoice): void {
+function seedTheme(theme: ThemeChoice | undefined): void {
   seededTheme ??= theme;
 }
 
@@ -202,11 +203,25 @@ export function ThemeProvider({
 }: ThemeProviderProps): React.JSX.Element {
   // Latched before the first snapshot is read, so the panel paints the seeded
   // theme rather than flashing the fallback and correcting itself.
-  if (defaultTheme !== undefined) seedTheme(defaultTheme);
+  seedTheme(defaultTheme);
+  // Unsubscribing gives the seed back, and React subscribes again without
+  // rendering, under StrictMode and whenever a retained CollapsibleSection
+  // reveals the panel, so each subscription restores the seed first. It is the
+  // seed the panel mounted with, held in a subscribe function that never
+  // changes: a new identity would resubscribe on a changed prop and move a
+  // panel that is already showing a theme.
+  const [subscribeSeeded] = useState(() => (listener: () => void) => {
+    seedTheme(defaultTheme);
+    return subscribe(listener);
+  });
   // An unresolved preference stays "auto" so the panel follows an explicit
   // host theme and otherwise uses the library's light fallback. Operating-system
   // preferences are reserved for the explicit "system" choice.
-  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const theme = useSyncExternalStore(
+    subscribeSeeded,
+    getSnapshot,
+    getServerSnapshot,
+  );
   const value = useMemo(() => ({ theme, setTheme }), [theme]);
 
   return <ThemeContext value={value}>{children}</ThemeContext>;

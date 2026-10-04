@@ -1,13 +1,19 @@
-import { screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  CollapsibleSection,
   PanelErrorBoundary,
   type PanelErrorBoundaryFallbackProps,
   Section,
 } from "../../src/index.js";
 import { Dialog } from "../../src/overlays.js";
-import { renderInPanel } from "../helpers.js";
+import {
+  type PanelAnnounce,
+  PanelAnnouncerProvider,
+} from "../../src/utils/announcer.js";
+import { panel, renderInPanel } from "../helpers.js";
 import { Bomb, failure } from "./lib/failing-content.js";
 
 afterEach(() => {
@@ -215,6 +221,81 @@ describe("PanelErrorBoundary", () => {
         name: "This panel stopped working",
       }),
     ).toBeNull();
+  });
+
+  it("announces the failure once when a retained section hides and reveals it", async () => {
+    const user = userEvent.setup();
+    const announce = vi.fn<PanelAnnounce>();
+    failure.armed = false;
+    // Built fresh per render: React skips re-rendering a subtree handed the
+    // very same element, and this test needs the second render to run.
+    const tree = (): React.JSX.Element =>
+      panel(
+        <PanelAnnouncerProvider value={announce}>
+          <CollapsibleSection title="Storage" defaultOpen>
+            <PanelErrorBoundary>
+              <Bomb />
+            </PanelErrorBoundary>
+          </CollapsibleSection>
+        </PanelAnnouncerProvider>,
+      );
+    const { rerender } = render(tree());
+    const toggle = screen.getByRole("button", { name: "Storage" });
+    toggle.focus();
+
+    failure.armed = true;
+    rerender(tree());
+    expect(announce).toHaveBeenCalledOnce();
+
+    // A retained section runs the fallback's effects again on every expand.
+    // The crash was reported when it happened, and the operator who reopens
+    // the section is looking straight at the fallback.
+    await user.click(toggle);
+    await user.click(toggle);
+
+    expect(toggle).toHaveFocus();
+    expect(announce).toHaveBeenCalledOnce();
+  });
+
+  it("takes focus without also announcing when React replays its effects", () => {
+    const announce = vi.fn<PanelAnnounce>();
+    const { container } = render(
+      <StrictMode>
+        {panel(
+          <PanelAnnouncerProvider value={announce}>
+            <PanelErrorBoundary>
+              <Bomb />
+            </PanelErrorBoundary>
+          </PanelAnnouncerProvider>,
+        )}
+      </StrictMode>,
+    );
+
+    // StrictMode runs the mount effect twice. The first run moves focus onto
+    // the fallback, so a second report would find focus "elsewhere" and read
+    // the same failure out over the one the focus move already announced.
+    expect(container.querySelector(".snui-banner--danger")).toHaveFocus();
+    expect(announce).not.toHaveBeenCalled();
+  });
+
+  it("reports a retry that fails again", async () => {
+    const user = userEvent.setup();
+    const { container } = renderInPanel(
+      <PanelErrorBoundary>
+        <Bomb />
+      </PanelErrorBoundary>,
+    );
+    const first = container.querySelector(".snui-banner--danger");
+    expect(first).toHaveFocus();
+
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    // The retry took the focused button away with the old fallback, so the
+    // second crash leaves the reader on the body exactly as the first did,
+    // and the new fallback has a report of its own to make.
+    const second = container.querySelector(".snui-banner--danger");
+    expect(second).not.toBe(first);
+    expect(second).toHaveFocus();
   });
 
   it("hands a custom fallback the error and both actions", async () => {

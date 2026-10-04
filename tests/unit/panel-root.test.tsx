@@ -7,6 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { StrictMode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   CollapsibleSection,
@@ -643,6 +644,81 @@ describe("PanelRoot themes", () => {
     expect(screen.getByTestId("second")).toHaveAttribute(
       "data-snui-theme",
       "night",
+    );
+  });
+
+  it("keeps a seeded theme when React replays the store subscription", () => {
+    render(
+      <StrictMode>
+        <PanelRoot data-testid="panel" defaultTheme="night">
+          <ThemeToggle />
+        </PanelRoot>
+      </StrictMode>,
+    );
+
+    // StrictMode unsubscribes and subscribes again with no render in between.
+    // The unsubscribe gives the seed back, so the subscription itself has to
+    // restore it or the panel falls to Auto on its first paint.
+    expect(screen.getByTestId("panel")).toHaveAttribute(
+      "data-snui-theme",
+      "night",
+    );
+    expect(screen.getByRole("radio", { name: "Night" })).toBeChecked();
+    expect(window.localStorage.getItem(THEME_STORAGE_KEY)).toBeNull();
+  });
+
+  it("keeps a seeded theme when a retained section hides and reveals its panel", async () => {
+    const user = userEvent.setup();
+    render(
+      <CollapsibleSection title="Provider settings" defaultOpen>
+        <PanelRoot data-testid="retained-panel" defaultTheme="night">
+          <ThemeToggle />
+        </PanelRoot>
+      </CollapsibleSection>,
+    );
+    const panel = screen.getByTestId("retained-panel");
+    const toggle = screen.getByRole("button", { name: "Provider settings" });
+    expect(panel).toHaveAttribute("data-snui-theme", "night");
+
+    // The reveal subscribes again without rendering the panel, which is the
+    // same replay: a nav station seeded to Night must not turn white because
+    // someone collapsed and reopened the section around it.
+    await user.click(toggle);
+    await user.click(toggle);
+
+    expect(panel).toHaveAttribute("data-snui-theme", "night");
+    expect(screen.getByRole("radio", { name: "Night" })).toBeChecked();
+  });
+
+  it("keeps the theme a panel shows when its seed changes", () => {
+    const seeded = render(
+      <PanelRoot data-testid="seeded" defaultTheme="night">
+        Body
+      </PanelRoot>,
+    );
+    seeded.rerender(
+      <PanelRoot data-testid="seeded" defaultTheme="dark">
+        Body
+      </PanelRoot>,
+    );
+
+    // A seed is a starting point for a document showing no theme yet, so a
+    // later value never moves a panel that is already on screen.
+    expect(screen.getByTestId("seeded")).toHaveAttribute(
+      "data-snui-theme",
+      "night",
+    );
+    seeded.unmount();
+
+    const unseeded = render(<PanelRoot data-testid="unseeded">Body</PanelRoot>);
+    unseeded.rerender(
+      <PanelRoot data-testid="unseeded" defaultTheme="dark">
+        Body
+      </PanelRoot>,
+    );
+
+    expect(screen.getByTestId("unseeded")).not.toHaveAttribute(
+      "data-snui-theme",
     );
   });
 
