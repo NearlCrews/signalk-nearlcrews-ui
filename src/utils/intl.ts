@@ -43,8 +43,10 @@ export function createFormatterCache<F>(): FormatterCache<F> {
     // Concatenated rather than serialized, and read straight off the caller's
     // value: formatters run on every render of every value on screen, and the
     // default path has no locale at all. The copy Intl needs waits for a miss.
+    // A list joins on a character no tag holds, so a host setting passed as
+    // one comma-joined string, a rejected tag, never shares a key with it.
     const tags =
-      typeof locale === "string" ? locale : (locale?.join(",") ?? "");
+      typeof locale === "string" ? locale : (locale?.join("\u0001") ?? "");
     const key = `${tags}\u0000${variant}`;
     const cached = formatters.get(key);
     if (cached !== undefined) return cached;

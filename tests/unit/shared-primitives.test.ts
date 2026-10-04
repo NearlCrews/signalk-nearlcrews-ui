@@ -90,6 +90,11 @@ import {
   resolveSelectAllState,
   selectAllTarget,
 } from "../../src/utils/select-all.js";
+import {
+  isTimerDelay,
+  MAX_TIMER_DELAY_MS,
+  subscribeToClock,
+} from "../../src/utils/shared-clock.js";
 import { formatCount, joinList } from "../../src/utils/text.js";
 import { SPACE_SCALE } from "../../src/utils/variants.js";
 import { windowGlobal } from "../../src/utils/window-global.js";
@@ -296,6 +301,22 @@ describe("createFormatterCache", () => {
 
     expect(createFormatterCache<string>()("xx-", "", build)).toBe("runtime");
     expect(build.mock.calls).toEqual([[["xx-"]], [undefined]]);
+  });
+
+  it("keeps a comma-joined string apart from the list with the same join", () => {
+    const build = vi.fn((locales: readonly string[] | undefined) => {
+      if (locales === undefined) return "runtime";
+      if (locales.some((tag) => tag.includes(","))) {
+        throw new RangeError("Incorrect locale");
+      }
+      return locales.join(" then ");
+    });
+    const formatters = createFormatterCache<string>();
+
+    // A host setting passed as one comma-joined string is a rejected tag, so
+    // it caches the runtime formatter. The well-formed list must not find it.
+    expect(formatters("en-US,en", "", build)).toBe("runtime");
+    expect(formatters(["en-US", "en"], "", build)).toBe("en-US then en");
   });
 
   it("propagates a failure that is not a rejected tag", () => {
@@ -996,6 +1017,38 @@ describe("createEmitter", () => {
     }).not.toThrow();
     expect(second).toHaveBeenCalledOnce();
     expect(emitter.size()).toBe(1);
+  });
+});
+
+describe("isTimerDelay", () => {
+  it("accepts a positive delay no longer than one timer holds", () => {
+    expect(isTimerDelay(1)).toBe(true);
+    expect(isTimerDelay(10_000)).toBe(true);
+    expect(isTimerDelay(MAX_TIMER_DELAY_MS)).toBe(true);
+  });
+
+  it("rejects a delay a timer would fire at once", () => {
+    expect(isTimerDelay(0)).toBe(false);
+    expect(isTimerDelay(-1)).toBe(false);
+    expect(isTimerDelay(Number.NaN)).toBe(false);
+    expect(isTimerDelay(Number.POSITIVE_INFINITY)).toBe(false);
+    expect(isTimerDelay(MAX_TIMER_DELAY_MS + 1)).toBe(false);
+  });
+});
+
+describe("subscribeToClock", () => {
+  it("runs no timer for a cadence longer than one timer holds", () => {
+    vi.useFakeTimers();
+    const onTick = vi.fn();
+
+    // setInterval wraps a delay past the cap to zero, which would tell every
+    // reader the instant as fast as the engine allows. The cadence is written
+    // out, so the case does not lean on the constant the clock compares with.
+    const stop = subscribeToClock(2_147_483_648, onTick);
+
+    expect(onTick).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+    stop();
   });
 });
 

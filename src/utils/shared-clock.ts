@@ -16,6 +16,21 @@ import { createEmitter, type Emitter } from "./emitter.js";
  */
 export const DEFAULT_CLOCK_TICK_MS = 10_000;
 
+/**
+ * The longest delay a timer holds. A longer one overflows and fires at once,
+ * so an instant further out is waited for in steps of this.
+ */
+export const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
+/**
+ * Whether a timer can wait `delayMs`: a positive number no longer than one
+ * timer holds. Zero, a negative, NaN, Infinity, and a delay past the cap all
+ * fire at once when handed to a timer, so a caller arms none for them.
+ */
+export function isTimerDelay(delayMs: number): boolean {
+  return delayMs > 0 && delayMs <= MAX_TIMER_DELAY_MS;
+}
+
 type Tick = (nowMs: number) => void;
 
 interface SharedClock {
@@ -87,13 +102,14 @@ function unwatchVisibility(): void {
  * else reads that cadence and stopping it when the last reader leaves. The
  * new listener is told the current instant at once. Returns the unsubscribe.
  *
- * A cadence that is not a positive finite number ticks not at all rather than
- * as fast as the engine allows: `setInterval` treats NaN as zero and clamps it
- * to about four milliseconds, so a `Number(setting) * 1000` that failed to
- * parse would re-render every age on the panel hundreds of times a second.
+ * A cadence no timer can wait ticks not at all rather than as fast as the
+ * engine allows: `setInterval` treats NaN, and a delay past the cap, as zero
+ * and clamps it to about four milliseconds, so a `Number(setting) * 1000` that
+ * failed to parse would re-render every age on the panel hundreds of times a
+ * second.
  */
 export function subscribeToClock(tickMs: number, onTick: Tick): () => void {
-  if (!Number.isFinite(tickMs) || tickMs <= 0) {
+  if (!isTimerDelay(tickMs)) {
     onTick(Date.now());
     return () => undefined;
   }

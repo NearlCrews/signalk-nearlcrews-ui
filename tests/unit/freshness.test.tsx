@@ -134,6 +134,25 @@ describe("usePollFreshness stale timing", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it("reads a cadence longer than one timer can hold as a stopped clock", () => {
+    vi.useFakeTimers({ now: NOW });
+    // One millisecond past the longest delay a timer holds, written out so the
+    // case states the number it means.
+    render(
+      <FreshnessProbe
+        lastUpdated={NOW}
+        staleAfterMs={3_000}
+        tickMs={2_147_483_648}
+      />,
+    );
+
+    // Handed to a timer, the cadence would wrap to zero and tick as fast as
+    // the engine allows. No interval runs, and the stale wake stops with it,
+    // as it does for a cadence of 0.
+    expect(reading()).toBe("current");
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("reads a zero or negative threshold as none: aged on the tick, never stale", () => {
     vi.useFakeTimers({ now: NOW });
     function AgeProbe({

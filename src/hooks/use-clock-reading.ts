@@ -1,12 +1,10 @@
 import { useEffect, useEffectEvent, useState } from "react";
 
-import { subscribeToClock } from "../utils/shared-clock.js";
-
-/**
- * The longest delay a timer holds. A longer one overflows and fires at once,
- * so an instant further out is waited for in steps of this.
- */
-const MAX_TIMER_DELAY_MS = 2_147_483_647;
+import {
+  isTimerDelay,
+  MAX_TIMER_DELAY_MS,
+  subscribeToClock,
+} from "../utils/shared-clock.js";
 
 /** A clock reading and the moment it was taken for. */
 interface ClockReading {
@@ -46,9 +44,9 @@ export interface ClockReadingOptions {
  * would come too late for an effect that already acted on the first commit,
  * such as a note announcing a turn to stale. That render reads the clock
  * once per moment and stores it, so every later render of the same moment is
- * pure and a StrictMode replay agrees. `tickMs` of 0 stops the ticks and the
- * wake, and the moment is still measured when it arrives. A moment that is
- * not a finite number subscribes to nothing.
+ * pure and a StrictMode replay agrees. `tickMs` of 0, or any cadence no timer
+ * can wait, stops the ticks and the wake, and the moment is still measured
+ * when it arrives. A moment that is not a finite number subscribes to nothing.
  */
 export function useClockReading(
   momentMs: number,
@@ -76,8 +74,8 @@ export function useClockReading(
     setReading((previous) => ({ ...previous, nowMs: candidateMs }));
   });
 
-  // A cadence that is not a positive finite number does not tick at all;
-  // subscribeToClock owns that rule for every reader of the shared clock.
+  // A cadence no timer can wait does not tick at all; subscribeToClock owns
+  // that rule for every reader of the shared clock.
   const measures = Number.isFinite(momentMs);
   useEffect(() => {
     if (!measures) return undefined;
@@ -88,7 +86,7 @@ export function useClockReading(
   // clock is read a millisecond after it, so a strict comparison sees it
   // passed. A timer that fires early, or a wait longer than one timer holds,
   // leaves a reading short of the instant, which runs this again for the rest.
-  const clockRuns = Number.isFinite(tickMs) && tickMs > 0;
+  const clockRuns = isTimerDelay(tickMs);
   const wakeMs =
     clockRuns &&
     measures &&
