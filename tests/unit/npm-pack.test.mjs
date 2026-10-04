@@ -40,12 +40,22 @@ describe("npm pack JSON compatibility", () => {
 });
 
 describe("npm executable resolution", () => {
-  // tests/setup.ts restores every stubbed environment variable after each test.
-  it("requires the package script npm executable", () => {
-    vi.stubEnv("npm_execpath", undefined);
+  // Read while the file is collected, before any test stubs it.
+  const ambientExecPath = process.env.npm_execpath;
+
+  // vitest.config.ts unstubs every environment variable before each test.
+  it.each([
+    ["missing", undefined],
+    ["empty", ""],
+  ])("requires the package script npm executable (%s)", (_case, value) => {
+    vi.stubEnv("npm_execpath", value);
 
     expect(() => runNpmPack([])).toThrow(
       "Package validation must run through npm so npm_execpath is available.",
     );
+  });
+
+  it("starts the next test with the variable the run was given", () => {
+    expect(process.env.npm_execpath).toBe(ambientExecPath);
   });
 });

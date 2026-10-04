@@ -56,9 +56,13 @@ export interface AnimationFrameStub {
 export function stubAnimationFrames(): AnimationFrameStub {
   const frames: FrameRequestCallback[] = [];
   const cancelled: number[] = [];
+  // Counted apart from the queue, which runAll empties: the real scheduler
+  // never repeats a handle, and a repeat would make `cancelled` ambiguous.
+  let handle = 0;
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
     frames.push(callback);
-    return frames.length;
+    handle += 1;
+    return handle;
   });
   vi.spyOn(window, "cancelAnimationFrame").mockImplementation((handle) => {
     cancelled.push(handle);

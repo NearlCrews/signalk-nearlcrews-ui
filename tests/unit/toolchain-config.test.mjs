@@ -165,6 +165,15 @@ describe("unit test projects", () => {
     expect(components?.setupFiles).toEqual(["./tests/setup.ts"]);
   });
 
+  it("restores stubbed environment variables in both projects", () => {
+    // Only the components project loads tests/setup.ts, so the restore a
+    // tooling spec relies on has to come from the block both projects extend.
+    expect(vitestConfig.test?.unstubEnvs).toBe(true);
+    for (const project of vitestConfig.test?.projects ?? []) {
+      expect(project.extends, project.test?.name).toBe(true);
+    }
+  });
+
   it("puts every unit spec in exactly one project", () => {
     expect(unitFiles.length).toBeGreaterThan(0);
     for (const file of unitFiles) {

@@ -49,6 +49,10 @@ export default defineConfig({
     // exceeds the 5 second default on a cold coverage run, and the tooling
     // specs that spawn a CLI or a build need the same room.
     testTimeout: 20_000,
+    // Only the components project loads tests/setup.ts, so a stubbed
+    // environment variable is handed back here, before each test, for the
+    // tooling specs as well.
+    unstubEnvs: true,
     projects: [
       {
         extends: true,
