@@ -12,19 +12,9 @@ import {
   markdownAnchors,
   splitDestination,
 } from "./lib/docs-links.mjs";
-import { collectFiles, repositoryPath } from "./lib/paths.mjs";
+import { collectMarkdownFiles, repositoryPath } from "./lib/paths.mjs";
 
 const repositoryRoot = repositoryPath();
-const ignoredDirectories = new Set([
-  ".claude",
-  ".git",
-  ".remember",
-  "coverage",
-  "dist",
-  "node_modules",
-  "playwright-report",
-  "test-results",
-]);
 
 /** Whether the target exists, and whether it is a file rather than a directory. */
 async function describeTarget(targetFile) {
@@ -49,15 +39,7 @@ const targetCache = new Map();
 const anchorCache = new Map();
 
 const failures = [];
-const files = await collectFiles(repositoryRoot, {
-  matches: (name) => extname(name).toLowerCase() === ".md",
-  skipDirectories: ignoredDirectories,
-});
-
-// A walk that found nothing would otherwise report a pass it never earned.
-if (files.length === 0) {
-  throw new Error(`No Markdown files found under ${repositoryRoot}.`);
-}
+const files = await collectMarkdownFiles(repositoryRoot);
 
 // Read together rather than one at a time: the checking loop below is ordered
 // so its failures read in file order, but the reads themselves are not.

@@ -26,15 +26,6 @@ function readJson(...parts) {
   return JSON.parse(readText(...parts));
 }
 
-/** Reads a configuration file whose format allows whole-line comments. */
-function readJsonc(...parts) {
-  const source = readText(...parts)
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("//"))
-    .join("\n");
-  return JSON.parse(source);
-}
-
 const pinnedTools = readJson(".github", "pinned-tools.json");
 const workflows = WORKFLOW_NAMES.map((name) => ({
   name,
@@ -120,13 +111,13 @@ describe("editor schema pins", () => {
 });
 
 describe("documentation gates", () => {
-  it("keeps the Markdown globs in the markdownlint configuration", () => {
-    // An editor extension and a bare markdownlint-cli2 read the config, not
-    // the npm script, so the corpus has to live there.
-    const config = readJsonc(".markdownlint-cli2.jsonc");
-    expect(config.globs).toEqual(["**/*.md"]);
-    expect(config.ignores).toContain("node_modules");
-    expect(packageJson.scripts["lint:docs"]).toBe("markdownlint-cli2");
+  it("lints Markdown with the rules an editor reads", () => {
+    // The runner and an editor extension both read .markdownlint.json, so a
+    // rule changed there changes what both report.
+    expect(readJson(".markdownlint.json").default).toBe(true);
+    expect(packageJson.scripts["lint:docs"]).toBe(
+      "node scripts/check-markdown.mjs",
+    );
   });
 
   it("spell checks the shipped trees, not Markdown alone", () => {

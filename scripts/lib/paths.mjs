@@ -7,7 +7,7 @@
  */
 import { readdir, readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
@@ -48,6 +48,38 @@ export async function collectFiles(directory, options) {
     }),
   );
   return found.flat();
+}
+
+/**
+ * Directories no Markdown gate reads: tool state, build output, reports, and
+ * installed packages.
+ */
+const MARKDOWN_SKIPPED_DIRECTORIES = new Set([
+  ".claude",
+  ".git",
+  ".remember",
+  "coverage",
+  "dist",
+  "node_modules",
+  "playwright-report",
+  "test-results",
+]);
+
+/**
+ * Every Markdown file under `directory`: the one corpus the lint and the link
+ * check both read, so the two gates cannot drift onto different trees. A walk
+ * that finds nothing throws, because a gate over no files would report a pass
+ * it never earned.
+ */
+export async function collectMarkdownFiles(directory) {
+  const files = await collectFiles(directory, {
+    matches: (name) => extname(name).toLowerCase() === ".md",
+    skipDirectories: MARKDOWN_SKIPPED_DIRECTORIES,
+  });
+  if (files.length === 0) {
+    throw new Error(`No Markdown files found under ${directory}.`);
+  }
+  return files;
 }
 
 export async function readJson(path) {

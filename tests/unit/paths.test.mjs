@@ -6,6 +6,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   collectFiles,
+  collectMarkdownFiles,
   packageBinaryEntry,
   readPackageJson,
   repositoryPath,
@@ -59,6 +60,34 @@ describe("collectFiles", () => {
     expect(
       await collectFiles(root, { matches: (name) => name.endsWith(".mjs") }),
     ).toEqual([]);
+  });
+});
+
+describe("collectMarkdownFiles", () => {
+  it("reads Markdown at every depth and skips tool and build directories", async () => {
+    await mkdir(join(root, "node_modules", "vendored"), { recursive: true });
+    await mkdir(join(root, "dist"), { recursive: true });
+    await writeFile(join(root, "node_modules", "vendored", "README.md"), "");
+    await writeFile(join(root, "dist", "NOTES.MD"), "");
+    await writeFile(join(root, "nested", "UPPER.MD"), "upper");
+
+    expect(found(await collectMarkdownFiles(root)).sort()).toEqual([
+      "nested/UPPER.MD",
+      "nested/deeper/bottom.md",
+      "nested/middle.md",
+      "skipped/ignored.md",
+      "top.md",
+    ]);
+  });
+
+  it("fails a walk that finds no Markdown, which would pass unearned", async () => {
+    const empty = join(root, "no-markdown");
+    await mkdir(empty, { recursive: true });
+    await writeFile(join(empty, "notes.txt"), "not markdown");
+
+    await expect(collectMarkdownFiles(empty)).rejects.toThrow(
+      `No Markdown files found under ${empty}.`,
+    );
   });
 });
 
