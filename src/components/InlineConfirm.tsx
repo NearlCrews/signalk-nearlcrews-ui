@@ -5,6 +5,7 @@ import {
   type RefAttributes,
   type RefObject,
   useEffect,
+  useEffectEvent,
   useId,
   useRef,
 } from "react";
@@ -162,9 +163,11 @@ export function InlineConfirm({
     returnFocusRef,
   });
 
-  useEffect(() => {
-    if (!effectiveOpen) return;
-
+  // The first stop is read as the region opens, so the effect watches the open
+  // state alone: a caller passing a fresh `{ current: node }` object each
+  // render would otherwise have focus pulled back to it on every commit, out
+  // of whatever the user had moved on to inside the confirmation.
+  const focusOnOpen = useEffectEvent((): void => {
     const container = containerRef.current;
     if (container === null) return;
 
@@ -180,7 +183,11 @@ export function InlineConfirm({
     // Confirm blocks activation through aria-disabled rather than leaving the
     // tab order, so whatever the user focused stays focused.
     (initialFocusRef?.current ?? container).focus();
-  }, [effectiveOpen, initialFocusRef]);
+  });
+
+  useEffect(() => {
+    if (effectiveOpen) focusOnOpen();
+  }, [effectiveOpen]);
 
   const cancel = (reason: InlineConfirmCancelReason): void => {
     commitOpen(false);

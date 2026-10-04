@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef, Fragment } from "react";
+import { createRef, Fragment, type RefObject } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Button, InlineConfirm, PanelRoot } from "../../src/index.js";
 import { COMPONENT_STYLES } from "../../src/styles/components.js";
@@ -16,23 +16,9 @@ const ROUTE_CONFIRM = {
 
 // This block runs first on purpose: the generic-confirmation warning is
 // reported once per module, so a later test would find it already spent.
+// The order inside the block matters for the same reason: the case that
+// expects silence runs before the case that spends the warning.
 describe("InlineConfirm destructive labeling", () => {
-  it("reports a destructive confirmation that names no consequence", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    renderInPanel(
-      <InlineConfirm
-        open
-        message="This removes the cached source."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
-    );
-
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringContaining('labeled "Confirm"'),
-    );
-  });
-
   it("says nothing about a confirmation that names its consequence", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     renderInPanel(
@@ -49,6 +35,22 @@ describe("InlineConfirm destructive labeling", () => {
     expect(
       screen.getByRole("button", { name: "Delete route" }),
     ).toBeInTheDocument();
+  });
+
+  it("reports a destructive confirmation that names no consequence", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <InlineConfirm
+        open
+        message="This removes the cached source."
+        onCancel={vi.fn()}
+        onConfirm={vi.fn()}
+      />,
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('labeled "Confirm"'),
+    );
   });
 });
 
@@ -312,6 +314,41 @@ describe("inline confirmation upgrades", () => {
     );
 
     expect(initialFocusRef.current).toHaveFocus();
+  });
+
+  it("moves focus once when the first stop arrives as a new ref object", () => {
+    const scrollIntoView = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoView;
+    const details = createRef<HTMLButtonElement>();
+    const onCancel = vi.fn();
+    const onConfirm = vi.fn();
+    const confirmation = (
+      initialFocusRef: RefObject<HTMLElement | null>,
+    ): React.JSX.Element => (
+      <InlineConfirm
+        open
+        initialFocusRef={initialFocusRef}
+        message={
+          <button ref={details} type="button">
+            Review details
+          </button>
+        }
+        onCancel={onCancel}
+        onConfirm={onConfirm}
+      />
+    );
+    const { rerender } = renderInPanel(confirmation(details));
+    expect(details.current).toHaveFocus();
+
+    const cancel = screen.getByRole("button", { name: "Cancel" });
+    cancel.focus();
+
+    // A caller that builds the ref inline hands over a new object on every
+    // render. The region is already open, so the user's place inside it holds.
+    rerender(panel(confirmation({ current: details.current })));
+
+    expect(cancel).toHaveFocus();
+    expect(scrollIntoView).toHaveBeenCalledOnce();
   });
 
   it("returns focus to the requested destination after close", () => {

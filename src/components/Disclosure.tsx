@@ -129,6 +129,10 @@ export function useDisclosure({
     returnFocusRef: triggerRef,
   });
 
+  // The last committed state, so a lost trigger is reported for a close and
+  // never for a panel that mounted closed, where nothing was handed back.
+  const wasOpenRef = useRef(effectiveOpen);
+
   /*
    * The panel takes focus for a press, in the commit phase, so the latch is
    * consumed before the microtask that drops it. Declared after the handoff
@@ -136,8 +140,12 @@ export function useDisclosure({
    */
   useLayoutEffect(() => {
     const pressed = openIntent.consume(effectiveOpen);
+    const closed = wasOpenRef.current && !effectiveOpen;
+    wasOpenRef.current = effectiveOpen;
     if (!effectiveOpen) {
-      if (triggerRef.current === null) warnLostTrigger(panelRef.current);
+      if (closed && triggerRef.current === null) {
+        warnLostTrigger(panelRef.current);
+      }
       return;
     }
     if (pressed) panelRef.current?.focus();
@@ -187,8 +195,8 @@ export function useDisclosure({
  * Reports a close that had nowhere to hand focus back to. The trigger is the
  * documented destination, so a pair that unmounts it along with the panel
  * drops the reader on the body with no keyboard route back. Reported only
- * when focus actually landed there, because a trigger that has simply not
- * mounted yet takes nothing away from anyone.
+ * when focus actually landed there, because a close while the user is
+ * somewhere else takes nothing away from anyone.
  */
 function warnLostTrigger(panelNode: HTMLElement | null): void {
   if (panelNode === null || !focusIsOnBody(panelNode.ownerDocument)) return;

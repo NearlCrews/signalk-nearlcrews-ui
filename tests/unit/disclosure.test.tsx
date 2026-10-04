@@ -559,3 +559,50 @@ describe("useDisclosure", () => {
     expect(onOpenChange).not.toHaveBeenCalled();
   });
 });
+
+// The lost-trigger warning is reported once per module, so the case that
+// expects silence runs before the case that spends it.
+describe("useDisclosure lost trigger report", () => {
+  function Pair({
+    open,
+    withTrigger,
+  }: {
+    readonly open: boolean;
+    readonly withTrigger: boolean;
+  }): React.JSX.Element {
+    const { panelProps, triggerProps } = useDisclosure({ open });
+    return (
+      <div>
+        {withTrigger ? (
+          <button type="button" {...triggerProps}>
+            Details
+          </button>
+        ) : null}
+        <div {...panelProps}>Detail body</div>
+      </div>
+    );
+  }
+
+  it("says nothing when a closed panel mounts before its trigger", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    render(<Pair open={false} withTrigger={false} />);
+
+    // Focus rests on the body, as on any freshly loaded page, and nothing
+    // closed, so there is no handoff to have lost.
+    expect(document.body).toHaveFocus();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("reports a close that takes the trigger away and leaves focus on the body", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const { rerender } = render(<Pair open withTrigger />);
+    expect(warn).not.toHaveBeenCalled();
+
+    rerender(<Pair open={false} withTrigger={false} />);
+
+    expect(document.body).toHaveFocus();
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("trigger is no longer mounted"),
+    );
+  });
+});
