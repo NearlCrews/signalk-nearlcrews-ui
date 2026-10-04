@@ -28,7 +28,7 @@ The package is an npm dependency only. Do not add Signal K plugin keywords, App 
 
 ## npm trusted publishing
 
-The package is already established on npm. Keep one [GitHub Actions trusted publisher](https://docs.npmjs.com/trusted-publishers) for this package, configured with the `NearlCrews/signalk-nearlcrews-ui` repository, `.github/workflows/npm-publish.yml`, and the protected `npm` environment.
+The package is already established on npm. Keep one [GitHub Actions trusted publisher](https://docs.npmjs.com/trusted-publishers/) for this package, configured with the `NearlCrews/signalk-nearlcrews-ui` repository, `.github/workflows/npm-publish.yml`, and the protected `npm` environment.
 
 Normal publication starts with an approved `v<version>` GitHub Release. The workflow verifies, tests, packs, and publishes the exact artifact with OIDC provenance. Its publish job needs `id-token: write` and `contents: read`; it does not need an npm token. Do not publish a normal release from a local npm session.
 
