@@ -6,32 +6,28 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, describe, expect, it } from "vitest";
 
 import {
-  installDomStubs,
   renderModulePanelRemote,
   renderModuleRemoteInRealm,
 } from "../../bin/lib/module-runtime.mjs";
 import {
-  CONTAINER_RUNTIME,
-  checkConsumer,
+  createPanelContext,
+  disposePanelContext,
+  HOST_STATES,
+  installDomStubs,
+} from "../../bin/lib/panel-runtime.mjs";
+import {
   createConsumer,
-  EXPOSES,
+  ENTRY_PREAMBLE,
+  EXPOSED_MODULE,
+  REACT_PACKAGES,
+  REMOTE_ENTRY,
   removeConsumers,
-  SHARE_REGISTRATIONS,
+  runRuntimeCli,
   STAMP,
 } from "./lib/consumer-fixture.mjs";
 
-/** React, react-dom, and what react-dom/server loads beside them. */
-const REACT_PACKAGES = ["react", "react-dom", "scheduler"];
-
-const EXPOSED_MODULE = "./PluginConfigurationPanel";
-
-const STATES = [
-  {
-    description: "configuration undefined",
-    props: { configuration: undefined },
-  },
-  { description: "configuration {}", props: { configuration: {} } },
-];
+/** Stands in for the file URL a worker imports the built entry from. */
+const ENTRY_URL = "file:///plugins/panel/public/remoteEntry.js";
 
 /**
  * A remote built as an ES module in a package whose type is "module": an entry
@@ -58,9 +54,7 @@ export function panelModule(React) {
 }
 `,
     "main.css": ".row.row{gap:var(--snui-space-2)}",
-    "remoteEntry.js": `${SHARE_REGISTRATIONS}
-${CONTAINER_RUNTIME}
-${EXPOSES}
+    "remoteEntry.js": `${ENTRY_PREAMBLE}
 ${entryPrelude}
 let sharedReact = null;
 function loadStylesheet() {
@@ -96,6 +90,30 @@ function moduleConsumer(options = {}) {
   });
 }
 
+/** Renders in a realm the test passes, with the suite's own React. */
+function renderInRealm(options) {
+  return renderModuleRemoteInRealm({
+    entryUrl: ENTRY_URL,
+    exposedModule: EXPOSED_MODULE,
+    react: React,
+    reactDom: ReactDOM,
+    renderToStaticMarkup,
+    states: HOST_STATES,
+    ...options,
+  });
+}
+
+/** Renders a consumer's built remote in a worker, as the command line does. */
+function renderInWorker(root, options = {}) {
+  return renderModulePanelRemote({
+    entryPath: join(root, REMOTE_ENTRY),
+    exposedModule: EXPOSED_MODULE,
+    root,
+    states: HOST_STATES,
+    ...options,
+  });
+}
+
 afterAll(removeConsumers);
 
 describe("renderModuleRemoteInRealm", () => {
@@ -125,16 +143,10 @@ describe("renderModuleRemoteInRealm", () => {
     const realm = {};
     const stages = [];
 
-    const result = await renderModuleRemoteInRealm({
-      entryUrl: "file:///plugins/panel/public/remoteEntry.js",
-      exposedModule: EXPOSED_MODULE,
+    const result = await renderInRealm({
       globalObject: realm,
       importEntry: async () => namespaceFor(realm),
       onStage: (stage) => stages.push(stage),
-      react: React,
-      reactDom: ReactDOM,
-      renderToStaticMarkup,
-      states: STATES,
     });
 
     expect(stages).toEqual(["evaluate", "load", "render"]);
@@ -149,15 +161,9 @@ describe("renderModuleRemoteInRealm", () => {
 
   it("names an entry that exports no container", async () => {
     await expect(
-      renderModuleRemoteInRealm({
-        entryUrl: "file:///plugins/panel/public/remoteEntry.js",
-        exposedModule: EXPOSED_MODULE,
+      renderInRealm({
         globalObject: {},
         importEntry: async () => ({ get: () => {} }),
-        react: React,
-        reactDom: ReactDOM,
-        renderToStaticMarkup,
-        states: STATES,
       }),
     ).rejects.toThrow(
       "The panel remote did not load: remoteEntry.js does not export get and init, which the Signal K Admin reads off a module remote.",
@@ -174,16 +180,29 @@ describe("installDomStubs", () => {
     });
     realm.fetch = () => "network";
 
-    installDomStubs(realm, "file:///plugins/panel/public/remoteEntry.js");
+    installDomStubs(realm, ENTRY_URL);
 
-    expect(realm.document.currentScript.src).toBe(
-      "file:///plugins/panel/public/remoteEntry.js",
-    );
+    expect(realm.document.currentScript.src).toBe(ENTRY_URL);
     expect(() => realm.fetch("/plugins")).toThrow(
       "The panel fetched while it rendered.",
     );
     expect(typeof realm.CSSScopeRule).toBe("function");
     expect(realm.navigator.userAgent).toBe("Node.js");
+  });
+
+  it("keeps a worker's new stubs out of its keys, and a classic context's in them", () => {
+    const worker = { fetch: () => "network" };
+    installDomStubs(worker, ENTRY_URL);
+    expect(Object.keys(worker)).toEqual(["fetch"]);
+
+    const context = createPanelContext({ scriptUrl: ENTRY_URL });
+    try {
+      expect(Object.keys(context)).toEqual(
+        expect.arrayContaining(["document", "fetch", "self", "window"]),
+      );
+    } finally {
+      disposePanelContext(context);
+    }
   });
 });
 
@@ -191,12 +210,7 @@ describe("renderModulePanelRemote", () => {
   it("renders a module remote in a worker, stylesheet and chunk included", async () => {
     const root = moduleConsumer();
 
-    const result = await renderModulePanelRemote({
-      entryPath: join(root, "public", "remoteEntry.js"),
-      exposedModule: EXPOSED_MODULE,
-      root,
-      states: STATES,
-    });
+    const result = await renderInWorker(root);
 
     expect(result.compatibility.markup).toContain(
       "data-browser-compatibility-message",
@@ -208,15 +222,7 @@ describe("renderModulePanelRemote", () => {
   it("stops a remote that never finishes evaluating", async () => {
     const root = moduleConsumer({ entryPrelude: "for (;;) {}" });
 
-    await expect(
-      renderModulePanelRemote({
-        entryPath: join(root, "public", "remoteEntry.js"),
-        exposedModule: EXPOSED_MODULE,
-        root,
-        states: STATES,
-        timeoutMs: 1000,
-      }),
-    ).rejects.toThrow(
+    await expect(renderInWorker(root, { timeoutMs: 1000 })).rejects.toThrow(
       "The panel remote did not load: remoteEntry.js did not finish evaluating within 1000ms.",
     );
   });
@@ -224,14 +230,7 @@ describe("renderModulePanelRemote", () => {
   it("reports a worker that exits before it answers", async () => {
     const root = moduleConsumer({ entryPrelude: "process.exit(3);" });
 
-    await expect(
-      renderModulePanelRemote({
-        entryPath: join(root, "public", "remoteEntry.js"),
-        exposedModule: EXPOSED_MODULE,
-        root,
-        states: STATES,
-      }),
-    ).rejects.toThrow(
+    await expect(renderInWorker(root)).rejects.toThrow(
       "The render worker exited with code 3 before it answered.",
     );
   });
@@ -242,37 +241,24 @@ describe("renderModulePanelRemote", () => {
         'setTimeout(() => { throw new Error("Timer threw"); }, 0);\nawait new Promise(() => {});',
     });
 
-    await expect(
-      renderModulePanelRemote({
-        entryPath: join(root, "public", "remoteEntry.js"),
-        exposedModule: EXPOSED_MODULE,
-        root,
-        states: STATES,
-      }),
-    ).rejects.toThrow("The panel remote did not load: Timer threw.");
+    await expect(renderInWorker(root)).rejects.toThrow(
+      "The panel remote did not load: Timer threw.",
+    );
   });
 
   it("reports a failure the worker caught", async () => {
     const root = moduleConsumer();
 
     await expect(
-      renderModulePanelRemote({
-        entryPath: join(root, "public", "remoteEntry.js"),
-        exposedModule: "./Missing",
-        root,
-        states: STATES,
-      }),
+      renderInWorker(root, { exposedModule: "./Missing" }),
     ).rejects.toThrow("The panel remote did not load: no module ./Missing.");
   });
 
   it("runs from the command line for a module package", () => {
     const root = moduleConsumer();
 
-    const result = checkConsumer(
+    const result = runRuntimeCli(
       root,
-      "--runtime",
-      "--expose",
-      EXPOSED_MODULE,
       "--props",
       '{"configuration":{"label":"Two conversions"}}',
       "--expect",

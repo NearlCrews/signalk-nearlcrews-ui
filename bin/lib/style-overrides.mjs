@@ -22,6 +22,7 @@ import { dirname, join, relative, resolve } from "node:path";
 
 import { PACKAGE_NAME } from "./consumer-checks.mjs";
 import { readCss, singleClassOf } from "./css-source.mjs";
+import { escapeRegExp } from "./regexp.mjs";
 
 /** Source files a panel's components live in. */
 const COMPONENT_FILE = /\.[cm]?[jt]sx?$/;
@@ -29,14 +30,14 @@ const COMPONENT_FILE = /\.[cm]?[jt]sx?$/;
 /** The CSS modules the check reads rules from. */
 const CSS_MODULE_FILE = /\.module\.css$/;
 
-/** Every file under `directory` that `pattern` matches, skipping dependencies. */
-function filesUnder(directory, pattern) {
+/** Every file under `directory`, skipping dependencies and dot entries. */
+function filesUnder(directory) {
   const found = [];
   for (const entry of readdirSync(directory, { withFileTypes: true })) {
     if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
     const path = join(directory, entry.name);
-    if (entry.isDirectory()) found.push(...filesUnder(path, pattern));
-    else if (pattern.test(entry.name)) found.push(path);
+    if (entry.isDirectory()) found.push(...filesUnder(path));
+    else found.push(path);
   }
   return found;
 }
@@ -82,7 +83,7 @@ function opensRegex(source, index) {
  * a line break, which keeps an apostrophe in JSX text from reaching past its
  * own line.
  */
-function skipLiteral(source, index, closing, singleLine) {
+function skipLiteral(source, index, closing) {
   let position = index;
   let inClass = false;
   while (position < source.length) {
@@ -91,7 +92,7 @@ function skipLiteral(source, index, closing, singleLine) {
       position += 2;
       continue;
     }
-    if (singleLine && character === "\n") return position;
+    if (character === "\n") return position;
     if (closing === "/") {
       if (character === "[") inClass = true;
       else if (character === "]") inClass = false;
@@ -169,11 +170,9 @@ function opensCommentAt(source, position) {
  * `//` or `/*` after a space or a bracket, a glued `//` followed by
  * whitespace, and a glued `/*` that a comment close ends on its own line,
  * as in the empty comment a glob such as `src/**` followed by `/*.ts` holds,
- * or in a path such as `vessels/*.nav.*` followed by `/x`. That is why the
- * imports, which come before any markup, are read from its output, while
- * class reads, their line numbers, and the tag of any read it blanked come
- * from the source as written; only a read it kept has its tag looked up in
- * the output first.
+ * or in a path such as `vessels/*.nav.*` followed by `/x`. That is why
+ * `findClassesOnPackageComponents` takes only some of its reads from this
+ * output, and says which.
  *
  * Reading source with its comments gone is what lets the import patterns
  * below stay simple: a comment can neither start a match at the word
@@ -229,11 +228,11 @@ export function blankScriptComments(source) {
       blank(position, stop);
       position = stop;
     } else if (character === "'" || character === '"') {
-      position = skipLiteral(source, position + 1, character, true);
+      position = skipLiteral(source, position + 1, character);
     } else if (character === "`") {
       position = skipTemplate(position + 1);
     } else if (character === "/" && opensRegex(source, position)) {
-      position = skipLiteral(source, position + 1, "/", true);
+      position = skipLiteral(source, position + 1, "/");
     } else if (substitutions.length > 0 && character === "{") {
       substitutions[substitutions.length - 1] += 1;
       position += 1;
@@ -280,8 +279,28 @@ const CSS_MODULE_IMPORT = new RegExp(
 
 /** An import specifier from this package or one of its entry points. */
 const PACKAGE_SPECIFIER = new RegExp(
-  `^${PACKAGE_NAME.replaceAll("-", "\\-")}(?:/[\\w-]+)?$`,
+  `^${escapeRegExp(PACKAGE_NAME)}(?:/[\\w-]+)?$`,
 );
+
+/**
+ * What an import clause binds: its default binding, its namespace binding,
+ * and its named imports as `[imported, local]` pairs.
+ */
+function readImportClause(clause) {
+  const braces = /\{([^}]*)\}/.exec(clause)?.[1];
+  const named = [];
+  for (const entry of braces?.split(",") ?? []) {
+    const words = entry.trim().split(/\s+/);
+    if (words[0] === "") continue;
+    const [imported, , local = imported] = words;
+    named.push([imported, local]);
+  }
+  return {
+    defaultBinding: /^([\w$]+)\s*(?:,|$)/.exec(clause.trim())?.[1],
+    named,
+    namespace: /\*\s*as\s+([\w$]+)/.exec(clause)?.[1],
+  };
+}
 
 /** The package imports of code whose comments are already blanked. */
 function readPackageImports(code) {
@@ -290,14 +309,11 @@ function readPackageImports(code) {
   for (const match of code.matchAll(IMPORT_STATEMENT)) {
     const [, typeOnly, clause, specifier] = match;
     if (typeOnly !== undefined || !PACKAGE_SPECIFIER.test(specifier)) continue;
-    const namespace = /\*\s*as\s+([\w$]+)/.exec(clause)?.[1];
+    const { named: pairs, namespace } = readImportClause(clause);
     if (namespace !== undefined) namespaces.add(namespace);
-    const braces = /\{([^}]*)\}/.exec(clause)?.[1];
-    for (const entry of braces?.split(",") ?? []) {
-      const words = entry.trim().split(/\s+/);
-      if (words[0] === "type" || words[0] === "") continue;
-      const [exported, , local = exported] = words;
-      named.set(local, exported);
+    for (const [exported, local] of pairs) {
+      // An inline `type` import brings in no component either.
+      if (exported !== "type") named.set(local, exported);
     }
   }
   return { named, namespaces };
@@ -321,15 +337,10 @@ function readCssModuleImports(code, file) {
       ? resolve(dirname(file), specifier)
       : undefined;
     const module = { specifier, ...(path === undefined ? {} : { path }) };
-    const object =
-      /\*\s*as\s+([\w$]+)/.exec(clause)?.[1] ??
-      /^([\w$]+)\s*(?:,|$)/.exec(clause.trim())?.[1];
+    const { defaultBinding, named, namespace } = readImportClause(clause);
+    const object = namespace ?? defaultBinding;
     if (object !== undefined) imports.push({ binding: object, ...module });
-    const braces = /\{([^}]*)\}/.exec(clause)?.[1];
-    for (const entry of braces?.split(",") ?? []) {
-      const words = entry.trim().split(/\s+/);
-      if (words[0] === "") continue;
-      const [key, , binding = key] = words;
+    for (const [key, binding] of named) {
       imports.push({ binding, key, ...module });
     }
   }
@@ -434,9 +445,9 @@ function lineOf(source, index) {
   return source.slice(0, index).split("\n").length;
 }
 
-/** A binding as a regular expression source, `$` escaped. */
+/** A binding as a regular expression source, at the start of a name. */
 function bindingPattern(binding) {
-  return `(?<![\\w$.])${binding.replaceAll("$", "\\$")}`;
+  return `(?<![\\w$.])${escapeRegExp(binding)}`;
 }
 
 /**
@@ -487,9 +498,7 @@ export function findClassesOnPackageComponents(file, source) {
   // blanked sits in a comment, or after JSX text the blanker took for one
   // (see blankScriptComments), where the blanked text would hand it to
   // whatever tag was still open before the blanking began; its tag comes
-  // from the source as written. A URL, and a path pattern or glob with no
-  // comment close after it on its line, open no comment, so they blank
-  // nothing.
+  // from the source as written.
   const code = blankScriptComments(source);
   const { named, namespaces } = readPackageImports(code);
   if (named.size === 0 && namespaces.size === 0) return [];
@@ -544,7 +553,7 @@ export function singleClassSelectorsOf(source) {
  * findings as sentences and the number of CSS modules read.
  */
 export function findSingleClassOverrides(directory, root = directory) {
-  const cssModules = filesUnder(directory, CSS_MODULE_FILE);
+  const files = filesUnder(directory);
   const singleClasses = new Map();
   // A component may import a module from outside the directory, so modules
   // are read as their importers name them rather than only from the listing.
@@ -560,7 +569,7 @@ export function findSingleClassOverrides(directory, root = directory) {
     return singleClasses.get(path);
   };
   const findings = new Set();
-  for (const file of filesUnder(directory, COMPONENT_FILE)) {
+  for (const file of files.filter((path) => COMPONENT_FILE.test(path))) {
     const source = readFileSync(file, "utf8");
     for (const placement of findClassesOnPackageComponents(file, source)) {
       const declared =
@@ -589,7 +598,10 @@ export function findSingleClassOverrides(directory, root = directory) {
       }
     }
   }
-  return { cssModules: cssModules.length, findings: [...findings] };
+  return {
+    cssModules: files.filter((path) => CSS_MODULE_FILE.test(path)).length,
+    findings: [...findings],
+  };
 }
 
 /**

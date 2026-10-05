@@ -36,16 +36,34 @@ export const REACT_RUNTIME_MARKERS = Object.freeze([
 /** The attribute every PanelRoot stamps with the package version it renders. */
 export const VERSION_STAMP_ATTRIBUTE = "data-snui-version";
 
+/** A stamped version: three numeric parts and any suffix that follows them. */
+const STAMPED_VERSION = String.raw`\d+\.\d+\.\d+[\w.+-]*`;
+
 const VERSION_STAMP_PATTERNS = [
   // JSX prop literal after minification: "data-snui-version":"0.9.0"
-  /"data-snui-version"\s*:\s*"(?<version>\d+\.\d+\.\d+[\w.+-]*)"/g,
+  new RegExp(
+    String.raw`"${VERSION_STAMP_ATTRIBUTE}"\s*:\s*"(?<version>${STAMPED_VERSION})"`,
+    "g",
+  ),
   // Attribute comparison: "0.9.0"===node.getAttribute("data-snui-version")
-  /"(?<version>\d+\.\d+\.\d+[\w.+-]*)"\s*===?\s*\w+\.getAttribute\("data-snui-version"\)/g,
+  new RegExp(
+    String.raw`"(?<version>${STAMPED_VERSION})"\s*===?\s*\w+\.getAttribute\("${VERSION_STAMP_ATTRIBUTE}"\)`,
+    "g",
+  ),
   // Attribute selector in a style string: [data-snui-version="0.9.0"]. The
   // quote is captured and backreferenced because a minifier may rewrite the
   // style string with single quotes, escaped or not.
-  /\[data-snui-version=(?<quote>\\?["'])(?<version>\d+\.\d+\.\d+[\w.+-]*)\k<quote>\]/g,
+  new RegExp(
+    String.raw`\[${VERSION_STAMP_ATTRIBUTE}=(?<quote>\\?["'])(?<version>${STAMPED_VERSION})\k<quote>\]`,
+    "g",
+  ),
 ];
+
+// Rendered attribute: data-snui-version="0.9.0"
+const MARKUP_VERSION_STAMP = new RegExp(
+  `${VERSION_STAMP_ATTRIBUTE}="(?<version>${STAMPED_VERSION})"`,
+  "g",
+);
 
 function assertExactVersion(version, source) {
   if (typeof version !== "string" || !EXACT_VERSION.test(version)) {
@@ -53,7 +71,6 @@ function assertExactVersion(version, source) {
       `${PACKAGE_NAME} in ${source} must be pinned to an exact version such as 0.9.0, got ${String(version)}. A prerelease such as 0.11.0-rc.1 is exact too; a range is not. The package ships breaking changes in minor releases, so a range would let an unreviewed upgrade reach the panel.`,
     );
   }
-  return version;
 }
 
 /**
@@ -157,6 +174,15 @@ export function findVersionStamps(source) {
     }
   }
   return versions;
+}
+
+/** Versions stamped on rendered markup, by this package and by any other. */
+export function markupVersionStamps(markup) {
+  return new Set(
+    [...markup.matchAll(MARKUP_VERSION_STAMP)].map(
+      (match) => match.groups.version,
+    ),
+  );
 }
 
 /**
@@ -293,16 +319,30 @@ export function findConsumedShares(remoteEntrySource) {
   return consumed;
 }
 
+/**
+ * Asserts `names` are exactly the names of the published share map, and
+ * returns those in order. `subject` opens the sentence that lists what was
+ * found instead.
+ */
+function assertShareNames(names, shared, subject) {
+  const expectedNames = Object.keys(shared).sort();
+  const foundNames = [...names].sort();
+  if (foundNames.join() !== expectedNames.join()) {
+    throw new Error(
+      `${subject} ${foundNames.join(", ") || "(none)"}; the published share map is ${expectedNames.join(", ")}.`,
+    );
+  }
+  return expectedNames;
+}
+
 /** Asserts the remote consumes exactly the published share map. */
 export function assertConsumedShares(remoteEntrySource, shared, parseRange) {
   const consumed = findConsumedShares(remoteEntrySource);
-  const expectedNames = Object.keys(shared).sort();
-  const consumedNames = [...consumed.keys()].sort();
-  if (consumedNames.join() !== expectedNames.join()) {
-    throw new Error(
-      `The built remote consumes host shares ${consumedNames.join(", ") || "(none)"}; the published share map is ${expectedNames.join(", ")}.`,
-    );
-  }
+  const expectedNames = assertShareNames(
+    consumed.keys(),
+    shared,
+    "The built remote consumes host shares",
+  );
   for (const name of expectedNames) {
     const expected = encodeRequiredVersion(
       shared[name].requiredVersion,
@@ -330,13 +370,11 @@ export function assertConfiguredShares(configuredShared, shared) {
       "The Webpack configuration gives ModuleFederationPlugin an array shared option, which cannot carry the singleton and requiredVersion settings this package needs. Spread `shared` from signalk-nearlcrews-ui/federation instead.",
     );
   }
-  const expectedNames = Object.keys(shared).sort();
-  const configuredNames = Object.keys(configuredShared).sort();
-  if (configuredNames.join() !== expectedNames.join()) {
-    throw new Error(
-      `The Webpack configuration shares ${configuredNames.join(", ") || "(none)"}; the published share map is ${expectedNames.join(", ")}.`,
-    );
-  }
+  const expectedNames = assertShareNames(
+    Object.keys(configuredShared),
+    shared,
+    "The Webpack configuration shares",
+  );
   for (const name of expectedNames) {
     const configured = configuredShared[name];
     const expected = shared[name];

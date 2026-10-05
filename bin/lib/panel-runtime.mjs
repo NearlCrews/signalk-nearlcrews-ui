@@ -21,9 +21,11 @@ import vm from "node:vm";
 
 import {
   assertOnlyVersionStamp,
+  markupVersionStamps,
   PACKAGE_NAME,
   VERSION_STAMP_ATTRIBUTE,
 } from "./consumer-checks.mjs";
+import { REMOTE_ENTRY_NAME } from "./host-loading.mjs";
 
 /**
  * Globals Node and the browser both provide, passed through unchanged. These
@@ -181,8 +183,39 @@ export function createDomStubs(scriptUrl) {
 export const COMPATIBILITY_NOTICE_MARKER = "data-browser-compatibility-message";
 
 /** Stands in for the script the Signal K Admin host loads the panel from. */
-export const DEFAULT_SCRIPT_URL =
-  "http://localhost/plugins/panel/remoteEntry.js";
+export const DEFAULT_SCRIPT_URL = `http://localhost/plugins/panel/${REMOTE_ENTRY_NAME}`;
+
+/**
+ * Puts the DOM stubs on a realm's global: the classic context below, or a
+ * worker's own global for a module remote. Node 22 and later define
+ * `navigator` as a getter on the global and no `self` at all, so every stub is
+ * defined as a property rather than assigned, which also replaces Node's own
+ * `fetch` with the stub that turns a render reaching the network into a
+ * finding. The classic context's stubs are enumerable, like the host globals
+ * and timers assigned to its sandbox. A worker's leave the attribute alone, so
+ * a new stub stays out of the global's keys and Node's own `fetch` keeps its
+ * place in them.
+ */
+export function installDomStubs(
+  globalObject,
+  scriptUrl,
+  { enumerable = false } = {},
+) {
+  const stubs = createDomStubs(scriptUrl);
+  const attributes = enumerable
+    ? { configurable: true, enumerable: true, writable: true }
+    : { configurable: true, writable: true };
+  const define = (name, value) => {
+    Object.defineProperty(globalObject, name, { ...attributes, value });
+  };
+  define("document", stubs.document);
+  define("window", globalObject);
+  define("self", globalObject);
+  for (const [name, value] of Object.entries(stubs.window)) {
+    define(name, value);
+  }
+  setNativeCssScope(globalObject, true);
+}
 
 /**
  * A context that answers what a panel remote reads at import and render time.
@@ -191,8 +224,7 @@ export const DEFAULT_SCRIPT_URL =
  * container assigns itself to `window`.
  */
 export function createPanelContext({ scriptUrl = DEFAULT_SCRIPT_URL } = {}) {
-  const stubs = createDomStubs(scriptUrl);
-  const sandbox = { document: stubs.document };
+  const sandbox = {};
   for (const name of HOST_GLOBALS) {
     if (name in globalThis) sandbox[name] = globalThis[name];
   }
@@ -212,11 +244,8 @@ export function createPanelContext({ scriptUrl = DEFAULT_SCRIPT_URL } = {}) {
 
   const context = vm.createContext(sandbox);
   CONTEXT_TIMERS.set(context, timers);
-  context.self = context;
-  context.window = context;
   context.globalThis = context;
-  Object.assign(context, stubs.window);
-  setNativeCssScope(context, true);
+  installDomStubs(context, scriptUrl, { enumerable: true });
   return context;
 }
 
@@ -291,14 +320,16 @@ const MODULE_SYNTAX =
   /(?:^|[\s;}])(?:export\s*(?:\{|\*|default[\s({[]|(?:const|let|var|function|class|async)\b)|import\s*(?:\{|\*|["'])|import\s+[\w$]+\s*(?:,|from\b))/;
 
 /**
- * Compiles one built file as the classic script the Signal K Admin host loads
- * for a package without `"type": "module"`. An ES module there is a build the
- * Admin cannot run, so it is named as such rather than left as a bare
- * SyntaxError.
+ * Runs one built file in the context as the classic script the Signal K Admin
+ * host loads for a package without `"type": "module"`. An ES module there is a
+ * build the Admin cannot run, so a file that does not compile is named as such
+ * rather than left as a bare SyntaxError. What the script throws while it runs
+ * is the caller's to report.
  */
-function compileClassicScript(name, source) {
+function runClassicScript({ context, name, source, timeoutMs }) {
+  let script;
   try {
-    return new vm.Script(source, { filename: name });
+    script = new vm.Script(source, { filename: name });
   } catch (cause) {
     if (MODULE_SYNTAX.test(source)) {
       throw new Error(
@@ -308,6 +339,21 @@ function compileClassicScript(name, source) {
     }
     throw cause;
   }
+  script.runInContext(context, { timeout: timeoutMs });
+}
+
+/**
+ * Whether a value is a Module Federation container as the Admin loader takes
+ * one: an object, a module namespace included, whose `get` and `init` are
+ * functions.
+ */
+export function isContainer(value) {
+  return (
+    value !== null &&
+    typeof value === "object" &&
+    typeof value.get === "function" &&
+    typeof value.init === "function"
+  );
 }
 
 /**
@@ -315,28 +361,47 @@ function compileClassicScript(name, source) {
  * assigned to `containerName`, the global the Admin reads it from. The entry
  * is the small container runtime and loads no chunk while it evaluates.
  */
-export function evaluateClassicContainer({
+function evaluateClassicContainer({
   containerName,
   context,
   entryName,
   source,
   timeoutMs = DEFAULT_TIMEOUT_MS,
 }) {
-  compileClassicScript(entryName, source).runInContext(context, {
-    timeout: timeoutMs,
-  });
+  runClassicScript({ context, name: entryName, source, timeoutMs });
   const container = context[containerName];
-  if (
-    container === null ||
-    typeof container !== "object" ||
-    typeof container.get !== "function" ||
-    typeof container.init !== "function"
-  ) {
+  if (!isContainer(container)) {
     throw new Error(
       `${entryName} did not assign a container with get and init to window.${containerName}, the global the Signal K Admin reads a classic remote from: the package name with -, @, and / replaced by underscores. Name the Webpack container ${containerName}, or pass --container for a host that loads it under another name.`,
     );
   }
   return container;
+}
+
+/**
+ * Asserts a classic remote entry, evaluated alone, assigns its container to
+ * the global the Admin reads. The context lasts for the one evaluation and is
+ * disposed whether or not the entry loads, so a timer the entry scheduled
+ * cannot keep the caller from exiting.
+ */
+export function assertClassicContainerLoads({
+  containerName,
+  entryName,
+  source,
+  timeoutMs,
+}) {
+  const context = createPanelContext();
+  try {
+    evaluateClassicContainer({
+      containerName,
+      context,
+      entryName,
+      source,
+      timeoutMs,
+    });
+  } finally {
+    disposePanelContext(context);
+  }
 }
 
 /**
@@ -425,9 +490,7 @@ async function loadPanelModule({
     beforeGet: () => {
       for (const { name, source } of bundles) {
         if (name !== entryName) {
-          compileClassicScript(name, source).runInContext(context, {
-            timeout: timeoutMs,
-          });
+          runClassicScript({ context, name, source, timeoutMs });
         }
       }
     },
@@ -465,15 +528,6 @@ export function panelComponentOf(panelModule, exposedModule) {
     );
   }
   return component;
-}
-
-/** Versions stamped on rendered markup, by this package and by any other. */
-function markupVersionStamps(markup) {
-  return new Set(
-    [...markup.matchAll(/data-snui-version="(\d+\.\d+\.\d+[\w.+-]*)"/g)].map(
-      (match) => match[1],
-    ),
-  );
 }
 
 /**
@@ -525,6 +579,34 @@ export function failureOf(cause) {
   return missingGlobal
     ? `${sentence} A global the panel reached for at import time may be missing: the DOM stubs in bin/lib/panel-runtime.mjs are where one goes.`
     : sentence;
+}
+
+/** The error every way a remote fails to load is reported as. */
+export function panelLoadError(cause) {
+  return new Error(`The panel remote did not load: ${failureOf(cause)}`, {
+    cause,
+  });
+}
+
+/**
+ * The consumer's own React, React DOM, and static renderer, which the panel
+ * renders with as it does in the Admin. `consumerRequire` resolves from the
+ * consumer's root.
+ */
+export function loadConsumerReact(consumerRequire) {
+  try {
+    return {
+      react: consumerRequire("react"),
+      reactDom: consumerRequire("react-dom"),
+      renderToStaticMarkup:
+        consumerRequire("react-dom/server").renderToStaticMarkup,
+    };
+  } catch (cause) {
+    throw new Error(
+      `--runtime renders the panel with the consumer's own React, which is not installed: ${cause.message}`,
+      { cause },
+    );
+  }
 }
 
 /**
@@ -610,7 +692,7 @@ export function renderPanelStates({
 export async function renderPanelRemote({
   bundles,
   containerName,
-  entryName = "remoteEntry.js",
+  entryName = REMOTE_ENTRY_NAME,
   exposedModule,
   react,
   reactDom,
@@ -635,9 +717,7 @@ export async function renderPanelRemote({
         timeoutMs,
       });
     } catch (cause) {
-      throw new Error(`The panel remote did not load: ${failureOf(cause)}`, {
-        cause,
-      });
+      throw panelLoadError(cause);
     }
     return renderPanelStates({
       component: panelComponentOf(panelModule, exposedModule),

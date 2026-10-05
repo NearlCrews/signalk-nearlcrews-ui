@@ -75,26 +75,30 @@ function readDeclaration(statement) {
   return { property, value: statement.slice(colon + 1).trim() };
 }
 
+/** An at-rule's name and prelude, from its text up to its block or semicolon. */
+function readAtRule(text) {
+  const name = /^@([\w-]+)/.exec(text)?.[1] ?? "";
+  return { name, prelude: text.slice(name.length + 1).trim() };
+}
+
 /**
  * Reads a stylesheet's blocks. Returns the style rules (each with its
- * selectors, the preludes of the at-rules around it, whether it sits inside
- * another style rule, and its own declarations), every at-rule with its name
- * and prelude, and every declaration in the sheet.
+ * selectors and whether it sits inside another style rule), every at-rule
+ * with its name and prelude, and every declaration in the sheet.
  */
 export function readCss(source) {
   const text = maskCss(source);
   const rules = [];
   const atRules = [];
   const declarations = [];
+  // One entry per open block: whether it is a style rule.
   const stack = [];
   let start = 0;
   let parentheses = 0;
 
   const addDeclaration = (statement) => {
     const declaration = readDeclaration(statement);
-    if (declaration === undefined) return;
-    declarations.push(declaration);
-    stack.at(-1)?.rule?.declarations.push(declaration);
+    if (declaration !== undefined) declarations.push(declaration);
   };
 
   for (let index = 0; index < text.length; index += 1) {
@@ -107,34 +111,20 @@ export function readCss(source) {
       const prelude = text.slice(start, index).trim();
       start = index + 1;
       if (prelude.startsWith("@")) {
-        const name = /^@([\w-]+)/.exec(prelude)?.[1] ?? "";
-        const atRule = {
-          name,
-          prelude: prelude.slice(name.length + 1).trim(),
-        };
-        atRules.push(atRule);
-        stack.push({ atRule });
+        atRules.push(readAtRule(prelude));
+        stack.push(false);
         continue;
       }
-      const rule = {
-        atRules: stack
-          .filter((frame) => frame.atRule !== undefined)
-          .map((frame) => `@${frame.atRule.name} ${frame.atRule.prelude}`),
-        declarations: [],
-        nested: stack.some((frame) => frame.rule !== undefined),
+      rules.push({
+        nested: stack.includes(true),
         selectors: splitSelectorList(prelude),
-      };
-      rules.push(rule);
-      stack.push({ rule });
+      });
+      stack.push(true);
     } else if (character === ";") {
       const statement = text.slice(start, index).trim();
       start = index + 1;
       if (statement.startsWith("@")) {
-        const name = /^@([\w-]+)/.exec(statement)?.[1] ?? "";
-        atRules.push({
-          name,
-          prelude: statement.slice(name.length + 1).trim(),
-        });
+        atRules.push(readAtRule(statement));
       } else {
         addDeclaration(statement);
       }

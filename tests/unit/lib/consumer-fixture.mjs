@@ -9,29 +9,28 @@
  * test asserts the manifest still shares exactly these, so the two cannot drift
  * apart quietly.
  */
-import { spawnSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { symlinkSync } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import process from "node:process";
 
 import { encodeRequiredVersion } from "../../../bin/lib/consumer-checks.mjs";
 import { renderFederationEntry } from "../../../scripts/lib/federation-share.mjs";
 import { repositoryPath } from "../../../scripts/lib/paths.mjs";
+import { runNode } from "./run-node.mjs";
+import { temporaryTree } from "./temporary-tree.mjs";
 
 export const manifest = createRequire(import.meta.url)("../../../package.json");
 const CLI = repositoryPath("bin", "snui-check-consumer.mjs");
 /** Where every consumer workspace's built remote entry sits, from its root. */
-const REMOTE_ENTRY = "public/remoteEntry.js";
+export const REMOTE_ENTRY = "public/remoteEntry.js";
 export const SHARED_NAMES = ["react", "react-dom"];
 export const FEDERATION_REQUEST = "signalk-nearlcrews-ui/federation";
+
+/** The module every fixture remote exposes, the one the Admin asks for. */
+export const EXPOSED_MODULE = "./PluginConfigurationPanel";
+
+/** React, react-dom, and what react-dom/server loads beside them. */
+export const REACT_PACKAGES = ["react", "react-dom", "scheduler"];
 
 /** The version stamp PanelRoot writes, as digits and dots or nothing. */
 export const STAMP = /^\d+\.\d+\.\d+$/.test(manifest.version)
@@ -58,7 +57,7 @@ function versionTuple(range) {
 }
 
 /** The share registrations Webpack 5 minifies into a remote entry. */
-export const SHARE_REGISTRATIONS = `var l={${SHARED_NAMES.map((name, index) => {
+const SHARE_REGISTRATIONS = `var l={${SHARED_NAMES.map((name, index) => {
   const share = shared[name];
   if (share === undefined)
     throw new Error(`The manifest no longer shares ${name}.`);
@@ -73,29 +72,42 @@ export const CONTAINER_RUNTIME =
   'var containerError="Container initialization failed as it has already been initialized with a different share scope";';
 
 /** The module map a remote entry carries, keyed by the name the Admin asks for. */
-export const EXPOSES =
-  'var exposes={"./PluginConfigurationPanel":()=>Promise.resolve(()=>({}))};';
+const EXPOSES = `var exposes={"${EXPOSED_MODULE}":()=>Promise.resolve(()=>({}))};`;
 
 /**
- * A classic remote entry: the share registrations, the container runtime, the
- * exposed module map, and the container assigned to the global the Admin reads
- * for a package named consumer-fixture.
+ * What every Webpack remote entry carries before its container: the share
+ * registrations, the container runtime, and the exposed module map.
  */
-export const CLASSIC_ENTRY = `${SHARE_REGISTRATIONS}
-${CONTAINER_RUNTIME}
-${EXPOSES}
+export const ENTRY_PREAMBLE = [
+  SHARE_REGISTRATIONS,
+  CONTAINER_RUNTIME,
+  EXPOSES,
+].join("\n");
+
+/**
+ * A classic remote entry: the preamble, and the container assigned to the
+ * global the Admin reads for a package named consumer-fixture.
+ */
+export const CLASSIC_ENTRY = `${ENTRY_PREAMBLE}
 var consumer_fixture={get:function(){return Promise.reject(new Error("not loaded"))},init:function(){}};
 `;
 
 /** The same entry built as an ES module, which exports the container instead. */
-export const MODULE_ENTRY = `${SHARE_REGISTRATIONS}
-${CONTAINER_RUNTIME}
-${EXPOSES}
+export const MODULE_ENTRY = `${ENTRY_PREAMBLE}
 const get=()=>Promise.reject(new Error("not loaded")),init=()=>{};export{get,init};
 `;
 
 /** The chunk the library lands in, carrying the PanelRoot version stamp. */
 export const CHUNK = `jsx("div",{"data-snui-root":"","data-snui-version":"${STAMP}"});`;
+
+/** The default built remote with `overrides` laid over it. */
+export function remoteAssets(overrides = {}) {
+  return {
+    "main.chunk.js": CHUNK,
+    "remoteEntry.js": CLASSIC_ENTRY,
+    ...overrides,
+  };
+}
 
 /**
  * The installed release's token sheet, cut down to the names the fixtures
@@ -108,16 +120,13 @@ const TOKENS_CSS = `.snui-tokens {
 }
 `;
 
-const workspaces = [];
-
 /** Removes every workspace created so far. Call from an afterAll hook. */
-export function removeConsumers() {
-  for (const workspace of workspaces.splice(0)) {
-    rmSync(workspace, { force: true, recursive: true });
-  }
-}
+export { removeTemporaryTrees as removeConsumers } from "./temporary-tree.mjs";
 
-/** The keyword the Signal K server mounts a configuration panel by. */
+/**
+ * The keywords a plugin with a configuration panel carries: the plugin
+ * keyword, and the one the Signal K server mounts a configuration panel by.
+ */
 const CONFIGURATOR_KEYWORDS = Object.freeze([
   "signalk-node-server-plugin",
   "signalk-plugin-configurator",
@@ -135,7 +144,7 @@ const CONFIGURATOR_KEYWORDS = Object.freeze([
  * path from the root.
  */
 export function createConsumer({
-  assets = { "main.chunk.js": CHUNK, "remoteEntry.js": CLASSIC_ENTRY },
+  assets = remoteAssets(),
   baseline,
   config,
   configName = "webpack.config.cjs",
@@ -145,36 +154,27 @@ export function createConsumer({
   name = "consumer-fixture",
   pinField = "devDependencies",
 } = {}) {
-  const root = mkdtempSync(join(tmpdir(), "snui-consumer-"));
-  workspaces.push(root);
-
-  const installed = join(root, "node_modules", manifest.name);
-  mkdirSync(join(installed, "dist"), { recursive: true });
-  writeFileSync(join(installed, "package.json"), JSON.stringify(manifest));
-  writeFileSync(join(installed, "dist", "federation.cjs"), FEDERATION_ENTRY);
-  writeFileSync(join(installed, "dist", "tokens.css"), TOKENS_CSS);
-  writeFileSync(
-    join(root, "package.json"),
-    JSON.stringify({
+  const installed = `node_modules/${manifest.name}`;
+  const tree = {
+    [`${installed}/package.json`]: JSON.stringify(manifest),
+    [`${installed}/dist/federation.cjs`]: FEDERATION_ENTRY,
+    [`${installed}/dist/tokens.css`]: TOKENS_CSS,
+    "package.json": JSON.stringify({
       name,
       private: true,
       keywords: CONFIGURATOR_KEYWORDS,
       [pinField]: { [manifest.name]: manifest.version },
       ...manifestFields,
     }),
-  );
-
-  const remoteDirectory = join(root, dirname(REMOTE_ENTRY));
-  mkdirSync(remoteDirectory);
+  };
   for (const [assetName, source] of Object.entries(assets)) {
-    writeFileSync(join(remoteDirectory, assetName), source);
+    tree[`${dirname(REMOTE_ENTRY)}/${assetName}`] = source;
   }
-
-  if (config !== undefined) {
-    const configPath = join(root, configName);
-    mkdirSync(dirname(configPath), { recursive: true });
-    writeFileSync(configPath, config);
+  if (config !== undefined) tree[configName] = config;
+  if (baseline !== undefined) {
+    tree["size-baseline.json"] = JSON.stringify(baseline);
   }
+  const root = temporaryTree("snui-consumer-", { ...tree, ...files });
   for (const packageName of link) {
     symlinkSync(
       repositoryPath("node_modules", packageName),
@@ -182,21 +182,19 @@ export function createConsumer({
       "junction",
     );
   }
-  if (baseline !== undefined) {
-    writeFileSync(join(root, "size-baseline.json"), JSON.stringify(baseline));
-  }
-  for (const [path, source] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    writeFileSync(join(root, path), source);
-  }
   return root;
 }
 
 export function runCli(...args) {
-  return spawnSync(process.execPath, [CLI, ...args], { encoding: "utf8" });
+  return runNode(CLI, ...args);
 }
 
 /** Runs the check against a workspace's built remote, with any further options. */
 export function checkConsumer(root, ...args) {
   return runCli("--root", root, "--remote", REMOTE_ENTRY, ...args);
+}
+
+/** Runs the check with the render of the exposed module, and any further options. */
+export function runRuntimeCli(root, ...args) {
+  return checkConsumer(root, "--runtime", "--expose", EXPOSED_MODULE, ...args);
 }

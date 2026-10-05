@@ -46,7 +46,6 @@
  * security boundary. Point the check at a build and a working tree the
  * operator trusts.
  */
-import { Buffer } from "node:buffer";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
@@ -92,14 +91,13 @@ import {
   declaredTokenNames,
 } from "./lib/package-tokens.mjs";
 import {
+  assertClassicContainerLoads,
   assertMarkupIncludes,
   assertMarkupVersionStamp,
   COMPATIBILITY_NOTICE_MARKER,
-  createPanelContext,
-  disposePanelContext,
-  evaluateClassicContainer,
   failureOf,
   HOST_STATES,
+  loadConsumerReact,
   renderPanelRemote,
 } from "./lib/panel-runtime.mjs";
 import { assertDoubledOverrides } from "./lib/style-overrides.mjs";
@@ -265,11 +263,9 @@ function assertHostLoading({ argv, consumerManifest, entryName, entrySource }) {
   }
   const containerName =
     containerOption ?? toSafeModuleId(consumerManifest.name ?? "");
-  const context = createPanelContext();
   try {
-    evaluateClassicContainer({
+    assertClassicContainerLoads({
       containerName,
-      context,
       entryName,
       source: entrySource,
     });
@@ -278,8 +274,6 @@ function assertHostLoading({ argv, consumerManifest, entryName, entrySource }) {
       `${entryName} does not load as the classic remote the Signal K Admin expects: ${failureOf(cause)}`,
       { cause },
     );
-  } finally {
-    disposePanelContext(context);
   }
   return {
     clause: `classic remote assigning window.${containerName}`,
@@ -310,20 +304,6 @@ async function assertRuntime({
     );
   }
 
-  let react;
-  let reactDom;
-  let renderToStaticMarkup;
-  try {
-    react = consumerRequire("react");
-    reactDom = consumerRequire("react-dom");
-    ({ renderToStaticMarkup } = consumerRequire("react-dom/server"));
-  } catch (cause) {
-    throw new Error(
-      `--runtime renders the panel with the consumer's own React, which is not installed: ${cause.message}`,
-      { cause },
-    );
-  }
-
   // The host states come first, so a panel that cannot open on a fresh
   // install fails before a configured render can hide it.
   const props = readProps(argv);
@@ -350,6 +330,8 @@ async function assertRuntime({
       "--expect-unsupported needs the compatibility render that --no-compatibility-render skips.",
     );
   }
+  // A module remote renders in a worker, which loads the consumer's React
+  // in its own realm.
   const { compatibility, renders } =
     hostLoading.format === "module"
       ? await renderModulePanelRemote({
@@ -360,14 +342,12 @@ async function assertRuntime({
           states,
         })
       : await renderPanelRemote({
+          ...loadConsumerReact(consumerRequire),
           bundles: scripts,
           containerName: hostLoading.containerName,
           entryName,
           exposedModule,
-          react,
-          reactDom,
           renderCompatibilityNotice,
-          renderToStaticMarkup,
           states,
         });
 
@@ -409,7 +389,7 @@ async function assertRuntime({
       `The panel called save while it rendered ${joinNames(saving)}. The host passes save for a user action, and a panel that saves during render saves on every host render.`,
     );
   }
-  return `, panel rendered from ${formatCount(scripts.length, "bundle")} with configuration undefined and {}${configured === undefined ? "" : " and --props"}`;
+  return `panel rendered from ${formatCount(scripts.length, "bundle")} with configuration undefined and {}${configured === undefined ? "" : " and --props"}`;
 }
 
 async function main() {
@@ -465,13 +445,19 @@ async function main() {
       : readdirSync(remoteDirectory).filter((name) =>
           REMOTE_ASSET_FILE.test(name),
         );
+  // Read once each, on first use: the scans take an asset's text and the
+  // size checks its bytes.
+  const assetBytes = new Map();
+  const bytesOf = (name) => {
+    if (!assetBytes.has(name)) {
+      assetBytes.set(name, readFileSync(join(remoteDirectory, name)));
+    }
+    return assetBytes.get(name);
+  };
   const readAssets = (pattern) =>
     assetNames
       .filter((name) => pattern.test(name))
-      .map((name) => ({
-        name,
-        source: readFileSync(join(remoteDirectory, name), "utf8"),
-      }));
+      .map((name) => ({ name, source: bytesOf(name).toString("utf8") }));
   const scripts = readAssets(SCRIPT_FILE);
   const entrySource = scripts.find(({ name }) => name === entryName)?.source;
   if (entrySource === undefined) {
@@ -506,23 +492,33 @@ async function main() {
   const { shared } = consumerRequire(`${PACKAGE_NAME}/federation`);
   assertConsumedShares(entrySource, shared, readParseRange(consumerRequire));
 
+  // The summary, one clause per check, in the order the checks ran.
+  const clauses = [
+    runtimeDependencyFieldOf(consumerManifest) === undefined
+      ? "exact pin"
+      : `exact pin as a runtime dependency (${RUNTIME_DEPENDENCY_COST})`,
+    hostLoading.clause,
+    "version stamp",
+    "no React runtime",
+    "production JSX runtime",
+    `host shares ${joinNames(Object.keys(shared))}`,
+  ];
+
   const webpackConfigPath =
     webpackConfigOption === undefined
       ? ["webpack.config.cjs", "webpack.config.js", "webpack.config.mjs"]
           .map((name) => join(root, name))
           .find((path) => existsSync(path))
       : resolve(root, webpackConfigOption);
-  let configuredMessage = "";
   if (webpackConfigPath !== undefined) {
     const config = await loadWebpackConfig(webpackConfigPath);
     assertConfiguredShares(findSharedOption(config), shared);
-    configuredMessage = ", Webpack configuration shares match";
+    clauses.push("Webpack configuration shares match");
   }
 
   // The installed release's own token sheet declares exactly its public
   // tokens, so the allowed names come from the release the remote bundled.
   const stylesheets = readAssets(STYLESHEET_FILE);
-  let tokensMessage = "";
   if (stylesheets.length > 0) {
     const allowedNames = new Set([
       ...declaredTokenNames(
@@ -534,38 +530,43 @@ async function main() {
       ...CONSUMER_HOOK_NAMES,
     ]);
     assertPackageTokens(stylesheets, allowedNames);
-    tokensMessage = `, package names in ${formatCount(stylesheets.length, "CSS file")}`;
+    clauses.push(
+      `package names in ${formatCount(stylesheets.length, "CSS file")}`,
+    );
   }
 
-  let graphMessage = "";
   if (statsOption !== undefined) {
     const modules = assertModuleGraph(readJson(resolve(root, statsOption)));
-    graphMessage = `, module graph of ${formatCount(modules, "module")}`;
+    clauses.push(`module graph of ${formatCount(modules, "module")}`);
   }
 
-  let stylesMessage = "";
   if (stylesOption !== undefined) {
     const cssModules = assertDoubledOverrides(
       resolve(root, stylesOption),
       root,
     );
-    stylesMessage = `, doubled overrides in ${formatCount(cssModules, "CSS module")}`;
+    clauses.push(
+      `doubled overrides in ${formatCount(cssModules, "CSS module")}`,
+    );
   }
 
   // The entry loads on every Admin page, so its own size is reported beside
   // the total, which loads only when the panel opens.
-  const entryGzipBytes = gzipBytesOf([Buffer.from(entrySource)]);
-  let sizeMessage = `, remote entry ${entryGzipBytes} gzip bytes`;
-  if (baselineOption !== undefined) {
+  const entrySize = `remote entry ${gzipBytesOf([bytesOf(entryName)])} gzip bytes`;
+  if (baselineOption === undefined) {
+    clauses.push(entrySize);
+  } else {
     const baseline = readJson(resolve(root, baselineOption));
-    const gzipBytes = gzipBytesOf(
-      assetNames.map((name) => readFileSync(join(remoteDirectory, name))),
+    const gzipBytes = gzipBytesOf(assetNames.map(bytesOf));
+    clauses.push(
+      assertSizeBaseline(gzipBytes, baseline),
+      `${entrySize} of them`,
     );
-    sizeMessage = `, ${assertSizeBaseline(gzipBytes, baseline)}${sizeMessage} of them`;
   }
 
-  const runtimeMessage = runtime
-    ? await assertRuntime({
+  if (runtime) {
+    clauses.push(
+      await assertRuntime({
         argv,
         consumerRequire,
         entryName,
@@ -574,15 +575,12 @@ async function main() {
         root,
         scripts,
         version,
-      })
-    : "";
+      }),
+    );
+  }
 
-  const pinMessage =
-    runtimeDependencyFieldOf(consumerManifest) === undefined
-      ? "exact pin"
-      : `exact pin as a runtime dependency (${RUNTIME_DEPENDENCY_COST})`;
   process.stdout.write(
-    `${PACKAGE_NAME} ${version} consumer check passed: ${pinMessage}, ${hostLoading.clause}, version stamp, no React runtime, production JSX runtime, host shares ${Object.keys(shared).join(" and ")}${configuredMessage}${tokensMessage}${graphMessage}${stylesMessage}${sizeMessage}${runtimeMessage}.\n`,
+    `${PACKAGE_NAME} ${version} consumer check passed: ${clauses.join(", ")}.\n`,
   );
 }
 

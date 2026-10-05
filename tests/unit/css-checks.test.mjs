@@ -55,33 +55,10 @@ describe("the CSS reader", () => {
     ]);
     expect(atRules[1].prelude).toBe("snui-panel (width <= 32rem)");
     expect(rules).toEqual([
-      {
-        atRules: [],
-        declarations: [
-          { property: "gap", value: "var(--snui-space-2)" },
-          { property: "color", value: "red" },
-        ],
-        nested: false,
-        selectors: [".row"],
-      },
-      {
-        atRules: ["@container snui-panel (width <= 32rem)"],
-        declarations: [{ property: "gap", value: "0" }],
-        nested: false,
-        selectors: [".row", ".cell::after"],
-      },
-      {
-        atRules: [],
-        declarations: [],
-        nested: false,
-        selectors: [".list"],
-      },
-      {
-        atRules: [],
-        declarations: [{ property: "margin", value: "0" }],
-        nested: true,
-        selectors: [".item"],
-      },
+      { nested: false, selectors: [".row"] },
+      { nested: false, selectors: [".row", ".cell::after"] },
+      { nested: false, selectors: [".list"] },
+      { nested: true, selectors: [".item"] },
     ]);
     expect(declarations.map(({ property }) => property)).toEqual([
       "gap",

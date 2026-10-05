@@ -1,7 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
@@ -17,6 +15,7 @@ import {
   singleClassSelectorsOf,
 } from "../../bin/lib/style-overrides.mjs";
 import { repositoryPath } from "../../scripts/lib/paths.mjs";
+import { removeTemporaryTrees, temporaryTree } from "./lib/temporary-tree.mjs";
 
 const STYLE_OVERRIDES = pathToFileURL(
   repositoryPath("bin", "lib", "style-overrides.mjs"),
@@ -62,24 +61,29 @@ function placeInChild(source) {
   return JSON.parse(result.stdout);
 }
 
-const directories = [];
+/** The placements a component source yields, each as `Component:key@line`. */
+function placementsOf(source, file = "/panel/Panel.tsx") {
+  return findClassesOnPackageComponents(file, source).map(
+    ({ component, key, line }) => `${component}:${key}@${String(line)}`,
+  );
+}
+
+/**
+ * A panel source: the package import of `names`, the default import of the
+ * panel's CSS module, then `body`, which starts on line 3.
+ */
+function panelSource(names, body) {
+  return `import { ${names} } from "signalk-nearlcrews-ui";
+import styles from "./Panel.module.css";
+${body}`;
+}
 
 /** Writes a panel source tree and returns its root. */
 function panelTree(files) {
-  const root = mkdtempSync(join(tmpdir(), "snui-styles-"));
-  directories.push(root);
-  for (const [path, source] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    writeFileSync(join(root, path), source);
-  }
-  return root;
+  return temporaryTree("snui-styles-", files);
 }
 
-afterAll(() => {
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true });
-  }
-});
+afterAll(removeTemporaryTrees);
 
 describe("blanking comments", () => {
   it("blanks line and block comments and keeps every line break", () => {
@@ -365,15 +369,10 @@ import { Badge } from "signalk-nearlcrews-ui";`).named.keys(),
   });
 
   it("reads an import whose braces hold comments, the word import included", () => {
-    const placed = (source) =>
-      findClassesOnPackageComponents("/panel/Panel.tsx", source).map(
-        ({ component, key, line }) => `${component}:${key}@${String(line)}`,
-      );
-
     // A line comment with "import" inside a package import's braces, and one
     // without it, which must not bind the next name to "//".
     expect(
-      placed(`import {
+      placementsOf(`import {
   Checkbox, // import this one for rows
   Badge, // rows
   Text,
@@ -385,13 +384,13 @@ import styles from "./Panel.module.css";
     ).toEqual(["Checkbox:row@7", "Badge:tag@8", "Text:note@9"]);
     // A block comment with "import" inside the braces.
     expect(
-      placed(`import { /* import note */ Button } from "signalk-nearlcrews-ui";
+      placementsOf(`import { /* import note */ Button } from "signalk-nearlcrews-ui";
 import styles from "./Panel.module.css";
 <Button className={styles.action} />;`),
     ).toEqual(["Button:action@3"]);
     // The same inside a CSS module's named import.
     expect(
-      placed(`import { Checkbox } from "signalk-nearlcrews-ui";
+      placementsOf(`import { Checkbox } from "signalk-nearlcrews-ui";
 import {
   row, // import for the checkbox row
   /* import */ tag,
@@ -479,16 +478,12 @@ export { row } from "./Panel.module.css";
   });
 
   it("reads placements from the source as written, whatever JSX text holds", () => {
-    const placed = (source) =>
-      findClassesOnPackageComponents("/panel/Paths.tsx", source).map(
-        ({ component, key, line }) => `${component}:${key}@${String(line)}`,
-      );
-
     // A path pattern in JSX text holds a "/*" after a letter, and a URL holds
     // a "//" after a colon. Neither is a comment there, so the blanker leaves
     // both as text, and neither may hide the markup after it.
     expect(
-      placed(`import { Checkbox, Text } from "signalk-nearlcrews-ui";
+      placementsOf(
+        `import { Checkbox, Text } from "signalk-nearlcrews-ui";
 import styles from "./Paths.module.css";
 export const Paths = () => (
   <>
@@ -496,47 +491,42 @@ export const Paths = () => (
     <Checkbox className={styles.row} />
     <p>See https://signalk.org <Checkbox className={styles.link} /></p>
   </>
-);`),
+);`,
+        "/panel/Paths.tsx",
+      ),
     ).toEqual(["Checkbox:row@6", "Checkbox:link@7"]);
   });
 
   it("reports a class in commented-out markup, which the consumer clears by deleting it", () => {
     expect(
-      findClassesOnPackageComponents(
-        "/panel/Panel.tsx",
-        `import { Checkbox } from "signalk-nearlcrews-ui";
-import styles from "./Panel.module.css";
-export const P = () => (
+      placementsOf(
+        panelSource(
+          "Checkbox",
+          `export const P = () => (
   <>
     {/* <Checkbox className={styles.old} /> */}
     <Checkbox className={styles.row} />
   </>
 );`,
-      ).map(({ key, line }) => `${key}@${String(line)}`),
-    ).toEqual(["old@5", "row@6"]);
+        ),
+      ),
+    ).toEqual(["Checkbox:old@5", "Checkbox:row@6"]);
   });
 
   it("places a class beside a regular expression in an attribute", () => {
     expect(
-      findClassesOnPackageComponents(
-        "/panel/Panel.tsx",
-        `import { TextInput } from "signalk-nearlcrews-ui";
-import styles from "./Panel.module.css";
-<TextInput validate={(u) => /^https?:\\/\\//.test(u)} className={styles.url} />;`,
-      ).map(({ key, line }) => `${key}@${String(line)}`),
-    ).toEqual(["url@3"]);
+      placementsOf(
+        panelSource(
+          "TextInput",
+          "<TextInput validate={(u) => /^https?:\\/\\//.test(u)} className={styles.url} />;",
+        ),
+      ),
+    ).toEqual(["TextInput:url@3"]);
   });
 
   it("places a class after a comment inside the opening tag", () => {
     const placed = (tag) =>
-      findClassesOnPackageComponents(
-        "/panel/Panel.tsx",
-        `import { Checkbox, TextInput } from "signalk-nearlcrews-ui";
-import styles from "./Panel.module.css";
-${tag}`,
-      ).map(
-        ({ component, key, line }) => `${component}:${key}@${String(line)}`,
-      );
+      placementsOf(panelSource("Checkbox, TextInput", tag));
 
     // A line comment holding an apostrophe and a backtick, as a consumer
     // writes one to explain an attribute.
@@ -593,14 +583,7 @@ ${tag}`,
 
   it("keeps placements after JSX text in an attribute that looks like a comment", () => {
     const placed = (markup) =>
-      findClassesOnPackageComponents(
-        "/panel/Panel.tsx",
-        `import { Checkbox, Section, Text } from "signalk-nearlcrews-ui";
-import styles from "./Panel.module.css";
-${markup}`,
-      ).map(
-        ({ component, key, line }) => `${component}:${key}@${String(line)}`,
-      );
+      placementsOf(panelSource("Checkbox, Section, Text", markup));
 
     // A path pattern in a local tag's attribute, then a package component.
     expect(
@@ -637,14 +620,7 @@ ${markup}`,
 
   it("keeps the right tag on the lines after a URL in JSX text", () => {
     const placed = (markup) =>
-      findClassesOnPackageComponents(
-        "/panel/Panel.tsx",
-        `import { Checkbox, Section, Text } from "signalk-nearlcrews-ui";
-import styles from "./Panel.module.css";
-${markup}`,
-      ).map(
-        ({ component, key, line }) => `${component}:${key}@${String(line)}`,
-      );
+      placementsOf(panelSource("Checkbox, Section, Text", markup));
 
     // A render prop whose Checkbox wraps its attributes onto the next line.
     expect(
@@ -719,51 +695,43 @@ const rowClass = styles.plain;`),
 
   it("places a class after attribute values that hold quotes, braces, or >", () => {
     const placed = (tag) =>
-      findClassesOnPackageComponents(
-        "/panel/Panel.tsx",
-        `import { Checkbox, SegmentedControl } from "signalk-nearlcrews-ui";
-import styles from "./Panel.module.css";
-${tag}`,
-      ).map(({ component, key }) => `${component}:${key}`);
+      placementsOf(panelSource("Checkbox, SegmentedControl", tag));
 
     expect(
       placed(
         `<Checkbox label="depth > 3 m, it's {deep}" className={styles.a} />;`,
       ),
-    ).toEqual(["Checkbox:a"]);
+    ).toEqual(["Checkbox:a@3"]);
     expect(
       placed(`<Checkbox label='say "stop" > go' className={styles.b} />;`),
-    ).toEqual(["Checkbox:b"]);
+    ).toEqual(["Checkbox:b@3"]);
     // A JSX attribute string has no escapes, so a trailing backslash is text.
     expect(
       placed(String.raw`<Checkbox title="C:\" className={styles.c} />;`),
-    ).toEqual(["Checkbox:c"]);
+    ).toEqual(["Checkbox:c@3"]);
     expect(
       placed("<Checkbox disabled={count > 0} className={styles.d} />;"),
-    ).toEqual(["Checkbox:d"]);
+    ).toEqual(["Checkbox:d@3"]);
     expect(
       placed(
         "<Checkbox label={<>Don't <b>stop</b></>} className={styles.e} />;",
       ),
-    ).toEqual(["Checkbox:e"]);
+    ).toEqual(["Checkbox:e@3"]);
     // Explicit type arguments on a generic component.
     expect(
       placed(
         '<SegmentedControl<Density> label="Density" className={styles.f} />;',
       ),
-    ).toEqual(["SegmentedControl:f"]);
+    ).toEqual(["SegmentedControl:f@3"]);
   });
 
   it("places named classes in both branches of a conditional, but not an object key", () => {
     expect(
-      findClassesOnPackageComponents(
-        "/panel/Panel.tsx",
-        `import { Checkbox } from "signalk-nearlcrews-ui";
+      placementsOf(`import { Checkbox } from "signalk-nearlcrews-ui";
 import { active, idle, flag } from "./Panel.module.css";
 <Checkbox className={on ? active : idle} />;
-<Checkbox className={cx({ flag: on })} />;`,
-      ).map(({ key }) => key),
-    ).toEqual(["active", "idle"]);
+<Checkbox className={cx({ flag: on })} />;`),
+    ).toEqual(["Checkbox:active@3", "Checkbox:idle@3"]);
   });
 
   it("places a class a named import brings in", () => {

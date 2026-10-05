@@ -5,18 +5,77 @@ import { describe, expect, it } from "vitest";
 import {
   createDomStubs,
   createPanelContext,
+  DEFAULT_SCRIPT_URL,
   disposePanelContext,
-  renderPanelRemote,
+  setNativeCssScope,
 } from "../../bin/lib/panel-runtime.mjs";
 
-/** A classic container whose share-scope initialization never settles. */
-const HUNG_CONTAINER = `window.probe_panel = {
-  init: function () { return new Promise(function () {}); },
-  get: function () { return Promise.reject(new Error("not reached")); },
-};
-`;
+describe("the panel context", () => {
+  /** What React Aria's focus-visible setup and transition tracker touch. */
+  const REACT_ARIA_SETUP = `
+    if (typeof document === "undefined") throw new Error("no document");
+    if (document.readyState === "loading") throw new Error("deferred to DOMContentLoaded");
+    const focus = window.HTMLElement.prototype.focus;
+    Reflect.defineProperty(window.HTMLElement.prototype, "focus", {
+      configurable: true,
+      writable: true,
+      value: function () {},
+    });
+    document.addEventListener("keydown", () => {}, true);
+    document.addEventListener("keyup", () => {}, true);
+    document.body.addEventListener("transitionrun", () => {});
+    document.body.addEventListener("transitionend", () => {});
+    window.addEventListener("focus", () => {}, true);
+    window.addEventListener("blur", () => {}, false);
+    document.currentScript.src;
+  `;
 
-const REACT = { createElement: () => ({}), version: "19.3.0" };
+  it("answers the import-time setup this package's dependencies run", () => {
+    expect(() =>
+      vm.runInContext(REACT_ARIA_SETUP, createPanelContext()),
+    ).not.toThrow();
+  });
+
+  it("is one object for window, self, and globalThis, as a browser is", () => {
+    const context = createPanelContext();
+
+    expect(
+      vm.runInContext(
+        "window === self && self === globalThis && window.document === document",
+        context,
+      ),
+    ).toBe(true);
+    expect(vm.runInContext("document.currentScript.src", context)).toBe(
+      DEFAULT_SCRIPT_URL,
+    );
+    expect(
+      vm.runInContext("typeof setTimeout === 'function'", context),
+      "host globals pass through",
+    ).toBe(true);
+  });
+
+  it("refuses the network and the document's own elements", () => {
+    const context = createPanelContext();
+
+    expect(() => vm.runInContext("fetch('/plugins')", context)).toThrow(
+      "The panel fetched while it rendered.",
+    );
+    expect(() =>
+      vm.runInContext("document.createElement('script')", context),
+    ).toThrow("pre-registers every chunk");
+  });
+
+  it("takes the CSS scope interface away and puts it back", () => {
+    const context = createPanelContext();
+    const supported = "typeof window.CSSScopeRule === 'function'";
+
+    expect(vm.runInContext(supported, context)).toBe(true);
+    setNativeCssScope(context, false);
+    expect(vm.runInContext(supported, context)).toBe(false);
+    setNativeCssScope(context, true);
+    expect(vm.runInContext(supported, context)).toBe(true);
+  });
+});
 
 describe("panel context timers", () => {
   it("clears a timer the panel scheduled, and never holds the loop open", async () => {
@@ -45,25 +104,6 @@ describe("panel context timers", () => {
     expect(() => {
       disposePanelContext(vm.createContext({}));
     }).not.toThrow();
-  });
-});
-
-describe("a remote that never settles", () => {
-  it("fails within the bound rather than stopping the check", async () => {
-    await expect(
-      renderPanelRemote({
-        bundles: [{ name: "remoteEntry.js", source: HUNG_CONTAINER }],
-        containerName: "probe_panel",
-        exposedModule: "./PluginConfigurationPanel",
-        react: REACT,
-        reactDom: { version: "19.3.0" },
-        renderToStaticMarkup: () => "",
-        states: [],
-        timeoutMs: 50,
-      }),
-    ).rejects.toThrow(
-      "remoteEntry.js did not finish initializing the share scope within 50ms.",
-    );
   });
 });
 

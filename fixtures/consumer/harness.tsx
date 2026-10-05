@@ -17,7 +17,8 @@ import {
   type PanelRemoteContainer,
 } from "signalk-nearlcrews-ui/host-harness";
 
-const REMOTE_URL = "/signalk-example/remoteEntry.js";
+const PACKAGE_NAME = "signalk-example";
+const REMOTE_URL = `/${PACKAGE_NAME}/remoteEntry.js`;
 
 // A scope registered the way Signal K 2.24.0 and 2.25.0 under-reported React.
 const shareScope: HostShareScope = createHostShareScope(React, ReactDOM, {
@@ -31,7 +32,7 @@ const frame: HostPanelFrameProps = {
   onSave: (configuration) => {
     saved.push(configuration);
   },
-  packageName: "signalk-example",
+  packageName: PACKAGE_NAME,
   shareScope,
   type: "module",
   url: REMOTE_URL,
@@ -42,7 +43,7 @@ export function mountFixture(root: HTMLElement): void {
 }
 
 export function loadContainer(): Promise<PanelRemoteContainer> {
-  return loadPanelRemote({ packageName: "signalk-example", url: REMOTE_URL });
+  return loadPanelRemote({ packageName: PACKAGE_NAME, url: REMOTE_URL });
 }
 
 export function isHarnessElement(element: Element): boolean {

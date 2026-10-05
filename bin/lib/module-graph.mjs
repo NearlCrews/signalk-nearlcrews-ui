@@ -10,6 +10,7 @@
  * the context the in-root portal and the locale provider rely on, so every
  * overlay throws.
  */
+import { formatCount } from "./cli-arguments.mjs";
 import { PACKAGE_NAME } from "./consumer-checks.mjs";
 
 /**
@@ -25,13 +26,14 @@ const ALLOWED_REACT_FILES = Object.freeze([
 const HOST_OWNED_PACKAGES = Object.freeze(["react-dom", "scheduler"]);
 
 /**
- * Packages that must be bundled at most once. React Aria 1.21 ships as the
- * `react-aria`, `react-aria-components`, and `react-stately` packages plus the
+ * The React Aria packages, which must be bundled at most once, as this
+ * package must. React Aria 1.21 ships as the `react-aria`,
+ * `react-aria-components`, and `react-stately` packages plus the
  * `@internationalized` scope; the older scoped packages are listed so a
  * dependency that still pulls one in is held to the same rule.
  */
 const SINGLE_INSTANCE_PACKAGE =
-  /^(?:react-aria|react-aria-components|react-stately|signalk-nearlcrews-ui|@internationalized\/[\w.-]+|@react-aria\/[\w.-]+|@react-stately\/[\w.-]+)$/;
+  /^(?:react-aria|react-aria-components|react-stately|@internationalized\/[\w.-]+|@react-aria\/[\w.-]+|@react-stately\/[\w.-]+)$/;
 
 const NODE_MODULES = "node_modules/";
 
@@ -106,6 +108,35 @@ function errorCountOf(stats) {
 }
 
 /**
+ * Asserts the remote bundled nothing the host owns: of React only the
+ * production JSX runtime, and nothing of React DOM or the scheduler. `paths`
+ * are module paths as {@link collectModulePaths} returns them.
+ */
+export function assertNoHostOwnedModules(paths) {
+  const reactFiles = new Set();
+  const hostOwned = new Set();
+  for (const path of paths) {
+    const owner = packageOf(path);
+    if (owner === undefined) continue;
+    if (owner.name === "react") {
+      if (!ALLOWED_REACT_FILES.includes(owner.file)) reactFiles.add(path);
+    } else if (HOST_OWNED_PACKAGES.includes(owner.name)) {
+      hostOwned.add(path);
+    }
+  }
+  if (reactFiles.size > 0) {
+    throw new Error(
+      `The remote bundled React modules other than the production JSX runtime: ${[...reactFiles].join(", ")}. React is a host share, so the remote must take it from the share scope.`,
+    );
+  }
+  if (hostOwned.size > 0) {
+    throw new Error(
+      `The remote bundled modules the Signal K Admin host owns: ${[...hostOwned].join(", ")}. The host renders the panel with its own React DOM.`,
+    );
+  }
+}
+
+/**
  * Asserts the module graph a Webpack stats file records. Returns the number of
  * module paths it read, for the summary.
  */
@@ -118,7 +149,7 @@ export function assertModuleGraph(stats) {
   }
   if (errors > 0) {
     throw new Error(
-      `The Webpack stats record ${errors === 1 ? "1 build error" : `${errors} build errors`}, so the remote beside them is not the build it claims to be.`,
+      `The Webpack stats record ${formatCount(errors, "build error")}, so the remote beside them is not the build it claims to be.`,
     );
   }
 
@@ -129,33 +160,19 @@ export function assertModuleGraph(stats) {
     );
   }
 
+  assertNoHostOwnedModules(paths);
+
   const roots = new Map();
-  const reactFiles = new Set();
-  const hostOwned = new Set();
   for (const path of paths) {
     const owner = packageOf(path);
-    if (owner === undefined) continue;
-    if (owner.name === "react") {
-      if (!ALLOWED_REACT_FILES.includes(owner.file)) reactFiles.add(path);
-    } else if (HOST_OWNED_PACKAGES.includes(owner.name)) {
-      hostOwned.add(path);
-    }
-    if (SINGLE_INSTANCE_PACKAGE.test(owner.name)) {
+    if (
+      owner !== undefined &&
+      (owner.name === PACKAGE_NAME || SINGLE_INSTANCE_PACKAGE.test(owner.name))
+    ) {
       const known = roots.get(owner.name) ?? new Set();
       known.add(owner.root);
       roots.set(owner.name, known);
     }
-  }
-
-  if (reactFiles.size > 0) {
-    throw new Error(
-      `The remote bundled React modules other than the production JSX runtime: ${[...reactFiles].join(", ")}. React is a host share, so the remote must take it from the share scope.`,
-    );
-  }
-  if (hostOwned.size > 0) {
-    throw new Error(
-      `The remote bundled modules the Signal K Admin host owns: ${[...hostOwned].join(", ")}. The host renders the panel with its own React DOM.`,
-    );
   }
   if (!roots.has(PACKAGE_NAME)) {
     throw new Error(

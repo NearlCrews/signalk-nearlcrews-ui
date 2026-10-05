@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { packageError } from "../utils/errors.js";
+import { windowGlobal } from "../utils/window-global.js";
 import { HOST_HARNESS_MARKER } from "./marker.js";
 import type { HostShareScope } from "./share-scope.js";
 
@@ -47,10 +48,6 @@ const SCRIPT_LOAD_TIMEOUT_MS = 10_000;
  */
 export function safeModuleId(packageName: string): string {
   return packageName.replaceAll(/[-@/]/g, "_");
-}
-
-function containerOnWindow(name: string): PanelRemoteContainer | undefined {
-  return Reflect.get(window, name) as PanelRemoteContainer | undefined;
 }
 
 /**
@@ -110,7 +107,7 @@ export async function loadPanelRemote({
   url,
 }: LoadPanelRemoteOptions): Promise<PanelRemoteContainer> {
   const globalName = safeModuleId(packageName);
-  const existing = containerOnWindow(globalName);
+  const existing = windowGlobal<PanelRemoteContainer>(window, globalName);
   if (existing !== undefined) return existing;
 
   if (type === "module") {
@@ -125,7 +122,7 @@ export async function loadPanelRemote({
   }
 
   await loadClassicScript(url);
-  const container = containerOnWindow(globalName);
+  const container = windowGlobal<PanelRemoteContainer>(window, globalName);
   if (container === undefined) {
     throw packageError(remoteUnavailableMessage(packageName));
   }

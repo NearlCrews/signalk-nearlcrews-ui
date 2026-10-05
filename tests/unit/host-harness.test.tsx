@@ -20,7 +20,6 @@ const REMOTE_URL = `/${PACKAGE_NAME}/remoteEntry.js`;
 afterEach(() => {
   Reflect.deleteProperty(window, GLOBAL_NAME);
   for (const script of document.querySelectorAll("script")) script.remove();
-  vi.restoreAllMocks();
 });
 
 /** A container whose panel shows the configuration it holds and saves one. */

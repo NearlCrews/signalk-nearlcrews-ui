@@ -21,6 +21,7 @@ import {
 import { createShareScope } from "../../bin/lib/panel-runtime.mjs";
 import { safeModuleId } from "../../src/host-harness/load-remote.js";
 import { createHostShareScope } from "../../src/host-harness/share-scope.js";
+import { statsModule } from "./lib/webpack-stats.mjs";
 
 /** A share scope with each entry's get replaced by the module it resolves to. */
 async function resolvedShape(scope) {
@@ -158,14 +159,9 @@ describe("the Admin loading contract", () => {
 });
 
 describe("the Webpack module graph", () => {
-  /** A module record as webpack --json writes one. */
-  const record = (path, extra = {}) => ({
-    name: `./${path}`,
-    nameForCondition: `/plugin/${path}`,
-    type: "module",
-    ...extra,
-  });
-  const LIBRARY = record("node_modules/signalk-nearlcrews-ui/dist/index.js");
+  const LIBRARY = statsModule(
+    "node_modules/signalk-nearlcrews-ui/dist/index.js",
+  );
 
   it("finds each module's package, root, and file", () => {
     expect(
@@ -181,10 +177,10 @@ describe("the Webpack module graph", () => {
   it("walks nested, grouped, and child compilation modules", () => {
     const stats = {
       children: [
-        { modules: [record("src/child.ts")], name: "HtmlWebpackCompiler" },
+        { modules: [statsModule("src/child.ts")], name: "HtmlWebpackCompiler" },
       ],
       modules: [
-        { children: [record("src/grouped.ts")], type: "modules by path" },
+        { children: [statsModule("src/grouped.ts")], type: "modules by path" },
         {
           modules: [{ name: "./src/inner.ts + 2 modules" }],
           name: "./src/panel.tsx + 3 modules",
@@ -211,10 +207,10 @@ describe("the Webpack module graph", () => {
         errors: [],
         modules: [
           LIBRARY,
-          record("node_modules/react/jsx-runtime.js"),
-          record("node_modules/react/cjs/react-jsx-runtime.production.js"),
-          record("node_modules/react-aria/dist/a.mjs"),
-          record("node_modules/react-aria/dist/b.mjs"),
+          statsModule("node_modules/react/jsx-runtime.js"),
+          statsModule("node_modules/react/cjs/react-jsx-runtime.production.js"),
+          statsModule("node_modules/react-aria/dist/a.mjs"),
+          statsModule("node_modules/react-aria/dist/b.mjs"),
         ],
       }),
     ).toBe(5);
@@ -239,7 +235,7 @@ describe("the Webpack module graph", () => {
     expect(() =>
       assertModuleGraph({
         errorsCount: 0,
-        modules: [LIBRARY, record("node_modules/react/index.js")],
+        modules: [LIBRARY, statsModule("node_modules/react/index.js")],
       }),
     ).toThrow(
       "The remote bundled React modules other than the production JSX runtime: /plugin/node_modules/react/index.js.",
@@ -247,13 +243,13 @@ describe("the Webpack module graph", () => {
     expect(() =>
       assertModuleGraph({
         errorsCount: 0,
-        modules: [LIBRARY, record("node_modules/scheduler/index.js")],
+        modules: [LIBRARY, statsModule("node_modules/scheduler/index.js")],
       }),
     ).toThrow("modules the Signal K Admin host owns");
     expect(() =>
       assertModuleGraph({
         errorsCount: 0,
-        modules: [record("src/panel.tsx")],
+        modules: [statsModule("src/panel.tsx")],
       }),
     ).toThrow("list no module from signalk-nearlcrews-ui");
   });
@@ -264,8 +260,8 @@ describe("the Webpack module graph", () => {
         errorsCount: 0,
         modules: [
           LIBRARY,
-          record("node_modules/react-aria/dist/a.mjs"),
-          record(
+          statsModule("node_modules/react-aria/dist/a.mjs"),
+          statsModule(
             "node_modules/react-aria-components/node_modules/react-aria/dist/a.mjs",
           ),
         ],

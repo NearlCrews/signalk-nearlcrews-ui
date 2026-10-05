@@ -20,16 +20,18 @@
  */
 import { join, relative, resolve } from "node:path";
 
+import { joinNames } from "./cli-arguments.mjs";
 import { VERSION_STAMP_ATTRIBUTE } from "./consumer-checks.mjs";
+import { escapeRegExp } from "./regexp.mjs";
 
 /** The keyword that makes the server mount a package's configuration panel. */
 const CONFIGURATOR_KEYWORD = "signalk-plugin-configurator";
 
 /** The module the Admin asks a configurator's container for. */
-const PLUGIN_CONFIG_PANEL = "./PluginConfigurationPanel";
+export const PLUGIN_CONFIG_PANEL = "./PluginConfigurationPanel";
 
 /** The file name the Admin finds a remote's script tag by. */
-const REMOTE_ENTRY_NAME = "remoteEntry.js";
+export const REMOTE_ENTRY_NAME = "remoteEntry.js";
 
 /**
  * Text only Webpack's Module Federation container runtime carries: the error
@@ -120,7 +122,7 @@ export function assertModuleContainer(entrySource, entryName) {
   const found =
     exported.size === 0
       ? "exports nothing"
-      : `exports ${[...exported].join(", ")} but not ${missing.join(" or ")}`;
+      : `exports ${[...exported].join(", ")} but not ${joinNames(missing, "or")}`;
   throw new Error(
     `package.json sets "type": "module", so the Signal K server writes a <script type="module"> tag for ${entryName} and the Admin imports it and reads get and init from its exports. This ${entryName} ${found}, so the Admin logs "Could not load module" and shows "Module ... is not available". Build the remote with a library type of "module", or give the package another type if its server code allows.`,
   );
@@ -128,9 +130,7 @@ export function assertModuleContainer(entrySource, entryName) {
 
 /** Asserts the entry exposes the module the Admin asks a configurator for. */
 export function assertExposesPanel(entrySource, entryName) {
-  const key = new RegExp(
-    `(["'])${PLUGIN_CONFIG_PANEL.replaceAll(".", "\\.")}\\1\\s*:`,
-  );
+  const key = new RegExp(`(["'])${escapeRegExp(PLUGIN_CONFIG_PANEL)}\\1\\s*:`);
   if (!key.test(entrySource)) {
     throw new Error(
       `${entryName} exposes no ${PLUGIN_CONFIG_PANEL} module. The Signal K Admin asks every configurator's container for exactly that name, so expose the panel under it.`,

@@ -1,4 +1,4 @@
-import vm from "node:vm";
+import { createRequire } from "node:module";
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
@@ -6,31 +6,50 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterAll, describe, expect, it } from "vitest";
 
 import {
+  assertClassicContainerLoads,
   assertMarkupIncludes,
   assertMarkupVersionStamp,
   COMPATIBILITY_NOTICE_MARKER,
-  createPanelContext,
-  DEFAULT_SCRIPT_URL,
+  loadConsumerReact,
   renderPanelRemote,
-  setNativeCssScope,
 } from "../../bin/lib/panel-runtime.mjs";
 import {
-  CONTAINER_RUNTIME,
   checkConsumer,
   createConsumer,
-  EXPOSES,
+  ENTRY_PREAMBLE,
+  EXPOSED_MODULE,
   manifest,
+  REACT_PACKAGES,
   removeConsumers,
-  SHARE_REGISTRATIONS,
+  runRuntimeCli,
   STAMP,
 } from "./lib/consumer-fixture.mjs";
 
-/** React, react-dom, and what react-dom/server loads beside them. */
-const REACT_PACKAGES = ["react", "react-dom", "scheduler"];
+/** Source for a panel root element stamped with the installed version, holding `child`. */
+function panelElement(child) {
+  return `React.createElement("div", { "data-snui-root": "", "data-snui-version": "${STAMP}" }, ${child})`;
+}
 
-const EXPOSED_MODULE = "./PluginConfigurationPanel";
 const NOTICE = `React.createElement("section", { "${COMPATIBILITY_NOTICE_MARKER}": "" }, "Browser update required")`;
-const PANEL = `React.createElement("div", { "data-snui-root": "", "data-snui-version": "${STAMP}" }, "Loading conversions")`;
+const PANEL = panelElement('"Loading conversions"');
+
+/** A classic container whose share-scope initialization never settles. */
+const HUNG_CONTAINER = `window.probe_panel = {
+  init: function () { return new Promise(function () {}); },
+  get: function () { return Promise.reject(new Error("not reached")); },
+};
+`;
+
+/**
+ * A chunk that registers `moduleSource`, an expression over React, as the
+ * exposed panel module, under the key the fixture entry looks it up by.
+ */
+function chunkExposing(moduleSource) {
+  return `self.snuiFixtureModules["${EXPOSED_MODULE}"] = function (React) {
+  return ${moduleSource};
+};
+`;
+}
 
 /**
  * A built panel remote: a classic container that takes React from the share
@@ -46,19 +65,14 @@ function panelRemote({
   saveDuringRender = false,
 } = {}) {
   return {
-    "main.chunk.js": `${chunkPrelude}self.snuiFixtureModules["${EXPOSED_MODULE}"] = function (React) {
-  return {
+    "main.chunk.js": `${chunkPrelude}${chunkExposing(`{
     default: function PluginConfigurationPanel(props) {
       ${saveDuringRender ? "props.save({ saved: true });" : ""}
       if (typeof window.CSSScopeRule !== "function") return ${compatibilityNotice};
       return ${panel};
     },
-  };
-};
-`,
-    "remoteEntry.js": `${SHARE_REGISTRATIONS}
-${CONTAINER_RUNTIME}
-${EXPOSES}
+  }`)}`,
+    "remoteEntry.js": `${ENTRY_PREAMBLE}
 ${entryPrelude}var publicPath = document.currentScript.src.replace(/[^/]+$/, "");
 if (document.readyState !== "loading") {
   var patchedFocus = HTMLElement.prototype.focus;
@@ -96,10 +110,7 @@ function bundlesOf(assets) {
 function remoteExposing(moduleSource) {
   return bundlesOf({
     ...panelRemote(),
-    "main.chunk.js": `self.snuiFixtureModules["${EXPOSED_MODULE}"] = function (React) {
-  return ${moduleSource};
-};
-`,
+    "main.chunk.js": chunkExposing(moduleSource),
   });
 }
 
@@ -127,35 +138,35 @@ function renderInProcess(options = {}) {
   });
 }
 
-function runRuntimeCli(root, ...args) {
-  return checkConsumer(root, "--runtime", "--expose", EXPOSED_MODULE, ...args);
+/** A consumer holding the fixture remote, with React installed beside it. */
+function runtimeConsumer(remote = {}, consumer = {}) {
+  return createConsumer({
+    assets: panelRemote(remote),
+    link: REACT_PACKAGES,
+    ...consumer,
+  });
 }
 
 afterAll(removeConsumers);
 
 describe("snui-check-consumer --runtime", () => {
   it("renders the panel the host renders and reports the bundles it ran", () => {
-    const root = createConsumer({
-      assets: panelRemote(),
-      link: REACT_PACKAGES,
-    });
+    const root = runtimeConsumer();
 
     const result = runRuntimeCli(root, "--expect", "Loading conversions");
 
     expect(result.status, result.stderr).toBe(0);
     // Two separate clauses: the JSX runtime is reported on every invocation,
-    // so it no longer sits immediately before the runtime-only clause.
+    // and the bundle count only with --runtime, so nothing holds them
+    // adjacent.
     expect(result.stdout).toContain("production JSX runtime");
     expect(result.stdout).toContain("panel rendered from 2 bundles");
   });
 
   it("catches a development JSX runtime without running the panel", () => {
-    const root = createConsumer({
-      assets: panelRemote({
-        chunkPrelude:
-          'var _jsxFileName = "src/panel/PluginConfigurationPanel.tsx";\nfunction jsxDEV(type, props) { return props; }\n',
-      }),
-      link: REACT_PACKAGES,
+    const root = runtimeConsumer({
+      chunkPrelude:
+        'var _jsxFileName = "src/panel/PluginConfigurationPanel.tsx";\nfunction jsxDEV(type, props) { return props; }\n',
     });
 
     const staticRun = checkConsumer(root);
@@ -175,13 +186,10 @@ describe("snui-check-consumer --runtime", () => {
   it("catches a rendered version stamp the bundled literal hides", () => {
     // The chunk carries the installed version as a literal, so the static
     // stamp check passes; the panel renders a different one.
-    const root = createConsumer({
-      assets: panelRemote({
-        chunkPrelude: `var installed = { "data-snui-version": "${STAMP}" };\n`,
-        panel:
-          'React.createElement("div", { "data-snui-root": "", "data-snui-version": "9.9." + "9" }, "Panel")',
-      }),
-      link: REACT_PACKAGES,
+    const root = runtimeConsumer({
+      chunkPrelude: `var installed = { "data-snui-version": "${STAMP}" };\n`,
+      panel:
+        'React.createElement("div", { "data-snui-root": "", "data-snui-version": "9.9." + "9" }, "Panel")',
     });
 
     expect(
@@ -198,12 +206,9 @@ describe("snui-check-consumer --runtime", () => {
   });
 
   it("catches a panel that renders no panel root at all", () => {
-    const root = createConsumer({
-      assets: panelRemote({
-        chunkPrelude: `var installed = { "data-snui-root": "", "data-snui-version": "${STAMP}" };\n`,
-        panel: 'React.createElement("div", null, "Panel")',
-      }),
-      link: REACT_PACKAGES,
+    const root = runtimeConsumer({
+      chunkPrelude: `var installed = { "data-snui-root": "", "data-snui-version": "${STAMP}" };\n`,
+      panel: 'React.createElement("div", null, "Panel")',
     });
 
     const result = runRuntimeCli(root);
@@ -215,10 +220,7 @@ describe("snui-check-consumer --runtime", () => {
   });
 
   it("requires the compatibility notice a browser without CSS scope gets", () => {
-    const root = createConsumer({
-      assets: panelRemote({ compatibilityNotice: PANEL }),
-      link: REACT_PACKAGES,
-    });
+    const root = runtimeConsumer({ compatibilityNotice: PANEL });
 
     const result = runRuntimeCli(root);
 
@@ -229,12 +231,9 @@ describe("snui-check-consumer --runtime", () => {
   });
 
   it("takes the consumer's own words for a replaced compatibility notice", () => {
-    const root = createConsumer({
-      assets: panelRemote({
-        compatibilityNotice:
-          'React.createElement("p", null, "This panel needs a newer browser.")',
-      }),
-      link: REACT_PACKAGES,
+    const root = runtimeConsumer({
+      compatibilityNotice:
+        'React.createElement("p", null, "This panel needs a newer browser.")',
     });
 
     expect(
@@ -250,10 +249,7 @@ describe("snui-check-consumer --runtime", () => {
 
   it("refuses --expect-unsupported beside the option that skips its render", () => {
     // The pair would assert nothing about the text it names and still pass.
-    const root = createConsumer({
-      assets: panelRemote(),
-      link: REACT_PACKAGES,
-    });
+    const root = runtimeConsumer();
 
     const result = runRuntimeCli(
       root,
@@ -273,10 +269,7 @@ describe("snui-check-consumer --runtime", () => {
   });
 
   it("reports every --expect the rendered panel is missing", () => {
-    const root = createConsumer({
-      assets: panelRemote(),
-      link: REACT_PACKAGES,
-    });
+    const root = runtimeConsumer();
 
     const result = runRuntimeCli(root, "--expect", "Saved conversions");
 
@@ -288,11 +281,10 @@ describe("snui-check-consumer --runtime", () => {
 
   it("opens the panel with configuration undefined, as a fresh install does", () => {
     // Written against a null configuration, which the host never passes.
-    const root = createConsumer({
-      assets: panelRemote({
-        panel: `React.createElement("div", { "data-snui-root": "", "data-snui-version": "${STAMP}" }, props.configuration === null ? "Unconfigured" : props.configuration.label)`,
-      }),
-      link: REACT_PACKAGES,
+    const root = runtimeConsumer({
+      panel: panelElement(
+        'props.configuration === null ? "Unconfigured" : props.configuration.label',
+      ),
     });
 
     const result = runRuntimeCli(
@@ -308,11 +300,10 @@ describe("snui-check-consumer --runtime", () => {
   });
 
   it("opens the panel with configuration {}, as a package enabled by default does", () => {
-    const root = createConsumer({
-      assets: panelRemote({
-        panel: `React.createElement("div", { "data-snui-root": "", "data-snui-version": "${STAMP}" }, props.configuration === undefined ? "Unconfigured" : props.configuration.limits.depth)`,
-      }),
-      link: REACT_PACKAGES,
+    const root = runtimeConsumer({
+      panel: panelElement(
+        'props.configuration === undefined ? "Unconfigured" : props.configuration.limits.depth',
+      ),
     });
 
     const result = runRuntimeCli(root);
@@ -324,11 +315,8 @@ describe("snui-check-consumer --runtime", () => {
   });
 
   it("passes the configuration the host holds through --props", () => {
-    const root = createConsumer({
-      assets: panelRemote({
-        panel: `React.createElement("div", { "data-snui-root": "", "data-snui-version": "${STAMP}" }, props.configuration?.label ?? "Unconfigured")`,
-      }),
-      link: REACT_PACKAGES,
+    const root = runtimeConsumer({
+      panel: panelElement('props.configuration?.label ?? "Unconfigured"'),
     });
 
     const unconfigured = runRuntimeCli(root, "--expect", "Unconfigured");
@@ -356,10 +344,7 @@ describe("snui-check-consumer --runtime", () => {
   });
 
   it("reports a panel that calls save while it renders", () => {
-    const root = createConsumer({
-      assets: panelRemote({ saveDuringRender: true }),
-      link: REACT_PACKAGES,
-    });
+    const root = runtimeConsumer({ saveDuringRender: true });
 
     const result = runRuntimeCli(root);
 
@@ -372,11 +357,8 @@ describe("snui-check-consumer --runtime", () => {
   it("reports a save made only while the panel renders with configuration {}", () => {
     // Normalizing {} through the plugin's defaults is the path most likely
     // to save during render, so the {} render counts saves like every other.
-    const root = createConsumer({
-      assets: panelRemote({
-        panel: `(props.configuration !== undefined && props.save({ normalized: true }), ${PANEL})`,
-      }),
-      link: REACT_PACKAGES,
+    const root = runtimeConsumer({
+      panel: `(props.configuration !== undefined && props.save({ normalized: true }), ${PANEL})`,
     });
 
     const result = runRuntimeCli(root);
@@ -389,11 +371,7 @@ describe("snui-check-consumer --runtime", () => {
   });
 
   it("names the container global a remote entry did not assign", () => {
-    const root = createConsumer({
-      assets: panelRemote(),
-      link: REACT_PACKAGES,
-      name: "other-consumer",
-    });
+    const root = runtimeConsumer({}, { name: "other-consumer" });
 
     const result = runRuntimeCli(root);
 
@@ -407,10 +385,7 @@ describe("snui-check-consumer --runtime", () => {
   });
 
   it("names the module a remote entry does not expose", () => {
-    const root = createConsumer({
-      assets: panelRemote(),
-      link: REACT_PACKAGES,
-    });
+    const root = runtimeConsumer();
 
     const result = checkConsumer(root, "--runtime", "--expose", "./Missing");
 
@@ -426,11 +401,8 @@ describe("snui-check-consumer --runtime", () => {
 
   it("points a missing global at the one place the stubs live", () => {
     // What a React Aria release that reaches for a new global looks like.
-    const root = createConsumer({
-      assets: panelRemote({
-        entryPrelude: 'matchMedia("(prefers-reduced-motion: reduce)");\n',
-      }),
-      link: REACT_PACKAGES,
+    const root = runtimeConsumer({
+      entryPrelude: 'matchMedia("(prefers-reduced-motion: reduce)");\n',
     });
 
     const result = runRuntimeCli(root);
@@ -443,15 +415,34 @@ describe("snui-check-consumer --runtime", () => {
   });
 
   it("needs a module to render", () => {
-    const root = createConsumer({
-      assets: panelRemote(),
-      link: REACT_PACKAGES,
-    });
+    const root = runtimeConsumer();
 
     const result = checkConsumer(root, "--runtime");
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("--runtime needs --expose <module>");
+  });
+
+  it("reports an argument error before a missing React", () => {
+    // No React linked: neither error needs a render, so each comes first.
+    const root = createConsumer({ assets: panelRemote() });
+
+    const props = runRuntimeCli(root, "--props", "not json");
+    expect(props.status).not.toBe(0);
+    expect(props.stderr).toContain("--props is not valid JSON");
+    expect(props.stderr).not.toContain("which is not installed");
+
+    const unsupported = runRuntimeCli(
+      root,
+      "--no-compatibility-render",
+      "--expect-unsupported",
+      "Browser update required",
+    );
+    expect(unsupported.status).not.toBe(0);
+    expect(unsupported.stderr).toContain(
+      "--expect-unsupported needs the compatibility render that --no-compatibility-render skips.",
+    );
+    expect(unsupported.stderr).not.toContain("which is not installed");
   });
 
   it("leaves the static mode alone and refuses its options without --runtime", () => {
@@ -469,92 +460,6 @@ describe("snui-check-consumer --runtime", () => {
     expect(result.stderr).toContain("--expect and --expose need --runtime.");
     // Without them the same build passes with no React installed beside it.
     expect(checkConsumer(root).status).toBe(0);
-  });
-});
-
-describe("the panel context", () => {
-  /** What React Aria's focus-visible setup and transition tracker touch. */
-  const REACT_ARIA_SETUP = `
-    if (typeof document === "undefined") throw new Error("no document");
-    if (document.readyState === "loading") throw new Error("deferred to DOMContentLoaded");
-    const focus = window.HTMLElement.prototype.focus;
-    Reflect.defineProperty(window.HTMLElement.prototype, "focus", {
-      configurable: true,
-      writable: true,
-      value: function () {},
-    });
-    document.addEventListener("keydown", () => {}, true);
-    document.addEventListener("keyup", () => {}, true);
-    document.body.addEventListener("transitionrun", () => {});
-    document.body.addEventListener("transitionend", () => {});
-    window.addEventListener("focus", () => {}, true);
-    window.addEventListener("blur", () => {}, false);
-    document.currentScript.src;
-  `;
-
-  it("answers the import-time setup this package's dependencies run", () => {
-    expect(() =>
-      vm.runInContext(REACT_ARIA_SETUP, createPanelContext()),
-    ).not.toThrow();
-  });
-
-  it("is one object for window, self, and globalThis, as a browser is", () => {
-    const context = createPanelContext();
-
-    expect(
-      vm.runInContext(
-        "window === self && self === globalThis && window.document === document",
-        context,
-      ),
-    ).toBe(true);
-    expect(vm.runInContext("document.currentScript.src", context)).toBe(
-      DEFAULT_SCRIPT_URL,
-    );
-    expect(
-      vm.runInContext("typeof setTimeout === 'function'", context),
-      "host globals pass through",
-    ).toBe(true);
-  });
-
-  it("refuses the network and the document's own elements", () => {
-    const context = createPanelContext();
-
-    expect(() => vm.runInContext("fetch('/plugins')", context)).toThrow(
-      "The panel fetched while it rendered.",
-    );
-    expect(() =>
-      vm.runInContext("document.createElement('script')", context),
-    ).toThrow("pre-registers every chunk");
-  });
-
-  it("takes the CSS scope interface away and puts it back", () => {
-    const context = createPanelContext();
-    const supported = "typeof window.CSSScopeRule === 'function'";
-
-    expect(vm.runInContext(supported, context)).toBe(true);
-    setNativeCssScope(context, false);
-    expect(vm.runInContext(supported, context)).toBe(false);
-    setNativeCssScope(context, true);
-    expect(vm.runInContext(supported, context)).toBe(true);
-  });
-});
-
-describe("rendered version stamps", () => {
-  it("accepts one matching stamp and rejects a second copy", () => {
-    expect(() =>
-      assertMarkupVersionStamp(
-        '<div data-snui-version="0.10.0"></div>',
-        "0.10.0",
-      ),
-    ).not.toThrow();
-    expect(() =>
-      assertMarkupVersionStamp(
-        '<div data-snui-version="0.10.0"><p data-snui-version="0.9.0"></p></div>',
-        "0.10.0",
-      ),
-    ).toThrow(
-      "stamps data-snui-version with 0.10.0, 0.9.0; expected exactly 0.10.0.",
-    );
   });
 });
 
@@ -634,6 +539,18 @@ describe("renderPanelRemote in process", () => {
     ).rejects.toThrow(`The remote exposes no ${EXPOSED_MODULE} module.`);
   });
 
+  it("fails a remote that never settles within the bound, rather than stopping the check", async () => {
+    await expect(
+      renderInProcess({
+        bundles: [{ name: "remoteEntry.js", source: HUNG_CONTAINER }],
+        containerName: "probe_panel",
+        timeoutMs: 50,
+      }),
+    ).rejects.toThrow(
+      "remoteEntry.js did not finish initializing the share scope within 50ms.",
+    );
+  });
+
   it("refuses a module with nothing the host can render", async () => {
     await expect(
       renderInProcess({ bundles: remoteExposing("{ default: 42 }") }),
@@ -669,7 +586,63 @@ describe("renderPanelRemote in process", () => {
   });
 });
 
+describe("a classic entry evaluated alone", () => {
+  it("passes one that assigns its container and names one that does not", () => {
+    const entry = {
+      containerName: "consumer_fixture",
+      entryName: "remoteEntry.js",
+      source: panelRemote()["remoteEntry.js"],
+    };
+
+    expect(() => {
+      assertClassicContainerLoads(entry);
+    }).not.toThrow();
+    expect(() => {
+      assertClassicContainerLoads({
+        ...entry,
+        containerName: "other_consumer",
+      });
+    }).toThrow(
+      "remoteEntry.js did not assign a container with get and init to window.other_consumer",
+    );
+  });
+});
+
+describe("the consumer's own React", () => {
+  it("loads through the consumer's require, and says when it is not installed", () => {
+    const loaded = loadConsumerReact(createRequire(import.meta.url));
+
+    expect(loaded.react.version).toBe(React.version);
+    expect(loaded.reactDom.version).toBe(ReactDOM.version);
+    expect(loaded.renderToStaticMarkup).toBeTypeOf("function");
+    expect(() =>
+      loadConsumerReact(() => {
+        throw new Error("Cannot find module 'react'");
+      }),
+    ).toThrow(
+      "--runtime renders the panel with the consumer's own React, which is not installed: Cannot find module 'react'",
+    );
+  });
+});
+
 describe("rendered markup assertions", () => {
+  it("accepts one matching stamp and rejects a second copy", () => {
+    expect(() =>
+      assertMarkupVersionStamp(
+        '<div data-snui-version="0.10.0"></div>',
+        "0.10.0",
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertMarkupVersionStamp(
+        '<div data-snui-version="0.10.0"><p data-snui-version="0.9.0"></p></div>',
+        "0.10.0",
+      ),
+    ).toThrow(
+      "stamps data-snui-version with 0.10.0, 0.9.0; expected exactly 0.10.0.",
+    );
+  });
+
   it("names a panel that rendered no stamp at all", () => {
     expect(() => assertMarkupVersionStamp("<div></div>", "0.10.0")).toThrow(
       `The rendered panel carries no data-snui-version stamp, so it rendered no PanelRoot of ${manifest.name} 0.10.0.`,

@@ -57,13 +57,7 @@ export function readOption(argv, name, requires = "a value") {
       `${name} was given ${given} times, and it takes one value.`,
     );
   }
-  const index = argv.indexOf(name);
-  if (index === -1) return undefined;
-  const value = argv[index + 1];
-  if (value === undefined || isFlag(value)) {
-    throw new Error(`${name} requires ${requires}.`);
-  }
-  return value;
+  return readValues(argv, name, requires)[0];
 }
 
 /** Every value given for a repeatable option, in the order they were given. */

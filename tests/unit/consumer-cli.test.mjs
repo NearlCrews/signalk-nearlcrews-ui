@@ -10,17 +10,19 @@ import {
   CONTAINER_RUNTIME,
   checkConsumer,
   createConsumer,
-  EXPOSES,
+  EXPOSED_MODULE,
   FEDERATION_REQUEST,
   MODULE_ENTRY,
   manifest,
+  REMOTE_ENTRY,
+  remoteAssets,
   removeConsumers,
   runCli,
-  SHARE_REGISTRATIONS,
   SHARED_NAMES,
   STAMP,
   shared,
 } from "./lib/consumer-fixture.mjs";
+import { statsModule } from "./lib/webpack-stats.mjs";
 
 const REMOTE_GZIP_BYTES = gzipBytesOf([
   Buffer.from(CHUNK),
@@ -103,12 +105,7 @@ describe("snui-check-consumer", () => {
       configName: "webpack.config.js",
     });
 
-    const result = runCli(
-      "--root",
-      root,
-      "--remote",
-      join(root, "public", "remoteEntry.js"),
-    );
+    const result = runCli("--root", root, "--remote", join(root, REMOTE_ENTRY));
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("Webpack configuration shares match");
@@ -118,7 +115,7 @@ describe("snui-check-consumer", () => {
     // In a package with "type": "module" the file is an ES module, whose
     // configuration is its default export.
     const root = createConsumer({
-      assets: { "main.chunk.js": CHUNK, "remoteEntry.js": MODULE_ENTRY },
+      assets: remoteAssets({ "remoteEntry.js": MODULE_ENTRY }),
       config: moduleConfig(
         "{ plugins: [{ options: { shared: { ...shared } } }] }",
       ),
@@ -212,14 +209,14 @@ exports.default = ${exported};
   });
 
   it("requires both the consumer root and the built remote", () => {
-    const result = runCli("--remote", "public/remoteEntry.js");
+    const result = runCli("--remote", REMOTE_ENTRY);
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Usage: snui-check-consumer");
   });
 
   it("rejects a following flag where a path belongs", () => {
-    const result = runCli("--root", "--remote", "public/remoteEntry.js");
+    const result = runCli("--root", "--remote", REMOTE_ENTRY);
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("--root requires a path.");
@@ -306,7 +303,7 @@ describe("snui-check-consumer and the Signal K Admin loader", () => {
 
   it("refuses a module entry in a package the server loads as classic", () => {
     const root = createConsumer({
-      assets: { "main.chunk.js": CHUNK, "remoteEntry.js": MODULE_ENTRY },
+      assets: remoteAssets({ "remoteEntry.js": MODULE_ENTRY }),
     });
 
     const result = checkConsumer(root);
@@ -319,7 +316,7 @@ describe("snui-check-consumer and the Signal K Admin loader", () => {
 
   it("passes a module entry that exports get and init in a module package", () => {
     const root = createConsumer({
-      assets: { "main.chunk.js": CHUNK, "remoteEntry.js": MODULE_ENTRY },
+      assets: remoteAssets({ "remoteEntry.js": MODULE_ENTRY }),
       manifest: { type: "module" },
     });
 
@@ -336,10 +333,9 @@ describe("snui-check-consumer and the Signal K Admin loader", () => {
     // The guard three consumers wrote by hand, `includes("export")`, passes
     // this entry: webpack's own `.exports` carries the word.
     const root = createConsumer({
-      assets: {
-        "main.chunk.js": CHUNK,
+      assets: remoteAssets({
         "remoteEntry.js": `${CLASSIC_ENTRY}module.exports=consumer_fixture;`,
-      },
+      }),
       manifest: { type: "module" },
     });
 
@@ -354,13 +350,9 @@ describe("snui-check-consumer and the Signal K Admin loader", () => {
 
   it("requires the module the Admin asks every configurator for", () => {
     const root = createConsumer({
-      assets: {
-        "main.chunk.js": CHUNK,
-        "remoteEntry.js": CLASSIC_ENTRY.replace(
-          "./PluginConfigurationPanel",
-          "./AppPanel",
-        ),
-      },
+      assets: remoteAssets({
+        "remoteEntry.js": CLASSIC_ENTRY.replace(EXPOSED_MODULE, "./AppPanel"),
+      }),
     });
 
     const result = checkConsumer(root);
@@ -373,10 +365,9 @@ describe("snui-check-consumer and the Signal K Admin loader", () => {
 
   it("names the bundler it supports rather than blaming the share map", () => {
     const root = createConsumer({
-      assets: {
-        "main.chunk.js": CHUNK,
+      assets: remoteAssets({
         "remoteEntry.js": CLASSIC_ENTRY.replace(CONTAINER_RUNTIME, ""),
-      },
+      }),
     });
 
     const result = checkConsumer(root);
@@ -403,10 +394,9 @@ describe("snui-check-consumer and the Signal K Admin loader", () => {
 
   it("refuses a remote that bundled the host harness", () => {
     const root = createConsumer({
-      assets: {
+      assets: remoteAssets({
         "main.chunk.js": `${CHUNK}var frame={"data-snui-host-harness":""};`,
-        "remoteEntry.js": CLASSIC_ENTRY,
-      },
+      }),
     });
 
     const result = checkConsumer(root);
@@ -445,11 +435,9 @@ describe("snui-check-consumer dependency placement", () => {
 describe("snui-check-consumer package names in CSS", () => {
   it("passes public tokens, documented hooks, and the panel container", () => {
     const root = createConsumer({
-      assets: {
-        "main.chunk.js": CHUNK,
+      assets: remoteAssets({
         "main.css": `.row{gap:var(--snui-space-2);scroll-margin-block-end:var(--snui-sticky-clearance)}@container snui-panel (width<=32rem){.row{color:var(--snui-color-text-muted)}}`,
-        "remoteEntry.js": CLASSIC_ENTRY,
-      },
+      }),
     });
 
     const result = checkConsumer(root);
@@ -460,11 +448,9 @@ describe("snui-check-consumer package names in CSS", () => {
 
   it("names every unknown, renamed, or misspelled package name", () => {
     const root = createConsumer({
-      assets: {
-        "main.chunk.js": CHUNK,
+      assets: remoteAssets({
         "main.css": `.row{gap:var(--snui-space-22);color:var(--module__snui-color-border)}@container snui-panle (width<=32rem){.row{gap:0}}`,
-        "remoteEntry.js": CLASSIC_ENTRY,
-      },
+      }),
     });
 
     const result = checkConsumer(root);
@@ -483,47 +469,33 @@ describe("snui-check-consumer package names in CSS", () => {
 });
 
 describe("snui-check-consumer --stats", () => {
-  const module = (name) => ({
-    name: `./node_modules/${name}`,
-    nameForCondition: `/work/node_modules/${name}`,
-    type: "module",
-  });
+  const LIBRARY = "node_modules/signalk-nearlcrews-ui/dist/index.js";
 
-  it("reads the module graph Webpack recorded", () => {
+  /** Runs the check with stats that record a clean build of `paths`. */
+  function checkStats(...paths) {
     const stats = {
       errorsCount: 0,
-      modules: [
-        module("signalk-nearlcrews-ui/dist/index.js"),
-        module("react/jsx-runtime.js"),
-      ],
+      modules: paths.map((path) => statsModule(path)),
     };
     const root = createConsumer({
       files: { "stats.json": JSON.stringify(stats) },
     });
+    return checkConsumer(root, "--stats", "stats.json");
+  }
 
-    const result = checkConsumer(root, "--stats", "stats.json");
+  it("reads the module graph Webpack recorded", () => {
+    const result = checkStats(LIBRARY, "node_modules/react/jsx-runtime.js");
 
     expect(result.status, result.stderr).toBe(0);
     expect(result.stdout).toContain("module graph of 2 modules");
   });
 
   it("fails a graph that bundled React DOM", () => {
-    const stats = {
-      errorsCount: 0,
-      modules: [
-        module("signalk-nearlcrews-ui/dist/index.js"),
-        module("react-dom/index.js"),
-      ],
-    };
-    const root = createConsumer({
-      files: { "stats.json": JSON.stringify(stats) },
-    });
-
-    const result = checkConsumer(root, "--stats", "stats.json");
+    const result = checkStats(LIBRARY, "node_modules/react-dom/index.js");
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(
-      "The remote bundled modules the Signal K Admin host owns: /work/node_modules/react-dom/index.js.",
+      "The remote bundled modules the Signal K Admin host owns: /plugin/node_modules/react-dom/index.js.",
     );
   });
 });
@@ -575,15 +547,5 @@ export function Panel() {
     expect(result.stderr).toContain(
       "--styles found no *.module.css under src/panel",
     );
-  });
-});
-
-describe("the consumer fixture", () => {
-  it("builds its entries from the shared pieces", () => {
-    for (const entry of [CLASSIC_ENTRY, MODULE_ENTRY]) {
-      expect(entry).toContain(SHARE_REGISTRATIONS);
-      expect(entry).toContain(CONTAINER_RUNTIME);
-      expect(entry).toContain(EXPOSES);
-    }
   });
 });

@@ -31,13 +31,14 @@ import {
 } from "node:worker_threads";
 
 import {
-  createDomStubs,
   DEFAULT_TIMEOUT_MS,
-  failureOf,
+  installDomStubs,
+  isContainer,
+  loadConsumerReact,
   loadExposedModule,
   panelComponentOf,
+  panelLoadError,
   renderPanelStates,
-  setNativeCssScope,
   withTimeout,
 } from "./panel-runtime.mjs";
 
@@ -45,27 +46,20 @@ import {
 const WORKER_FLAG = "snuiModulePanelRender";
 
 /**
- * Puts the DOM stubs on a realm's global. Node 22 and later define `navigator`
- * as a getter on the global and no `self` at all, so every stub is defined as
- * a property rather than assigned, which also replaces Node's own `fetch`
- * with the stub that turns a render reaching the network into a finding.
+ * What a stage that outlives its bound is reported as, by the realm's own
+ * timer for the evaluation and by the parent's for every stage.
  */
-export function installDomStubs(globalObject, scriptUrl) {
-  const stubs = createDomStubs(scriptUrl);
-  const define = (name, value) => {
-    Object.defineProperty(globalObject, name, {
-      configurable: true,
-      value,
-      writable: true,
-    });
-  };
-  define("document", stubs.document);
-  define("window", globalObject);
-  define("self", globalObject);
-  for (const [name, value] of Object.entries(stubs.window)) {
-    define(name, value);
+function stageTimeout(stage, entryName, exposedModule) {
+  switch (stage) {
+    case "evaluate":
+      return `${entryName} did not finish evaluating`;
+    case "load":
+      return `The remote did not finish loading ${exposedModule}`;
+    case "render":
+      return "The panel did not finish rendering";
+    default:
+      return "The render worker did not start";
   }
-  setNativeCssScope(globalObject, true);
 }
 
 /**
@@ -95,12 +89,9 @@ export async function renderModuleRemoteInRealm({
     const container = await withTimeout(
       Promise.resolve(importEntry(entryUrl)),
       timeoutMs,
-      `${entryName} did not finish evaluating`,
+      stageTimeout("evaluate", entryName, exposedModule),
     );
-    if (
-      typeof container?.get !== "function" ||
-      typeof container?.init !== "function"
-    ) {
+    if (!isContainer(container)) {
       throw new Error(
         `${entryName} does not export get and init, which the Signal K Admin reads off a module remote.`,
       );
@@ -115,9 +106,7 @@ export async function renderModuleRemoteInRealm({
       timeoutMs,
     });
   } catch (cause) {
-    throw new Error(`The panel remote did not load: ${failureOf(cause)}`, {
-      cause,
-    });
+    throw panelLoadError(cause);
   }
   onStage("render");
   return renderPanelStates({
@@ -136,20 +125,6 @@ export async function renderModuleRemoteInRealm({
  * not held to the remote's own bound, which a caller may set tight.
  */
 const WORKER_START_TIMEOUT_MS = 3 * DEFAULT_TIMEOUT_MS;
-
-/** What the parent reports when a stage outlives its bound. */
-function stageTimeout(stage, entryName, exposedModule) {
-  switch (stage) {
-    case "evaluate":
-      return `${entryName} did not finish evaluating`;
-    case "load":
-      return `The remote did not finish loading ${exposedModule}`;
-    case "render":
-      return "The panel did not finish rendering";
-    default:
-      return "The render worker did not start";
-  }
-}
 
 /**
  * Renders a module remote in a worker thread and returns what
@@ -194,9 +169,7 @@ export function renderModulePanelRemote({
         const description = stageTimeout(stage, entryName, exposedModule);
         settle(() => {
           rejectPromise(
-            new Error(
-              `The panel remote did not load: ${description} within ${bound}ms.`,
-            ),
+            panelLoadError(new Error(`${description} within ${bound}ms.`)),
           );
         });
       }, bound);
@@ -217,11 +190,7 @@ export function renderModulePanelRemote({
     });
     worker.on("error", (cause) => {
       settle(() => {
-        rejectPromise(
-          new Error(`The panel remote did not load: ${failureOf(cause)}`, {
-            cause,
-          }),
-        );
+        rejectPromise(panelLoadError(cause));
       });
     });
     worker.on("exit", (code) => {
@@ -242,20 +211,14 @@ export function renderModulePanelRemote({
  */
 async function answerParent(data) {
   try {
-    const consumerRequire = createRequire(join(data.root, "package.json"));
-    const react = consumerRequire("react");
-    const reactDom = consumerRequire("react-dom");
-    const { renderToStaticMarkup } = consumerRequire("react-dom/server");
     const result = await renderModuleRemoteInRealm({
       ...data,
+      ...loadConsumerReact(createRequire(join(data.root, "package.json"))),
       globalObject: globalThis,
       importEntry: (url) => import(url),
       onStage: (stage) => {
         parentPort.postMessage({ stage, type: "stage" });
       },
-      react,
-      reactDom,
-      renderToStaticMarkup,
     });
     parentPort.postMessage({ result, type: "done" });
   } catch (error) {
