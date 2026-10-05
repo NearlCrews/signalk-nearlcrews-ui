@@ -29,15 +29,15 @@ The budget column is the ceiling the size check enforces, and it carries forward
 
 | Import path                          | Gzip bytes | Budget (bytes) |
 | ------------------------------------ | ---------: | -------------: |
-| `signalk-nearlcrews-ui`              |      39906 |          39936 |
-| `signalk-nearlcrews-ui/composites`   |      26252 |          26624 |
-| `signalk-nearlcrews-ui/data-grid`    |      79928 |          83968 |
-| `signalk-nearlcrews-ui/format`       |       1147 |           2048 |
-| `signalk-nearlcrews-ui/forms`        |      30045 |          31744 |
-| `signalk-nearlcrews-ui/host-harness` |       1805 |           2048 |
-| `signalk-nearlcrews-ui/overlays`     |      66838 |          70656 |
+| `signalk-nearlcrews-ui`              |      39593 |          39936 |
+| `signalk-nearlcrews-ui/composites`   |      23316 |          26624 |
+| `signalk-nearlcrews-ui/data-grid`    |      77164 |          83968 |
+| `signalk-nearlcrews-ui/format`       |       1149 |           2048 |
+| `signalk-nearlcrews-ui/forms`        |      27295 |          31744 |
+| `signalk-nearlcrews-ui/host-harness` |       1804 |           2048 |
+| `signalk-nearlcrews-ui/overlays`     |      64296 |          70656 |
 | `signalk-nearlcrews-ui/tokens.css`   |       1746 |           2048 |
-| `fixtures/size/consumer-panel.ts`    |      35389 |          35840 |
+| `fixtures/size/consumer-panel.ts`    |      34745 |          35840 |
 
 The data grid and overlay entries carry React Aria's built-in announcement strings for 34 locales, about 40 KB of the data grid bundle before compression; the root, composites, and forms entries carry none of them. React Aria documents `@react-aria/optimize-locales-plugin` for dropping the locales a remote never uses, with a Webpack form, `optimizeLocales.webpack({ locales: [...] })`. Keeping en-US alone measured the data grid entry about 9.8 KB gzip smaller and the overlays entry about 2.6 KB smaller. Key the list on what actually picks React Aria's language. This package installs no `I18nProvider`, so React Aria follows the browser's language, and `PanelRoot.locale` pins only the package's own formatters. List every locale the panel pins through its own `I18nProvider`, and en-US alone when it pins none: a stripped locale falls back to en-US, which matches the Signal K Admin page, declared English with no localization of its own, and keeps a browser set to another language from reading React Aria announcements in that language inside an English page. Each remote bundles its own React Aria and the host shares only React and React DOM, so the saving belongs to that remote alone and the Admin loader is unaffected. The package cannot strip the strings for its consumers; this stays a choice in each consumer's build.
 
