@@ -11,6 +11,8 @@ import {
   type TestInfo,
 } from "@playwright/test";
 
+import { CSP_FIXTURE_PATH } from "../../fixtures/browser/browser-server.js";
+
 interface AxeRuleException {
   /** The axe rule id left out of this one run. */
   readonly id: string;
@@ -18,14 +20,23 @@ interface AxeRuleException {
   readonly reason: string;
 }
 
-export interface AxeOptions {
+interface AxeOptions {
   readonly disableRules?: readonly AxeRuleException[] | undefined;
 }
 
 /**
+ * The desktop Chromium project, where an engine-independent check runs once.
+ * Specs reach it only through skipOutsideChromium, and they compare against
+ * WEBKIT_PROJECT and MOBILE_PROJECT rather than spelling a project name.
+ */
+const CHROMIUM_PROJECT = "chromium";
+
+/** The desktop WebKit project. */
+export const WEBKIT_PROJECT = "webkit";
+
+/**
  * The one Playwright project that emulates a phone: a coarse pointer on a
- * narrow viewport. Specs compare the project name against this rather than
- * spelling it.
+ * narrow viewport.
  */
 export const MOBILE_PROJECT = "mobile-chromium";
 
@@ -57,43 +68,105 @@ export async function expectProjectPointer(
   ).toBe(testInfo.project.name === MOBILE_PROJECT);
 }
 
+/** The explicit themes, by their accessible names in the theme selector. */
+export const THEMES = ["Light", "Dark", "Night"] as const;
+
 /** A theme option's accessible name in the panel's theme selector. */
-export type ThemeName = "Light" | "Dark" | "Night";
+export type ThemeName = (typeof THEMES)[number];
+
+/** PanelRoot's element, by the attribute every root carries. */
+const PANEL_ROOT_SELECTOR = "[data-snui-version]";
+
+/** The panel root, or every root on a page that mounts several. */
+export function panelRoot(page: Page): Locator {
+  return page.locator(PANEL_ROOT_SELECTOR);
+}
 
 /**
- * Whether the current project, platform, and snapshot variant has a committed
- * baseline for a screenshot, or baselines are being regenerated. Baselines
- * come only from the hosted refresh workflow, so any other machine, and a CI
- * run before a new screenshot's first refresh, has none; a caller skips the
- * comparison then rather than failing on a missing file. The family
- * completeness test is what fails until the images are committed.
+ * Whether a screenshot can be compared: the current project, platform, and
+ * snapshot variant has a committed baseline for it, or baselines are being
+ * written. Hosted baselines come only from the refresh workflow, so any other
+ * machine, and a CI run before a new screenshot's first refresh, has none; a
+ * caller skips the comparison then rather than failing on a missing file. The
+ * family completeness test is what fails until the images are committed.
+ * Playwright's own update mode counts as writing, which is how a local run
+ * writes the local family.
  */
-export function hasCommittedBaseline(
-  testInfo: TestInfo,
-  snapshot: string,
-): boolean {
+function hasCommittedBaseline(testInfo: TestInfo, snapshot: string): boolean {
+  const { updateSnapshots } = testInfo.config;
   return (
     process.env.SNUI_UPDATE_BASELINES === "true" ||
+    updateSnapshots === "all" ||
+    updateSnapshots === "changed" ||
     existsSync(testInfo.snapshotPath(snapshot))
   );
 }
 
-/** Why a screenshot comparison was skipped, as the annotation reads. */
-export function missingBaselineReason(snapshot: string): string {
-  return `No committed ${snapshot} baseline for this project, platform, and snapshot variant; refresh baselines through the manual CI workflow.`;
+/** How every full-page visual baseline is captured. */
+export const FULL_PAGE_SNAPSHOT = {
+  animations: "disabled",
+  fullPage: true,
+} as const;
+
+/**
+ * Compares one capture with its baseline, or records why it was skipped. The
+ * other checks in the same test still run, which a test-level skip would stop.
+ * An element capture takes a page capture's options but the two that frame a
+ * page.
+ */
+export function matchBaseline(
+  target: Page,
+  testInfo: TestInfo,
+  snapshot: string,
+  options: PageAssertionsToHaveScreenshotOptions,
+): Promise<void>;
+export function matchBaseline(
+  target: Locator,
+  testInfo: TestInfo,
+  snapshot: string,
+  options: Omit<PageAssertionsToHaveScreenshotOptions, "clip" | "fullPage">,
+): Promise<void>;
+export async function matchBaseline(
+  target: Locator | Page,
+  testInfo: TestInfo,
+  snapshot: string,
+  options: PageAssertionsToHaveScreenshotOptions,
+): Promise<void> {
+  if (!hasCommittedBaseline(testInfo, snapshot)) {
+    testInfo.annotations.push({
+      description: `No committed ${snapshot} baseline for this project, platform, and snapshot variant; refresh baselines through the manual CI workflow.`,
+      type: "skip",
+    });
+    return;
+  }
+  // The page and the locator assertions each declare toHaveScreenshot, so the
+  // union is narrowed to one of them rather than passed through.
+  if ("goto" in target) {
+    await expect(target).toHaveScreenshot(snapshot, options);
+  } else {
+    await expect(target).toHaveScreenshot(snapshot, options);
+  }
 }
 
 /** Picks a theme and waits until the panel root carries it. */
 export async function selectTheme(page: Page, theme: ThemeName): Promise<void> {
   await page.getByRole("radio", { name: theme }).click();
-  await expect(page.locator("[data-snui-version]")).toHaveAttribute(
+  await expect(panelRoot(page)).toHaveAttribute(
     "data-snui-theme",
     theme.toLowerCase(),
   );
 }
 
+/**
+ * Emulates forced colors, which Playwright does in Chromium only, with motion
+ * reduced so no color is read in the middle of a transition.
+ */
+export function emulateForcedColors(page: Page): Promise<void> {
+  return page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+}
+
 /** A CSS system color keyword a probe can resolve. */
-export type SystemColor =
+type SystemColor =
   | "ButtonFace"
   | "ButtonText"
   | "Canvas"
@@ -134,11 +207,20 @@ export function systemColors<Name extends SystemColor>(
   );
 }
 
+/** One computed style value of the first element the locator matches. */
+export function styleOf(locator: Locator, property: string): Promise<string> {
+  return locator.evaluate(
+    (element, name) => getComputedStyle(element).getPropertyValue(name),
+    property,
+  );
+}
+
+/** The background color an element computes when it paints none. */
+export const TRANSPARENT = "rgba(0, 0, 0, 0)";
+
 /** The computed background color of the first element the locator matches. */
 export function backgroundOf(locator: Locator): Promise<string> {
-  return locator.evaluate(
-    (element) => getComputedStyle(element).backgroundColor,
-  );
+  return styleOf(locator, "background-color");
 }
 
 /**
@@ -154,6 +236,22 @@ export function tokenColor(anchor: Locator, token: string): Promise<string> {
     probe.remove();
     return value;
   }, token);
+}
+
+/**
+ * A length, a token or a literal, in pixels inside the anchor, read from a
+ * probe so the comparison follows the pointer and breakpoint in force.
+ */
+export function cssLength(anchor: Locator, length: string): Promise<number> {
+  return anchor.evaluate((element, value) => {
+    const probe = document.createElement("span");
+    probe.style.display = "block";
+    probe.style.width = value;
+    element.append(probe);
+    const px = Number.parseFloat(getComputedStyle(probe).width);
+    probe.remove();
+    return px;
+  }, length);
 }
 
 /** An element's rendered pixels, as the page decoded them. */
@@ -215,20 +313,46 @@ export async function expectSolidOutline(
   await expect(target).toHaveCSS("outline-width", width);
 }
 
+/** An element's layout box, in CSS pixels from the viewport's corner. */
+export interface Box {
+  readonly height: number;
+  readonly width: number;
+  readonly x: number;
+  readonly y: number;
+}
+
+/** A box that is there, or a failure naming what was not laid out. */
+export async function boxOf(locator: Locator): Promise<Box> {
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error(`${String(locator)} has no layout box.`);
+  return box;
+}
+
 /** Fails when a control's box is under the floor on either measured axis. */
 export async function expectTargetFloor(
   target: Locator,
   minimum: number,
   axes: "height" | "both" = "height",
 ): Promise<void> {
-  const box = await target.boundingBox();
-  expect(box, "Expected the control to have a rendered box.").not.toBeNull();
+  const box = await boxOf(target);
   // Subpixel layout leaves a control that is exactly at the floor reporting a
   // hair under it, which is the engine rounding rather than a small target.
-  expect(box?.height).toBeGreaterThanOrEqual(minimum - 0.01);
+  expect(box.height).toBeGreaterThanOrEqual(minimum - 0.01);
   if (axes === "both") {
-    expect(box?.width).toBeGreaterThanOrEqual(minimum - 0.01);
+    expect(box.width).toBeGreaterThanOrEqual(minimum - 0.01);
   }
+}
+
+/** Fails when the page is wider than its viewport and so scrolls sideways. */
+export async function expectNoSidewaysScroll(
+  page: Page,
+  message?: string,
+): Promise<void> {
+  const { clientWidth, scrollWidth } = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+  }));
+  expect(scrollWidth, message).toBeLessThanOrEqual(clientWidth);
 }
 
 /** Options for {@link settledScrollLeft}. */
@@ -311,6 +435,30 @@ export async function settledScrollLeft(
   );
 }
 
+/** The first row of a grid whose text holds the name. */
+export function gridRow(grid: Locator, name: string): Locator {
+  return grid.getByRole("row").filter({ hasText: name }).first();
+}
+
+/**
+ * Selects the second vessel of the showcase's Fleet grid with a click and
+ * returns its row. A selected grid row puts the selected fill, a row state
+ * nothing else on the page shows, into a capture or under an audit. The
+ * baselines and the theme audit both start here, so the pixels one takes are
+ * the state the other grades. The pointer is left on the row.
+ */
+export async function selectFleetRow(page: Page): Promise<Locator> {
+  const row = gridRow(page.getByRole("grid", { name: "Fleet" }), "Vessel 002");
+  await row.click();
+  await expect(row).toHaveAttribute("aria-selected", "true");
+  return row;
+}
+
+/** The panel page's inline reset confirmation. */
+export function resetConfirmation(page: Page): Locator {
+  return page.getByRole("region", { name: "Reset configuration?" });
+}
+
 /**
  * Moves the pointer off the panel's controls, so a rest capture shows no
  * hover state: clicking a control leaves the pointer resting on it. The page
@@ -323,14 +471,15 @@ export async function movePointerOffPanel(page: Page): Promise<void> {
   await page.mouse.move(0, 0);
   expect(
     await page.evaluate(
-      () =>
-        document.querySelector("[data-snui-version] [data-hovered]") === null &&
-        [...document.querySelectorAll("[data-snui-version] :hover")].every(
+      (root) =>
+        document.querySelector(`${root} [data-hovered]`) === null &&
+        [...document.querySelectorAll(`${root} :hover`)].every(
           (element) =>
             element.closest(
               'a, button, input, label, select, textarea, [role="button"], [role="radio"], [role="row"]',
             ) === null,
         ),
+      PANEL_ROOT_SELECTOR,
     ),
     "A panel control is still under the pointer.",
   ).toBe(true);
@@ -351,6 +500,23 @@ export async function settleFrames(page: Page, frames = 2): Promise<void> {
       });
     }
   }, frames);
+}
+
+/**
+ * Stops every transition, and every animation unless told otherwise, for the
+ * rest of the page's life. A capture or an audit taken mid-flight reads
+ * colors composited against what is behind the element, and a toast enters
+ * on a keyframe animation rather than a transition, so both stop by default.
+ */
+export async function freezeMotion(
+  page: Page,
+  { animations = true }: { readonly animations?: boolean } = {},
+): Promise<void> {
+  await page.addStyleTag({
+    content: animations
+      ? "* { transition: none !important; animation: none !important; }"
+      : "* { transition: none !important; }",
+  });
 }
 
 /**
@@ -395,6 +561,13 @@ export async function expectNoAxeViolations(
   expect(results.violations).toEqual([]);
 }
 
+/** Why an audit under forced colors leaves axe's contrast rule out. */
+export const FORCED_COLORS_CONTRAST_EXCEPTION: AxeRuleException = {
+  id: "color-contrast",
+  reason:
+    "Under forced colors the browser replaces author colors with the system palette at paint time while computed values keep the author colors, so axe grades pairs such as Dark text over a forced Canvas background that the user never sees; the contrast of the system palette belongs to the operating system.",
+};
+
 interface BrowserIssue {
   readonly kind: "console.error" | "pageerror";
   readonly pageUrl: string;
@@ -416,7 +589,7 @@ function isExpectedCspViolation(issue: BrowserIssue): boolean {
   }
   const mode = location.searchParams.get("mode");
   return (
-    location.pathname === "/csp.html" &&
+    location.pathname === CSP_FIXTURE_PATH &&
     (mode === "missing" || mode === "wrong") &&
     /refused to apply (?:(?:an? )?inline style|a stylesheet)|applying inline style violates|blocked an inline style/i.test(
       issue.text,
@@ -466,5 +639,16 @@ export const test = base.extend<BrowserErrorFixture>({
   ],
 });
 
-export type { Locator, Page, PageAssertionsToHaveScreenshotOptions, TestInfo };
+/**
+ * Skips the test in every project but desktop Chromium, with the reason the
+ * report shows.
+ */
+export function skipOutsideChromium(
+  testInfo: TestInfo,
+  reason = "Checked in Chromium only.",
+): void {
+  test.skip(testInfo.project.name !== CHROMIUM_PROJECT, reason);
+}
+
+export type { Locator, Page, TestInfo };
 export { expect };

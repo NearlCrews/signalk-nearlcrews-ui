@@ -10,6 +10,7 @@ import {
   type Selection,
 } from "signalk-nearlcrews-ui/data-grid";
 import { mountFixture } from "./mount.js";
+import { vesselIdentity } from "./shared.js";
 
 /*
  * The same small fleet in both DataGrid layouts, the table the grid renders
@@ -26,9 +27,8 @@ interface Vessel {
 }
 
 const FLEET: readonly Vessel[] = Array.from({ length: 6 }, (_, index) => ({
+  ...vesselIdentity(index),
   depth: 3 + index,
-  id: `vessel-${String(index + 1)}`,
-  name: `Vessel ${String(index + 1).padStart(3, "0")}`,
   source: index % 2 === 0 ? "GPS" : "Depth sounder",
 }));
 

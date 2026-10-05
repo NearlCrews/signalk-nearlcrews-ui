@@ -1,4 +1,13 @@
-import { expect, type Page, settleFrames, test } from "./fixtures.js";
+import { THEME_CHOICES } from "../../src/theme/contract.js";
+import { THEME_TOGGLE_LABEL_DEFAULTS } from "../../src/utils/panel-label-defaults.js";
+import {
+  expect,
+  type Locator,
+  type Page,
+  panelRoot,
+  settleFrames,
+  test,
+} from "./fixtures.js";
 
 /*
  * PanelShell places its theme selector after the panel content, and panels
@@ -12,19 +21,20 @@ import { expect, type Page, settleFrames, test } from "./fixtures.js";
  */
 
 /** The accessible names of the five theme radios, in order. */
-const THEME_NAMES = [
-  "Match Admin",
-  "Match device",
-  "Light",
-  "Dark",
-  "Night",
-] as const;
+const THEME_NAMES = THEME_CHOICES.map(
+  (choice) => THEME_TOGGLE_LABEL_DEFAULTS.choiceLabels[choice],
+);
 
 /**
  * Frames the bar needs to settle: one for the scroll or focus that moves it,
  * one for its own measuring pass, and one for the placement that pass commits.
  */
 const BAR_SETTLE_FRAMES = 3;
+
+/** The save bar, by its supported test hook. */
+function actionBar(page: Page): Locator {
+  return page.locator("[data-snui-action-bar]");
+}
 
 /**
  * Opens the live-regions page, a PanelShell with `themeToggle="end"` whose
@@ -34,7 +44,7 @@ const BAR_SETTLE_FRAMES = 3;
  */
 async function openTallPanel(page: Page): Promise<void> {
   await page.goto("/live-regions.html");
-  await expect(page.locator("[data-snui-action-bar]")).toBeVisible();
+  await expect(actionBar(page)).toBeVisible();
   await page.evaluate(() => {
     const root = document.getElementById("root");
     const section = document.querySelector("[data-snui-root] .snui-section");
@@ -65,9 +75,22 @@ async function scrollUntilDocked(page: Page): Promise<void> {
     scrollTo(0, panel.getBoundingClientRect().top + scrollY - 40);
   });
   await settleFrames(page, BAR_SETTLE_FRAMES);
-  await expect(page.locator("[data-snui-action-bar]")).toHaveAttribute(
-    "data-snui-docked",
-    "",
+  await expect(actionBar(page)).toHaveAttribute("data-snui-docked", "");
+}
+
+/** Scrolls to the end of the page, which returns the bar to the flow. */
+async function scrollToPageEnd(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    scrollTo(0, document.documentElement.scrollHeight);
+  });
+  await settleFrames(page, BAR_SETTLE_FRAMES);
+  await expect(actionBar(page)).not.toHaveAttribute("data-snui-docked");
+}
+
+/** Whether keyboard focus stands on a theme radio. */
+function focusIsOnThemeRadio(page: Page): Promise<boolean> {
+  return page.evaluate(
+    () => document.activeElement?.getAttribute("role") === "radio",
   );
 }
 
@@ -104,7 +127,7 @@ function radioHits(page: Page): Promise<RadioHit[]> {
 /** Fails unless every theme radio can be pressed where it is drawn. */
 async function expectEveryThemeReachable(page: Page): Promise<void> {
   const hits = await radioHits(page);
-  expect(hits.map((hit) => hit.name)).toEqual([...THEME_NAMES]);
+  expect(hits.map((hit) => hit.name)).toEqual(THEME_NAMES);
   for (const hit of hits) {
     expect(hit.coveredByBar, `${hit.name} is under the docked bar`).toBe(false);
     expect(hit.onScreen, `${hit.name} is off screen`).toBe(true);
@@ -119,14 +142,8 @@ test.beforeEach(async ({ page }) => {
 test("releases the docked bar above the theme selector at the end of the page", async ({
   page,
 }) => {
-  const bar = page.locator("[data-snui-action-bar]");
-
   await scrollUntilDocked(page);
-  await page.evaluate(() => {
-    scrollTo(0, document.documentElement.scrollHeight);
-  });
-  await settleFrames(page, BAR_SETTLE_FRAMES);
-  await expect(bar).not.toHaveAttribute("data-snui-docked");
+  await scrollToPageEnd(page);
   await expectEveryThemeReachable(page);
 
   // Scrolling there a step at a time, as a reader does, ends the same way.
@@ -140,24 +157,20 @@ test("releases the docked bar above the theme selector at the end of the page", 
     });
     await settleFrames(page, BAR_SETTLE_FRAMES);
   }
-  await expect(bar).not.toHaveAttribute("data-snui-docked");
+  await expect(actionBar(page)).not.toHaveAttribute("data-snui-docked");
   await expectEveryThemeReachable(page);
 });
 
 test("reaches the theme selector from the docked bar by keyboard and by press", async ({
   page,
 }) => {
-  const bar = page.locator("[data-snui-action-bar]");
-
   await scrollUntilDocked(page);
   await page.getByRole("button", { name: "Save" }).focus();
   // The theme selector is a single tab stop after the bar's actions.
   let onTheme = false;
   for (let step = 0; step < 8 && !onTheme; step += 1) {
     await page.keyboard.press("Tab");
-    onTheme = await page.evaluate(
-      () => document.activeElement?.getAttribute("role") === "radio",
-    );
+    onTheme = await focusIsOnThemeRadio(page);
   }
   expect(onTheme).toBe(true);
   await settleFrames(page, BAR_SETTLE_FRAMES);
@@ -185,20 +198,13 @@ test("reaches the theme selector from the docked bar by keyboard and by press", 
   const heldAt = await page.evaluate(() => scrollY);
   await settleFrames(page, BAR_SETTLE_FRAMES);
   expect(await page.evaluate(() => scrollY)).toBe(heldAt);
-  expect(
-    await page.evaluate(
-      () => document.activeElement?.getAttribute("role") === "radio",
-    ),
-  ).toBe(true);
+  expect(await focusIsOnThemeRadio(page)).toBe(true);
 
   // A consumer test presses the last theme from wherever the page stands, and
   // the press lands without the bar intercepting it.
   await page.getByRole("radio", { name: "Night" }).click({ timeout: 5_000 });
-  await expect(page.locator("[data-snui-root]")).toHaveAttribute(
-    "data-snui-theme",
-    "night",
-  );
-  await expect(bar).not.toHaveAttribute("data-snui-docked");
+  await expect(panelRoot(page)).toHaveAttribute("data-snui-theme", "night");
+  await expect(actionBar(page)).not.toHaveAttribute("data-snui-docked");
 });
 
 interface ContentEdges {
@@ -248,18 +254,12 @@ async function expectBarAlignedWithSection(page: Page): Promise<void> {
 test("lines the bar's status and buttons up with the section content above it", async ({
   page,
 }) => {
-  const bar = page.locator("[data-snui-action-bar]");
-
   // The save bar ends nearly every panel, under a column of sections, so its
   // content keeps the sections' inline inset, docked and in flow alike, and
   // at the narrow panel width the mobile project runs at.
   await scrollUntilDocked(page);
   await expectBarAlignedWithSection(page);
 
-  await page.evaluate(() => {
-    scrollTo(0, document.documentElement.scrollHeight);
-  });
-  await settleFrames(page, BAR_SETTLE_FRAMES);
-  await expect(bar).not.toHaveAttribute("data-snui-docked");
+  await scrollToPageEnd(page);
   await expectBarAlignedWithSection(page);
 });

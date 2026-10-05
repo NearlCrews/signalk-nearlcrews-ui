@@ -1,9 +1,14 @@
-import type { Locator, Page, TestInfo } from "@playwright/test";
-
 import { TONE_BAR_WIDTH } from "../../src/styles/fragments.js";
 import {
+  cssLength,
+  emulateForcedColors,
   expect,
+  gridRow,
+  type Locator,
   movePointerOffPanel,
+  type Page,
+  skipOutsideChromium,
+  styleOf,
   systemColors,
   test,
   tokenColor,
@@ -95,18 +100,21 @@ interface FleetRows {
   readonly unselected: Locator;
 }
 
+/** Opens the fixture and returns the grid with the given accessible name. */
+async function openFleet(page: Page, label: string): Promise<Locator> {
+  await page.goto("/data-grid.html");
+  return page.getByRole("grid", { exact: true, name: label });
+}
+
 /**
  * Opens the fixture and selects the second vessel with a click, then parks
  * the pointer so no row is hovered.
  */
 async function selectByPointer(page: Page, label: string): Promise<FleetRows> {
-  await page.goto("/data-grid.html");
-  const grid = page.getByRole("grid", { exact: true, name: label });
+  const grid = await openFleet(page, label);
   const header = grid.locator(".snui-data-grid__header [role='row']").first();
-  const row = (name: string): Locator =>
-    grid.getByRole("row").filter({ hasText: name }).first();
-  const unselected = row("Vessel 001");
-  const selected = row("Vessel 002");
+  const unselected = gridRow(grid, "Vessel 001");
+  const selected = gridRow(grid, "Vessel 002");
   await selected.click();
   await expect(selected).toHaveAttribute("aria-selected", "true");
   await movePointerOffPanel(page);
@@ -119,12 +127,12 @@ async function selectByPointer(page: Page, label: string): Promise<FleetRows> {
  * Banner that both lost their width cannot pass as equal.
  */
 async function toneBarWidth(page: Page): Promise<number> {
-  const width = await page
-    .locator(".snui-banner")
-    .first()
-    .evaluate((banner) =>
-      Number.parseFloat(getComputedStyle(banner).borderInlineStartWidth),
-    );
+  const width = Number.parseFloat(
+    await styleOf(
+      page.locator(".snui-banner").first(),
+      "border-inline-start-width",
+    ),
+  );
   expect(width).toBeGreaterThan(1);
   return width;
 }
@@ -132,23 +140,11 @@ async function toneBarWidth(page: Page): Promise<number> {
 /** The token the selection bar is drawn in, resolved inside its row. */
 const ACCENT_FILL = "--snui-color-accent-fill";
 
-/** One engine proves the rules, and forced colors is emulated there alone. */
-function onlyInChromium(testInfo: TestInfo): void {
-  test.skip(testInfo.project.name !== "chromium", "Checked in Chromium only.");
-}
-
 const LAYOUTS = [
   ["table", "Table fleet"],
   ["virtualized", "Virtualized fleet"],
   ["compact virtualized", "Compact virtualized fleet"],
 ] as const;
-
-/** One rem in CSS pixels, the unit TONE_BAR_WIDTH is written in. */
-function remInPixels(page: Page): Promise<number> {
-  return page.evaluate(() =>
-    Number.parseFloat(getComputedStyle(document.documentElement).fontSize),
-  );
-}
 
 /**
  * Focuses the first vessel's row, moves to the second with ArrowDown, and
@@ -156,10 +152,9 @@ function remInPixels(page: Page): Promise<number> {
  * holding focus and its ring.
  */
 async function selectByKeyboard(page: Page, label: string): Promise<Locator> {
-  await page.goto("/data-grid.html");
-  const grid = page.getByRole("grid", { exact: true, name: label });
-  const row = grid.getByRole("row").filter({ hasText: "Vessel 002" });
-  await grid.getByRole("row").filter({ hasText: "Vessel 001" }).focus();
+  const grid = await openFleet(page, label);
+  const row = gridRow(grid, "Vessel 002");
+  await gridRow(grid, "Vessel 001").focus();
   await page.keyboard.press("ArrowDown");
   await page.keyboard.press("Space");
   await expect(row).toHaveAttribute("aria-selected", "true");
@@ -168,12 +163,37 @@ async function selectByKeyboard(page: Page, label: string): Promise<Locator> {
   return row;
 }
 
+/** A focused row's inset focus ring. */
+function focusRing(
+  row: Locator,
+): Promise<{ offset: number; style: string; width: number }> {
+  return row.evaluate((element) => {
+    const style = getComputedStyle(element);
+    return {
+      offset: Number.parseFloat(style.outlineOffset),
+      style: style.outlineStyle,
+      width: Number.parseFloat(style.outlineWidth),
+    };
+  });
+}
+
+/**
+ * Fails unless the bar starts past the ring on every side it touches. The
+ * ring fills the band just inside the row's edge, so it stays whole.
+ */
+function expectBarInsideRing(first: LeadingEdge, ringWidth: number): void {
+  expect(first.barInlineStart).toBe(ringWidth);
+  expect(first.barBlockStart).toBe(ringWidth);
+  expect(first.barBlockEnd).toBe(ringWidth);
+  expect(first.barHeight).toBeCloseTo(first.cellHeight - 2 * ringWidth, 0);
+}
+
 for (const [layout, label] of LAYOUTS) {
   test.describe(`the ${layout} layout`, () => {
     test("paints the selection bar before the first cell of a selected row only", async ({
       page,
     }, testInfo) => {
-      onlyInChromium(testInfo);
+      skipOutsideChromium(testInfo);
       const { header, selected, unselected } = await selectByPointer(
         page,
         label,
@@ -215,10 +235,11 @@ for (const [layout, label] of LAYOUTS) {
         firstUnselected.textOffset,
         1,
       );
-      // The widening is the bar's own 0.3rem over the density's inset, so a
+      // The widening is the bar's own width over the density's inset, so a
       // density padding rule that won the cascade over it would show here.
-      expect(firstHeader.inset - (otherHeaders[0]?.inset ?? 0)).toBeCloseTo(
-        Number.parseFloat(TONE_BAR_WIDTH) * (await remInPixels(page)),
+      const widening = firstHeader.inset - (otherHeaders[0]?.inset ?? 0);
+      expect(widening).toBeCloseTo(
+        await cssLength(page.locator(".snui-root__content"), TONE_BAR_WIDTH),
         1,
       );
 
@@ -233,9 +254,7 @@ for (const [layout, label] of LAYOUTS) {
       expect(firstSelected.barBlockEnd).toBe(0);
       expect(firstSelected.barHeight).toBeCloseTo(firstSelected.cellHeight, 0);
       expect(firstSelected.barWidth).toBe(bannerBar);
-      expect(firstSelected.barWidth).toBeLessThanOrEqual(
-        firstHeader.inset - (otherHeaders[0]?.inset ?? 0) + 0.5,
-      );
+      expect(firstSelected.barWidth).toBeLessThanOrEqual(widening + 0.5);
       for (const edge of [
         firstHeader,
         firstUnselected,
@@ -250,47 +269,29 @@ for (const [layout, label] of LAYOUTS) {
     test("keeps the selection bar inside a focused row's focus ring", async ({
       page,
     }, testInfo) => {
-      onlyInChromium(testInfo);
+      skipOutsideChromium(testInfo);
       // Space selects the row that holds focus, so a selected row usually
       // carries the ring too.
       const row = await selectByKeyboard(page, label);
 
-      const ring = await row.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-          offset: Number.parseFloat(style.outlineOffset),
-          style: style.outlineStyle,
-          width: Number.parseFloat(style.outlineWidth),
-        };
-      });
+      const ring = await focusRing(row);
       const [first] = split(await leadingEdges(row));
       expect(ring.style).toBe("solid");
       expect(ring.offset).toBe(-ring.width);
-      // The ring fills the band just inside the row's edge; the bar starts
-      // past it on every side it touches, so the ring stays whole.
       expect(first.bar).not.toBeNull();
-      expect(first.barInlineStart).toBe(ring.width);
-      expect(first.barBlockStart).toBe(ring.width);
-      expect(first.barBlockEnd).toBe(ring.width);
-      expect(first.barHeight).toBeCloseTo(first.cellHeight - 2 * ring.width, 0);
+      expectBarInsideRing(first, ring.width);
     });
 
     test("widens the ring under a contrast request and keeps the bar inside it", async ({
       page,
     }, testInfo) => {
-      onlyInChromium(testInfo);
+      skipOutsideChromium(testInfo);
       // A request for more contrast widens every focus ring to 3px, the
       // grid row's included, and the bar steps inside the wider band.
       await page.emulateMedia({ contrast: "more" });
       const row = await selectByKeyboard(page, label);
 
-      const ring = await row.evaluate((element) => {
-        const style = getComputedStyle(element);
-        return {
-          offset: Number.parseFloat(style.outlineOffset),
-          width: Number.parseFloat(style.outlineWidth),
-        };
-      });
+      const ring = await focusRing(row);
       const [first] = split(await leadingEdges(row));
       expect(ring.width).toBe(3);
       expect(ring.offset).toBe(-ring.width);
@@ -298,20 +299,14 @@ for (const [layout, label] of LAYOUTS) {
       // tone bar, and spans the cell between the wider band's edges.
       expect(first.bar).toBe(await tokenColor(row, ACCENT_FILL));
       expect(first.barWidth).toBe(await toneBarWidth(page));
-      expect(first.barInlineStart).toBe(ring.width);
-      expect(first.barBlockStart).toBe(ring.width);
-      expect(first.barBlockEnd).toBe(ring.width);
-      expect(first.barHeight).toBeCloseTo(first.cellHeight - 2 * ring.width, 0);
+      expectBarInsideRing(first, ring.width);
     });
 
     test("shows a focused selected row's ring under forced colors", async ({
       page,
     }, testInfo) => {
-      onlyInChromium(testInfo);
-      await page.emulateMedia({
-        forcedColors: "active",
-        reducedMotion: "reduce",
-      });
+      skipOutsideChromium(testInfo);
+      await emulateForcedColors(page);
       const row = await selectByKeyboard(page, label);
 
       // Forced colors fills a selected row with Highlight, so a ring in
@@ -335,11 +330,8 @@ for (const [layout, label] of LAYOUTS) {
     test("keeps the one selection bar under forced colors", async ({
       page,
     }, testInfo) => {
-      onlyInChromium(testInfo);
-      await page.emulateMedia({
-        forcedColors: "active",
-        reducedMotion: "reduce",
-      });
+      skipOutsideChromium(testInfo);
+      await emulateForcedColors(page);
       const { selected } = await selectByPointer(page, label);
 
       const [first, others] = split(await leadingEdges(selected));

@@ -27,19 +27,20 @@ import {
   StatusIndicator,
   Textarea,
   TextInput,
-  ThemeToggle,
 } from "signalk-nearlcrews-ui";
 import { CheckboxGroup } from "signalk-nearlcrews-ui/composites";
 import { createToastQueue, ToastRegion } from "signalk-nearlcrews-ui/overlays";
 import { mountFixture } from "./mount.js";
+import { LOG_DETAIL_OPTIONS, PageHeader } from "./shared.js";
 
-type LogLevel = "minimal" | "normal" | "verbose";
+type LogLevel = (typeof LOG_DETAIL_OPTIONS)[number]["value"];
 const fixtureParameters = new URLSearchParams(window.location.search);
 const showStates = fixtureParameters.has("states");
 const startBusy = fixtureParameters.has("busy");
 const becomeBusyOnConfirm = fixtureParameters.has("busy-on-confirm");
 const testFocusLoading = fixtureParameters.has("focus-loading");
 const simulateAdminHost = fixtureParameters.has("admin-host");
+const nestFocusTarget = fixtureParameters.has("nested-scroller");
 const showHostResetFixture = fixtureParameters.has("host-reset");
 const showForcedColorActions = fixtureParameters.has("forced-color-actions");
 const engineToastQueue = createToastQueue();
@@ -59,7 +60,7 @@ function Fixture(): React.JSX.Element {
   const saveRef = useRef<HTMLButtonElement>(null);
 
   return (
-    <PanelRoot {...(simulateAdminHost ? { width: "standard" } : {})}>
+    <PanelRoot width={simulateAdminHost ? "standard" : undefined}>
       <Stack gap={4}>
         {showHostResetFixture ? (
           <div data-testid="host-reset-fixture">
@@ -71,13 +72,10 @@ function Fixture(): React.JSX.Element {
             </fieldset>
           </div>
         ) : null}
-        <Cluster justify="between" gap={4}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: "1.4rem" }}>Weather provider</h1>
-            <StatusIndicator tone="success">Connected</StatusIndicator>
-          </div>
-          <ThemeToggle />
-        </Cluster>
+        <PageHeader
+          title="Weather provider"
+          status={<StatusIndicator tone="success">Connected</StatusIndicator>}
+        />
 
         {simulateAdminHost ? (
           <Cluster gap={2}>
@@ -226,11 +224,7 @@ function Fixture(): React.JSX.Element {
                 label="Log detail"
                 value={logLevel}
                 onValueChange={setLogLevel}
-                options={[
-                  { value: "minimal", label: "Minimal" },
-                  { value: "normal", label: "Normal" },
-                  { value: "verbose", label: "Verbose" },
-                ]}
+                options={LOG_DETAIL_OPTIONS}
               />
             </CollapsibleSection>
           </Stack>
@@ -332,6 +326,18 @@ function Fixture(): React.JSX.Element {
             else setConfirmOpen(false);
           }}
         />
+
+        {nestFocusTarget ? (
+          <div
+            className="admin-host__nested-scroller"
+            data-testid="admin-host-nested-scroller"
+          >
+            <Button data-testid="admin-host-nested-target">
+              Nested panel action
+            </Button>
+            <div className="admin-host__nested-scroller-rest" />
+          </div>
+        ) : null}
 
         {simulateAdminHost ? (
           <div className="admin-host__tall-panel-content">

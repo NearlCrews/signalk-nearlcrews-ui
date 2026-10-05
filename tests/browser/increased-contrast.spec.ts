@@ -1,15 +1,19 @@
 import { DARK_TOKENS, NIGHT_TOKENS } from "../../src/styles/tokens.js";
-import { hexChannels } from "../color-channels.js";
+import { hexChannels, NIGHT_CHANNEL_CAP } from "../color-channels.js";
 import {
+  boxOf,
   expect,
   expectSolidOutline,
   type Locator,
   type Page,
   type Pixels,
+  panelRoot,
   renderedPixels,
   selectTheme,
   settleAnimations,
-  type TestInfo,
+  skipOutsideChromium,
+  styleOf,
+  THEMES,
   type ThemeName,
   test,
 } from "./fixtures.js";
@@ -38,11 +42,6 @@ import {
  * the native parts measured here are Chromium's own.
  */
 
-const THEMES: readonly ThemeName[] = ["Light", "Dark", "Night"];
-
-/** The brightest green or blue channel Night lets a color carry. */
-const NIGHT_CHANNEL_CAP = 0x40;
-
 /** Why a cascade check runs in one engine. */
 const CASCADE_ONLY =
   "The cascade is engine independent; checked in Chromium only.";
@@ -50,13 +49,6 @@ const CASCADE_ONLY =
 /** Why a check of the browser's own parts runs in one engine. */
 const NATIVE_PARTS_ONLY =
   "These native parts are Chromium's own; checked in Chromium only.";
-
-function skipOutsideChromium(
-  testInfo: TestInfo,
-  reason: string = CASCADE_ONLY,
-): void {
-  test.skip(testInfo.project.name !== "chromium", reason);
-}
 
 /** The computed value of each token on an element inside the panel. */
 function tokenValues(
@@ -131,7 +123,7 @@ for (const theme of THEMES) {
   test(`raises boundaries, outlines, and muted text on request in ${theme}`, async ({
     page,
   }, testInfo) => {
-    skipOutsideChromium(testInfo);
+    skipOutsideChromium(testInfo, CASCADE_ONLY);
     await page.goto("/");
     await selectTheme(page, theme);
 
@@ -150,7 +142,7 @@ for (const theme of THEMES) {
 test("widens every component focus ring on request", async ({
   page,
 }, testInfo) => {
-  skipOutsideChromium(testInfo);
+  skipOutsideChromium(testInfo, CASCADE_ONLY);
   await page.emulateMedia({ contrast: "more" });
   await page.goto("/showcase.html");
 
@@ -199,15 +191,13 @@ test("widens every component focus ring on request", async ({
 test("raises the tokens on request under a host's dark marker", async ({
   page,
 }, testInfo) => {
-  skipOutsideChromium(testInfo);
+  skipOutsideChromium(testInfo, CASCADE_ONLY);
   await page.emulateMedia({ contrast: "more" });
   await page.goto("/");
   // A panel that follows Admin carries no theme of its own, so the host's
   // marker sets its palette at the heaviest weight in the token sheet.
   await page.getByRole("radio", { name: "Match Admin" }).click();
-  await expect(page.locator("[data-snui-version]")).not.toHaveAttribute(
-    "data-snui-theme",
-  );
+  await expect(panelRoot(page)).not.toHaveAttribute("data-snui-theme");
   await page.evaluate(() => {
     document.documentElement.setAttribute("data-bs-theme", "dark");
   });
@@ -221,7 +211,7 @@ test("raises the tokens on request under a host's dark marker", async ({
 test("keeps the browser's own chrome under the Night channel cap", async ({
   page,
 }, testInfo) => {
-  skipOutsideChromium(testInfo);
+  skipOutsideChromium(testInfo, CASCADE_ONLY);
   await page.goto("/");
   await selectTheme(page, "Night");
 
@@ -230,9 +220,7 @@ test("keeps the browser's own chrome under the Night channel cap", async ({
   const scroller = page.getByRole("textbox", { name: "Operator notes" });
   expectNightCapped(
     "scrollbar-color",
-    await scroller.evaluate(
-      (element) => getComputedStyle(element).scrollbarColor,
-    ),
+    await styleOf(scroller, "scrollbar-color"),
   );
 
   const selection = await panelContent(page).evaluate((element) => {
@@ -261,14 +249,9 @@ test("keeps the Night number spinner working", async ({ page }, testInfo) => {
   // pointer route to step a number, since a wheel over the field blurs it.
   const field = page.getByRole("spinbutton", { name: "Refresh interval" });
   await field.hover();
-  const box = await field.boundingBox();
-  expect(
-    box,
-    "Expected the number field to have a rendered box.",
-  ).not.toBeNull();
-  if (box === null) return;
-  const paddingEnd = await field.evaluate((element) =>
-    Number.parseFloat(getComputedStyle(element).paddingInlineEnd),
+  const box = await boxOf(field);
+  const paddingEnd = Number.parseFloat(
+    await styleOf(field, "padding-inline-end"),
   );
   // The upper half of the spin button, just inside the field's end padding.
   await page.mouse.click(
@@ -297,12 +280,7 @@ async function spinnerTargetWidth(page: Page, field: Locator): Promise<number> {
     // Hovering scrolls the field into view, so its box is read afterwards:
     // a click outside the viewport lands nowhere.
     await field.hover();
-    const box = await field.boundingBox();
-    expect(
-      box,
-      "Expected the number field to have a rendered box.",
-    ).not.toBeNull();
-    if (box === null) return 0;
+    const box = await boxOf(field);
     await page.mouse.click(
       box.x + box.width - end - inset - 0.5,
       box.y + box.height * 0.3,
@@ -398,6 +376,12 @@ function pickerRingPixels(pixels: Pixels): number {
   return trailingPixelsIn(pixels, "--snui-color-focus");
 }
 
+/** One pixel of a resize grip's strokes, by its distance from the corner. */
+interface GripStroke {
+  readonly fromBottom: number;
+  readonly fromSide: number;
+}
+
 /**
  * Night text-strength pixels (red at 0xe0 or more) within 16 CSS pixels of the
  * bottom edge and of the given side, as their distance in device pixels from
@@ -408,8 +392,8 @@ function pickerRingPixels(pixels: Pixels): number {
 function cornerStrokes(
   pixels: Pixels,
   side: "left" | "right",
-  scale = 1,
-): { readonly fromBottom: number; readonly fromSide: number }[] {
+  scale: number,
+): GripStroke[] {
   const reach = 16 * scale;
   return pixelsWhere(pixels, (red, _green, _blue, x, y) => {
     const fromSide = side === "left" ? x : pixels.width - 1 - x;
@@ -428,11 +412,8 @@ function cornerStrokes(
  * `scale` is the device pixel ratio the distances were measured at.
  */
 function expectGripFacingCorner(
-  strokes: readonly {
-    readonly fromBottom: number;
-    readonly fromSide: number;
-  }[],
-  scale = 1,
+  strokes: readonly GripStroke[],
+  scale: number,
 ): void {
   expect(strokes.length, "the grip draws no strokes").toBeGreaterThan(0);
   for (const { fromBottom, fromSide } of strokes) {
@@ -460,12 +441,7 @@ function expectGripFacingCorner(
  * does. Each stroke fills one or more whole pixel diagonals, one distance sum
  * apiece, and a gap separates the two strokes.
  */
-function expectEqualStrokeWeights(
-  strokes: readonly {
-    readonly fromBottom: number;
-    readonly fromSide: number;
-  }[],
-): void {
+function expectEqualStrokeWeights(strokes: readonly GripStroke[]): void {
   const diagonals = [
     ...new Set(
       strokes.map(({ fromBottom, fromSide }) => fromSide + fromBottom),
@@ -483,10 +459,10 @@ function expectEqualStrokeWeights(
   expect(weights[0], "the strokes differ in weight").toBe(weights[1]);
 }
 
-/** Opens the showcase in Night, settled. */
-async function openNightShowcase(page: Page): Promise<void> {
+/** Opens the showcase in a theme, settled. */
+async function openShowcaseIn(page: Page, theme: ThemeName): Promise<void> {
   await page.goto("/showcase.html");
-  await selectTheme(page, "Night");
+  await selectTheme(page, theme);
   await settleAnimations(page);
 }
 
@@ -551,7 +527,7 @@ for (const label of [
     page,
   }, testInfo) => {
     skipOutsideChromium(testInfo, NATIVE_PARTS_ONLY);
-    await openNightShowcase(page);
+    await openShowcaseIn(page, "Night");
     await addDateAndTimeFields(page);
 
     const pixels = await renderedPixels(
@@ -569,7 +545,7 @@ test("keeps the focused date segment under the Night channel cap", async ({
   page,
 }, testInfo) => {
   skipOutsideChromium(testInfo, NATIVE_PARTS_ONLY);
-  await openNightShowcase(page);
+  await openShowcaseIn(page, "Night");
 
   // Focusing the field puts the browser's own focus on its first segment.
   const field = page.getByLabel("Season start", { exact: true });
@@ -600,7 +576,7 @@ test("rings the Night date picker in the focus token when the keyboard reaches i
   page,
 }, testInfo) => {
   skipOutsideChromium(testInfo, NATIVE_PARTS_ONLY);
-  await openNightShowcase(page);
+  await openShowcaseIn(page, "Night");
 
   const { beforePicker, onPicker } = await pickerFocusImages(page);
 
@@ -693,9 +669,7 @@ for (const theme of THEMES) {
     page,
   }, testInfo) => {
     skipOutsideChromium(testInfo, NATIVE_PARTS_ONLY);
-    await page.goto("/showcase.html");
-    await selectTheme(page, theme);
-    await settleAnimations(page);
+    await openShowcaseIn(page, theme);
 
     for (const [contrast, width] of [
       ["no-preference", 2],
@@ -731,17 +705,11 @@ test("keeps the Night resize grip resizing the field", async ({
   page,
 }, testInfo) => {
   skipOutsideChromium(testInfo, NATIVE_PARTS_ONLY);
-  await page.goto("/showcase.html");
-  await selectTheme(page, "Night");
+  await openShowcaseIn(page, "Night");
 
   const notes = page.getByRole("textbox", { name: "Operator notes" });
   await notes.scrollIntoViewIfNeeded();
-  const before = await notes.boundingBox();
-  expect(
-    before,
-    "Expected the notes field to have a rendered box.",
-  ).not.toBeNull();
-  if (before === null) return;
+  const before = await boxOf(notes);
   // The grip sits in the field's bottom trailing corner.
   await page.mouse.move(
     before.x + before.width - 3,
@@ -754,36 +722,7 @@ test("keeps the Night resize grip resizing the field", async ({
     { steps: 5 },
   );
   await page.mouse.up();
-  const after = await notes.boundingBox();
-  expect(after?.height ?? 0).toBeGreaterThan(before.height + 20);
-});
-
-test("draws the Night resize grip clear of the border, facing its corner", async ({
-  page,
-}, testInfo) => {
-  skipOutsideChromium(testInfo, NATIVE_PARTS_ONLY);
-  await openNightShowcase(page);
-
-  const notes = page.getByRole("textbox", { name: "Operator notes" });
-  expectGripFacingCorner(
-    cornerStrokes(await renderedPixels(page, notes), "right"),
-  );
-});
-
-test("mirrors the Night resize grip in a right-to-left field", async ({
-  page,
-}, testInfo) => {
-  skipOutsideChromium(testInfo, NATIVE_PARTS_ONLY);
-  await openNightShowcase(page);
-
-  // The browser moves the grip to the bottom left of a right-to-left field.
-  const notes = page.getByRole("textbox", { name: "Operator notes" });
-  await notes.evaluate((field) => {
-    field.setAttribute("dir", "rtl");
-  });
-  expectGripFacingCorner(
-    cornerStrokes(await renderedPixels(page, notes), "left"),
-  );
+  expect((await boxOf(notes)).height).toBeGreaterThan(before.height + 20);
 });
 
 test("draws the Night resize grip in button text under forced colors, on a clear corner", async ({
@@ -791,7 +730,7 @@ test("draws the Night resize grip in button text under forced colors, on a clear
 }, testInfo) => {
   skipOutsideChromium(testInfo, NATIVE_PARTS_ONLY);
   await page.emulateMedia({ forcedColors: "active" });
-  await openNightShowcase(page);
+  await openShowcaseIn(page, "Night");
 
   const pixels = await renderedPixels(
     page,
@@ -806,20 +745,19 @@ test("draws the Night resize grip in button text under forced colors, on a clear
   const canvas = fromCorner(40, 12);
   const strokes = pixelsWhere(
     pixels,
-    (red, green, blue, x, y) =>
-      pixels.width - 1 - x < 12 &&
-      pixels.height - 1 - y < 12 &&
-      pixels.width - 1 - x >= 3 &&
-      pixels.height - 1 - y >= 3 &&
-      (red !== canvas[0] || green !== canvas[1] || blue !== canvas[2]),
-  );
-  expect(strokes.length).toBeGreaterThan(0);
-  expectEqualStrokeWeights(
-    strokes.map(({ x, y }) => ({
+    (red, green, blue) =>
+      red !== canvas[0] || green !== canvas[1] || blue !== canvas[2],
+  )
+    .map(({ x, y }) => ({
       fromBottom: pixels.height - 1 - y,
       fromSide: pixels.width - 1 - x,
-    })),
-  );
+    }))
+    .filter(
+      ({ fromBottom, fromSide }) =>
+        fromSide >= 3 && fromSide < 12 && fromBottom >= 3 && fromBottom < 12,
+    );
+  expect(strokes.length).toBeGreaterThan(0);
+  expectEqualStrokeWeights(strokes);
 });
 
 test("keeps the hovered Night number spinner under the channel cap", async ({
@@ -839,23 +777,26 @@ test("keeps the hovered Night number spinner under the channel cap", async ({
 });
 
 /*
- * The grip's two bands are equally wide and a quarter of the tile apart, so
- * the strokes keep one weight on a scaled or high density screen too, where
- * each covers more device pixel diagonals: a laptop at 125 percent, and
- * screens at 2 and 2.5 device pixels per CSS pixel.
+ * The grip's strokes stand clear of the border and face the corner they sit
+ * in, the bottom right, or the bottom left of a right-to-left field, where
+ * the browser moves the grip. Its two bands are equally wide and a quarter of
+ * the tile apart, so the strokes keep one weight on a scaled or high density
+ * screen too, where each covers more device pixel diagonals: a laptop at 125
+ * percent, and screens at 2 and 2.5 device pixels per CSS pixel.
  */
-for (const scale of [1.25, 2, 2.5]) {
+for (const scale of [1, 1.25, 2, 2.5]) {
   test.describe(`at a device pixel ratio of ${String(scale)}`, () => {
     test.use({ deviceScaleFactor: scale });
 
     for (const side of ["right", "left"] as const) {
-      test(`keeps both Night grip strokes one weight in the bottom ${side} corner`, async ({
+      test(`draws the Night resize grip clear of the border, facing the bottom ${side} corner, with both strokes one weight`, async ({
         page,
       }, testInfo) => {
         skipOutsideChromium(testInfo, NATIVE_PARTS_ONLY);
-        await openNightShowcase(page);
+        await openShowcaseIn(page, "Night");
 
         const notes = page.getByRole("textbox", { name: "Operator notes" });
+        // A right-to-left field carries the grip in its bottom left corner.
         if (side === "left") {
           await notes.evaluate((field) => {
             field.setAttribute("dir", "rtl");

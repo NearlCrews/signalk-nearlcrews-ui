@@ -2,8 +2,11 @@ import {
   expect,
   expectNoAxeViolations,
   movePointerOffPanel,
+  selectFleetRow,
   selectTheme,
   settleAnimations,
+  skipOutsideChromium,
+  THEMES,
   test,
 } from "./fixtures.js";
 
@@ -20,26 +23,19 @@ import {
  * every engine resolves the same way, and one engine keeps the run short.
  */
 
-const THEMES = ["Light", "Dark", "Night"] as const;
+/** Why the audits run in one engine. */
+const GRADED_IN_CHROMIUM = "Graded in Chromium only.";
 
 for (const theme of THEMES) {
   test(`grades the showcase with axe in ${theme}`, async ({
     page,
   }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium", "Graded in Chromium only.");
+    skipOutsideChromium(testInfo, GRADED_IN_CHROMIUM);
     // A full-page audit of the showcase is slow on a loaded runner.
     test.slow();
     await page.goto("/showcase.html");
     await selectTheme(page, theme);
-    // A selected grid row puts the selected fill, a row state nothing else on
-    // the page shows, under the audit.
-    const selectedRow = page
-      .getByRole("grid", { name: "Fleet" })
-      .getByRole("row")
-      .filter({ hasText: "Vessel 002" })
-      .first();
-    await selectedRow.click();
-    await expect(selectedRow).toHaveAttribute("aria-selected", "true");
+    await selectFleetRow(page);
     // The click leaves the pointer on the row, and its hover fill would stand
     // in for the plain selected fill under the audit.
     await movePointerOffPanel(page);
@@ -54,7 +50,7 @@ for (const theme of THEMES) {
 test("grades an open dialog and a danger toast with axe in Night", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium", "Graded in Chromium only.");
+  skipOutsideChromium(testInfo, GRADED_IN_CHROMIUM);
   test.slow();
   await page.goto("/showcase.html");
   await selectTheme(page, "Night");

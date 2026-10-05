@@ -1,12 +1,13 @@
 import * as React from "react";
 import * as ReactDOM from "react-dom";
-import { createRoot, type Root } from "react-dom/client";
+import type { Root } from "react-dom/client";
 import {
   createHostShareScope,
   HostPanelFrame,
   loadPanelRemote,
   type PanelRemoteType,
 } from "signalk-nearlcrews-ui/host-harness";
+import { mountFixture } from "./mount.js";
 
 declare const __CLASSIC_REMOTE_URL__: string;
 declare const __ESM_REMOTE_URL__: string;
@@ -67,29 +68,22 @@ const REMOTES: readonly FixtureRemote[] = [
 ];
 
 function mountRemote(remote: FixtureRemote): Root {
-  const element = document.querySelector(`#${remote.rootId}`);
-  if (!(element instanceof HTMLElement)) {
-    throw new Error(`Missing federation fixture root: ${remote.rootId}`);
-  }
-  const root = createRoot(element);
-  // StrictMode, as the other two browser fixtures do: this is the fixture that
-  // mounts and unmounts remotes and then asserts the document is left with no
-  // style elements, so the double invocation that catches an effect whose
-  // cleanup does not undo its setup belongs here most of all.
-  root.render(
-    <React.StrictMode>
-      <HostPanelFrame
-        configuration={remote.configuration}
-        packageName={remote.packageName}
-        shareScope={createHostShareScope(React, ReactDOM, {
-          reportedVersion: remote.reportedVersion,
-        })}
-        type={remote.type}
-        url={remote.url}
-      />
-    </React.StrictMode>,
+  // mountFixture mounts every browser fixture under StrictMode, and here it
+  // matters most of all: this is the fixture that mounts and unmounts remotes
+  // and then asserts the document is left with no style elements, so the
+  // double invocation catches an effect whose cleanup does not undo its setup.
+  return mountFixture(
+    <HostPanelFrame
+      configuration={remote.configuration}
+      packageName={remote.packageName}
+      shareScope={createHostShareScope(React, ReactDOM, {
+        reportedVersion: remote.reportedVersion,
+      })}
+      type={remote.type}
+      url={remote.url}
+    />,
+    remote.rootId,
   );
-  return root;
 }
 
 try {

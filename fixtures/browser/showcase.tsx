@@ -32,7 +32,6 @@ import {
   Text,
   Textarea,
   TextInput,
-  ThemeToggle,
   VisuallyHidden,
 } from "signalk-nearlcrews-ui";
 import {
@@ -77,6 +76,7 @@ import {
   toast,
 } from "signalk-nearlcrews-ui/overlays";
 import { mountFixture } from "./mount.js";
+import { LOG_DETAIL_OPTIONS, PageHeader, vesselIdentity } from "./shared.js";
 
 const showcaseParameters = new URLSearchParams(window.location.search);
 /** Mirrors the Admin's fixed header and sidebar around the panel. */
@@ -190,8 +190,7 @@ interface Boat {
 const EXPANDING_BOAT_ID = "vessel-1";
 
 const BOATS: readonly Boat[] = Array.from({ length: 240 }, (_, index) => ({
-  id: `vessel-${String(index + 1)}`,
-  name: `Vessel ${String(index + 1).padStart(3, "0")}`,
+  ...vesselIdentity(index),
   depth: 1.5 + ((index * 17) % 60) / 10,
   wind: 4 + ((index * 7) % 28),
   source:
@@ -243,17 +242,14 @@ function Showcase(): React.JSX.Element {
   return (
     <PanelRoot width="wide">
       <Stack gap={5}>
-        <Cluster justify="between" gap={4}>
-          <div>
-            <h1 style={{ margin: 0, fontSize: "1.4rem" }}>
-              Component showcase
-            </h1>
+        <PageHeader
+          title="Component showcase"
+          status={
             <StatusIndicator tone="success" live="polite">
               Every export rendered
             </StatusIndicator>
-          </div>
-          <ThemeToggle />
-        </Cluster>
+          }
+        />
 
         <Section
           title="Feedback"
@@ -448,11 +444,7 @@ function Showcase(): React.JSX.Element {
               name="log-detail"
               defaultValue="normal"
               onValueChange={ignore}
-              options={[
-                { value: "minimal", label: "Minimal" },
-                { value: "normal", label: "Normal" },
-                { value: "verbose", label: "Verbose" },
-              ]}
+              options={LOG_DETAIL_OPTIONS}
             />
             <SegmentedControl
               label="Panel density"

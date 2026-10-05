@@ -1,20 +1,14 @@
 import {
+  boxOf,
   controlTargetFloor,
   expect,
   expectProjectPointer,
-  type Locator,
   MOBILE_PROJECT,
+  skipOutsideChromium,
+  styleOf,
   test,
+  WEBKIT_PROJECT,
 } from "./fixtures.js";
-
-/** A box that is there, or a failure naming what was not laid out. */
-async function boxOf(
-  locator: Locator,
-): Promise<{ height: number; width: number; x: number; y: number }> {
-  const box = await locator.boundingBox();
-  if (box === null) throw new Error(`${String(locator)} has no layout box.`);
-  return box;
-}
 
 const FIELD_GROUPS = ["Provider behavior", "Data sources"] as const;
 
@@ -33,7 +27,7 @@ test("keeps a field group legend inside its border and in the actions row on a w
   page,
 }, testInfo) => {
   test.skip(
-    testInfo.project.name === "webkit",
+    testInfo.project.name === WEBKIT_PROJECT,
     "WebKit computes float to none on every grid item, so the legend stays the rendered legend in the fieldset border, the 0.12.0 rendering.",
   );
   await page.goto("/");
@@ -53,8 +47,8 @@ test("keeps a field group legend inside its border and in the actions row on a w
       boxOf(legend),
       boxOf(actions),
     ]);
-    const borderTop = await group.evaluate((element) =>
-      Number.parseFloat(getComputedStyle(element).borderTopWidth),
+    const borderTop = Number.parseFloat(
+      await styleOf(group, "border-top-width"),
     );
     // Inside the border box, rather than in a notch the top border runs
     // into.
@@ -106,11 +100,12 @@ test("stands text controls level with the buttons beside them", async ({
 test("sets a field error's glyph apart from its message and hangs wrapped lines past it", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   // Narrow enough that the longer messages wrap.
   await page.setViewportSize({ width: 320, height: 900 });
   await page.goto("/?states=1");
 
+  let wrappedLines = 0;
   for (const message of [
     "Enter an HTTP or HTTPS URL.",
     "Choose a supported confidence threshold.",
@@ -126,36 +121,34 @@ test("sets a field error's glyph apart from its message and hangs wrapped lines 
       text.evaluate((element) => {
         const range = element.ownerDocument.createRange();
         range.selectNodeContents(element);
-        return [...range.getClientRects()].map((rect) => rect.left);
+        return [...range.getClientRects()].map(({ left, top }) => ({
+          left,
+          top,
+        }));
       }),
     ]);
+    const firstLeft = lines[0]?.left ?? 0;
     // A visible gap after the glyph, the one other glyphs take.
-    expect(lines[0] ?? 0, message).toBeGreaterThanOrEqual(
+    expect(firstLeft, message).toBeGreaterThanOrEqual(
       glyphBox.x + glyphBox.width + 3,
     );
     // Every wrapped line starts where the first one does, past the glyph.
-    for (const left of lines) {
-      expect(left, message).toBeCloseTo(lines[0] ?? 0, 0);
+    for (const { left } of lines) {
+      expect(left, message).toBeCloseTo(firstLeft, 0);
     }
+    wrappedLines = Math.max(
+      wrappedLines,
+      new Set(lines.map(({ top }) => Math.round(top))).size,
+    );
   }
   // The check above has to have met a wrapped message to prove the hang.
-  const wrapped = await page
-    .getByText("Choose a supported confidence threshold.", { exact: true })
-    .evaluate((element) => {
-      const range = element.ownerDocument.createRange();
-      range.selectNodeContents(element);
-      const tops = new Set(
-        [...range.getClientRects()].map((rect) => Math.round(rect.top)),
-      );
-      return tops.size;
-    });
-  expect(wrapped).toBeGreaterThan(1);
+  expect(wrappedLines).toBeGreaterThan(1);
 });
 
 test("centers an inline field's label on its control when it has no description", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto("/showcase.html");
 
   const field = page
@@ -173,7 +166,7 @@ test("centers an inline field's label on its control when it has no description"
 test("draws the optional marker at the regular weight, apart from its label", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto("/showcase.html");
 
   const label = page

@@ -1,27 +1,31 @@
 import {
+  emulateForcedColors,
   expect,
+  expectSolidOutline,
   type Locator,
   type Page,
   renderedPixels,
   selectTheme,
   settleAnimations,
+  skipOutsideChromium,
+  styleOf,
   systemColors,
   test,
   tokenColor,
 } from "./fixtures.js";
 
-/** One computed style value of the first element the locator matches. */
-function styleOf(locator: Locator, property: string): Promise<string> {
-  return locator.evaluate(
-    (element, name) => getComputedStyle(element).getPropertyValue(name),
-    property,
-  );
+/** The label a panel checkbox draws beside its box. */
+function checkboxLabel(page: Page, name: string): Locator {
+  return page
+    .getByRole("checkbox", { name })
+    .locator("xpath=..")
+    .locator(".snui-checkbox__label");
 }
 
 test("keeps a button at its own type size inside a small-text card footer", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto("/showcase.html");
 
   const footerButton = page.getByRole("button", { name: "Open plan" });
@@ -34,7 +38,7 @@ test("keeps a button at its own type size inside a small-text card footer", asyn
 test("draws a button rendered as an anchor as the variant it names", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto("/showcase.html");
 
   const anchor = page.getByRole("link", { name: "Anchor form" });
@@ -51,26 +55,24 @@ test("draws a button rendered as an anchor as the variant it names", async ({
 test("dims a disabled checkbox's label with the disabled text color", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto("/?states=1");
 
-  const labelOf = (name: string): Locator =>
-    page
-      .getByRole("checkbox", { name })
-      .locator("xpath=..")
-      .locator(".snui-checkbox__label");
   const disabledText = await styleOf(
     page.getByRole("button", { name: "Disabled" }),
     "color",
   );
-  await expect(labelOf("Unavailable option")).toHaveCSS("color", disabledText);
-  expect(await styleOf(labelOf("Optional diagnostics"), "color")).not.toBe(
+  await expect(checkboxLabel(page, "Unavailable option")).toHaveCSS(
+    "color",
     disabledText,
   );
+  expect(
+    await styleOf(checkboxLabel(page, "Optional diagnostics"), "color"),
+  ).not.toBe(disabledText);
 
   // The markers set their own colors, and they dim with the label rather
   // than reading stronger than the text they annotate.
-  await labelOf("Unavailable option").evaluate((element) => {
+  await checkboxLabel(page, "Unavailable option").evaluate((element) => {
     for (const className of ["snui-optional-mark", "snui-required-mark"]) {
       const marker = element.ownerDocument.createElement("span");
       marker.className = className;
@@ -80,19 +82,18 @@ test("dims a disabled checkbox's label with the disabled text color", async ({
     }
   });
   for (const marker of [".snui-optional-mark", ".snui-required-mark"]) {
-    await expect(labelOf("Unavailable option").locator(marker)).toHaveCSS(
-      "color",
-      disabledText,
-    );
+    await expect(
+      checkboxLabel(page, "Unavailable option").locator(marker),
+    ).toHaveCSS("color", disabledText);
   }
 });
 
 test("paints blocked buttons and a disabled checkbox label GrayText under forced colors", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto("/?states=1");
-  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+  await emulateForcedColors(page);
   const colors = await systemColors(page, [
     "ButtonText",
     "GrayText",
@@ -111,10 +112,7 @@ test("paints blocked buttons and a disabled checkbox label GrayText under forced
     "color",
     colors.ButtonText,
   );
-  const label = page
-    .getByRole("checkbox", { name: "Unavailable option" })
-    .locator("xpath=..")
-    .locator(".snui-checkbox__label");
+  const label = checkboxLabel(page, "Unavailable option");
   await expect(label).toHaveCSS("color", colors.GrayText);
 
   // A marker inside the label takes the system color too, rather than its
@@ -209,7 +207,7 @@ async function openDisabledControls(page: Page): Promise<{
   // Read before forced colors applies: after it, the probe would report the
   // system color the engine paints over the token.
   const { disabledText, surface } = await disabledPalette(page);
-  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+  await emulateForcedColors(page);
   await settleAnimations(page);
 
   const colors = await systemColors(page, DISABLED_CONTROL_COLORS);
@@ -235,7 +233,7 @@ async function paintedRows(page: Page, target: Locator): Promise<string[][]> {
 test("sets a disabled selected segment's text apart from its fill and dims a disabled group's other options", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto(DISABLED_CONTROLS_PAGE);
   // The options transition their colors.
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -259,7 +257,7 @@ test("sets a disabled selected segment's text apart from its fill and dims a dis
 test("dims a field label only once its slot holds no live value control", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto(DISABLED_CONTROLS_PAGE);
   const { disabledText } = await disabledPalette(page);
   const liveText = await styleOf(fieldLabel(page, "Call sign"), "color");
@@ -276,7 +274,7 @@ test("dims a field label only once its slot holds no live value control", async 
 test("leaves a dimmed field label to a consumer rule that already outweighed it", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto(DISABLED_CONTROLS_PAGE);
   const { disabledText } = await disabledPalette(page);
   const label = fieldLabel(page, "Vessel name");
@@ -300,7 +298,7 @@ test("leaves a dimmed field label to a consumer rule that already outweighed it"
 test("paints a disabled radio dial GrayText under forced colors", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   const { colors } = await openDisabledControls(page);
   const dial = (name: string): Locator =>
     page
@@ -326,7 +324,7 @@ test("paints a disabled radio dial GrayText under forced colors", async ({
 test("paints a disabled switch GrayText under forced colors", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   const { colors } = await openDisabledControls(page);
   const partsOf = (name: string): { thumb: Locator; track: Locator } => {
     const button = page.locator(".snui-switch__button", { hasText: name });
@@ -352,7 +350,7 @@ test("paints a disabled switch GrayText under forced colors", async ({
 test("paints a disabled slider's thumb and filled track GrayText under forced colors", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   const { colors, disabledText } = await openDisabledControls(page);
 
   // The thumb and the track are native parts no computed style reaches, so
@@ -382,7 +380,7 @@ test("paints a disabled slider's thumb and filled track GrayText under forced co
 test("paints a disabled or blocked selected segment GrayText under forced colors", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   const { colors } = await openDisabledControls(page);
 
   const expectGrayFill = async (option: Locator): Promise<void> => {
@@ -415,7 +413,7 @@ test("paints a disabled or blocked selected segment GrayText under forced colors
 test("paints only a dimmed field label GrayText under forced colors", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   const { colors } = await openDisabledControls(page);
 
   for (const { dims, label } of FIELD_LABELS) {
@@ -431,9 +429,9 @@ test("paints only a dimmed field label GrayText under forced colors", async ({
 test("keeps a focused danger button's ring under forced colors while the pointer rests on it", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto("/showcase.html");
-  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+  await emulateForcedColors(page);
   const colors = await systemColors(page, ["ButtonText", "CanvasText"]);
 
   const danger = page.getByRole("button", { name: "Danger", exact: true });
@@ -454,9 +452,9 @@ test("keeps a focused danger button's ring under forced colors while the pointer
 test("shows the focus ring on a keyboard-focused invalid field under forced colors", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto("/?states=1");
-  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+  await emulateForcedColors(page);
 
   for (const field of [
     page.getByRole("textbox", { name: "Invalid server URL" }),
@@ -470,7 +468,6 @@ test("shows the focus ring on a keyboard-focused invalid field under forced colo
     // follows is visible focus.
     await page.keyboard.press("Shift");
     await field.focus();
-    await expect(field).toHaveCSS("outline-style", "solid");
-    await expect(field).toHaveCSS("outline-width", "2px");
+    await expectSolidOutline(field);
   }
 });

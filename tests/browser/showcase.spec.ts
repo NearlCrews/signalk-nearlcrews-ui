@@ -1,19 +1,27 @@
 import {
+  type Box,
+  boxOf,
   controlTargetFloor,
+  emulateForcedColors,
   expect,
   expectNoAxeViolations,
+  expectNoSidewaysScroll,
   expectSolidOutline,
   expectTargetFloor,
-  hasCommittedBaseline,
+  FORCED_COLORS_CONTRAST_EXCEPTION,
+  FULL_PAGE_SNAPSHOT,
+  freezeMotion,
+  gridRow,
   type Locator,
-  missingBaselineReason,
+  matchBaseline,
   movePointerOffPanel,
   type Page,
-  type PageAssertionsToHaveScreenshotOptions,
+  selectFleetRow,
   selectTheme,
   settleAnimations,
   settledScrollLeft,
-  type TestInfo,
+  skipOutsideChromium,
+  styleOf,
   type ThemeName,
   test,
 } from "./fixtures.js";
@@ -59,11 +67,11 @@ test("keeps a nested popover above its dialog", async ({ page }) => {
   const scrim = page.locator(".snui-scrim");
   const popover = page.getByRole("dialog", { name: "Show approach note" });
   const [dialogZIndex, popoverZIndex] = await Promise.all([
-    scrim.evaluate((element) => Number(getComputedStyle(element).zIndex)),
-    popover.evaluate((element) => Number(getComputedStyle(element).zIndex)),
+    styleOf(scrim, "z-index"),
+    styleOf(popover, "z-index"),
   ]);
 
-  expect(popoverZIndex).toBeGreaterThan(dialogZIndex);
+  expect(Number(popoverZIndex)).toBeGreaterThan(Number(dialogZIndex));
   await expect(popover).toBeVisible();
 });
 
@@ -84,8 +92,7 @@ test("flips a popover anchored in panel flow and keeps its width", async ({
   // it. A trigger under the bar is pressed only after the click scrolls the
   // panel again, which puts it back where the popover has room to open
   // downward and the flip under test never happens.
-  const triggerBox = await trigger.boundingBox();
-  expect(triggerBox).not.toBeNull();
+  const triggerBox = await boxOf(trigger);
   await trigger.click();
 
   const popover = page.getByRole("dialog", { name: "About this anchorage" });
@@ -93,15 +100,12 @@ test("flips a popover anchored in panel flow and keeps its width", async ({
   await expect(popover).toHaveAttribute("data-placement", "top");
   await expect(popover).toHaveCSS("width", "280px");
 
-  const box = await popover.boundingBox();
-  expect(box).not.toBeNull();
-  if (box !== null && triggerBox !== null) {
-    expect(box.y).toBeGreaterThanOrEqual(0);
-    expect(box.y + box.height).toBeLessThanOrEqual(400);
-    // The flip was forced rather than incidental: the popover is taller than
-    // the room its trigger left below itself.
-    expect(400 - (triggerBox.y + triggerBox.height)).toBeLessThan(box.height);
-  }
+  const box = await boxOf(popover);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(400);
+  // The flip was forced rather than incidental: the popover is taller than
+  // the room its trigger left below itself.
+  expect(400 - (triggerBox.y + triggerBox.height)).toBeLessThan(box.height);
   // Free-form content is shown rather than clipped away to the border.
   const clipped = await popover.evaluate(
     (element) => element.scrollHeight > element.clientHeight,
@@ -129,17 +133,13 @@ test("opens an anchored overlay at full height in a scrolled panel", async ({
   expect(clipped).toBe(false);
 
   const [surfaceBox, lastItemBox] = await Promise.all([
-    page.locator(".snui-menu-popover").boundingBox(),
-    page.getByRole("menuitem", { name: "Reset layout" }).boundingBox(),
+    boxOf(page.locator(".snui-menu-popover")),
+    boxOf(page.getByRole("menuitem", { name: "Reset layout" })),
   ]);
-  expect(surfaceBox).not.toBeNull();
-  expect(lastItemBox).not.toBeNull();
-  if (surfaceBox !== null && lastItemBox !== null) {
-    expect(lastItemBox.y + lastItemBox.height).toBeLessThanOrEqual(
-      surfaceBox.y + surfaceBox.height,
-    );
-    expect(surfaceBox.y + surfaceBox.height).toBeLessThanOrEqual(400);
-  }
+  expect(lastItemBox.y + lastItemBox.height).toBeLessThanOrEqual(
+    surfaceBox.y + surfaceBox.height,
+  );
+  expect(surfaceBox.y + surfaceBox.height).toBeLessThanOrEqual(400);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
 });
@@ -299,12 +299,9 @@ test("keeps tall popover content scrollable inside the visual viewport", async (
   await expect(
     popover.getByRole("button", { name: "Final popover action" }),
   ).toBeVisible();
-  const box = await popover.boundingBox();
-  expect(box).not.toBeNull();
-  if (box !== null) {
-    expect(box.y).toBeGreaterThanOrEqual(0);
-    expect(box.y + box.height).toBeLessThanOrEqual(568);
-  }
+  const box = await boxOf(popover);
+  expect(box.y).toBeGreaterThanOrEqual(0);
+  expect(box.y + box.height).toBeLessThanOrEqual(568);
 });
 
 test("scrolls a wide table inside its region while the panel stays put", async ({
@@ -330,11 +327,7 @@ test("scrolls a wide table inside its region while the panel stays put", async (
 
   // The point of the region: the table overflows it, and the panel around it
   // does not gain a sideways scroll of its own.
-  const pageSizes = await page.evaluate(() => ({
-    clientWidth: document.documentElement.clientWidth,
-    scrollWidth: document.documentElement.scrollWidth,
-  }));
-  expect(pageSizes.scrollWidth).toBeLessThanOrEqual(pageSizes.clientWidth);
+  await expectNoSidewaysScroll(page);
 
   // The overflow is reachable by keyboard because the region takes focus and
   // the arrow keys scroll it both ways.
@@ -386,8 +379,6 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
   test.slow();
   await page.goto("/showcase.html");
   const grid = page.getByRole("grid", { name: "Fleet" });
-  const row = (name: string) =>
-    grid.getByRole("row").filter({ hasText: name }).first();
   const nameHeader = grid.getByRole("columnheader", { name: "Boat" });
   /** Scrolls the grid to its top or its end the way a user's scroll does. */
   const scrollGrid = (toEnd: boolean) =>
@@ -401,17 +392,13 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
   await nameHeader.click();
   await expect(nameHeader).toHaveAttribute("data-sort-direction", "ascending");
 
-  const firstRow = row("Vessel 001");
-  const secondRow = row("Vessel 002");
-  const initialGap = await Promise.all([
-    firstRow.boundingBox(),
-    secondRow.boundingBox(),
-  ]).then(([first, second]) => {
-    if (first === null || second === null) {
-      throw new Error("Expected the first two fleet rows to be rendered.");
-    }
-    return second.y - first.y;
-  });
+  const firstRow = gridRow(grid, "Vessel 001");
+  const secondRow = gridRow(grid, "Vessel 002");
+  const [initialFirst, initialSecond] = await Promise.all([
+    boxOf(firstRow),
+    boxOf(secondRow),
+  ]);
+  const initialGap = initialSecond.y - initialFirst.y;
 
   await page.getByRole("button", { name: "Expand first vessel" }).click();
   await expect
@@ -447,7 +434,7 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
   ).toHaveAttribute("aria-selected", "true");
 
   await scrollGrid(true);
-  const lastRow = row("Vessel 240");
+  const lastRow = gridRow(grid, "Vessel 240");
   await expect(lastRow).toBeVisible();
   await expect(lastRow).toHaveAttribute("data-snui-zebra-odd", "true");
 
@@ -466,12 +453,7 @@ test("keeps virtualized grid behavior stable across measured rows and windows", 
 test("audits open overlays and every toast tone with axe", async ({ page }) => {
   test.slow();
   await page.goto("/showcase.html");
-  // Transitions and animations both, because the toast entry is a keyframe
-  // animation rather than a transition, and auditing it mid-flight measures
-  // colors composited against what is behind the card.
-  await page.addStyleTag({
-    content: "* { transition: none !important; animation: none !important; }",
-  });
+  await freezeMotion(page);
 
   // Dialog with its nested popover open.
   await page.getByRole("button", { name: "Open dialog" }).click();
@@ -604,18 +586,17 @@ test("paints the dialog scrim and toasts above the Admin header and sidebar", as
   await page.getByRole("button", { name: "warning toast" }).click();
   const host = page.locator(".snui-toast-region-host");
   await expect(host).toHaveCSS("position", "fixed");
-  const hostZIndex = await host.evaluate((element) =>
-    Number(getComputedStyle(element).zIndex),
+  expect(Number(await styleOf(host, "z-index"))).toBeGreaterThan(
+    HOST_HEADER_Z_INDEX,
   );
-  expect(hostZIndex).toBeGreaterThan(HOST_HEADER_Z_INDEX);
 });
 
 test("reconstructs every overlay module under forced colors", async ({
   page,
 }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium");
+  skipOutsideChromium(testInfo);
   await page.goto("/showcase.html");
-  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+  await emulateForcedColors(page);
 
   // Every overlay module at once: the three existing forced-colors probes
   // cover controls, tabs, and the inline confirmation, so the blocks in
@@ -637,13 +618,7 @@ test("reconstructs every overlay module under forced colors", async ({
   await expectSolidOutline(page.locator(".snui-dialog"));
 
   await expectNoAxeViolations(page, {
-    disableRules: [
-      {
-        id: "color-contrast",
-        reason:
-          "Under forced colors the browser replaces author colors with the system palette at paint time while computed values keep the author colors, so axe grades pairs the user never sees; the contrast of the system palette belongs to the operating system.",
-      },
-    ],
+    disableRules: [FORCED_COLORS_CONTRAST_EXCEPTION],
   });
 });
 
@@ -690,45 +665,24 @@ const SHOWCASE_NOW = new Date("2026-09-01T12:00:00Z");
 const OVERLAY_CLIP_MARGIN = 16;
 
 /**
- * Compares one capture with its baseline, or records why it was skipped. The
- * other checks in the same test still run, which a test-level skip would stop.
- */
-async function matchShowcaseBaseline(
-  target: Page,
-  testInfo: TestInfo,
-  snapshot: string,
-  options: PageAssertionsToHaveScreenshotOptions,
-): Promise<void> {
-  if (!hasCommittedBaseline(testInfo, snapshot)) {
-    testInfo.annotations.push({
-      description: missingBaselineReason(snapshot),
-      type: "skip",
-    });
-    return;
-  }
-  await expect(target).toHaveScreenshot(snapshot, options);
-}
-
-/**
  * Fails when the sticky action bar overlaps the table's caption or header
  * row, which a full-page capture would then show covered.
  */
 async function expectTableClearOfActionBar(page: Page): Promise<void> {
   const table = page.getByRole("table", { name: "Signal K paths" });
   const [bar, head] = await Promise.all([
-    page.locator(".snui-action-bar").last().boundingBox(),
+    boxOf(page.locator(".snui-action-bar").last()),
     table.evaluate((element) => {
       const caption = element.querySelector("caption");
       const header = element.querySelector("thead");
-      if (caption === null || header === null) return null;
+      if (caption === null || header === null) {
+        throw new Error("The table has no caption and header row.");
+      }
       const top = caption.getBoundingClientRect().top;
       const bottom = header.getBoundingClientRect().bottom;
       return { bottom, top };
     }),
   ]);
-  expect(bar, "The showcase renders no action bar.").not.toBeNull();
-  expect(head, "The table has no caption and header row.").not.toBeNull();
-  if (bar === null || head === null) return;
   const overlaps = bar.y < head.bottom && bar.y + bar.height > head.top;
   expect(
     overlaps,
@@ -740,28 +694,24 @@ async function expectTableClearOfActionBar(page: Page): Promise<void> {
 async function clipAround(
   page: Page,
   ...locators: readonly Locator[]
-): Promise<{ height: number; width: number; x: number; y: number }> {
-  const boxes = await Promise.all(
-    locators.map((locator) => locator.boundingBox()),
-  );
-  const present = boxes.filter((box) => box !== null);
-  expect(present).toHaveLength(locators.length);
+): Promise<Box> {
+  const boxes = await Promise.all(locators.map((locator) => boxOf(locator)));
   const viewport = page.viewportSize();
   const left = Math.max(
     0,
-    Math.min(...present.map((box) => box.x)) - OVERLAY_CLIP_MARGIN,
+    Math.min(...boxes.map((box) => box.x)) - OVERLAY_CLIP_MARGIN,
   );
   const top = Math.max(
     0,
-    Math.min(...present.map((box) => box.y)) - OVERLAY_CLIP_MARGIN,
+    Math.min(...boxes.map((box) => box.y)) - OVERLAY_CLIP_MARGIN,
   );
   const right = Math.min(
     viewport?.width ?? Number.POSITIVE_INFINITY,
-    Math.max(...present.map((box) => box.x + box.width)) + OVERLAY_CLIP_MARGIN,
+    Math.max(...boxes.map((box) => box.x + box.width)) + OVERLAY_CLIP_MARGIN,
   );
   const bottom = Math.min(
     viewport?.height ?? Number.POSITIVE_INFINITY,
-    Math.max(...present.map((box) => box.y + box.height)) + OVERLAY_CLIP_MARGIN,
+    Math.max(...boxes.map((box) => box.y + box.height)) + OVERLAY_CLIP_MARGIN,
   );
   return {
     height: Math.round(bottom - top),
@@ -783,26 +733,15 @@ for (const baseline of SHOWCASE_BASELINES) {
   test(`matches the showcase baselines in ${baseline.theme}`, async ({
     page,
   }, testInfo) => {
-    test.skip(testInfo.project.name !== "chromium");
+    skipOutsideChromium(testInfo);
     test.slow();
     await page.clock.setFixedTime(SHOWCASE_NOW);
     await page.goto("/showcase.html");
-    // Transitions and animations both: a capture taken mid-flight paints
-    // colors composited against what is behind the element.
-    await page.addStyleTag({
-      content: "* { transition: none !important; animation: none !important; }",
-    });
+    await freezeMotion(page);
     await selectTheme(page, baseline.theme);
-    // A selected grid row puts the selected fill, a row state nothing else on
-    // the page shows, into the capture: its rest fill, so the pointer leaves
-    // the row it clicked.
-    const selectedRow = page
-      .getByRole("grid", { name: "Fleet" })
-      .getByRole("row")
-      .filter({ hasText: "Vessel 002" })
-      .first();
-    await selectedRow.click();
-    await expect(selectedRow).toHaveAttribute("aria-selected", "true");
+    // The capture shows the selected row's rest fill, so the pointer leaves
+    // the row it clicked before the capture.
+    const selectedRow = await selectFleetRow(page);
     // The page is captured in a viewport as tall as the page. A full-page
     // capture of a shorter one paints the bottom-sticky action bar at the
     // bottom of whatever viewport the click left, over the table's caption
@@ -821,10 +760,7 @@ for (const baseline of SHOWCASE_BASELINES) {
     await expect(selectedRow).not.toHaveAttribute("data-hovered");
     await expectTableClearOfActionBar(page);
     await settleAnimations(page);
-    await matchShowcaseBaseline(page, testInfo, baseline.page, {
-      animations: "disabled",
-      fullPage: true,
-    });
+    await matchBaseline(page, testInfo, baseline.page, FULL_PAGE_SNAPSHOT);
     if (viewport !== null) await page.setViewportSize(viewport);
 
     const menuTrigger = page.getByRole("button", { name: "Panel actions" });
@@ -832,7 +768,7 @@ for (const baseline of SHOWCASE_BASELINES) {
     const menu = page.getByRole("menu");
     await expect(menu).toBeVisible();
     await settleAnimations(page);
-    await matchShowcaseBaseline(page, testInfo, baseline.menu, {
+    await matchBaseline(page, testInfo, baseline.menu, {
       animations: "disabled",
       clip: await clipAround(page, menuTrigger, menu),
     });
@@ -846,7 +782,7 @@ for (const baseline of SHOWCASE_BASELINES) {
     const note = page.getByRole("dialog", { name: "Show approach note" });
     await expect(note).toBeVisible();
     await settleAnimations(page);
-    await matchShowcaseBaseline(page, testInfo, baseline.dialog, {
+    await matchBaseline(page, testInfo, baseline.dialog, {
       animations: "disabled",
     });
   });

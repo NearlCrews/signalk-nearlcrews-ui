@@ -1,6 +1,6 @@
-/* Page chrome shared by the fixture and showcase entry points. The page
-   background tracks the panel theme so screenshots have no light seam around
-   a dark or night panel. */
+/* Page chrome shared by the browser fixture pages. The page background tracks
+   the panel theme so screenshots have no light seam around a dark or night
+   panel. */
 body {
   margin: 0;
   background: #dfe4ea;
@@ -196,6 +196,18 @@ button {
 
 .admin-host__after-panel-content {
   min-height: 100vh;
+}
+
+/* A scroller inside the panel with room to scroll its one control up, so the
+   control can be cleared from the docked bar without moving the page. */
+.admin-host__nested-scroller {
+  block-size: 240px;
+  overflow-y: auto;
+  padding-block-start: 120px;
+}
+
+.admin-host__nested-scroller-rest {
+  block-size: 400px;
 }
 
 /* Signal K Admin chrome: Bootstrap's fixed header at z-index 1020 and the

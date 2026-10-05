@@ -1,4 +1,10 @@
-import { expect, test } from "./fixtures.js";
+import {
+  expect,
+  expectNoSidewaysScroll,
+  type Page,
+  panelRoot,
+  test,
+} from "./fixtures.js";
 
 /*
  * WCAG 1.4.12: a reader's own stylesheet may raise line height to 1.5 times
@@ -54,8 +60,6 @@ interface SpacingReport {
   readonly checked: readonly string[];
   /** One sentence per element whose text no longer fits where it is drawn. */
   readonly clipped: readonly string[];
-  readonly pageClientWidth: number;
-  readonly pageScrollWidth: number;
 }
 
 /**
@@ -134,21 +138,21 @@ function readSpacingReport(selectors: readonly string[]): SpacingReport {
     }
   }
 
-  return {
-    checked: [...checked],
-    clipped,
-    pageClientWidth: document.documentElement.clientWidth,
-    pageScrollWidth: document.documentElement.scrollWidth,
-  };
+  return { checked: [...checked], clipped };
+}
+
+/** Opens a page at the reflow width and waits for its panel. */
+async function openNarrow(page: Page, path: string): Promise<void> {
+  await page.setViewportSize(NARROW_VIEWPORT);
+  await page.goto(path);
+  await expect(panelRoot(page).first()).toBeVisible();
 }
 
 for (const [pageName, path] of PAGES) {
   test(`keeps every ${pageName} label, addon, option, and banner whole under text spacing overrides`, async ({
     page,
   }) => {
-    await page.setViewportSize(NARROW_VIEWPORT);
-    await page.goto(path);
-    await expect(page.locator("[data-snui-version]").first()).toBeVisible();
+    await openNarrow(page, path);
     await page.addStyleTag({ content: TEXT_SPACING_STYLESHEET });
 
     // Layout settles over a frame or two once the spacing applies, and the
@@ -160,10 +164,10 @@ for (const [pageName, path] of PAGES) {
       readSpacingReport,
       SPACED_TEXT_SELECTORS,
     );
-    expect(
-      report.pageScrollWidth,
+    await expectNoSidewaysScroll(
+      page,
       "the page scrolls sideways under the overrides",
-    ).toBeLessThanOrEqual(report.pageClientWidth);
+    );
     expect(
       report.checked.length,
       "the page renders none of the text under test",
@@ -176,11 +180,9 @@ test("checks every kind of text the criterion names across the two pages", async
 }) => {
   // A selector that stops matching, after a class rename, would leave its
   // text unchecked while the per-page tests still passed.
-  await page.setViewportSize(NARROW_VIEWPORT);
   const checked = new Set<string>();
   for (const [, path] of PAGES) {
-    await page.goto(path);
-    await expect(page.locator("[data-snui-version]").first()).toBeVisible();
+    await openNarrow(page, path);
     const report = await page.evaluate(
       readSpacingReport,
       SPACED_TEXT_SELECTORS,
@@ -193,9 +195,7 @@ test("checks every kind of text the criterion names across the two pages", async
 test("reports text a box or a clipping ancestor cuts off", async ({ page }) => {
   // The check has to fail on the arrangement it exists to catch: a one-line
   // addon narrower than its words, and a title inside a clipping box.
-  await page.setViewportSize(NARROW_VIEWPORT);
-  await page.goto("/?states=1");
-  await expect(page.locator("[data-snui-version]").first()).toBeVisible();
+  await openNarrow(page, "/?states=1");
   await page.locator(".snui-root__content").evaluate((content) => {
     const addon = document.createElement("span");
     addon.className = "snui-input-group__addon";

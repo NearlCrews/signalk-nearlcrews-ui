@@ -1,7 +1,5 @@
-import type { Page } from "@playwright/test";
-
 import { SAVE_ACTION_BAR_LABEL_DEFAULTS } from "../../src/utils/panel-label-defaults.js";
-import { expect, test } from "./fixtures.js";
+import { expect, type Page, test } from "./fixtures.js";
 import { expectExposedLiveText, liveTextExposure } from "./live-regions.js";
 
 /*

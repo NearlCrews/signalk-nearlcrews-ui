@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Page } from "./fixtures.js";
 
 /** The verdict the page gives when a live element carrying the text is reachable. */
 const EXPOSED = "exposed";

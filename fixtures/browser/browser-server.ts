@@ -17,5 +17,11 @@ export const BROWSER_HOST = "127.0.0.1";
 export const BROWSER_PORT = browserPort;
 export const BROWSER_URL = `http://${BROWSER_HOST}:${String(BROWSER_PORT)}`;
 
+/** Where the CSP fixture page is served. */
+export const CSP_FIXTURE_PATH = "/csp.html";
+
 /** The style nonce the CSP fixture page's policy admits. */
 export const CSP_FIXTURE_NONCE = "snui-csp-fixture";
+
+/** A style nonce the policy refuses, which the page's wrong mode applies. */
+export const CSP_WRONG_NONCE = "wrong-nonce";

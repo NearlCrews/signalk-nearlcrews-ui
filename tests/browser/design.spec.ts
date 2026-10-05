@@ -1,14 +1,19 @@
 import { CONTAINER_BREAKPOINT_NARROW } from "../../src/styles/tokens.js";
 import {
   backgroundOf,
+  boxOf,
+  cssLength,
+  emulateForcedColors,
   expect,
   expectProjectPointer,
   expectSolidOutline,
   type Locator,
-  MOBILE_PROJECT,
   type Page,
   selectTheme,
+  skipOutsideChromium,
+  styleOf,
   systemColors,
+  TRANSPARENT,
   test,
   tokenColor,
 } from "./fixtures.js";
@@ -32,21 +37,9 @@ async function radiusRatio(dot: Locator): Promise<number> {
   });
 }
 
-/**
- * A length, a token or a literal, in pixels inside the panel, read from a
- * probe so the comparison follows the pointer and breakpoint in force.
- */
-function cssLength(anchor: Locator, length: string): Promise<number> {
-  return anchor.evaluate((element, value) => {
-    const probe = document.createElement("span");
-    probe.style.display = "block";
-    probe.style.width = value;
-    element.append(probe);
-    const px = Number.parseFloat(getComputedStyle(probe).width);
-    probe.remove();
-    return px;
-  }, length);
-}
+/** Why a forced-colors check runs in one engine. */
+const FORCED_COLORS_ONLY =
+  "Playwright emulates forced colors in Chromium only.";
 
 test("shapes the info dot as a rounded square, distinct from neutral", async ({
   page,
@@ -72,26 +65,6 @@ test("shapes the info dot as a rounded square, distinct from neutral", async ({
   expect(infoRatio).not.toBeCloseTo(neutralRatio, 2);
 });
 
-test("keeps input text at 16 pixels or more on coarse pointers", async ({
-  page,
-}, testInfo) => {
-  test.skip(
-    testInfo.project.name !== MOBILE_PROJECT,
-    "The 16 pixel floor targets iOS Safari focus zoom, driven by the coarse-pointer query.",
-  );
-  await page.goto("/showcase.html");
-  for (const control of [
-    page.getByRole("textbox", { name: "Server URL" }),
-    page.getByRole("combobox", { name: "Provider mode" }),
-    page.getByRole("textbox", { name: "Operator notes" }),
-  ]) {
-    const fontSize = await control.evaluate((element) =>
-      Number.parseFloat(getComputedStyle(element).fontSize),
-    );
-    expect(fontSize).toBeGreaterThanOrEqual(16);
-  }
-});
-
 test("paints a visible hover fill on Dark menu items", async ({ page }) => {
   await page.goto("/showcase.html");
   await selectTheme(page, "Dark");
@@ -102,7 +75,7 @@ test("paints a visible hover fill on Dark menu items", async ({ page }) => {
   await expect(item).toBeVisible();
   const popoverFill = await backgroundOf(page.locator(".snui-menu-popover"));
   await item.hover();
-  await expect.poll(() => backgroundOf(item)).not.toBe("rgba(0, 0, 0, 0)");
+  await expect.poll(() => backgroundOf(item)).not.toBe(TRANSPARENT);
   const hoverFill = await backgroundOf(item);
 
   expect(hoverFill).not.toBe(popoverFill);
@@ -125,7 +98,7 @@ test("paints zebra rows that differ from the grid surface in Light and Night", a
       backgroundOf(rows.first()),
     ]);
     expect(stripe, `${theme} zebra row equals the surface`).not.toBe(surface);
-    expect(stripe).not.toBe("rgba(0, 0, 0, 0)");
+    expect(stripe).not.toBe(TRANSPARENT);
   }
 });
 
@@ -157,7 +130,7 @@ test("paints table zebra rows and the scroll region focus ring from the tokens",
     );
     // Only alternate rows take the fill, so the stripe reads as a pattern.
     expect(plainFill, `${theme} unstriped cell carries a fill`).toBe(
-      "rgba(0, 0, 0, 0)",
+      TRANSPARENT,
     );
 
     // The region is a tab stop, so its ring has to survive every theme. Focus
@@ -191,12 +164,9 @@ test("paints table zebra rows and the scroll region focus ring from the tokens",
 test("keeps the selected tab and its focus ring visible under forced colors", async ({
   page,
 }, testInfo) => {
-  test.skip(
-    testInfo.project.name !== "chromium",
-    "Playwright emulates forced colors in Chromium only.",
-  );
+  skipOutsideChromium(testInfo, FORCED_COLORS_ONLY);
   await page.goto("/showcase.html");
-  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+  await emulateForcedColors(page);
 
   const list = page.getByRole("tablist", { name: "Provider detail" });
   const overview = list.getByRole("tab", { name: "Overview" });
@@ -212,7 +182,7 @@ test("keeps the selected tab and its focus ring visible under forced colors", as
         width: Number.parseFloat(computed.borderBottomWidth),
       };
     }),
-    advanced.evaluate((element) => getComputedStyle(element).borderBottomColor),
+    styleOf(advanced, "border-bottom-color"),
   ]);
   // Forced colors flattens the accent, so the selected bar is redrawn in the
   // system highlight; an unselected tab must not pick the same mark up.
@@ -235,12 +205,9 @@ test("keeps the selected tab and its focus ring visible under forced colors", as
 test("tells a hovered grid row from a selected one under forced colors", async ({
   page,
 }, testInfo) => {
-  test.skip(
-    testInfo.project.name !== "chromium",
-    "Playwright emulates forced colors in Chromium only.",
-  );
+  skipOutsideChromium(testInfo, FORCED_COLORS_ONLY);
   await page.goto("/showcase.html");
-  await page.emulateMedia({ forcedColors: "active", reducedMotion: "reduce" });
+  await emulateForcedColors(page);
 
   const grid = page.getByRole("grid", { name: "Fleet" });
   // Row 1 is the header, so the first two body rows are 2 and 3.
@@ -293,17 +260,10 @@ test("shows the whole value of the grid cell that holds keyboard focus", async (
   // The whole value now fits its cell, and the measured row grew to hold it.
   await expect.poll(overflows).toBe(false);
   await expect.poll(rowHeight).toBeGreaterThan(heightBefore);
-  const [textBox, rowBox] = await Promise.all([
-    text.boundingBox(),
-    firstRow.boundingBox(),
-  ]);
-  expect(textBox).not.toBeNull();
-  expect(rowBox).not.toBeNull();
-  if (textBox !== null && rowBox !== null) {
-    expect(textBox.y + textBox.height).toBeLessThanOrEqual(
-      rowBox.y + rowBox.height + 1,
-    );
-  }
+  const [textBox, rowBox] = await Promise.all([boxOf(text), boxOf(firstRow)]);
+  expect(textBox.y + textBox.height).toBeLessThanOrEqual(
+    rowBox.y + rowBox.height + 1,
+  );
 });
 
 test("paints Section and CollapsibleSection as one surface", async ({
@@ -369,6 +329,31 @@ test("paints Section and CollapsibleSection as one surface", async ({
   expect(collapsibleStyle.inset).toBe(sectionStyle.inset);
 });
 
+test("hides a Stack, Cluster, Card, and MetricGrid through the hidden attribute", async ({
+  page,
+}) => {
+  await page.goto("/showcase.html");
+  // Each block's class sets a display of its own, which the attribute has to
+  // outrank, as it does when a closed useDisclosure panel lands on a block.
+  for (const block of [
+    ".snui-stack",
+    ".snui-cluster",
+    ".snui-card",
+    ".snui-metric-grid",
+  ]) {
+    const element = page.locator(block).first();
+    await expect(element, `${block} sets no display`).not.toHaveCSS(
+      "display",
+      "none",
+    );
+    await element.evaluate((node) => node.setAttribute("hidden", ""));
+    await expect(element, `${block} stays on screen`).toHaveCSS(
+      "display",
+      "none",
+    );
+  }
+});
+
 test("neutralizes the remaining Bootstrap Reboot element rules inside the panel", async ({
   page,
 }) => {
@@ -422,14 +407,14 @@ test("neutralizes the remaining Bootstrap Reboot element rules inside the panel"
 
   expect(styles.code.color).toBe(styles.bodyColor);
   expect(styles.code["padding-top"]).toBe("0px");
-  expect(styles.code["background-color"]).toBe("rgba(0, 0, 0, 0)");
+  expect(styles.code["background-color"]).toBe(TRANSPARENT);
   expect(styles.kbd.color).toBe(styles.bodyColor);
   expect(styles.kbd["padding-left"]).toBe("0px");
-  expect(styles.kbd["background-color"]).toBe("rgba(0, 0, 0, 0)");
+  expect(styles.kbd["background-color"]).toBe(TRANSPARENT);
   expect(styles.kbd["border-radius"]).toBe("0px");
   // The host highlight is replaced rather than erased, so the mark paints the
   // package's own accent tint instead of nothing at all.
-  expect(styles.mark["background-color"]).not.toBe("rgba(0, 0, 0, 0)");
+  expect(styles.mark["background-color"]).not.toBe(TRANSPARENT);
   expect(styles.mark["padding-left"]).toBe("0px");
   expect(styles.pre["margin-bottom"]).toBe("0px");
   expect(styles.label.display).toBe("inline");

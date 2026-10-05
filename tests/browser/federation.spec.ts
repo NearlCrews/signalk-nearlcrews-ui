@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures.js";
+import { expect, panelRoot, test } from "./fixtures.js";
 
 test("loads classic and ESM remotes against host React and ReactDOM", async ({
   page,
@@ -14,6 +14,8 @@ test("loads classic and ESM remotes against host React and ReactDOM", async ({
   await page.goto("/federation.html");
   const classicRoot = page.locator("#classic-root");
   const esmRoot = page.locator("#esm-root");
+  const ready = page.getByText("Fixture ready");
+  const rootSheet = page.locator("style[data-snui-styles]");
   await expect(page.locator("body")).toHaveAttribute(
     "data-federation-ready",
     "true",
@@ -26,20 +28,20 @@ test("loads classic and ESM remotes against host React and ReactDOM", async ({
       1,
     );
   }
-  await expect(page.getByText("Fixture ready")).toHaveCount(2);
+  await expect(ready).toHaveCount(2);
   await expect(page.getByText("Composite entry ready")).toHaveCount(2);
   await expect(page.getByText("Data-grid entry ready")).toHaveCount(2);
   await expect(
     page.getByRole("textbox", { name: "Federation forms entry" }),
   ).toHaveCount(2);
   await expect(page.getByText("Saved 0 times")).toHaveCount(2);
-  await expect(page.locator("style[data-snui-styles]")).toHaveCount(1);
+  await expect(rootSheet).toHaveCount(1);
 
   await classicRoot.getByRole("button", { name: "Save configuration" }).click();
   await expect(classicRoot).toContainText("Saved 1 time");
   await expect(esmRoot).toContainText("Saved 0 times");
 
-  const roots = page.locator("[data-snui-version]");
+  const roots = panelRoot(page);
   const firstThemeGroup = page
     .getByRole("radiogroup", { name: "Theme" })
     .first();
@@ -63,12 +65,12 @@ test("loads classic and ESM remotes against host React and ReactDOM", async ({
   await expect(esmRoot.locator(".snui-toast-region-host")).toHaveCount(1);
 
   await page.evaluate(() => window.unmountFederationFixture?.("classic-root"));
-  await expect(page.getByText("Fixture ready")).toHaveCount(1);
-  await expect(page.locator("style[data-snui-styles]")).toHaveCount(1);
+  await expect(ready).toHaveCount(1);
+  await expect(rootSheet).toHaveCount(1);
 
   await page.evaluate(() => window.unmountFederationFixture?.("esm-root"));
-  await expect(page.getByText("Fixture ready")).toHaveCount(0);
-  await expect(page.locator("style[data-snui-styles]")).toHaveCount(0);
+  await expect(ready).toHaveCount(0);
+  await expect(rootSheet).toHaveCount(0);
   await expect(page.getByRole("alert")).toBeEmpty();
 
   // Webpack is allowed to say the registered share does not satisfy the range
