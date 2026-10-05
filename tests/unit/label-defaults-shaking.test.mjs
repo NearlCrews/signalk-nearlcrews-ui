@@ -1,16 +1,14 @@
-import { fileURLToPath } from "node:url";
-
 import { build } from "esbuild";
 import { describe, expect, it } from "vitest";
 
-const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
+import {
+  BUNDLE_BUILD_OPTIONS,
+  HOST_EXTERNALS,
+} from "../../scripts/lib/bundle-contract.mjs";
+import { repositoryPath } from "../../scripts/lib/paths.mjs";
 
-/** Packages a panel remote shares with its host or resolves on its own. */
-const EXTERNAL = [
-  "react",
-  "react/*",
-  "react-dom",
-  "react-dom/*",
+/** Packages a panel remote resolves on its own, beside the ones its host shares. */
+const REACT_ARIA_EXTERNALS = [
   "react-aria",
   "react-aria/*",
   "react-aria-components",
@@ -25,16 +23,12 @@ const EXTERNAL = [
  */
 async function bundleText(contents) {
   const result = await build({
-    stdin: { contents, loader: "tsx", resolveDir: repositoryRoot },
-    bundle: true,
-    external: EXTERNAL,
+    ...BUNDLE_BUILD_OPTIONS,
+    external: [...HOST_EXTERNALS, ...REACT_ARIA_EXTERNALS],
     format: "esm",
     jsx: "automatic",
     logLevel: "silent",
-    minify: true,
-    platform: "browser",
-    target: "es2022",
-    write: false,
+    stdin: { contents, loader: "tsx", resolveDir: repositoryPath() },
   });
   return result.outputFiles[0]?.text ?? "";
 }

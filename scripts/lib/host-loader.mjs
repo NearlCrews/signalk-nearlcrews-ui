@@ -185,6 +185,7 @@ export function extractSnippet(source, { anchor, enclosingCall }) {
       break;
     } else if (
       depth === 0 &&
+      character === "\n" &&
       /^\n[ \t]*\n/.test(source.slice(position, position + 80))
     ) {
       break;

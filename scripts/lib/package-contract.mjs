@@ -1,6 +1,6 @@
 import { PACKAGE_NAME } from "../../bin/lib/consumer-checks.mjs";
+import { escapeRegExp } from "../../bin/lib/regexp.mjs";
 import { localDestinations } from "./docs-links.mjs";
-import { escapeRegExp } from "./regexp.mjs";
 
 const PACKAGE_DESCRIPTION =
   "Accessible, theme-aware React primitives for Signal K administration panels.";
@@ -28,6 +28,18 @@ const EXPECTED_KEYWORDS = Object.freeze([
 ]);
 
 /**
+ * The themes the README shows the showcase in, in its order. The capture
+ * script writes one image per theme, the README pins each, and the tarball
+ * must carry each, so all three read this list.
+ */
+export const SHOWCASE_THEMES = Object.freeze(["light", "dark", "night"]);
+
+/** The committed showcase image for `theme`, from the repository root. */
+export function showcaseScreenshotPath(theme) {
+  return `docs/screenshots/showcase-${theme}.png`;
+}
+
+/**
  * The documents a consumer of the published package can act on.
  * docs/repository-setup.md is not one of them: it is a checklist of this
  * repository's own GitHub and npm settings, so the manifest excludes it from
@@ -38,9 +50,7 @@ export const MAINTAINED_PACKAGE_DOCS = Object.freeze([
   "docs/design-contract.md",
   "docs/migration.md",
   "docs/release-policy.md",
-  "docs/screenshots/showcase-dark.png",
-  "docs/screenshots/showcase-light.png",
-  "docs/screenshots/showcase-night.png",
+  ...SHOWCASE_THEMES.map(showcaseScreenshotPath).sort(),
 ]);
 
 const EXPECTED_PACKAGE_FILES = Object.freeze([
@@ -94,7 +104,7 @@ const README_BADGES = Object.freeze([
   "[![CI](https://github.com/NearlCrews/signalk-nearlcrews-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/NearlCrews/signalk-nearlcrews-ui/actions/workflows/ci.yml)",
   "[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/LICENSE)",
   `[![node (dev)](https://img.shields.io/badge/node%20%28dev%29-${NODE_BADGE_VERSIONS}-brightgreen.svg)](https://nodejs.org)`,
-  "[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/nearlcrews)",
+  "[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/nearlcrews)",
 ]);
 
 function requireSameMembers(actual, expected, label) {
@@ -313,12 +323,21 @@ function validatePackagedSurface(packageJson) {
 
 /** The release gates, and the prepare ban npm 10 makes necessary. */
 function validateLifecycleScripts(packageJson) {
+  // validate has just built the package and both federation fixtures, so
+  // release:check calls Playwright directly rather than through test:browser,
+  // whose pretest hook would build them all again.
   if (
     packageJson.scripts?.["release:check"] !==
-    "node scripts/check-release-approval.mjs && npm run validate && npm run test:browser"
+    "node scripts/check-release-approval.mjs && npm run validate && playwright test"
   ) {
     throw new Error(
       "release:check must retain approval, validation, and browser gates.",
+    );
+  }
+
+  if (packageJson.scripts?.["test:browser"] !== "playwright test") {
+    throw new Error(
+      "test:browser must be exactly playwright test, because release:check runs the same command without its build hook.",
     );
   }
 
@@ -445,8 +464,8 @@ function validateReadmeShape(packageJson, readme) {
     );
   }
 
-  for (const theme of ["light", "dark", "night"]) {
-    const expectedScreenshot = `https://unpkg.com/${PACKAGE_NAME}@${packageJson.version}/docs/screenshots/showcase-${theme}.png`;
+  for (const theme of SHOWCASE_THEMES) {
+    const expectedScreenshot = `https://unpkg.com/${PACKAGE_NAME}@${packageJson.version}/${showcaseScreenshotPath(theme)}`;
     if (!readme.includes(expectedScreenshot)) {
       throw new Error(
         `README.md must pin the ${theme} screenshot to ${PACKAGE_NAME}@${packageJson.version}.`,

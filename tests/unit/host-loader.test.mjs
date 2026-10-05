@@ -1,13 +1,5 @@
-import { spawnSync } from "node:child_process";
-import {
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -20,6 +12,8 @@ import {
   readLoaderSources,
 } from "../../scripts/lib/host-loader.mjs";
 import { repositoryPath } from "../../scripts/lib/paths.mjs";
+import { runNode } from "./lib/run-node.mjs";
+import { removeTemporaryTrees, temporaryTree } from "./lib/temporary-tree.mjs";
 
 const SCRIPT = repositoryPath("scripts", "check-host-loader.mjs");
 
@@ -102,6 +96,8 @@ export default function EmbeddedPluginConfigurationForm({
 }
 `;
 
+const FACT_NAMES = LOADER_FACTS.map(({ name }) => name).sort();
+
 const SOURCES = {
   "packages/server-admin-ui/src/views/Configuration/EmbeddedPluginConfigurationForm.tsx":
     EMBEDDED_FORM,
@@ -111,27 +107,15 @@ const SOURCES = {
   "src/serverroutes.ts": SERVER_ROUTES,
 };
 
-const directories = [];
-
 function checkout(files = SOURCES) {
-  const root = mkdtempSync(join(tmpdir(), "snui-loader-"));
-  directories.push(root);
-  for (const [path, source] of Object.entries(files)) {
-    mkdirSync(dirname(join(root, path)), { recursive: true });
-    writeFileSync(join(root, path), source);
-  }
-  return root;
+  return temporaryTree("snui-loader-", files);
 }
 
 function runScript(...args) {
-  return spawnSync(process.execPath, [SCRIPT, ...args], { encoding: "utf8" });
+  return runNode(SCRIPT, ...args);
 }
 
-afterAll(() => {
-  for (const directory of directories.splice(0)) {
-    rmSync(directory, { force: true, recursive: true });
-  }
-});
+afterAll(removeTemporaryTrees);
 
 describe("extracting a watched snippet", () => {
   it("takes a declaration through its balanced body", () => {
@@ -196,9 +180,7 @@ describe("hashing and comparing", () => {
   it("reads every watched fact from a checkout", async () => {
     const hashes = await readLoaderSources({ source: checkout() });
 
-    expect(Object.keys(hashes).sort()).toEqual(
-      LOADER_FACTS.map(({ name }) => name).sort(),
-    );
+    expect(Object.keys(hashes).sort()).toEqual(FACT_NAMES);
   });
 
   it("lists the facts whose hash moved", () => {
@@ -245,9 +227,7 @@ describe("check-host-loader", () => {
     expect(update.status, update.stderr).toBe(0);
     const recorded = JSON.parse(readFileSync(baseline, "utf8"));
     expect(recorded.tag).toBe("local checkout");
-    expect(Object.keys(recorded.hashes).sort()).toEqual(
-      LOADER_FACTS.map(({ name }) => name).sort(),
-    );
+    expect(Object.keys(recorded.hashes).sort()).toEqual(FACT_NAMES);
 
     const same = runScript("--source", source, "--baseline", baseline);
     expect(same.status, same.stderr).toBe(0);

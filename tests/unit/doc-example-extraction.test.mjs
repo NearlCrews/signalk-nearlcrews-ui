@@ -225,11 +225,16 @@ describe("compile diagnostics", () => {
     imports: new Map([["signalk-nearlcrews-ui/overlays", ["AlertDialog"]]]),
   };
 
-  it("names each example's file in order and completes only the snippets", () => {
-    const files = exampleFiles(
+  /** Both examples as the compile writes them, the snippet completed. */
+  function compiledFiles() {
+    return exampleFiles(
       [moduleExample, snippetExample],
       new Map([["example-02.tsx", scope]]),
     );
+  }
+
+  it("names each example's file in order and completes only the snippets", () => {
+    const files = compiledFiles();
 
     expect(files.map(({ name, preamble }) => ({ name, preamble }))).toEqual([
       { name: "example-01.tsx", preamble: 0 },
@@ -243,10 +248,7 @@ describe("compile diagnostics", () => {
   });
 
   it("reports each diagnostic at the documentation line it came from", () => {
-    const files = exampleFiles(
-      [moduleExample, snippetExample],
-      new Map([["example-02.tsx", scope]]),
-    );
+    const files = compiledFiles();
     const output = [
       // Line 3 of a module is the third code line, two below the fence's
       // first code line.

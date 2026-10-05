@@ -1,14 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   fetchJson,
   fetchOk,
   latestReleaseTag,
 } from "../../scripts/lib/github-releases.mjs";
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
 
 describe("GitHub release lookups", () => {
   it("asks for the latest release, with a token when one is given", async () => {

@@ -15,6 +15,12 @@ const SHA = "0123456789abcdef0123456789abcdef01234567";
 const OTHER_SHA = "fedcba9876543210fedcba9876543210fedcba98";
 const REPOSITORY = "NearlCrews/signalk-nearlcrews-ui";
 
+/** The check most cases single out. An empty list would leave them nothing to break. */
+const [FIRST_CHECK] = REQUIRED_RELEASE_CHECKS;
+if (FIRST_CHECK === undefined) {
+  throw new Error("REQUIRED_RELEASE_CHECKS is empty.");
+}
+
 function workflowRun(id, path, overrides = {}) {
   return {
     id,
@@ -68,10 +74,8 @@ function assertFixture(checkRuns, workflowRuns) {
 describe("release check parser", () => {
   it("accepts the newest success for every job in the newest trusted workflow runs", () => {
     const { checkRuns, workflowRuns } = successfulFixture();
-    const first = REQUIRED_RELEASE_CHECKS[0];
-    expect(first).toBeDefined();
     checkRuns.push(
-      checkRun(first, 100, 1, {
+      checkRun(FIRST_CHECK, 100, 1, {
         conclusion: "failure",
       }),
       checkRun(
@@ -108,41 +112,27 @@ describe("release check parser", () => {
       });
 
     expect(() => assertFixture(brokenChecks, workflowRuns)).toThrow(
-      expect.objectContaining({
-        message: expect.stringContaining(`${missing.name}: missing`),
-      }),
+      `${missing.name}: missing`,
     );
     expect(() => assertFixture(brokenChecks, workflowRuns)).toThrow(
-      expect.objectContaining({
-        message: expect.stringContaining(
-          `${pending.name}: in_progress/none from github-actions`,
-        ),
-      }),
+      `${pending.name}: in_progress/none from github-actions`,
     );
     expect(() => assertFixture(brokenChecks, workflowRuns)).toThrow(
-      expect.objectContaining({
-        message: expect.stringContaining(
-          `${failed.name}: completed/failure from github-actions`,
-        ),
-      }),
+      `${failed.name}: completed/failure from github-actions`,
     );
     expect(() => assertFixture(brokenChecks, workflowRuns)).toThrow(
-      expect.objectContaining({
-        message: expect.stringContaining(`${wrongCommit.name}: missing`),
-      }),
+      `${wrongCommit.name}: missing`,
     );
   });
 
   it("rejects a newer failure even when an older check with the same name passed", () => {
     const { checkRuns, workflowRuns } = successfulFixture();
-    const requirement = REQUIRED_RELEASE_CHECKS[0];
-    expect(requirement).toBeDefined();
     checkRuns.push(
-      checkRun(requirement, 100, 9_000, { conclusion: "failure" }),
+      checkRun(FIRST_CHECK, 100, 9_000, { conclusion: "failure" }),
     );
 
     expect(() => assertFixture(checkRuns, workflowRuns)).toThrow(
-      `${requirement.name}: completed/failure from github-actions`,
+      `${FIRST_CHECK.name}: completed/failure from github-actions`,
     );
   });
 
@@ -156,17 +146,15 @@ describe("release check parser", () => {
     );
 
     expect(() => assertFixture(checkRuns, workflowRuns)).toThrow(
-      `${REQUIRED_RELEASE_CHECKS[0]?.name}: newest ${CI_WORKFLOW_PATH} run 101 is completed/failure`,
+      `${FIRST_CHECK.name}: newest ${CI_WORKFLOW_PATH} run 101 is completed/failure`,
     );
   });
 
   it("rejects duplicate job names from a different workflow", () => {
     const { checkRuns, workflowRuns } = successfulFixture();
-    const requirement = REQUIRED_RELEASE_CHECKS[0];
-    expect(requirement).toBeDefined();
     workflowRuns.push(workflowRun(300, ".github/workflows/spoof.yml"));
     const spoofedChecks = checkRuns.map((candidate) =>
-      candidate.name === requirement.name
+      candidate.name === FIRST_CHECK.name
         ? {
             ...candidate,
             id: 9_000,
@@ -176,36 +164,29 @@ describe("release check parser", () => {
     );
 
     expect(() => assertFixture(spoofedChecks, workflowRuns)).toThrow(
-      `${requirement.name}: missing`,
+      `${FIRST_CHECK.name}: missing`,
     );
   });
 
   it("rejects a spoofed required name from another GitHub App", () => {
     const { checkRuns, workflowRuns } = successfulFixture();
-    const requirement = REQUIRED_RELEASE_CHECKS[0];
-    expect(requirement).toBeDefined();
     const spoofedChecks = checkRuns.map((candidate) =>
-      candidate.name === requirement.name
+      candidate.name === FIRST_CHECK.name
         ? { ...candidate, app: { slug: "untrusted-app" } }
         : candidate,
     );
 
     expect(() => assertFixture(spoofedChecks, workflowRuns)).toThrow(
-      `${requirement.name}: completed/success from untrusted-app`,
+      `${FIRST_CHECK.name}: completed/success from untrusted-app`,
     );
   });
 
   it("accepts an unrelated check run with no details URL", () => {
     const { checkRuns, workflowRuns } = successfulFixture();
-    const thirdPartyCheck = {
-      id: 9_000,
-      name: "Some other app",
-      head_sha: SHA,
-      status: "completed",
-      conclusion: "success",
+    const thirdPartyCheck = checkRun({ name: "Some other app" }, 0, 9_000, {
       app: { slug: "third-party-app" },
       details_url: null,
-    };
+    });
 
     expect(() =>
       assertFixture([thirdPartyCheck, ...checkRuns], workflowRuns),
@@ -213,9 +194,7 @@ describe("release check parser", () => {
   });
 
   it("validates paginated API response shapes", () => {
-    const requirement = REQUIRED_RELEASE_CHECKS[0];
-    expect(requirement).toBeDefined();
-    const candidateCheck = checkRun(requirement, 100, 1_000);
+    const candidateCheck = checkRun(FIRST_CHECK, 100, 1_000);
     const checkPage = { total_count: 1, check_runs: [candidateCheck] };
     const workflowPage = {
       total_count: 1,
@@ -258,6 +237,14 @@ describe("release check parser", () => {
 });
 
 describe("paged GitHub collections", () => {
+  /** What every call asks for; each case adds its own pages and limits. */
+  const request = {
+    arrayKey: "check_runs",
+    label: "check-runs",
+    token: "test-token",
+    url: "https://api.github.com/repos/owner/name/commits/sha/check-runs",
+  };
+
   function pagedFetch(pages) {
     return (url) => {
       const page = Number(new URL(url).searchParams.get("page"));
@@ -278,37 +265,25 @@ describe("paged GitHub collections", () => {
 
     await expect(
       fetchAllPages({
-        arrayKey: "check_runs",
+        ...request,
         fetchPage: pagedFetch(pages),
-        label: "check-runs",
         perPage: 2,
-        token: "test-token",
-        url: "https://api.github.com/repos/owner/name/commits/sha/check-runs",
       }),
     ).resolves.toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
   });
 
   it("reports a failed request and refuses to page forever", async () => {
     await expect(
-      fetchAllPages({
-        arrayKey: "check_runs",
-        fetchPage: pagedFetch([]),
-        label: "check-runs",
-        token: "test-token",
-        url: "https://api.github.com/repos/owner/name/commits/sha/check-runs",
-      }),
+      fetchAllPages({ ...request, fetchPage: pagedFetch([]) }),
     ).rejects.toThrow("GitHub check-runs request failed with HTTP 404.");
 
     const full = { total_count: 10, check_runs: [{ id: 1 }] };
     await expect(
       fetchAllPages({
-        arrayKey: "check_runs",
+        ...request,
         fetchPage: pagedFetch([full, full, full]),
-        label: "check-runs",
         maximumPages: 2,
         perPage: 1,
-        token: "test-token",
-        url: "https://api.github.com/repos/owner/name/commits/sha/check-runs",
       }),
     ).rejects.toThrow(
       "GitHub returned more than 2 check-runs records for the release commit.",

@@ -28,14 +28,10 @@ export default tseslint.config(
     ],
   },
   eslint.configs.recommended,
-  ...tseslint.configs.strictTypeChecked.map((config) => ({
-    ...config,
-    files: TYPESCRIPT_FILES,
-  })),
-  ...tseslint.configs.stylisticTypeChecked.map((config) => ({
-    ...config,
-    files: TYPESCRIPT_FILES,
-  })),
+  ...[
+    ...tseslint.configs.strictTypeChecked,
+    ...tseslint.configs.stylisticTypeChecked,
+  ].map((config) => ({ ...config, files: TYPESCRIPT_FILES })),
   {
     files: TYPESCRIPT_FILES,
     languageOptions: {
@@ -83,6 +79,7 @@ export default tseslint.config(
       "fixtures/federation/PluginConfigurationPanel.tsx",
       "tests/setup.ts",
       "tests/unit/**/*.{ts,tsx}",
+      "tests/browser/**/*.{ts,tsx}",
     ],
     languageOptions: {
       globals: globals.browser,
@@ -97,12 +94,6 @@ export default tseslint.config(
     ],
     languageOptions: {
       globals: globals.node,
-    },
-  },
-  {
-    files: ["tests/browser/**/*.{ts,tsx}"],
-    languageOptions: {
-      globals: globals.browser,
     },
   },
   {

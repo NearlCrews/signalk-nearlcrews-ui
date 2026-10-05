@@ -21,13 +21,14 @@
  * Run `npm run declarations:update` to accept an intended change.
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative, sep } from "node:path";
 
 import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";
 
 import {
   DECLARATION_FILE,
+  distPath,
   entryDeclarationFiles,
+  fileKey,
   reachableDeclarations,
   renderSnapshot,
   snapshotDifferences,
@@ -49,7 +50,7 @@ const baselinePath = repositoryPath("tests", "declarations.baseline.txt");
 const shouldUpdate = readFlag(argv, "--update");
 
 function readDeclaration(file) {
-  const path = join(distDirectory, ...file.split("/"));
+  const path = distPath(distDirectory, file);
   return existsSync(path) ? readFileSync(path, "utf8") : undefined;
 }
 
@@ -57,7 +58,7 @@ const emitted = (
   await collectFiles(distDirectory, {
     matches: (name) => DECLARATION_FILE.test(name),
   })
-).map((file) => relative(distDirectory, file).split(sep).join("/"));
+).map((file) => fileKey(distDirectory, file));
 if (emitted.length === 0) {
   throw new Error("No declarations found. Run the build first.");
 }
@@ -87,13 +88,16 @@ const accountingFailure =
       "Mark each one `@internal` in its source (the build strips those), or\n" +
       "export it from an entry point deliberately.";
 
+const companionFailures = [declarationFailure, accountingFailure].filter(
+  (failure) => failure !== undefined,
+);
+
 if (shouldUpdate) {
   writeFileSync(baselinePath, snapshot);
   process.stdout.write(`Declaration baseline updated: ${summary}.\n`);
-  const updateFailures = [declarationFailure, accountingFailure].filter(
-    (failure) => failure !== undefined,
-  );
-  if (updateFailures.length > 0) throw new Error(updateFailures.join("\n\n"));
+  if (companionFailures.length > 0) {
+    throw new Error(companionFailures.join("\n\n"));
+  }
 } else {
   let baseline;
   try {
@@ -118,8 +122,7 @@ if (shouldUpdate) {
         "compared, so a change here is one a consumer's compiler or tools can see.",
     );
   }
-  if (declarationFailure !== undefined) failures.push(declarationFailure);
-  if (accountingFailure !== undefined) failures.push(accountingFailure);
+  failures.push(...companionFailures);
   if (failures.length > 0) throw new Error(failures.join("\n\n"));
 
   process.stdout.write(`Declarations match the baseline: ${summary}.\n`);

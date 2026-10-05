@@ -1,9 +1,7 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { exportSpecifier } from "../../scripts/lib/bundle-contract.mjs";
 import {
@@ -13,6 +11,8 @@ import {
   validatePackageMetadata,
   validatePackedFiles,
 } from "../../scripts/lib/package-contract.mjs";
+import { readPackageJson } from "../../scripts/lib/paths.mjs";
+import { removeTemporaryTrees, temporaryTree } from "./lib/temporary-tree.mjs";
 
 const version = "0.8.1";
 const exportsMap = {
@@ -82,7 +82,8 @@ const packageJson = {
   },
   scripts: {
     "release:check":
-      "node scripts/check-release-approval.mjs && npm run validate && npm run test:browser",
+      "node scripts/check-release-approval.mjs && npm run validate && playwright test",
+    "test:browser": "playwright test",
     prepack: "npm run build",
     prepublishOnly:
       "node scripts/check-release-approval.mjs && npm run test:browser",
@@ -117,14 +118,15 @@ const packageLock = {
   },
 };
 const changelog = `## [${version}] - 2026-08-12\n\n[${version}]: https://example.test/v0.7.0...v${version}`;
-const badges = [
+const badgeLines = [
   "[![npm version](https://img.shields.io/npm/v/signalk-nearlcrews-ui.svg)](https://www.npmjs.com/package/signalk-nearlcrews-ui)",
   "[![npm downloads](https://img.shields.io/npm/dm/signalk-nearlcrews-ui.svg)](https://www.npmjs.com/package/signalk-nearlcrews-ui)",
   "[![CI](https://github.com/NearlCrews/signalk-nearlcrews-ui/actions/workflows/ci.yml/badge.svg)](https://github.com/NearlCrews/signalk-nearlcrews-ui/actions/workflows/ci.yml)",
   "[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/LICENSE)",
   "[![node (dev)](https://img.shields.io/badge/node%20%28dev%29-22.22.2%20%7C%2024.15.0%20%7C%2026.0.0-brightgreen.svg)](https://nodejs.org)",
-  "[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://www.buymeacoffee.com/nearlcrews)",
-].join("\n");
+  "[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/nearlcrews)",
+];
+const badges = badgeLines.join("\n");
 const readme = `# Signal K NearlCrews UI
 
 ${badges}
@@ -183,6 +185,21 @@ describe("package release metadata", () => {
         }),
       ),
     ).toThrow("must not define a prepare script");
+  });
+
+  it("keeps test:browser the command release:check runs", () => {
+    expect(() =>
+      validatePackageMetadata(
+        withPackageJson({
+          scripts: {
+            ...packageJson.scripts,
+            "test:browser": "playwright test --project=chromium",
+          },
+        }),
+      ),
+    ).toThrow(
+      "test:browser must be exactly playwright test, because release:check runs the same command without its build hook.",
+    );
   });
 
   it("keeps allowScripts equal to every locked package with an install script", () => {
@@ -420,8 +437,8 @@ describe("package release metadata", () => {
 
   it("rejects reordered or dynamic license badges", () => {
     const reordered = readme.replace(
-      `${badges.split("\n")[2]}\n${badges.split("\n")[3]}`,
-      `${badges.split("\n")[3]}\n${badges.split("\n")[2]}`,
+      `${badgeLines[2]}\n${badgeLines[3]}`,
+      `${badgeLines[3]}\n${badgeLines[2]}`,
     );
     expect(() =>
       validatePackageMetadata({ ...validMetadata, readme: reordered }),
@@ -471,7 +488,7 @@ describe("relative link detection", () => {
 });
 
 describe("packed documentation allowlist", () => {
-  const bin = { "snui-check-consumer": "bin/snui-check-consumer.mjs" };
+  const { bin } = packageJson;
   const packedFiles = new Set([
     "CHANGELOG.md",
     "LICENSE",
@@ -525,31 +542,34 @@ describe("packed documentation allowlist", () => {
 });
 
 describe("exports map resolution", () => {
+  let packageDirectory;
+  let realManifest;
+  let consumerRequire;
+
   // A synthetic install of the real manifest with empty targets proves the
   // conditions resolve under both loaders without needing a built dist.
-  const workspace = mkdtempSync(join(tmpdir(), "snui-exports-"));
-  const packageDirectory = join(workspace, "node_modules", packageJson.name);
-  const realManifest = createRequire(import.meta.url)("../../package.json");
-  const targets = Object.values(realManifest.exports).flatMap((declaration) =>
-    typeof declaration === "string"
-      ? [declaration]
-      : Object.values(declaration),
-  );
-  for (const target of new Set(targets)) {
-    const path = join(packageDirectory, ...target.split("/"));
-    mkdirSync(join(path, ".."), { recursive: true });
-    if (target !== "./package.json") writeFileSync(path, "");
-  }
-  writeFileSync(
-    join(packageDirectory, "package.json"),
-    JSON.stringify(realManifest),
-  );
-  writeFileSync(join(workspace, "consumer.cjs"), "");
-  const consumerRequire = createRequire(join(workspace, "consumer.cjs"));
-
-  afterAll(() => {
-    rmSync(workspace, { force: true, recursive: true });
+  beforeAll(async () => {
+    realManifest = await readPackageJson();
+    const packageRoot = `node_modules/${packageJson.name}`;
+    const targets = Object.values(realManifest.exports).flatMap(
+      (declaration) =>
+        typeof declaration === "string"
+          ? [declaration]
+          : Object.values(declaration),
+    );
+    const workspace = temporaryTree("snui-exports-", {
+      "consumer.cjs": "",
+      ...Object.fromEntries(
+        targets.map((target) => [`${packageRoot}/${target}`, ""]),
+      ),
+      // Written last, so the manifest target holds the manifest.
+      [`${packageRoot}/package.json`]: JSON.stringify(realManifest),
+    });
+    packageDirectory = join(workspace, packageRoot);
+    consumerRequire = createRequire(join(workspace, "consumer.cjs"));
   });
+
+  afterAll(removeTemporaryTrees);
 
   it("resolves every JavaScript entry through require", () => {
     for (const [subpath, declaration] of Object.entries(realManifest.exports)) {

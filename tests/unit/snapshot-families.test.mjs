@@ -1,8 +1,6 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 import {
   collectSnapshotNames,
@@ -18,6 +16,7 @@ import {
   snapshotProject,
   takesScreenshots,
 } from "../../scripts/lib/snapshot-families.mjs";
+import { removeTemporaryTrees, temporaryTree } from "./lib/temporary-tree.mjs";
 
 const SPEC = `
 await expect(page).toHaveScreenshot("panel-light.png");
@@ -32,6 +31,8 @@ const LOOPING_SPEC = `
 const BASELINES = { Light: \`showcase-light.png\`, Night: 'showcase-night.png' };
 await expect(page).toHaveScreenshot(BASELINES[theme]);
 `;
+
+afterAll(removeTemporaryTrees);
 
 describe("visual baseline families", () => {
   it("collects each literal screenshot name once, sorted", () => {
@@ -185,35 +186,25 @@ describe("visual baseline families", () => {
   });
 
   it("reads every snapshot spec, with no files where a directory is missing", async () => {
-    const root = mkdtempSync(join(tmpdir(), "snui-families-"));
-    try {
-      const [panel, showcase] = SNAPSHOT_SPECS;
-      mkdirSync(join(root, snapshotDirectory(panel)), { recursive: true });
-      writeFileSync(join(root, panel), SPEC);
-      writeFileSync(join(root, showcase), LOOPING_SPEC);
-      writeFileSync(
-        join(
-          root,
-          snapshotDirectory(panel),
-          "panel-light-chromium-linux-ubuntu24-x64.png",
-        ),
+    const [panel, showcase] = SNAPSHOT_SPECS;
+    const root = temporaryTree("snui-families-", {
+      [panel]: SPEC,
+      [showcase]: LOOPING_SPEC,
+      [`${snapshotDirectory(panel)}/panel-light-chromium-linux-ubuntu24-x64.png`]:
         "",
-      );
-      const specs = await readSnapshotSpecs((path) => join(root, path));
-      expect(specs).toEqual([
-        {
-          present: ["panel-light-chromium-linux-ubuntu24-x64.png"],
-          source: SPEC,
-          spec: panel,
-        },
-        { present: [], source: LOOPING_SPEC, spec: showcase },
-      ]);
-      await expect(
-        readSnapshotSpecs(() => join(root, "missing", "spec.ts")),
-      ).rejects.toThrow(/ENOENT/);
-    } finally {
-      rmSync(root, { force: true, recursive: true });
-    }
+    });
+    const specs = await readSnapshotSpecs((path) => join(root, path));
+    expect(specs).toEqual([
+      {
+        present: ["panel-light-chromium-linux-ubuntu24-x64.png"],
+        source: SPEC,
+        spec: panel,
+      },
+      { present: [], source: LOOPING_SPEC, spec: showcase },
+    ]);
+    await expect(
+      readSnapshotSpecs(() => join(root, "missing", "spec.ts")),
+    ).rejects.toThrow(/ENOENT/);
   });
 
   it("tells a spec that takes screenshots from one that does not", () => {
@@ -222,6 +213,11 @@ describe("visual baseline families", () => {
     expect(takesScreenshots("await expect(page).toHaveScreenshot(name);")).toBe(
       true,
     );
+    expect(
+      takesScreenshots(
+        "await matchBaseline(page, testInfo, name, FULL_PAGE_SNAPSHOT);",
+      ),
+    ).toBe(true);
     expect(takesScreenshots('await page.goto("/showcase.html");')).toBe(false);
   });
 });

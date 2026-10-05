@@ -1,21 +1,13 @@
 import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  lstatSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import { runNpmPack } from "../../scripts/lib/npm-pack.mjs";
 import { createPackedWorkspace } from "../../scripts/lib/packed-workspace.mjs";
 import { readPackageJson } from "../../scripts/lib/paths.mjs";
+import { removeTemporaryTrees, temporaryTree } from "./lib/temporary-tree.mjs";
 
 vi.mock("../../scripts/lib/npm-pack.mjs", async (importOriginal) => ({
   ...(await importOriginal()),
@@ -23,29 +15,23 @@ vi.mock("../../scripts/lib/npm-pack.mjs", async (importOriginal) => ({
 }));
 
 /** The pack destination npm was asked to write into. */
-function destinationOf(call) {
-  const argumentsList = call[0];
+function destinationOf(argumentsList) {
   return argumentsList[argumentsList.indexOf("--pack-destination") + 1];
 }
 
 /** Stands in for `npm pack`: writes a real tarball with one file in it. */
 function packFixture(argumentsList) {
-  const destination =
-    argumentsList[argumentsList.indexOf("--pack-destination") + 1];
-  const staging = mkdtempSync(join(tmpdir(), "snui-pack-staging-"));
-  try {
-    mkdirSync(join(staging, "package"));
-    writeFileSync(join(staging, "package", "marker.txt"), "packed\n");
-    execFileSync("tar", [
-      "-czf",
-      join(destination, "fixture.tgz"),
-      "-C",
-      staging,
-      "package",
-    ]);
-  } finally {
-    rmSync(staging, { force: true, recursive: true });
-  }
+  const destination = destinationOf(argumentsList);
+  const staging = temporaryTree("snui-pack-staging-", {
+    "package/marker.txt": "packed\n",
+  });
+  execFileSync("tar", [
+    "-czf",
+    join(destination, "fixture.tgz"),
+    "-C",
+    staging,
+    "package",
+  ]);
   return JSON.stringify([
     { filename: "fixture.tgz", files: [{ path: "marker.txt" }], size: 1 },
   ]);
@@ -54,6 +40,8 @@ function packFixture(argumentsList) {
 afterEach(() => {
   vi.mocked(runNpmPack).mockReset();
 });
+
+afterAll(removeTemporaryTrees);
 
 describe("createPackedWorkspace", () => {
   it("extracts the packed package as the workspace's own dependency", async () => {
@@ -95,7 +83,7 @@ describe("createPackedWorkspace", () => {
     await expect(createPackedWorkspace("snui-packed-test-")).rejects.toThrow(
       "npm pack failed",
     );
-    const workspace = destinationOf(vi.mocked(runNpmPack).mock.calls[0]);
+    const workspace = destinationOf(vi.mocked(runNpmPack).mock.calls[0][0]);
     expect(existsSync(workspace)).toBe(false);
   });
 });

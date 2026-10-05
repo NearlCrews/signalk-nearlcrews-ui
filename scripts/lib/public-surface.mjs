@@ -13,24 +13,22 @@
  * that augments a global or another module changes consumer types without an
  * export, so any such file is compared whole.
  */
-import { join, relative, sep } from "node:path";
+import { relative, sep } from "node:path";
 
 import ts from "typescript";
 
+import { packageOf } from "../../bin/lib/module-graph.mjs";
+import { DECLARATION_FILE, distPath, fileKey } from "./declaration-graph.mjs";
+
 /** JSDoc tags whose presence changes what a consumer's editor or lint does. */
 const BEHAVIORAL_TAGS = new Set(["default", "deprecated"]);
-
-/** A dist-relative path with forward slashes, the snapshot's file key. */
-function fileKey(distDirectory, fileName) {
-  return relative(distDirectory, fileName).split(sep).join("/");
-}
 
 function isDistDeclaration(distDirectory, fileName) {
   const key = relative(distDirectory, fileName);
   return (
     !key.startsWith("..") &&
     !key.split(sep).includes("node_modules") &&
-    /\.d\.[cm]?ts$/.test(fileName)
+    DECLARATION_FILE.test(fileName)
   );
 }
 
@@ -61,10 +59,7 @@ function resolveAlias(checker, symbol) {
 
 /** The npm package a declaration outside dist comes from. */
 function externalPackageOf(fileName) {
-  const segments = fileName.split(/[\\/]/);
-  const modules = segments.lastIndexOf("node_modules");
-  const name = segments[modules + 1] ?? "";
-  return name.startsWith("@") ? `${name}/${segments[modules + 2]}` : name;
+  return packageOf(fileName)?.name ?? "";
 }
 
 /** Whether an exported name can be used as a type, a value, or both. */
@@ -211,7 +206,7 @@ function declarationErrorsOf(program, distDirectory, files) {
  * file, such as a reference to a type the build stripped.
  */
 export function readPublicSurface(distDirectory, entryFiles, reachableFiles) {
-  const absolute = (file) => join(distDirectory, ...file.split("/"));
+  const absolute = (file) => distPath(distDirectory, file);
   const program = ts.createProgram({
     options: PROGRAM_OPTIONS,
     rootNames: [...new Set([...entryFiles, ...reachableFiles])].map(absolute),
@@ -281,9 +276,14 @@ export function readPublicSurface(distDirectory, entryFiles, reachableFiles) {
     visitReferences(statement);
   }
 
+  // Each reachable file with its source, read once for the three passes
+  // below.
+  const reachableSources = [...reachableFiles]
+    .sort()
+    .map((file) => ({ file, sourceFile: sourceFileOf(file) }));
+
   const augmentations = [];
-  for (const file of [...reachableFiles].sort()) {
-    const sourceFile = sourceFileOf(file);
+  for (const { file, sourceFile } of reachableSources) {
     if (sourceFile.statements.some(isAugmentation)) {
       augmentations.push(file);
       sections.set(file, sourceFile.text.trimEnd());
@@ -296,9 +296,9 @@ export function readPublicSurface(distDirectory, entryFiles, reachableFiles) {
   }
 
   const unaccountedExports = [];
-  for (const file of [...reachableFiles].sort()) {
+  for (const { file, sourceFile } of reachableSources) {
     if (entryFiles.includes(file) || augmentations.includes(file)) continue;
-    for (const symbol of exportsOf(sourceFileOf(file))) {
+    for (const symbol of exportsOf(sourceFile)) {
       const target = resolveAlias(checker, symbol);
       if (entryTargets.has(target)) continue;
       const statements = (target.declarations ?? []).map(topLevelStatement);
@@ -312,7 +312,7 @@ export function readPublicSurface(distDirectory, entryFiles, reachableFiles) {
   const declarationErrors = declarationErrorsOf(
     program,
     distDirectory,
-    [...reachableFiles].sort().map(sourceFileOf),
+    reachableSources.map(({ sourceFile }) => sourceFile),
   );
 
   return { augmentations, declarationErrors, sections, unaccountedExports };

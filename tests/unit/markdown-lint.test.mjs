@@ -1,30 +1,30 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { markdownLintFailures } from "../../scripts/lib/markdown-lint.mjs";
+import {
+  removeTemporaryTrees,
+  temporaryTree,
+  writeTree,
+} from "./lib/temporary-tree.mjs";
 
 let root;
 
-beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "snui-markdown-lint-"));
+beforeAll(() => {
+  root = temporaryTree("snui-markdown-lint-");
 });
 
-afterAll(async () => {
-  await rm(root, { force: true, recursive: true });
-});
+afterAll(removeTemporaryTrees);
 
-async function markdownFile(name, text) {
-  const file = join(root, name);
-  await writeFile(file, text);
-  return file;
+function markdownFile(name, text) {
+  writeTree(root, { [name]: text });
+  return join(root, name);
 }
 
 describe("markdownLintFailures", () => {
   it("names the file, the line, and the rule of each finding", async () => {
-    const file = await markdownFile(
+    const file = markdownFile(
       "skipped-level.md",
       "# Title\n\n### Two levels down\n",
     );
@@ -42,7 +42,7 @@ describe("markdownLintFailures", () => {
   });
 
   it("reports nothing for Markdown that follows the rules", async () => {
-    const file = await markdownFile("clean.md", "# Title\n\nA paragraph.\n");
+    const file = markdownFile("clean.md", "# Title\n\nA paragraph.\n");
 
     expect(await markdownLintFailures([file], { default: true }, root)).toEqual(
       [],
@@ -50,7 +50,7 @@ describe("markdownLintFailures", () => {
   });
 
   it("follows the configuration it is given", async () => {
-    const file = await markdownFile(
+    const file = markdownFile(
       "long-line.md",
       `# Title\n\n${"word ".repeat(40).trim()}\n`,
     );
@@ -67,8 +67,8 @@ describe("markdownLintFailures", () => {
   });
 
   it("keeps findings in the order of the files it was given", async () => {
-    const first = await markdownFile("b-first.md", "# One\n\n### Skip\n");
-    const second = await markdownFile("a-second.md", "# One\n\n### Skip\n");
+    const first = markdownFile("b-first.md", "# One\n\n### Skip\n");
+    const second = markdownFile("a-second.md", "# One\n\n### Skip\n");
 
     const failures = await markdownLintFailures(
       [first, second],

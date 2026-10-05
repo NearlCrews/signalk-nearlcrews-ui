@@ -14,6 +14,10 @@ name: CI
 #   newest npm that satisfies devEngines.packageManager.version in
 #   package.json, so that field is the one place the supported npm range lives
 #   and a new npm 12.x is exercised here before a contributor meets it.
+# - Every "Cache npm downloads" step uses one key. The download cache holds
+#   tarballs rather than built artifacts, so the Node version is no part of
+#   it: the runner, its architecture (optional platform packages differ), and
+#   the lockfile are the whole key.
 # - The third-party tools this repository downloads instead of running as
 #   actions (actionlint, zizmor, and lychee) are pinned in
 #   .github/pinned-tools.json, because no dependency updater can see a version
@@ -103,10 +107,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ matrix.node }}-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-npm-${{ matrix.node }}-
-            ${{ runner.os }}-npm-
+            ${{ runner.os }}-${{ runner.arch }}-npm-
       - name: Install dependencies
         run: npm ci
       - name: Validate package
@@ -143,10 +146,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-npm-24-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-npm-24-
-            ${{ runner.os }}-npm-
+            ${{ runner.os }}-${{ runner.arch }}-npm-
       - name: Install dependencies
         run: npm ci
       - name: Audit the full dependency tree
@@ -205,11 +207,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.npm
-          # The download cache holds tarballs rather than built artifacts, so
-          # the runner and the lockfile are the whole key.
-          key: ${{ runner.os }}-npm-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-npm-
+            ${{ runner.os }}-${{ runner.arch }}-npm-
       - name: Install dependencies
         run: npm ci
       - name: Validate package
@@ -254,10 +254,9 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-${{ matrix.architecture }}-npm-24-${{ hashFiles('package-lock.json') }}
+          key: ${{ runner.os }}-${{ runner.arch }}-npm-${{ hashFiles('package-lock.json') }}
           restore-keys: |
-            ${{ runner.os }}-${{ matrix.architecture }}-npm-24-
-            ${{ runner.os }}-${{ matrix.architecture }}-npm-
+            ${{ runner.os }}-${{ runner.arch }}-npm-
       - name: Install dependencies
         run: npm ci
       - name: Install browser dependencies

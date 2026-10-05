@@ -20,6 +20,7 @@ import * as composites from "../../src/composites.js";
 import * as dataGrid from "../../src/data-grid.js";
 import * as format from "../../src/format.js";
 import * as forms from "../../src/forms.js";
+import type { HostConfigurationPanelProps } from "../../src/host-harness.js";
 import * as root from "../../src/index.js";
 import * as overlays from "../../src/overlays.js";
 import { SAVE_ACTION_BAR_LABEL_DEFAULTS } from "../../src/utils/panel-label-defaults.js";
@@ -68,19 +69,25 @@ const KNOWN_BROKEN: readonly {
   readonly fragment: string;
 }[] = [];
 
-/** The known defect an example shows, if it is one of those above. */
-function knownDefect(example: DocExample): string | undefined {
-  return KNOWN_BROKEN.find(
-    ({ file, fragment }) =>
-      example.file === file && example.source.includes(fragment),
-  )?.defect;
-}
-
 // jsdom rewrites import.meta.url to an http URL, so the documents are read
 // from the repository root the suite runs in.
 const examples = DOC_EXAMPLE_FILES.flatMap((file) =>
   extractTsxExamples(readFileSync(join(process.cwd(), file), "utf8"), file),
 );
+
+/** The examples in `file` whose code contains `fragment`. */
+function examplesContaining(file: string, fragment: string): DocExample[] {
+  return examples.filter(
+    (example) => example.file === file && example.source.includes(fragment),
+  );
+}
+
+/** The known defect an example shows, if it is one of those above. */
+function knownDefect(example: DocExample): string | undefined {
+  return KNOWN_BROKEN.find(({ file, fragment }) =>
+    examplesContaining(file, fragment).includes(example),
+  )?.defect;
+}
 
 /** Resolves an example's import, and refuses one the package does not offer. */
 function requireModule(specifier: string): unknown {
@@ -179,10 +186,7 @@ function renderedElements(example: DocExample): React.ReactElement[] {
     if (typeof value !== "function") continue;
     if (name === "default") {
       // The shape Signal K Admin renders a plugin configuration panel in.
-      const Panel = value as React.ComponentType<{
-        readonly configuration: unknown;
-        readonly save: (configuration: unknown) => void;
-      }>;
+      const Panel = value as React.ComponentType<HostConfigurationPanelProps>;
       elements.push(<Panel configuration={undefined} save={vi.fn()} />);
     } else if (/^[A-Z]/.test(name)) {
       const Component = value as React.ComponentType;
@@ -220,10 +224,7 @@ describe("documentation examples", () => {
     // An entry for an example that no longer exists would never fail.
     for (const { file, fragment } of KNOWN_BROKEN) {
       expect(
-        examples.filter(
-          (example) =>
-            example.file === file && example.source.includes(fragment),
-        ),
+        examplesContaining(file, fragment),
         `${file} no longer has an example containing ${fragment}`,
       ).toHaveLength(1);
     }
@@ -290,9 +291,7 @@ describe("the render check", () => {
 describe("documented recipes do what their prose says", () => {
   /** The source of the one example in `file` whose code contains `fragment`. */
   function sourceOfExample(file: string, fragment: string): string {
-    const matching = examples.filter(
-      (example) => example.file === file && example.source.includes(fragment),
-    );
+    const matching = examplesContaining(file, fragment);
     expect(matching, `examples containing ${fragment}`).toHaveLength(1);
     const [example] = matching;
     if (example === undefined) throw new Error(`no example has ${fragment}`);
@@ -367,12 +366,7 @@ describe("documented recipes do what their prose says", () => {
     const { default: Panel } = exportsOfExample(
       "docs/migration.md",
       "function PollingSettings(",
-    ) as {
-      default: React.ComponentType<{
-        readonly configuration?: unknown;
-        readonly save: (configuration: unknown) => void;
-      }>;
-    };
+    ) as { default: React.ComponentType<HostConfigurationPanelProps> };
     render(<Panel configuration={{ intervalSeconds: 60 }} save={vi.fn()} />);
     const interval = screen.getByRole("spinbutton", { name: /Interval/ });
 
@@ -396,12 +390,7 @@ describe("documented recipes do what their prose says", () => {
     const { default: Panel } = exportsOfExample(
       "README.md",
       "export default function PluginConfigurationPanel",
-    ) as {
-      default: React.ComponentType<{
-        readonly configuration?: unknown;
-        readonly save: (configuration: unknown) => void;
-      }>;
-    };
+    ) as { default: React.ComponentType<HostConfigurationPanelProps> };
     const save = vi.fn<(configuration: unknown) => void>();
     const view = render(<Panel configuration={undefined} save={save} />);
 

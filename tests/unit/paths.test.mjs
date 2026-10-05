@@ -1,6 +1,5 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -11,23 +10,25 @@ import {
   readPackageJson,
   repositoryPath,
 } from "../../scripts/lib/paths.mjs";
+import {
+  removeTemporaryTrees,
+  temporaryTree,
+  writeTree,
+} from "./lib/temporary-tree.mjs";
 
 let root;
 
-beforeAll(async () => {
-  root = await mkdtemp(join(tmpdir(), "snui-paths-"));
-  await mkdir(join(root, "nested", "deeper"), { recursive: true });
-  await mkdir(join(root, "skipped"), { recursive: true });
-  await writeFile(join(root, "top.md"), "top");
-  await writeFile(join(root, "top.txt"), "not markdown");
-  await writeFile(join(root, "nested", "middle.md"), "middle");
-  await writeFile(join(root, "nested", "deeper", "bottom.md"), "bottom");
-  await writeFile(join(root, "skipped", "ignored.md"), "ignored");
+beforeAll(() => {
+  root = temporaryTree("snui-paths-", {
+    "nested/deeper/bottom.md": "bottom",
+    "nested/middle.md": "middle",
+    "skipped/ignored.md": "ignored",
+    "top.md": "top",
+    "top.txt": "not markdown",
+  });
 });
 
-afterAll(async () => {
-  await rm(root, { force: true, recursive: true });
-});
+afterAll(removeTemporaryTrees);
 
 function found(files) {
   return files.map((file) => relative(root, file).split(/[\\/]/).join("/"));
@@ -65,11 +66,11 @@ describe("collectFiles", () => {
 
 describe("collectMarkdownFiles", () => {
   it("reads Markdown at every depth and skips tool and build directories", async () => {
-    await mkdir(join(root, "node_modules", "vendored"), { recursive: true });
-    await mkdir(join(root, "dist"), { recursive: true });
-    await writeFile(join(root, "node_modules", "vendored", "README.md"), "");
-    await writeFile(join(root, "dist", "NOTES.MD"), "");
-    await writeFile(join(root, "nested", "UPPER.MD"), "upper");
+    writeTree(root, {
+      "dist/NOTES.MD": "",
+      "nested/UPPER.MD": "upper",
+      "node_modules/vendored/README.md": "",
+    });
 
     expect(found(await collectMarkdownFiles(root)).sort()).toEqual([
       "nested/UPPER.MD",
@@ -82,8 +83,7 @@ describe("collectMarkdownFiles", () => {
 
   it("fails a walk that finds no Markdown, which would pass unearned", async () => {
     const empty = join(root, "no-markdown");
-    await mkdir(empty, { recursive: true });
-    await writeFile(join(empty, "notes.txt"), "not markdown");
+    writeTree(root, { "no-markdown/notes.txt": "not markdown" });
 
     await expect(collectMarkdownFiles(empty)).rejects.toThrow(
       `No Markdown files found under ${empty}.`,
@@ -94,7 +94,7 @@ describe("collectMarkdownFiles", () => {
 describe("repositoryPath", () => {
   it("resolves from the module rather than the working directory", () => {
     expect(repositoryPath("package.json")).toBe(
-      join(repositoryPath(), "package.json"),
+      fileURLToPath(new URL("../../package.json", import.meta.url)),
     );
   });
 
@@ -105,22 +105,25 @@ describe("repositoryPath", () => {
 });
 
 describe("packageBinaryEntry", () => {
-  it("resolves a bare bin string and a named bin map", async () => {
+  it("resolves a bare bin string and a named bin map", () => {
     const bare = join(root, "bare-package.json");
     const named = join(root, "named-package.json");
-    await writeFile(bare, JSON.stringify({ bin: "./cli.js", name: "bare" }));
-    await writeFile(
-      named,
-      JSON.stringify({ bin: { other: "./other.js", tool: "./tool.js" } }),
-    );
+    writeTree(root, {
+      "bare-package.json": JSON.stringify({ bin: "./cli.js", name: "bare" }),
+      "named-package.json": JSON.stringify({
+        bin: { other: "./other.js", tool: "./tool.js" },
+      }),
+    });
 
     expect(packageBinaryEntry(bare, "bare")).toBe(join(root, "cli.js"));
     expect(packageBinaryEntry(named, "tool")).toBe(join(root, "tool.js"));
   });
 
-  it("names the manifest that declares no such binary", async () => {
+  it("names the manifest that declares no such binary", () => {
     const manifest = join(root, "binless-package.json");
-    await writeFile(manifest, JSON.stringify({ name: "binless" }));
+    writeTree(root, {
+      "binless-package.json": JSON.stringify({ name: "binless" }),
+    });
 
     expect(() => packageBinaryEntry(manifest, "tool")).toThrow(
       `${manifest} does not declare bin.tool.`,

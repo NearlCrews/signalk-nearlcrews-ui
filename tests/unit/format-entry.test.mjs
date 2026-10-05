@@ -3,17 +3,11 @@ import { dirname, join, relative, resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { collectSpecifiers } from "../../scripts/lib/declaration-graph.mjs";
 import { repositoryPath } from "../../scripts/lib/paths.mjs";
 
 const SOURCE_ROOT = repositoryPath("src");
 const ENTRY = join(SOURCE_ROOT, "format.ts");
-
-/** Every specifier the module imports or re-exports from, bare ones included. */
-function specifiers(source) {
-  return [...source.matchAll(/(?:from|import)\s*\(?\s*["']([^"']+)["']/g)].map(
-    ([, specifier]) => specifier,
-  );
-}
 
 /**
  * Resolves one relative specifier to the file on disk. The package writes
@@ -46,7 +40,9 @@ async function walkGraph(entry) {
     if (visited.has(file)) continue;
     visited.add(file);
 
-    for (const specifier of specifiers(source)) {
+    // Every specifier the module imports or re-exports from, bare ones
+    // included: a bare one is a package the entry would pull in.
+    for (const specifier of collectSpecifiers(source)) {
       if (!specifier.startsWith(".")) {
         packages.add(specifier);
         continue;

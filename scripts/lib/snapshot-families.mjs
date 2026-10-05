@@ -37,12 +37,14 @@ export function snapshotDirectory(spec) {
 const SNAPSHOT_NAME = /["'`]([\w.-]+\.png)["'`]/g;
 
 /**
- * Whether a browser spec takes screenshots: it compares one, or it names a
- * baseline image. A spec that does must be listed in SNAPSHOT_SPECS, which a
- * unit test enforces by reading every spec in tests/browser.
+ * Whether a browser spec takes screenshots: it compares one through
+ * `matchBaseline` or `toHaveScreenshot`, or it names a baseline image. A spec
+ * that does must be listed in SNAPSHOT_SPECS, which a unit test enforces by
+ * reading every spec in tests/browser.
  */
 export function takesScreenshots(specSource) {
   return (
+    specSource.includes("matchBaseline(") ||
     specSource.includes("toHaveScreenshot(") ||
     new RegExp(SNAPSHOT_NAME.source).test(specSource)
   );

@@ -8,7 +8,7 @@
  * throw when a workflow stops matching them, so a rewrite into a shape they
  * cannot read fails the alignment tests instead of passing vacuously.
  */
-import { escapeRegExp } from "./regexp.mjs";
+import { escapeRegExp } from "../../bin/lib/regexp.mjs";
 
 function unquote(value) {
   const trimmed = value.trim();

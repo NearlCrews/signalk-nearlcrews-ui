@@ -17,19 +17,13 @@
  * exports it, and any other free name is declared.
  */
 
+import { headingText, markdownLines } from "./markdown.mjs";
+
 /** The documents whose examples are checked, from the repository root. */
 export const DOC_EXAMPLE_FILES = Object.freeze([
   "README.md",
   "docs/migration.md",
 ]);
-
-/**
- * An opening or closing fence. A closing fence repeats the opening character
- * at least as many times and carries no info string.
- */
-const FENCE = /^(?<indent>[ \t]*)(?<marker>`{3,}|~{3,})(?<info>.*)$/;
-
-const HEADING = /^#{1,6}[ \t]+(?<text>.+?)[ \t]*#*[ \t]*$/;
 
 /** A statement that makes the example a module: an import or an export. */
 const MODULE_STATEMENT = /^(?:import|export)\s/m;
@@ -52,42 +46,29 @@ export function extractTsxExamples(markdown, file) {
   let heading = "";
   let open;
 
-  for (const [index, text] of markdown.split(/\r?\n/).entries()) {
-    const fence = FENCE.exec(text)?.groups;
-    if (open === undefined) {
-      if (fence !== undefined) {
-        open = {
-          body: [],
-          indent: fence.indent,
-          info: fence.info.trim().split(/\s+/)[0]?.toLowerCase() ?? "",
-          line: index + 1,
-          marker: fence.marker,
-        };
-        continue;
-      }
-      const title = HEADING.exec(text)?.groups?.text;
-      if (title !== undefined) heading = title;
-      continue;
-    }
-
-    const closes =
-      fence !== undefined &&
-      fence.marker[0] === open.marker[0] &&
-      fence.marker.length >= open.marker.length &&
-      fence.info.trim() === "";
-    if (!closes) {
+  for (const { fence, kind, number, text } of markdownLines(markdown)) {
+    if (kind === "prose") {
+      heading = headingText(text) ?? heading;
+    } else if (kind === "open") {
+      open = {
+        body: [],
+        indent: fence.indent,
+        info: fence.info.trim().split(/\s+/)[0]?.toLowerCase() ?? "",
+        line: number,
+      };
+    } else if (kind === "body") {
       open.body.push(text);
-      continue;
+    } else {
+      if (open.info === "tsx") {
+        examples.push({
+          file,
+          heading,
+          line: open.line,
+          source: removeIndent(open.body, open.indent),
+        });
+      }
+      open = undefined;
     }
-    if (open.info === "tsx") {
-      examples.push({
-        file,
-        heading,
-        line: open.line,
-        source: removeIndent(open.body, open.indent),
-      });
-    }
-    open = undefined;
   }
 
   if (open !== undefined) {

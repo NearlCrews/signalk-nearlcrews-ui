@@ -1,71 +1,29 @@
 /**
  * Keeps the toolchain settings that are stated in one file and relied on in
- * another honest: the checksum-pinned workflow tools, the editor schemas read
- * from the installed tools, the CI cancellation rule the release gate
- * depends on, the corpus each documentation gate reads, and the split of the
- * unit suite between a Node and a DOM environment.
+ * another honest: the editor schemas read from the installed tools, the CI
+ * cancellation rule the release gate depends on, the corpus each
+ * documentation gate reads, and the split of the unit suite between a Node
+ * and a DOM environment.
  */
 import { readdirSync, readFileSync } from "node:fs";
 import { matchesGlob } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { repositoryPath } from "../../scripts/lib/paths.mjs";
+import { readPackageJson, repositoryPath } from "../../scripts/lib/paths.mjs";
+import { CI_WORKFLOW_PATH } from "../../scripts/lib/release-checks.mjs";
 import vitestConfig from "../../vitest.config.js";
-
-/** Read from the directory, so a new workflow is held to these rules too. */
-const WORKFLOW_NAMES = readdirSync(
-  repositoryPath(".github", "workflows"),
-).filter((name) => name.endsWith(".yml"));
 
 function readText(...parts) {
   return readFileSync(repositoryPath(...parts), "utf8");
 }
 
-function readJson(...parts) {
+function readRepositoryJson(...parts) {
   return JSON.parse(readText(...parts));
 }
 
-const pinnedTools = readJson(".github", "pinned-tools.json");
-const workflows = WORKFLOW_NAMES.map((name) => ({
-  name,
-  source: readText(".github", "workflows", name),
-}));
-const ciWorkflow = workflows.find(({ name }) => name === "ci.yml").source;
-const packageJson = readJson("package.json");
-
-describe("checksum-pinned workflow tools", () => {
-  it("states a version and a SHA-256 for every tool", () => {
-    expect(Object.keys(pinnedTools).length).toBeGreaterThan(0);
-    for (const [tool, pin] of Object.entries(pinnedTools)) {
-      expect(pin.version, `${tool} needs a version`).toMatch(/^\d+\.\d+\.\d+$/);
-      expect(pin.sha256, `${tool} needs a SHA-256`).toMatch(/^[0-9a-f]{64}$/);
-    }
-  });
-
-  it("installs every pinned tool from the pin file", () => {
-    for (const tool of Object.keys(pinnedTools)) {
-      const readers = workflows.filter(({ source }) =>
-        source.includes(`jq -er '.${tool}.version' .github/pinned-tools.json`),
-      );
-      expect(
-        readers.map(({ name }) => name),
-        `${tool} must read its version from .github/pinned-tools.json`,
-      ).not.toEqual([]);
-    }
-  });
-
-  it("leaves no version or checksum written into a workflow", () => {
-    for (const { name, source } of workflows) {
-      expect(source, `${name} must not carry a literal checksum`).not.toMatch(
-        /[0-9a-f]{64}/,
-      );
-      expect(source, `${name} must not pin a tool version inline`).not.toMatch(
-        /_VERSION:\s*\d/,
-      );
-    }
-  });
-});
+const ciWorkflow = readText(CI_WORKFLOW_PATH);
+const packageJson = await readPackageJson();
 
 describe("CI cancellation", () => {
   it("cancels superseded pull-request runs only", () => {
@@ -82,25 +40,27 @@ describe("editor schema pins", () => {
   // Each schema is read from the installed package, so an editor validates
   // against the tool that runs and a dependency update edits no second file.
   it("points the knip schema at the installed knip", () => {
-    expect(readJson("knip.json").$schema).toBe(
+    expect(readRepositoryJson("knip.json").$schema).toBe(
       "./node_modules/knip/schema.json",
     );
-    expect(() => readJson("node_modules", "knip", "schema.json")).not.toThrow();
+    expect(() =>
+      readRepositoryJson("node_modules", "knip", "schema.json"),
+    ).not.toThrow();
   });
 
   it("points the Biome schema at the installed Biome", () => {
-    const installed = readJson(
+    const installed = readRepositoryJson(
       "node_modules",
       "@biomejs",
       "biome",
       "package.json",
     ).version;
     expect(packageJson.devDependencies["@biomejs/biome"]).toBe(installed);
-    expect(readJson("biome.json").$schema).toBe(
+    expect(readRepositoryJson("biome.json").$schema).toBe(
       "./node_modules/@biomejs/biome/configuration_schema.json",
     );
     expect(() =>
-      readJson(
+      readRepositoryJson(
         "node_modules",
         "@biomejs",
         "biome",
@@ -114,7 +74,7 @@ describe("documentation gates", () => {
   it("lints Markdown with the rules an editor reads", () => {
     // The runner and an editor extension both read .markdownlint.json, so a
     // rule changed there changes what both report.
-    expect(readJson(".markdownlint.json").default).toBe(true);
+    expect(readRepositoryJson(".markdownlint.json").default).toBe(true);
     expect(packageJson.scripts["lint:docs"]).toBe(
       "node scripts/check-markdown.mjs",
     );
@@ -165,10 +125,11 @@ describe("unit test projects", () => {
     expect(components?.setupFiles).toEqual(["./tests/setup.ts"]);
   });
 
-  it("restores stubbed environment variables in both projects", () => {
+  it("restores stubbed environment variables and globals in both projects", () => {
     // Only the components project loads tests/setup.ts, so the restore a
     // tooling spec relies on has to come from the block both projects extend.
     expect(vitestConfig.test?.unstubEnvs).toBe(true);
+    expect(vitestConfig.test?.unstubGlobals).toBe(true);
     for (const project of vitestConfig.test?.projects ?? []) {
       expect(project.extends, project.test?.name).toBe(true);
     }

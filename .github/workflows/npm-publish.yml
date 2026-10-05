@@ -108,7 +108,7 @@ jobs:
           NODE
           TARBALL_NAME="$(npm pack --ignore-scripts --pack-destination package)"
           TARBALL="package/${TARBALL_NAME}"
-          PACKED_GIT_HEAD="$(tar --extract --gzip --to-stdout --file "$TARBALL" package/package.json | node -e 'let input=""; process.stdin.on("data", chunk => { input += chunk; }); process.stdin.on("end", () => console.log(JSON.parse(input).gitHead ?? ""));')"
+          PACKED_GIT_HEAD="$(tar --extract --gzip --to-stdout --file "$TARBALL" package/package.json | jq -r '.gitHead // ""')"
           if [ "$PACKED_GIT_HEAD" != "$GITHUB_SHA" ]; then
             echo "Packed gitHead ($PACKED_GIT_HEAD) must exactly match $GITHUB_SHA." >&2
             exit 1
@@ -182,9 +182,9 @@ jobs:
             exit 1
           fi
           PACKED_MANIFEST="$(tar --extract --gzip --to-stdout --file "$TARBALL" package/package.json)"
-          PACKAGE_NAME="$(node -e 'const manifest = JSON.parse(process.argv[1]); console.log(manifest.name);' "$PACKED_MANIFEST")"
-          PACKAGE_VERSION="$(node -e 'const manifest = JSON.parse(process.argv[1]); console.log(manifest.version);' "$PACKED_MANIFEST")"
-          PACKED_GIT_HEAD="$(node -e 'const manifest = JSON.parse(process.argv[1]); console.log(manifest.gitHead ?? "");' "$PACKED_MANIFEST")"
+          PACKAGE_NAME="$(jq -er '.name' <<<"$PACKED_MANIFEST")"
+          PACKAGE_VERSION="$(jq -er '.version' <<<"$PACKED_MANIFEST")"
+          PACKED_GIT_HEAD="$(jq -r '.gitHead // ""' <<<"$PACKED_MANIFEST")"
           if [ "$PACKED_GIT_HEAD" != "$EXPECTED_GIT_HEAD" ]; then
             echo "Packed gitHead ($PACKED_GIT_HEAD) must exactly match $EXPECTED_GIT_HEAD." >&2
             exit 1

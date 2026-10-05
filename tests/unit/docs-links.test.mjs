@@ -59,6 +59,30 @@ describe("documentation anchors", () => {
 
     expect([...anchors]).toEqual(["real-heading", "after-the-block"]);
   });
+
+  it("keeps a block open past a shorter fence and a fence with an info string", () => {
+    const anchors = markdownAnchors(
+      [
+        "````md",
+        "```",
+        "# Inside the longer block",
+        "````tsx",
+        "# Still inside: a closing fence carries no info string",
+        "````",
+        "## After the block",
+      ].join("\n"),
+    );
+
+    expect([...anchors]).toEqual(["after-the-block"]);
+  });
+
+  it("reads a heading indented by up to three spaces, and no further", () => {
+    const anchors = markdownAnchors(
+      ["   ## Indented", "    ## Code by indentation"].join("\n"),
+    );
+
+    expect([...anchors]).toEqual(["indented"]);
+  });
 });
 
 describe("documentation link destinations", () => {

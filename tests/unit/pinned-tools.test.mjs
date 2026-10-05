@@ -1,8 +1,6 @@
-import { readdirSync, readFileSync } from "node:fs";
-
 import { describe, expect, it } from "vitest";
 
-import { repositoryPath } from "../../scripts/lib/paths.mjs";
+import { readJson, repositoryPath } from "../../scripts/lib/paths.mjs";
 import {
   archiveUrl,
   compareVersions,
@@ -11,21 +9,14 @@ import {
   PINNED_TOOLS_PATH,
   versionFromTag,
 } from "../../scripts/lib/pinned-tools.mjs";
-import { readSteps } from "../../scripts/lib/workflow-matrix.mjs";
+import { WORKFLOW_STEPS, WORKFLOWS } from "./lib/workflows.mjs";
 
-const pins = JSON.parse(
-  readFileSync(repositoryPath(...PINNED_TOOLS_PATH.split("/")), "utf8"),
-);
+const pins = await readJson(repositoryPath(PINNED_TOOLS_PATH));
 
 /** Every workflow step that installs a pinned tool, by tool. */
-const installSteps = readdirSync(repositoryPath(".github", "workflows"))
-  .filter((name) => name.endsWith(".yml"))
-  .flatMap((name) =>
-    readSteps(
-      readFileSync(repositoryPath(".github", "workflows", name), "utf8"),
-    ).map((step) => ({ ...step, workflow: name })),
-  )
-  .filter((step) => /^Install (\w+)$/.test(step.name ?? ""));
+const installSteps = WORKFLOW_STEPS.filter((step) =>
+  /^Install (\w+)$/.test(step.name ?? ""),
+);
 
 /** The URL an install step downloads, with the pinned version filled in. */
 function downloadedUrl(step, version) {
@@ -39,6 +30,39 @@ function downloadedUrl(step, version) {
   const fill = (value) => value.replaceAll(`\${version}`, version);
   return fill(url).replaceAll(`\${archive}`, fill(archive));
 }
+
+describe("checksum-pinned workflow tools", () => {
+  it("states a version and a SHA-256 for every tool", () => {
+    expect(Object.keys(pins).length).toBeGreaterThan(0);
+    for (const [tool, pin] of Object.entries(pins)) {
+      expect(pin.version, `${tool} needs a version`).toMatch(/^\d+\.\d+\.\d+$/);
+      expect(pin.sha256, `${tool} needs a SHA-256`).toMatch(/^[0-9a-f]{64}$/);
+    }
+  });
+
+  it("installs every pinned tool from the pin file", () => {
+    for (const tool of Object.keys(pins)) {
+      const readers = WORKFLOWS.filter(({ source }) =>
+        source.includes(`jq -er '.${tool}.version' ${PINNED_TOOLS_PATH}`),
+      );
+      expect(
+        readers.map(({ name }) => name),
+        `${tool} must read its version from ${PINNED_TOOLS_PATH}`,
+      ).not.toEqual([]);
+    }
+  });
+
+  it("leaves no version or checksum written into a workflow", () => {
+    for (const { name, source } of WORKFLOWS) {
+      expect(source, `${name} must not carry a literal checksum`).not.toMatch(
+        /[0-9a-f]{64}/,
+      );
+      expect(source, `${name} must not pin a tool version inline`).not.toMatch(
+        /_VERSION:\s*\d/,
+      );
+    }
+  });
+});
 
 describe("pinned tool releases", () => {
   it("knows the release source of every pinned tool", () => {
@@ -117,5 +141,26 @@ describe("pinned tool releases", () => {
     await expect(
       findOutdatedTools({ shellcheck: { version: "0.10.0" } }, network),
     ).rejects.toThrow("pins shellcheck, which has no release source");
+  });
+
+  it("reports the first failure in pin-file order, whichever settles first", async () => {
+    // The unknown tool fails at once, and the unreadable tag a moment later.
+    const network = {
+      archiveChecksum: async () => "",
+      latestTag: () =>
+        new Promise((resolve) => {
+          setTimeout(() => resolve("nightly"), 10);
+        }),
+    };
+
+    await expect(
+      findOutdatedTools(
+        {
+          actionlint: { version: "1.7.12" },
+          shellcheck: { version: "0.10.0" },
+        },
+        network,
+      ),
+    ).rejects.toThrow("The latest rhysd/actionlint release is tagged nightly");
   });
 });

@@ -27,9 +27,9 @@ import {
   readInlineList,
   readJobNames,
   readScalarValues,
-  readSteps,
   stepBody,
 } from "../../scripts/lib/workflow-matrix.mjs";
+import { WORKFLOW_STEPS } from "./lib/workflows.mjs";
 
 const ciWorkflow = readFileSync(repositoryPath(CI_WORKFLOW_PATH), "utf8");
 const refreshWorkflow = readFileSync(
@@ -222,14 +222,7 @@ run: |
 ]);
 
 describe("npm bootstrap steps", () => {
-  const steps = readdirSync(repositoryPath(".github", "workflows"))
-    .filter((name) => name.endsWith(".yml"))
-    .flatMap((workflow) =>
-      readSteps(
-        readFileSync(repositoryPath(".github", "workflows", workflow), "utf8"),
-      ).map((step) => ({ ...step, workflow })),
-    );
-  const bootstrapSteps = steps.filter((step) =>
+  const bootstrapSteps = WORKFLOW_STEPS.filter((step) =>
     step.lines.some((line) =>
       line.includes("devEngines.packageManager.version"),
     ),
@@ -247,7 +240,7 @@ describe("npm bootstrap steps", () => {
 
   it("writes every copy of the bootstrap exactly as the canonical body", () => {
     for (const [name, body] of NPM_BOOTSTRAP_BODIES) {
-      const copies = steps.filter((step) => step.name === name);
+      const copies = WORKFLOW_STEPS.filter((step) => step.name === name);
       expect(copies.length, `no workflow has a ${name} step`).toBeGreaterThan(
         0,
       );

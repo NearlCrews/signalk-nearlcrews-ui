@@ -9,11 +9,11 @@ import {
 import {
   assertPublicBundleBudgets,
   assertPublicCssExport,
+  BUNDLE_BUILD_OPTIONS,
   BUNDLED_REACT_MODULE,
-  exportSpecifier,
+  HOST_EXTERNALS,
   publicJavaScriptEntries,
 } from "./lib/bundle-contract.mjs";
-import { SIGNALK_HOST_SHARED_MODULES } from "./lib/federation-share.mjs";
 import { readPackageJson, repositoryPath } from "./lib/paths.mjs";
 import {
   assertRecordedSize,
@@ -21,16 +21,11 @@ import {
   CONSUMER_PANEL_ENTRY,
   CONSUMER_PANEL_FIXTURE,
   formatSizeTable,
+  importPathFor,
   parseSizeTable,
   SIZE_TABLE_DOCUMENT,
   tableBudget,
 } from "./lib/size-table.mjs";
-
-/** Host-shared modules and their subpaths stay outside every bundle. */
-const hostExternals = SIGNALK_HOST_SHARED_MODULES.flatMap((name) => [
-  name,
-  `${name}/*`,
-]);
 
 /**
  * `--table` prints the Markdown table docs/api-reference.md carries, for a
@@ -95,7 +90,7 @@ const packageSelfReference = {
   setup(pluginBuild) {
     const targets = new Map(
       [...publicEntries].map(([entry, target]) => [
-        exportSpecifier(manifest.name, entry === "index" ? "." : `./${entry}`),
+        importPathFor(manifest.name, entry),
         repositoryPath(target),
       ]),
     );
@@ -106,14 +101,10 @@ const packageSelfReference = {
   },
 };
 
-/** How every bundle is built, the stylesheet included, as a consumer would ship it. */
+/** How every bundle is built, the stylesheet included, with its inputs listed for the React scan. */
 const BUILD_OPTIONS = Object.freeze({
-  bundle: true,
+  ...BUNDLE_BUILD_OPTIONS,
   metafile: true,
-  minify: true,
-  platform: "browser",
-  target: "es2022",
-  write: false,
 });
 
 /**
@@ -135,7 +126,7 @@ async function measureEntry(entry, entryTarget, plugins = []) {
   const result = await build({
     ...BUILD_OPTIONS,
     entryPoints: [repositoryPath(entryTarget)],
-    external: hostExternals,
+    external: HOST_EXTERNALS,
     format: "esm",
     plugins,
     treeShaking: true,

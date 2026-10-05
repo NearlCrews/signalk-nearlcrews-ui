@@ -9,9 +9,8 @@
  * CommonJS `require` from the same tree, and that the federation entry loads
  * with the share map the build rendered. It also compiles the documentation
  * examples in the same workspace (scripts/lib/doc-example-compile.mjs), so
- * validation packs once.
+ * it packs once for both compiles.
  */
-import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, realpathSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join } from "node:path";
@@ -24,7 +23,7 @@ import {
 import { createFederationShared } from "./lib/federation-share.mjs";
 import { createPackedWorkspace } from "./lib/packed-workspace.mjs";
 import { repositoryPath } from "./lib/paths.mjs";
-import { typescriptCompilerEntry } from "./lib/typescript-compiler.mjs";
+import { runTypescriptCompiler } from "./lib/typescript-compiler.mjs";
 
 const fixtureDirectory = repositoryPath("fixtures", "consumer");
 
@@ -42,14 +41,8 @@ try {
   // resolve to the packed artifact rather than walking up to the repository.
   cpSync(fixtureDirectory, workspace, { recursive: true });
 
-  const typeCheck = spawnSync(
-    process.execPath,
-    [
-      typescriptCompilerEntry(),
-      "--noEmit",
-      "--project",
-      join(workspace, "tsconfig.json"),
-    ],
+  const typeCheck = runTypescriptCompiler(
+    ["--noEmit", "--project", join(workspace, "tsconfig.json")],
     { cwd: workspace, encoding: "utf8" },
   );
 
@@ -62,7 +55,7 @@ try {
   }
 
   // The documentation examples compile in the same packed workspace, so
-  // validation packs the package once.
+  // one pack serves both compiles.
   process.stdout.write(`${compileDocExamples(packed, readDocExamples())}\n`);
 
   // A CommonJS consumer (a Node test runner, a build script) must be able to

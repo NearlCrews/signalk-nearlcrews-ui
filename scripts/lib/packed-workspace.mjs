@@ -22,6 +22,42 @@ import { parseNpmPackResult, runNpmPack } from "./npm-pack.mjs";
 import { readPackageJson, repositoryPath } from "./paths.mjs";
 
 /**
+ * Packs the package into `directory` and returns what npm reports about the
+ * tarball it wrote there.
+ *
+ * `--ignore-scripts` keeps `prepack` from rebuilding dist in the middle of a
+ * validation run that already built it. `--json` keeps the tarball name out
+ * of stdout scraping.
+ */
+export function packInto(directory, packageName) {
+  return parseNpmPackResult(
+    runNpmPack(["--json", "--ignore-scripts", "--pack-destination", directory]),
+    packageName,
+  );
+}
+
+/**
+ * Links every dependency the repository has installed into `modules`, a
+ * workspace's node_modules directory, leaving out `packageName`, which the
+ * workspace holds a copy of its own.
+ *
+ * It reuses the installed tree rather than reaching the network: a real
+ * consumer install resolves the package's own dependencies (React Aria
+ * Components and its type packages) beside it, and the packed declarations
+ * reach into them.
+ */
+export function linkInstalledDependencies(modules, packageName) {
+  for (const dependency of readdirSync(repositoryPath("node_modules"))) {
+    if (dependency.startsWith(".") || dependency === packageName) continue;
+    symlinkSync(
+      repositoryPath("node_modules", dependency),
+      join(modules, dependency),
+      "junction",
+    );
+  }
+}
+
+/**
  * Packs the package into a fresh temporary directory and extracts it as that
  * directory's own dependency. Returns the workspace, the extracted package
  * directory, and the manifest; call `dispose` when done. Nothing is left
@@ -34,18 +70,9 @@ export async function createPackedWorkspace(prefix) {
   };
 
   try {
-    // `--ignore-scripts` keeps `prepack` from rebuilding dist in the middle
-    // of a validation run that already built it. `--json` keeps the tarball
-    // name out of stdout scraping.
-    const output = runNpmPack([
-      "--json",
-      "--ignore-scripts",
-      "--pack-destination",
-      workspace,
-    ]);
     const packageJson = await readPackageJson();
     const packageName = packageJson.name;
-    const tarball = parseNpmPackResult(output, packageName).filename;
+    const tarball = packInto(workspace, packageName).filename;
 
     const modules = join(workspace, "node_modules");
     const packageDirectory = join(modules, packageName);
@@ -56,18 +83,7 @@ export async function createPackedWorkspace(prefix) {
       { cwd: packageDirectory },
     );
 
-    // Reuse the repository's installed dependencies rather than reaching the
-    // network: a real consumer install resolves the package's own
-    // dependencies (React Aria Components and its type packages) beside it,
-    // and the packed declarations reach into them.
-    for (const dependency of readdirSync(repositoryPath("node_modules"))) {
-      if (dependency.startsWith(".") || dependency === packageName) continue;
-      symlinkSync(
-        repositoryPath("node_modules", dependency),
-        join(modules, dependency),
-        "junction",
-      );
-    }
+    linkInstalledDependencies(modules, packageName);
 
     return { dispose, packageDirectory, packageJson, workspace };
   } catch (error) {

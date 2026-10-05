@@ -16,6 +16,7 @@
     "fixtures/browser/geometry.tsx",
     "fixtures/browser/data-grid.tsx",
     "fixtures/browser/live-regions.tsx",
+    "fixtures/browser/csp.tsx",
     "fixtures/browser/vite.config.ts",
     "fixtures/consumer/consumer.tsx",
     "fixtures/consumer/harness.tsx",

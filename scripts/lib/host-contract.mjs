@@ -149,7 +149,7 @@ export async function fetchRegistryContract({
     throw new Error("Registry attempts must be an integer from 1 through 5.");
   }
 
-  let lastFailure = "npm view failed";
+  let lastFailure;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
       let output;
@@ -166,8 +166,7 @@ export async function fetchRegistryContract({
       }
       return parseRegistryContract(output, contractPackage);
     } catch (error) {
-      lastFailure =
-        error instanceof Error ? error.message : "Unknown registry failure";
+      lastFailure = error.message;
       if (attempt < attempts) {
         report(
           `Host contract registry attempt ${attempt}/${attempts} failed: ${lastFailure}. Retrying.`,

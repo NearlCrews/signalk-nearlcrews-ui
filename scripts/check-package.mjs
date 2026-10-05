@@ -6,11 +6,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { PACKAGE_NAME } from "../bin/lib/consumer-checks.mjs";
-import { parseNpmPackResult, runNpmPack } from "./lib/npm-pack.mjs";
 import {
   validatePackageMetadata,
   validatePackedFiles,
 } from "./lib/package-contract.mjs";
+import { packInto } from "./lib/packed-workspace.mjs";
 import {
   packageBinaryEntry,
   readJson,
@@ -59,13 +59,7 @@ const temporaryDirectory = await mkdtemp(
 try {
   // One pack, not two: `npm pack --json` reports the same file list and size
   // for a real pack as for a dry run, and packing is the slowest step here.
-  const packedOutput = runNpmPack([
-    "--ignore-scripts",
-    "--json",
-    "--pack-destination",
-    temporaryDirectory,
-  ]);
-  const packResult = parseNpmPackResult(packedOutput, PACKAGE_NAME);
+  const packResult = packInto(temporaryDirectory, PACKAGE_NAME);
   const tarballPath = join(temporaryDirectory, packResult.filename);
   const files = new Set(packResult.files.map((file) => file.path));
   validatePackedFiles(files, packageJson.exports, packageJson.bin);

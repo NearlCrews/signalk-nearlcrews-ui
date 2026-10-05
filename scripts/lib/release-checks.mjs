@@ -1,4 +1,6 @@
+import { githubApiHeaders } from "./github-releases.mjs";
 import { bulletList } from "./text.mjs";
+import { compareStableVersions, parseStableVersion } from "./version.mjs";
 
 export const CI_WORKFLOW_PATH = ".github/workflows/ci.yml";
 export const CODEQL_WORKFLOW_PATH = "dynamic/github-code-scanning/codeql";
@@ -212,16 +214,14 @@ export function parsePage(value, arrayKey, label) {
   return value;
 }
 
-const STABLE_VERSION = /^(\d+)\.(\d+)\.(\d+)$/;
-
-function parseStableVersion(value, label) {
-  const match = STABLE_VERSION.exec(value);
-  if (match === null) {
+function stableVersionParts(value, label) {
+  const parts = parseStableVersion(value);
+  if (parts === undefined) {
     throw new Error(
       `Expected a stable semantic version for ${label}, received ${String(value)}.`,
     );
   }
-  return match.slice(1).map(Number);
+  return parts;
 }
 
 /**
@@ -239,12 +239,9 @@ export function resolveDistTag(candidate, latestPublished) {
   const [core = ""] = candidate.split("+", 1);
   if (core.includes("-")) return "next";
 
-  const candidateParts = parseStableVersion(core, "the candidate");
-  const currentParts = parseStableVersion(latestPublished, "npm latest");
-  for (let index = 0; index < candidateParts.length; index += 1) {
-    if (candidateParts[index] > currentParts[index]) return "latest";
-    if (candidateParts[index] < currentParts[index]) break;
-  }
+  const candidateParts = stableVersionParts(core, "the candidate");
+  const currentParts = stableVersionParts(latestPublished, "npm latest");
+  if (compareStableVersions(candidateParts, currentParts) > 0) return "latest";
   throw new Error(
     `${candidate} must be newer than npm latest ${latestPublished}.`,
   );
@@ -291,10 +288,8 @@ export async function fetchAllPages({
 
     const response = await fetchPage(target, {
       headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${token}`,
+        ...githubApiHeaders(token),
         "User-Agent": "signalk-nearlcrews-ui-release-check",
-        "X-GitHub-Api-Version": "2022-11-28",
       },
     });
     if (!response.ok) {

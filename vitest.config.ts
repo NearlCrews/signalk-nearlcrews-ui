@@ -1,31 +1,6 @@
-import { createRequire } from "node:module";
-import { dirname, join } from "node:path";
 import { defineConfig } from "vitest/config";
 
-const nodeRequire = createRequire(import.meta.url);
-
-/**
- * Absolute path to the TypeScript 7 compiler the type tests are checked with.
- *
- * Two TypeScript packages are installed through npm aliases (see
- * CONTRIBUTING.md, "TypeScript toolchain"). Only `@typescript/native` declares
- * a `tsc` binary today, and npm links that name to whichever package declaring
- * it installed last, so the bare name Vitest would otherwise spawn is not the
- * package's to promise. Resolving `@typescript/native` by package path pins
- * the type tests to the compiler the build uses, the same way
- * scripts/tsc7.mjs pins the build itself.
- */
-function typescript7Checker(): string {
-  const manifestPath = nodeRequire.resolve("@typescript/native/package.json");
-  const manifest = nodeRequire(manifestPath) as {
-    readonly bin?: Readonly<Record<string, string>>;
-  };
-  const entry = manifest.bin?.tsc;
-  if (entry === undefined) {
-    throw new Error(`${manifestPath} does not declare bin.tsc.`);
-  }
-  return join(dirname(manifestPath), entry);
-}
+import { typescriptCompilerEntry } from "./scripts/lib/typescript-compiler.mjs";
 
 /**
  * The six published entry points plus the root barrel. Every one is a pure
@@ -49,10 +24,11 @@ export default defineConfig({
     // exceeds the 5 second default on a cold coverage run, and the tooling
     // specs that spawn a CLI or a build need the same room.
     testTimeout: 20_000,
-    // Only the components project loads tests/setup.ts, so a stubbed
-    // environment variable is handed back here, before each test, for the
-    // tooling specs as well.
+    // A stubbed environment variable or global leaks into every later test
+    // in the same file, so both are handed back here, before each test, in
+    // every project: only the components project loads tests/setup.ts.
     unstubEnvs: true,
+    unstubGlobals: true,
     projects: [
       {
         extends: true,
@@ -77,7 +53,9 @@ export default defineConfig({
           include: ["tests/unit/**/*.test.{ts,tsx}"],
           setupFiles: ["./tests/setup.ts"],
           typecheck: {
-            checker: typescript7Checker(),
+            // By path rather than the bare `tsc` name Vitest would otherwise
+            // spawn, so the type tests run the compiler the build uses.
+            checker: typescriptCompilerEntry(),
             enabled: true,
             include: ["tests/types/**/*.test-d.ts"],
             // Narrower than tsconfig.json: npm run type-check already compiles

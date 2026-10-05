@@ -23,6 +23,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { subset } from "semver";
 
 import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";
+import { escapeRegExp } from "../bin/lib/regexp.mjs";
 import { SIGNALK_HOST_SHARED_MODULES } from "./lib/federation-share.mjs";
 import {
   contractsMatch,
@@ -30,8 +31,8 @@ import {
   formatContractDiff,
   isRangeMap,
 } from "./lib/host-contract.mjs";
+import { runNpm } from "./lib/npm-pack.mjs";
 import { readJson, readPackageJson, repositoryPath } from "./lib/paths.mjs";
-import { escapeRegExp } from "./lib/regexp.mjs";
 
 const OPTIONS = ["--check-registry", "--update"];
 const argv = process.argv.slice(2);
@@ -64,9 +65,9 @@ function assertContractShape(value, source) {
   }
 }
 
-async function readRegistryContract() {
-  // Only registry modes reach npm, so the common local validation stays offline.
-  const { runNpm } = await import("./lib/npm-pack.mjs");
+// Only the registry modes call this, so the common local validation never
+// runs npm and stays offline.
+function readRegistryContract() {
   return fetchRegistryContract({ contractPackage, runNpm });
 }
 

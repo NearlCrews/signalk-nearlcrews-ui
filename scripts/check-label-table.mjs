@@ -13,8 +13,6 @@
  */
 import { readFile } from "node:fs/promises";
 
-import { build } from "esbuild";
-
 import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";
 import {
   formatLabelTable,
@@ -23,6 +21,7 @@ import {
   parseLabelTable,
 } from "./lib/label-table.mjs";
 import { repositoryPath } from "./lib/paths.mjs";
+import { importFromSource } from "./lib/source-module.mjs";
 import { bulletList } from "./lib/text.mjs";
 
 const DOCUMENT = "docs/api-reference.md";
@@ -31,11 +30,7 @@ const OPTIONS = ["--table"];
 const argv = process.argv.slice(2);
 assertKnownOptions(argv, OPTIONS);
 
-const compiled = await build({
-  bundle: true,
-  format: "esm",
-  logLevel: "silent",
-  platform: "neutral",
+const { PANEL_LABEL_DEFAULTS, REACHABILITY_STATUS } = await importFromSource({
   stdin: {
     contents: [
       'export { PANEL_LABEL_DEFAULTS } from "./src/utils/panel-label-defaults.ts";',
@@ -45,11 +40,7 @@ const compiled = await build({
     resolveDir: repositoryPath(),
     sourcefile: "label-defaults.ts",
   },
-  write: false,
 });
-const { PANEL_LABEL_DEFAULTS, REACHABILITY_STATUS } = await import(
-  `data:text/javascript;base64,${Buffer.from(compiled.outputFiles[0].contents).toString("base64")}`
-);
 
 const generated = [
   ...labelRows(PANEL_LABEL_DEFAULTS),

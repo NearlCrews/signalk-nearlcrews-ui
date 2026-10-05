@@ -8,7 +8,7 @@
  * checkout instead, and `--update` records what it read as the new baseline
  * once a reviewer has rechecked the facts a moved hash names.
  */
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
 import {
@@ -16,7 +16,7 @@ import {
   readFlag,
   readOption,
 } from "../bin/lib/cli-arguments.mjs";
-import { fetchJson, fetchOk } from "./lib/github-releases.mjs";
+import { fetchOk } from "./lib/github-releases.mjs";
 import {
   compareLoaderHashes,
   LOADER_FACTS,
@@ -24,7 +24,8 @@ import {
   readLoaderSources,
   SIGNALK_REPOSITORY,
 } from "./lib/host-loader.mjs";
-import { repositoryPath } from "./lib/paths.mjs";
+import { readJson, repositoryPath } from "./lib/paths.mjs";
+import { bulletList } from "./lib/text.mjs";
 
 const argv = process.argv.slice(2);
 assertKnownOptions(argv, ["--baseline", "--source", "--tag", "--update"], {
@@ -44,7 +45,7 @@ if (sourceOption !== undefined && tagOption !== undefined) {
 const token = process.env.GITHUB_TOKEN;
 const tag =
   sourceOption === undefined
-    ? (tagOption ?? (await latestSignalKReleaseTag({ fetchJson, token })))
+    ? (tagOption ?? (await latestSignalKReleaseTag({ token })))
     : "local checkout";
 const hashes = await readLoaderSources({
   fetchText: async (url) => (await fetchOk(url)).text(),
@@ -61,7 +62,7 @@ if (shouldUpdate) {
 } else {
   let baseline;
   try {
-    baseline = JSON.parse(await readFile(baselinePath, "utf8"));
+    baseline = await readJson(baselinePath);
   } catch (cause) {
     throw new Error(
       "Missing or unreadable host loader baseline. Run `npm run host-contract:loader:update`.",
@@ -70,12 +71,11 @@ if (shouldUpdate) {
   }
   const moved = compareLoaderHashes(baseline.hashes ?? {}, hashes);
   if (moved.length > 0) {
-    const details = LOADER_FACTS.filter(({ name }) => moved.includes(name))
-      .map(
-        ({ facts, file, name }) =>
-          `- ${name} (${file}): recheck that ${facts}.`,
-      )
-      .join("\n");
+    const details = bulletList(
+      LOADER_FACTS.filter(({ name }) => moved.includes(name)).map(
+        ({ facts, file, name }) => `${name} (${file}): recheck that ${facts}.`,
+      ),
+    );
     throw new Error(
       `The Signal K loader code at ${tag} differs from the baseline recorded at ${baseline.tag}:\n${details}\nOnce the facts hold, or the package follows the change, run \`npm run host-contract:loader:update\`.`,
     );

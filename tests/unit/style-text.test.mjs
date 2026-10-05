@@ -151,9 +151,8 @@ describe("styleTextEdits", () => {
       js('const A = `  a #{["  b"].join("\\n")}  c`;'),
       "module.js",
     );
-    expect(edits.map((edit) => edit.start)).toEqual(
-      [...edits.map((edit) => edit.start)].sort((a, b) => a - b),
-    );
+    const starts = edits.map((edit) => edit.start);
+    expect(starts).toEqual([...starts].sort((a, b) => a - b));
     expect(edits).toHaveLength(4);
   });
 });
@@ -232,7 +231,7 @@ describe("cssTokens", () => {
 });
 
 describe("styleTextDifferences", () => {
-  const identity = (styles) =>
+  const normalize = (styles) =>
     styles
       .replace(/\/\*[\s\S]*?\*\//g, " ")
       .replace(/\s+/g, " ")
@@ -243,7 +242,7 @@ describe("styleTextDifferences", () => {
       styleTextDifferences(
         [{ id: "root", styles: "\n.a {\n  color: red; /* why */\n}\n" }],
         [{ id: "root", styles: " .a { color: red; } " }],
-        identity,
+        normalize,
       ),
     ).toEqual([]);
   });
@@ -253,7 +252,7 @@ describe("styleTextDifferences", () => {
       styleTextDifferences(
         [{ id: "root", styles: ".a {\n}" }],
         [{ id: "root", styles: ".a {\n}" }],
-        identity,
+        normalize,
       ),
     ).toEqual([
       "root: the built text still holds a line break or a comment, so the compaction step did not run.",
@@ -293,7 +292,7 @@ describe("styleTextDifferences", () => {
           { id: "root", styles: "" },
           { id: "dialog", styles: "" },
         ],
-        identity,
+        normalize,
       ),
     ).toEqual([
       "The built style modules are root, dialog, but the source declares root.",

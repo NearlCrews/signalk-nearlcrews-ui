@@ -7,7 +7,7 @@
  * scripts/lib/public-surface.mjs; this walk decides which files it reads, and
  * which exported names the companion check holds to account.
  */
-import { dirname, posix } from "node:path";
+import { dirname, join, posix, relative, sep } from "node:path";
 
 import { conditionTarget } from "./bundle-contract.mjs";
 
@@ -18,19 +18,36 @@ const SPECIFIER_PATTERNS = [
   /\/\/\/\s*<reference\s+path=["']([^"']+)["']/g,
 ];
 
-/** Relative module specifiers a declaration file refers to, in source order. */
-export function collectRelativeSpecifiers(source) {
+/** Every module specifier a file refers to, one import form after another. */
+export function collectSpecifiers(source) {
   const specifiers = [];
   for (const pattern of SPECIFIER_PATTERNS) {
     for (const [, specifier] of source.matchAll(pattern)) {
-      if (specifier.startsWith(".")) specifiers.push(specifier);
+      specifiers.push(specifier);
     }
   }
   return specifiers;
 }
 
+/** The relative module specifiers among them, the files a walk can follow. */
+export function collectRelativeSpecifiers(source) {
+  return collectSpecifiers(source).filter((specifier) =>
+    specifier.startsWith("."),
+  );
+}
+
 /** An emitted declaration file of any module kind. */
 export const DECLARATION_FILE = /\.d\.[cm]?ts$/;
+
+/** A dist-relative path with forward slashes, the snapshot's file key. */
+export function fileKey(distDirectory, fileName) {
+  return relative(distDirectory, fileName).split(sep).join("/");
+}
+
+/** The absolute path of a dist-relative declaration file. */
+export function distPath(distDirectory, file) {
+  return join(distDirectory, ...file.split("/"));
+}
 
 /** A JavaScript extension, with the module-kind letter its declaration keeps. */
 const JAVASCRIPT_EXTENSION = /\.([cm]?)js$/;

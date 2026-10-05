@@ -24,21 +24,24 @@ import {
   assertExposesPanel,
   assertModuleContainer,
   assertWebpackContainer,
+  PLUGIN_CONFIG_PANEL,
+  REMOTE_ENTRY_NAME,
   toSafeModuleId,
 } from "../bin/lib/host-loading.mjs";
+import {
+  assertNoHostOwnedModules,
+  collectModulePaths,
+} from "../bin/lib/module-graph.mjs";
 import { renderModulePanelRemote } from "../bin/lib/module-runtime.mjs";
 import {
+  assertClassicContainerLoads,
   assertMarkupIncludes,
   assertMarkupVersionStamp,
   COMPATIBILITY_NOTICE_MARKER,
-  createPanelContext,
-  disposePanelContext,
-  evaluateClassicContainer,
   HOST_STATES,
   renderPanelRemote,
 } from "../bin/lib/panel-runtime.mjs";
 import {
-  BUNDLED_REACT_MODULE,
   panelJavaScriptEntries,
   TOOLING_ENTRIES,
 } from "./lib/bundle-contract.mjs";
@@ -53,9 +56,6 @@ const {
   version,
 } = await readPackageJson();
 
-/** The module both fixtures expose, the one the Admin asks a configurator for. */
-const EXPOSED_PANEL = "./PluginConfigurationPanel";
-const ENTRY_NAME = "remoteEntry.js";
 const expectedShared = createFederationShared(peerDependencies);
 // Derived from the exports map rather than listed here, so an entry point
 // added in a release is verified by the build it ships in. The test tooling
@@ -110,13 +110,6 @@ async function readStats(directory) {
   return stats;
 }
 
-function collectModuleNames(modules) {
-  return modules.flatMap((module) => [
-    module.name,
-    ...collectModuleNames(module.modules ?? []),
-  ]);
-}
-
 /** One fixture build's scripts, stats, and remote entry, read together. */
 async function readFixture(format) {
   const dist = repositoryPath("fixtures", "federation", format, "dist");
@@ -124,9 +117,11 @@ async function readFixture(format) {
     readJavaScript(dist),
     readStats(dist),
   ]);
-  const remote = files.find((file) => file.name === ENTRY_NAME);
+  const remote = files.find((file) => file.name === REMOTE_ENTRY_NAME);
   if (remote === undefined) {
-    throw new Error(`The ${format} fixture build produced no ${ENTRY_NAME}.`);
+    throw new Error(
+      `The ${format} fixture build produced no ${REMOTE_ENTRY_NAME}.`,
+    );
   }
   return { dist, files, format, remote, stats };
 }
@@ -135,7 +130,7 @@ const fixtures = await Promise.all(["classic", "esm"].map(readFixture));
 
 // The static reads the consumer bin makes of a remote entry.
 for (const { format, remote } of fixtures) {
-  const entryName = `The ${format} fixture ${ENTRY_NAME}`;
+  const entryName = `The ${format} fixture ${REMOTE_ENTRY_NAME}`;
   assertWebpackContainer(remote.source, entryName);
   assertExposesPanel(remote.source, entryName);
   assertEntryCarriesNoLibrary(remote.source, entryName);
@@ -147,19 +142,13 @@ for (const { format, remote } of fixtures) {
 const byFormat = Object.fromEntries(
   fixtures.map((fixture) => [fixture.format, fixture]),
 );
-assertModuleContainer(byFormat.esm.remote.source, ENTRY_NAME);
+assertModuleContainer(byFormat.esm.remote.source, REMOTE_ENTRY_NAME);
 const classicContainer = toSafeModuleId(packageName);
-const classicContext = createPanelContext();
-try {
-  evaluateClassicContainer({
-    containerName: classicContainer,
-    context: classicContext,
-    entryName: ENTRY_NAME,
-    source: byFormat.classic.remote.source,
-  });
-} finally {
-  disposePanelContext(classicContext);
-}
+assertClassicContainerLoads({
+  containerName: classicContainer,
+  entryName: REMOTE_ENTRY_NAME,
+  source: byFormat.classic.remote.source,
+});
 
 // The exposed panel renders in every state the Admin opens it in, with the
 // compatibility notice first, from the real chunks: the module remote in a
@@ -168,16 +157,16 @@ const renders = {
   classic: await renderPanelRemote({
     bundles: byFormat.classic.files,
     containerName: classicContainer,
-    entryName: ENTRY_NAME,
-    exposedModule: EXPOSED_PANEL,
+    entryName: REMOTE_ENTRY_NAME,
+    exposedModule: PLUGIN_CONFIG_PANEL,
     react: require("react"),
     reactDom: require("react-dom"),
     renderToStaticMarkup: require("react-dom/server").renderToStaticMarkup,
     states: HOST_STATES,
   }),
   esm: await renderModulePanelRemote({
-    entryPath: join(byFormat.esm.dist, ENTRY_NAME),
-    exposedModule: EXPOSED_PANEL,
+    entryPath: join(byFormat.esm.dist, REMOTE_ENTRY_NAME),
+    exposedModule: PLUGIN_CONFIG_PANEL,
     root: repositoryPath(),
     states: HOST_STATES,
   }),
@@ -208,18 +197,18 @@ for (const { files, format, stats } of fixtures) {
   assertNoReactRuntime(sources.join("\n"), `The ${format} fixture`);
   assertNoHostHarness(files, `The ${format} fixture`);
 
-  const moduleNames = collectModuleNames(stats.modules ?? []).filter(
-    (name) => typeof name === "string",
-  );
+  // A file module is recorded by its path, and a consumed share by the name
+  // Webpack gives it, so the one list answers every lookup below.
+  const modulePaths = collectModulePaths(stats);
   for (const entryPoint of packageEntryFiles) {
-    if (!moduleNames.some((name) => name.includes(`dist/${entryPoint}`))) {
+    if (!modulePaths.some((path) => path.includes(`dist/${entryPoint}`))) {
       throw new Error(
         `${format} fixture did not consume the ${entryPoint} package entry point.`,
       );
     }
   }
   for (const tooling of TOOLING_ENTRIES) {
-    if (moduleNames.some((name) => name.includes(`dist/${tooling}`))) {
+    if (modulePaths.some((path) => path.includes(`dist/${tooling}`))) {
       throw new Error(
         `${format} fixture bundles the ${tooling} test tooling entry point, which no panel may contain.`,
       );
@@ -227,25 +216,17 @@ for (const { files, format, stats } of fixtures) {
   }
   for (const [shared, share] of Object.entries(expectedShared)) {
     const consumed = `consume shared module (default) ${shared}@${share.requiredVersion} (singleton)`;
-    if (!moduleNames.includes(consumed)) {
+    if (!modulePaths.includes(consumed)) {
       throw new Error(
         `${format} fixture did not consume host-shared ${shared} at ${share.requiredVersion} as a singleton.`,
       );
     }
   }
 
-  const bundledReactModules = moduleNames.filter((name) =>
-    BUNDLED_REACT_MODULE.test(name),
-  );
-  const unexpectedReactModules = bundledReactModules.filter(
-    (name) =>
-      !/[\\/]react[\\/]jsx-runtime\.js$/.test(name) &&
-      !/[\\/]react[\\/]cjs[\\/]react-jsx-runtime\.production\.js$/.test(name),
-  );
-  if (unexpectedReactModules.length > 0) {
-    throw new Error(
-      `${format} fixture bundled unexpected React modules: ${unexpectedReactModules.join(", ")}.`,
-    );
+  try {
+    assertNoHostOwnedModules(modulePaths);
+  } catch (cause) {
+    throw new Error(`The ${format} fixture: ${cause.message}`, { cause });
   }
 }
 

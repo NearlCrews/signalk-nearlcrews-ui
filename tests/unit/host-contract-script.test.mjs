@@ -16,6 +16,11 @@ const REGISTRY_RESULT = {
   },
 };
 
+/** The registry answer as the baseline records it, parsed inside the test that asks. */
+function committedContract() {
+  return parseRegistryContract(JSON.stringify(REGISTRY_RESULT), PACKAGE_NAME);
+}
+
 describe("host contract registry compatibility", () => {
   it("parses the npm 11 object format", () => {
     expect(
@@ -67,10 +72,7 @@ describe("host contract registry compatibility", () => {
   });
 
   it("prints focused drift diagnostics", () => {
-    const committed = parseRegistryContract(
-      JSON.stringify(REGISTRY_RESULT),
-      PACKAGE_NAME,
-    );
+    const committed = committedContract();
     const published = {
       ...committed,
       version: "2.24.0",
@@ -112,10 +114,7 @@ describe("host contract registry compatibility", () => {
   });
 
   it("explains drift that no per-field branch describes", () => {
-    const committed = parseRegistryContract(
-      JSON.stringify(REGISTRY_RESULT),
-      PACKAGE_NAME,
-    );
+    const committed = committedContract();
     const published = {
       ...committed,
       peerDependencies: {

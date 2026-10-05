@@ -144,14 +144,14 @@ function locationOf(sourceFile, position) {
 
 /** Fails when a CSS literal ends where the next text part cannot continue it. */
 function assertClosed(sourceFile, node, state, what) {
-  if (state.comment) {
+  const inside = state.comment
+    ? "comment"
+    : state.quote === undefined
+      ? undefined
+      : "string";
+  if (inside !== undefined) {
     throw new Error(
-      `${locationOf(sourceFile, node.getStart(sourceFile))}: ${what} ends inside a CSS comment, so its style text cannot be compacted safely.`,
-    );
-  }
-  if (state.quote !== undefined) {
-    throw new Error(
-      `${locationOf(sourceFile, node.getStart(sourceFile))}: ${what} ends inside a CSS string, so its style text cannot be compacted safely.`,
+      `${locationOf(sourceFile, node.getStart(sourceFile))}: ${what} ends inside a CSS ${inside}, so its style text cannot be compacted safely.`,
     );
   }
 }
@@ -190,6 +190,14 @@ export function styleTextEdits(source, fileName) {
     }
   };
 
+  /** Compacts a literal that is one whole piece of CSS, written back by `quote`. */
+  const compactWhole = (node, what, quote) => {
+    const state = createCssState();
+    const compacted = compactCss(node.text, state);
+    assertClosed(sourceFile, node, state, what);
+    if (compacted !== node.text) replace(node, quote(compacted));
+  };
+
   const visit = (node) => {
     if (ts.isTaggedTemplateExpression(node)) {
       // A tag reads the raw text, which a rewrite of the cooked text changes.
@@ -197,19 +205,15 @@ export function styleTextEdits(source, fileName) {
     }
     if (ts.isStringLiteral(node)) {
       if (isModuleSpecifier(node)) return;
-      const state = createCssState();
-      const compacted = compactCss(node.text, state);
-      assertClosed(sourceFile, node, state, "A string literal");
-      if (compacted !== node.text) replace(node, JSON.stringify(compacted));
+      compactWhole(node, "A string literal", JSON.stringify);
       return;
     }
     if (ts.isNoSubstitutionTemplateLiteral(node)) {
-      const state = createCssState();
-      const compacted = compactCss(node.text, state);
-      assertClosed(sourceFile, node, state, "A template literal");
-      if (compacted !== node.text) {
-        replace(node, `\`${templateText(compacted)}\``);
-      }
+      compactWhole(
+        node,
+        "A template literal",
+        (text) => `\`${templateText(text)}\``,
+      );
       return;
     }
     if (ts.isTemplateExpression(node)) {

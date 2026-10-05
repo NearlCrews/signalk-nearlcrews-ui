@@ -13,11 +13,10 @@
  * declared, so what is checked is the package API the snippet uses. Errors
  * are reported at the documentation line they come from.
  */
-import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { exportSpecifier } from "./bundle-contract.mjs";
+import { conditionTarget, exportSpecifier } from "./bundle-contract.mjs";
 import {
   DOC_EXAMPLE_FILES,
   entryValueExports,
@@ -30,7 +29,7 @@ import {
   snippetScope,
 } from "./doc-examples.mjs";
 import { repositoryPath } from "./paths.mjs";
-import { typescriptCompilerEntry } from "./typescript-compiler.mjs";
+import { runTypescriptCompiler } from "./typescript-compiler.mjs";
 
 /** The workspace directory the examples are written to. */
 const EXAMPLES_DIRECTORY = "doc-examples";
@@ -109,9 +108,8 @@ export function compileDocExamples(packed, examples) {
   // packed declarations so a snippet imports what a consumer could import.
   const exportsBySpecifier = new Map();
   for (const [subpath, declaration] of Object.entries(packageJson.exports)) {
-    const types =
-      typeof declaration === "object" ? declaration.types : undefined;
-    if (typeof types !== "string" || !types.endsWith(".d.ts")) continue;
+    const types = conditionTarget(declaration, "types");
+    if (types === undefined || !types.endsWith(".d.ts")) continue;
     exportsBySpecifier.set(
       exportSpecifier(packageJson.name, subpath),
       entryValueExports(readFileSync(join(packageDirectory, types), "utf8")),
@@ -147,16 +145,8 @@ export function compileDocExamples(packed, examples) {
         file.source,
       );
     }
-    const result = spawnSync(
-      process.execPath,
-      [
-        typescriptCompilerEntry(),
-        "--noEmit",
-        "--pretty",
-        "false",
-        "--project",
-        EXAMPLES_PROJECT,
-      ],
+    const result = runTypescriptCompiler(
+      ["--noEmit", "--pretty", "false", "--project", EXAMPLES_PROJECT],
       { cwd: workspace, encoding: "utf8" },
     );
     return {

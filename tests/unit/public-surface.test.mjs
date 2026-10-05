@@ -1,13 +1,11 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-
+import ts from "typescript";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
   printPublicStatement,
   readPublicSurface,
 } from "../../scripts/lib/public-surface.mjs";
+import { removeTemporaryTrees, temporaryTree } from "./lib/temporary-tree.mjs";
 
 /** A small emitted declaration tree: two entries, shared files, and private ones. */
 const FILES = {
@@ -72,36 +70,30 @@ const FILES = {
   ].join("\n"),
 };
 
+/** Two dependencies a re-export can come from, scoped and not. */
+const DEPENDENCIES = {
+  "@scope/keys": "export type Key = string | number;\n",
+  "plain-types": "export interface Plain {\n    readonly value: string;\n}\n",
+};
+
 let distDirectory;
 
 beforeAll(() => {
-  distDirectory = mkdtempSync(join(tmpdir(), "snui-surface-"));
-  // Two dependencies a re-export can come from, scoped and not.
-  for (const [name, text] of [
-    ["@scope/keys", "export type Key = string | number;\n"],
-    [
-      "plain-types",
-      "export interface Plain {\n    readonly value: string;\n}\n",
-    ],
-  ]) {
-    const directory = join(distDirectory, "node_modules", ...name.split("/"));
-    mkdirSync(directory, { recursive: true });
-    writeFileSync(
-      join(directory, "package.json"),
-      JSON.stringify({ name, types: "index.d.ts", version: "1.0.0" }),
-    );
-    writeFileSync(join(directory, "index.d.ts"), text);
-  }
-  for (const [file, text] of Object.entries(FILES)) {
-    const path = join(distDirectory, ...file.split("/"));
-    mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, text);
-  }
+  distDirectory = temporaryTree("snui-surface-", {
+    ...FILES,
+    ...Object.fromEntries(
+      Object.entries(DEPENDENCIES).flatMap(([name, text]) => [
+        [
+          `node_modules/${name}/package.json`,
+          JSON.stringify({ name, types: "index.d.ts", version: "1.0.0" }),
+        ],
+        [`node_modules/${name}/index.d.ts`, text],
+      ]),
+    ),
+  });
 });
 
-afterAll(() => {
-  rmSync(distDirectory, { force: true, recursive: true });
-});
+afterAll(removeTemporaryTrees);
 
 function read(
   reachable = Object.keys(FILES).filter((file) => file !== "extra.d.ts"),
@@ -196,38 +188,28 @@ describe("public surface", () => {
 
 describe("declarations that refer to what was never emitted", () => {
   it("names a public type an @internal strip left dangling", () => {
-    const directory = mkdtempSync(join(tmpdir(), "snui-dangling-"));
-    try {
-      const files = {
-        "index.d.ts": 'export { Button } from "./components/Button.js";\n',
-        "components/Button.d.ts": [
-          'import type { Tone } from "../utils/tone.js";',
-          "export declare function Button(props: {",
-          "    readonly tone?: Tone;",
-          "}): string;",
-          "",
-        ].join("\n"),
-        // Tone was tagged @internal, so the build stripped its export.
-        "utils/tone.d.ts": "export declare const TONES: readonly string[];\n",
-      };
-      for (const [file, text] of Object.entries(files)) {
-        const path = join(directory, ...file.split("/"));
-        mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, text);
-      }
+    const directory = temporaryTree("snui-dangling-", {
+      "index.d.ts": 'export { Button } from "./components/Button.js";\n',
+      "components/Button.d.ts": [
+        'import type { Tone } from "../utils/tone.js";',
+        "export declare function Button(props: {",
+        "    readonly tone?: Tone;",
+        "}): string;",
+        "",
+      ].join("\n"),
+      // Tone was tagged @internal, so the build stripped its export.
+      "utils/tone.d.ts": "export declare const TONES: readonly string[];\n",
+    });
 
-      const { declarationErrors } = readPublicSurface(
-        directory,
-        ["index.d.ts"],
-        ["components/Button.d.ts", "index.d.ts", "utils/tone.d.ts"],
-      );
+    const { declarationErrors } = readPublicSurface(
+      directory,
+      ["index.d.ts"],
+      ["components/Button.d.ts", "index.d.ts", "utils/tone.d.ts"],
+    );
 
-      expect(declarationErrors).toEqual([
-        "components/Button.d.ts:1 refers to Tone, which the emitted declarations do not declare (an @internal tag on a public type?)",
-      ]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
-    }
+    expect(declarationErrors).toEqual([
+      "components/Button.d.ts:1 refers to Tone, which the emitted declarations do not declare (an @internal tag on a public type?)",
+    ]);
   });
 
   it("reports any other declaration error by its location", () => {
@@ -239,8 +221,7 @@ describe("declarations that refer to what was never emitted", () => {
 });
 
 describe("printPublicStatement", () => {
-  it("prints a statement the same way whatever its comments say", async () => {
-    const ts = (await import("typescript")).default;
+  it("prints a statement the same way whatever its comments say", () => {
     const print = (text) =>
       printPublicStatement(
         ts.createSourceFile("x.d.ts", text, ts.ScriptTarget.Latest, true)

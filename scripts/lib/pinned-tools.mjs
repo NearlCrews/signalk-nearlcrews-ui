@@ -10,6 +10,9 @@
  * the URL this table builds, so the two cannot name different archives.
  */
 
+import { settleInOrder } from "./promises.mjs";
+import { compareStableVersions, parseStableVersion } from "./version.mjs";
+
 /** The pin file every workflow reads, from the repository root. */
 export const PINNED_TOOLS_PATH = ".github/pinned-tools.json";
 
@@ -30,8 +33,6 @@ export const PINNED_TOOL_RELEASES = Object.freeze({
     tagPrefix: "v",
   },
 });
-
-const VERSION = /^(\d+)\.(\d+)\.(\d+)$/;
 
 function releaseOf(tool) {
   const release = PINNED_TOOL_RELEASES[tool];
@@ -54,21 +55,19 @@ export function versionFromTag(tool, tag) {
   const { tagPrefix } = releaseOf(tool);
   if (!tag.startsWith(tagPrefix)) return undefined;
   const version = tag.slice(tagPrefix.length);
-  return VERSION.test(version) ? version : undefined;
+  return parseStableVersion(version) === undefined ? undefined : version;
 }
 
 /** Orders two x.y.z versions numerically: negative, zero, or positive. */
 export function compareVersions(left, right) {
   const parse = (version) => {
-    const match = VERSION.exec(version);
-    if (match === null) throw new Error(`${version} is not an x.y.z version.`);
-    return match.slice(1).map(Number);
+    const parts = parseStableVersion(version);
+    if (parts === undefined) {
+      throw new Error(`${version} is not an x.y.z version.`);
+    }
+    return parts;
   };
-  const [a, b] = [parse(left), parse(right)];
-  for (let index = 0; index < 3; index += 1) {
-    if (a[index] !== b[index]) return a[index] - b[index];
-  }
-  return 0;
+  return compareStableVersions(parse(left), parse(right));
 }
 
 /**
@@ -78,25 +77,29 @@ export function compareVersions(left, right) {
  * download, so the network stays with the caller.
  */
 export async function findOutdatedTools(pins, { archiveChecksum, latestTag }) {
-  const outdated = [];
-  for (const [tool, pin] of Object.entries(pins)) {
-    const { repository } = releaseOf(tool);
-    const tag = await latestTag(repository);
-    const latest = versionFromTag(tool, tag);
-    if (latest === undefined) {
-      throw new Error(
-        `The latest ${repository} release is tagged ${tag}, which does not name a ${tool} version.`,
-      );
-    }
-    if (compareVersions(latest, pin.version) <= 0) continue;
-    const url = archiveUrl(tool, latest);
-    outdated.push({
-      latest,
-      pinned: pin.version,
-      sha256: await archiveChecksum(url),
-      tool,
-      url,
-    });
-  }
-  return outdated;
+  // The tools are independent lookups, so they run together; results and the
+  // first failure both follow pin-file order, which is the order the report
+  // prints.
+  const checked = await settleInOrder(
+    Object.entries(pins).map(async ([tool, pin]) => {
+      const { repository } = releaseOf(tool);
+      const tag = await latestTag(repository);
+      const latest = versionFromTag(tool, tag);
+      if (latest === undefined) {
+        throw new Error(
+          `The latest ${repository} release is tagged ${tag}, which does not name a ${tool} version.`,
+        );
+      }
+      if (compareVersions(latest, pin.version) <= 0) return undefined;
+      const url = archiveUrl(tool, latest);
+      return {
+        latest,
+        pinned: pin.version,
+        sha256: await archiveChecksum(url),
+        tool,
+        url,
+      };
+    }),
+  );
+  return checked.filter((tool) => tool !== undefined);
 }

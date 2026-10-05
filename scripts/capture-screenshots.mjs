@@ -19,12 +19,15 @@ import {
   BROWSER_PORT,
   BROWSER_URL,
 } from "../fixtures/browser/browser-server.ts";
+import {
+  SHOWCASE_THEMES,
+  showcaseScreenshotPath,
+} from "./lib/package-contract.mjs";
 import { packageBinaryEntry, repositoryPath } from "./lib/paths.mjs";
 
 const require = createRequire(import.meta.url);
 
 const SHOWCASE_URL = `${BROWSER_URL}/showcase.html`;
-const THEMES = ["light", "dark", "night"];
 const VIEWPORT = { width: 1440, height: 1000 };
 /* Twice the 1440 by 1000 viewport, matching the images already committed. */
 const SCALE = 2;
@@ -98,7 +101,7 @@ try {
     await page.goto(SHOWCASE_URL);
     await page.getByRole("heading", { level: 1 }).first().waitFor();
 
-    for (const theme of THEMES) {
+    for (const theme of SHOWCASE_THEMES) {
       const name = theme[0].toUpperCase() + theme.slice(1);
       await page.getByRole("radio", { name }).first().click();
       await page
@@ -107,11 +110,7 @@ try {
         .waitFor();
       /* Let the theme transition settle so the capture is not mid-fade. */
       await delay(500);
-      const file = repositoryPath(
-        "docs",
-        "screenshots",
-        `showcase-${theme}.png`,
-      );
+      const file = repositoryPath(showcaseScreenshotPath(theme));
       /*
        * The viewport, not the full page: `SaveActionBar` docks with
        * sticky="viewport-bottom", so only a viewport capture shows it at the

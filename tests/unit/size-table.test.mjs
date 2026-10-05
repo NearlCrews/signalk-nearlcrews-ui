@@ -18,6 +18,9 @@ function tableFor(rows) {
 }
 
 describe("bundle size table", () => {
+  /** A committed row whose budget sits above the one its size derives. */
+  const recorded = { budgetBytes: 44032, gzipBytes: 40675 };
+
   it("names the root entry by the package name and subpaths by import path", () => {
     expect(importPathFor(PACKAGE_NAME, "index")).toBe(PACKAGE_NAME);
     expect(importPathFor(PACKAGE_NAME, "data-grid")).toBe(
@@ -88,7 +91,7 @@ describe("bundle size table", () => {
       { budgetBytes: 24000, entry: "index", gzipBytes: 24470 },
     ]);
     expect(() => parseSizeTable(PACKAGE_NAME, markdown)).toThrow(
-      /budgets signalk-nearlcrews-ui at 24000 bytes, below the 24470 gzip bytes it records/,
+      `budgets ${PACKAGE_NAME} at 24000 bytes, below the 24470 gzip bytes it records`,
     );
   });
 
@@ -106,7 +109,6 @@ describe("bundle size table", () => {
   });
 
   it("carries the committed budget into a refreshed table", () => {
-    const recorded = { budgetBytes: 44032, gzipBytes: 40675 };
     expect(tableBudget(recorded, 32000, { tighten: false })).toBe(44032);
     expect(tableBudget(recorded, 44000, { tighten: false })).toBe(44032);
   });
@@ -121,7 +123,6 @@ describe("bundle size table", () => {
   });
 
   it("only ever lowers a budget when tightening", () => {
-    const recorded = { budgetBytes: 44032, gzipBytes: 40675 };
     expect(tableBudget(recorded, 32000, { tighten: true })).toBe(
       budgetFor(32000),
     );

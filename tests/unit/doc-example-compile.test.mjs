@@ -1,12 +1,3 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  rmSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -15,7 +6,8 @@ import {
   compileDocExamples,
   readDocExamples,
 } from "../../scripts/lib/doc-example-compile.mjs";
-import { repositoryPath } from "../../scripts/lib/paths.mjs";
+import { linkInstalledDependencies } from "../../scripts/lib/packed-workspace.mjs";
+import { removeTemporaryTrees, temporaryTree } from "./lib/temporary-tree.mjs";
 
 /*
  * The compile runs in the workspace check-consumer-types.mjs packs, a child
@@ -73,38 +65,31 @@ const PACKAGE_JSON = {
 let packed;
 
 beforeAll(() => {
-  const workspace = mkdtempSync(join(tmpdir(), "snui-doc-compile-"));
+  const packageRoot = `node_modules/${PACKAGE}`;
+  const workspace = temporaryTree("snui-doc-compile-", {
+    [`${packageRoot}/package.json`]: JSON.stringify(PACKAGE_JSON),
+    ...Object.fromEntries(
+      Object.entries(DECLARATIONS).map(([file, text]) => [
+        `${packageRoot}/${file}`,
+        text,
+      ]),
+    ),
+  });
   const modules = join(workspace, "node_modules");
-  const packageDirectory = join(modules, PACKAGE);
-  mkdirSync(packageDirectory, { recursive: true });
-  writeFileSync(
-    join(packageDirectory, "package.json"),
-    JSON.stringify(PACKAGE_JSON),
-  );
-  for (const [file, text] of Object.entries(DECLARATIONS)) {
-    writeFileSync(join(packageDirectory, file), text);
-  }
   // The declarations reach into React's types the way the packed ones do.
-  for (const dependency of readdirSync(repositoryPath("node_modules"))) {
-    if (dependency.startsWith(".")) continue;
-    symlinkSync(
-      repositoryPath("node_modules", dependency),
-      join(modules, dependency),
-      "junction",
-    );
-  }
-  packed = { packageDirectory, packageJson: PACKAGE_JSON, workspace };
+  linkInstalledDependencies(modules, PACKAGE);
+  packed = {
+    packageDirectory: join(modules, PACKAGE),
+    packageJson: PACKAGE_JSON,
+    workspace,
+  };
 });
 
-afterAll(() => {
-  if (packed !== undefined) {
-    rmSync(packed.workspace, { force: true, recursive: true });
-  }
-});
+afterAll(removeTemporaryTrees);
 
 /** An example as the extraction hands it over. */
-function example(line, source, heading = "Examples") {
-  return { file: "README.md", heading, line, source };
+function example(line, source) {
+  return { file: "README.md", heading: "Examples", line, source };
 }
 
 /** Compiles and returns what the failure wrote to stderr, or throws. */

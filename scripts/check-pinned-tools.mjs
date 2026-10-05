@@ -9,10 +9,9 @@
  * Node itself, so the workflow runs it without installing dependencies.
  */
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
 
 import { fetchOk, latestReleaseTag } from "./lib/github-releases.mjs";
-import { repositoryPath } from "./lib/paths.mjs";
+import { readJson, repositoryPath } from "./lib/paths.mjs";
 import { findOutdatedTools, PINNED_TOOLS_PATH } from "./lib/pinned-tools.mjs";
 import { bulletList } from "./lib/text.mjs";
 
@@ -24,9 +23,7 @@ async function archiveChecksum(url) {
   return createHash("sha256").update(archive).digest("hex");
 }
 
-const pins = JSON.parse(
-  await readFile(repositoryPath(...PINNED_TOOLS_PATH.split("/")), "utf8"),
-);
+const pins = await readJson(repositoryPath(PINNED_TOOLS_PATH));
 const outdated = await findOutdatedTools(pins, {
   archiveChecksum,
   latestTag: (repository) => latestReleaseTag(repository, { token }),

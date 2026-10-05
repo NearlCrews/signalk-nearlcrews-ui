@@ -1,10 +1,30 @@
 import { basename, extname } from "node:path";
 
+import { SIGNALK_HOST_SHARED_MODULES } from "./federation-share.mjs";
+
 /**
  * A React or React DOM module path inside a bundle's inputs. Both are host
  * shares, so a bundle that lists one carries a React copy of its own.
  */
 export const BUNDLED_REACT_MODULE = /node_modules[\\/]react(?:-dom)?[\\/]/;
+
+/**
+ * How a bundle is built to be measured or read as a consumer would ship it.
+ * The size check and the tree shaking spec both start from these, so the
+ * spec bundles the way the check does by construction.
+ */
+export const BUNDLE_BUILD_OPTIONS = Object.freeze({
+  bundle: true,
+  minify: true,
+  platform: "browser",
+  target: "es2022",
+  write: false,
+});
+
+/** Host-shared modules and their subpaths stay outside every bundle. */
+export const HOST_EXTERNALS = Object.freeze(
+  SIGNALK_HOST_SHARED_MODULES.flatMap((name) => [name, `${name}/*`]),
+);
 
 /** The string an exports-map conditions object gives `condition`, if any. */
 export function conditionTarget(declaration, condition) {

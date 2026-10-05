@@ -1,9 +1,7 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 
 import {
   createFederationShared,
@@ -11,8 +9,11 @@ import {
   renderFederationEntry,
   SIGNALK_HOST_SHARED_MODULES,
 } from "../../scripts/lib/federation-share.mjs";
+import { removeTemporaryTrees, temporaryTree } from "./lib/temporary-tree.mjs";
 
 const peerDependencies = { react: "^19.2.0", "react-dom": "^19.2.0" };
+
+afterAll(removeTemporaryTrees);
 
 describe("federation share map", () => {
   it("shares exactly the host-guaranteed modules as non-strict singletons without fallback", () => {
@@ -41,24 +42,22 @@ describe("federation share map", () => {
       peerDependencies,
       "0.9.0",
     );
-    const directory = mkdtempSync(join(tmpdir(), "snui-federation-"));
-    try {
-      const entryPath = join(directory, "federation.cjs");
-      writeFileSync(entryPath, cjs);
-      const loaded = createRequire(import.meta.url)(entryPath);
-      expect(loaded.shared).toEqual(shared);
-      expect(Object.isFrozen(loaded.shared)).toBe(true);
-      for (const share of Object.values(loaded.shared)) {
-        expect(Object.isFrozen(share)).toBe(true);
-      }
-      expect(loaded.hostNotes).toBe(HOST_NOTES);
-      expect([...loaded.SIGNALK_HOST_SHARED_MODULES]).toEqual([
-        "react",
-        "react-dom",
-      ]);
-    } finally {
-      rmSync(directory, { force: true, recursive: true });
+    const directory = temporaryTree("snui-federation-", {
+      "federation.cjs": cjs,
+    });
+    const loaded = createRequire(import.meta.url)(
+      join(directory, "federation.cjs"),
+    );
+    expect(loaded.shared).toEqual(shared);
+    expect(Object.isFrozen(loaded.shared)).toBe(true);
+    for (const share of Object.values(loaded.shared)) {
+      expect(Object.isFrozen(share)).toBe(true);
     }
+    expect(loaded.hostNotes).toBe(HOST_NOTES);
+    expect([...loaded.SIGNALK_HOST_SHARED_MODULES]).toEqual([
+      "react",
+      "react-dom",
+    ]);
     expect(cjs).toContain("signalk-nearlcrews-ui 0.9.0");
     expect(dts).toContain('"react" | "react-dom"');
     expect(dts).toContain("export declare const shared");

@@ -9,15 +9,13 @@
  * the package's browser floor.
  */
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
-import { build } from "esbuild";
 import { transform } from "lightningcss";
 
 import { distDirectory, repositoryPath } from "./lib/paths.mjs";
+import { importFromSource } from "./lib/source-module.mjs";
 import { styleTextDifferences } from "./lib/style-text.mjs";
 import { bulletList } from "./lib/text.mjs";
 
@@ -31,26 +29,9 @@ if (!existsSync(builtManifest)) {
   );
 }
 
-const compiled = await build({
-  bundle: true,
+const { STYLE_MODULES: sourceModules } = await importFromSource({
   entryPoints: [repositoryPath("src", "styles", "modules.ts")],
-  format: "esm",
-  logLevel: "silent",
-  platform: "neutral",
-  write: false,
 });
-
-const workspace = await mkdtemp(join(tmpdir(), "snui-style-text-"));
-let sourceModules;
-try {
-  const sourceManifest = join(workspace, "modules.mjs");
-  await writeFile(sourceManifest, compiled.outputFiles[0].contents);
-  ({ STYLE_MODULES: sourceModules } = await import(
-    pathToFileURL(sourceManifest).href
-  ));
-} finally {
-  await rm(workspace, { force: true, recursive: true });
-}
 const { STYLE_MODULES: builtModules } = await import(
   pathToFileURL(builtManifest).href
 );

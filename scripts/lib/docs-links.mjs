@@ -5,9 +5,7 @@
  * exercise them without the script's own repository-wide crawl running as a
  * side effect of the import.
  */
-import { prose, withoutInlineCode } from "./markdown.mjs";
-
-const HEADING = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/;
+import { headingText, prose, withoutInlineCode } from "./markdown.mjs";
 
 const INLINE_LINK =
   /(!?)\[[^\]]*\]\(\s*<?([^\s)>]+)>?(?:\s+["'][^"']*["'])?\s*\)/g;
@@ -48,7 +46,7 @@ export function markdownAnchors(markdown) {
   const counts = new Map();
 
   for (const { text } of prose(markdown)) {
-    const heading = HEADING.exec(text)?.[1];
+    const heading = headingText(text);
     if (heading === undefined) continue;
 
     const base = githubSlug(heading);
