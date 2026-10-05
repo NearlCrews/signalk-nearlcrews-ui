@@ -50,18 +50,35 @@ export const FIELD_ERROR_DECLARATIONS = `  min-width: 0;
   font-weight: var(--snui-font-weight-medium);
   overflow-wrap: anywhere;` as string;
 
-/** The raised surface every anchored overlay paints. */
-export const RAISED_OVERLAY_DECLARATIONS =
-  `  border: 1px solid var(--snui-color-border);
-  border-radius: var(--snui-radius-md);
-  background: var(--snui-color-surface-raised);
+/**
+ * The paint every raised overlay surface takes: a menu, a popover, a dialog,
+ * and a toast.
+ */
+export const RAISED_PAINT_DECLARATIONS =
+  `  background: var(--snui-color-surface-raised);
   box-shadow: var(--snui-shadow-overlay);
-  color: var(--snui-color-text);
+  color: var(--snui-color-text);` as string;
+
+/**
+ * The fade and slide an overlay settles with. A menu or a toast is a quick
+ * glance and takes the fast step; free-form content in a popover or a dialog
+ * settles more slowly.
+ */
+export function overlayFadeTransition(speed: "fast" | "normal"): string {
+  return `  transition:
+    opacity var(--snui-transition-${speed}),
+    transform var(--snui-transition-${speed});`;
+}
+
+/** The raised surface every anchored overlay paints, at rest. */
+export function raisedOverlayDeclarations(speed: "fast" | "normal"): string {
+  return `  border: 1px solid var(--snui-color-border);
+  border-radius: var(--snui-radius-md);
+${RAISED_PAINT_DECLARATIONS}
   opacity: 1;
   transform: none;
-  transition:
-    opacity var(--snui-transition-fast),
-    transform var(--snui-transition-fast);` as string;
+${overlayFadeTransition(speed)}`;
+}
 
 /**
  * The hover step and focus ring band every raised overlay surface remaps for
@@ -75,15 +92,32 @@ export const RAISED_SURFACE_TOKEN_DECLARATIONS =
   --snui-color-focus-ring-band: var(--snui-color-surface-raised);` as string;
 
 /**
+ * The gutter a fixed, viewport-sized layer keeps at one edge: the device's
+ * safe-area inset, and never tighter than the standard gutter. The dialog
+ * subtracts the top and bottom gutters from its height, so it reads them from
+ * here rather than restating what its scrim pads with.
+ */
+export function safeAreaGutter(
+  edge: "top" | "right" | "bottom" | "left",
+): string {
+  return `max(var(--snui-space-4), env(safe-area-inset-${edge}, 0px))`;
+}
+
+function safeAreaPaddingDeclarations(): string {
+  return `  padding:
+    ${safeAreaGutter("top")}
+    ${safeAreaGutter("right")}
+    ${safeAreaGutter("bottom")}
+    ${safeAreaGutter("left")};`;
+}
+
+/**
  * Padding that keeps a fixed, viewport-sized layer clear of the device safe
  * areas and never tighter than the standard gutter. Safe-area insets are
  * physical edges, so the shorthand stays physical.
  */
-export const SAFE_AREA_PADDING_DECLARATIONS = `  padding:
-    max(var(--snui-space-4), env(safe-area-inset-top, 0px))
-    max(var(--snui-space-4), env(safe-area-inset-right, 0px))
-    max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))
-    max(var(--snui-space-4), env(safe-area-inset-left, 0px));` as string;
+export const SAFE_AREA_PADDING_DECLARATIONS =
+  /* @__PURE__ */ safeAreaPaddingDeclarations();
 
 /** The entering and exiting state of an anchored overlay. */
 export const OVERLAY_TRANSITION_DECLARATIONS = `  opacity: 0;
@@ -97,6 +131,18 @@ export const OVERLAY_TRANSITION_DECLARATIONS = `  opacity: 0;
 export const FORCED_COLORS_OUTLINE_DECLARATIONS =
   `    outline: 2px solid CanvasText;
     outline-offset: -2px;` as string;
+
+/**
+ * The system highlight pair a control takes under forced colors where the
+ * author fill that marked it would flatten: a hovered, focused, pressed, or
+ * selected item, the way a native menu marks its current item, and a primary
+ * button's resting emphasis. Indented for use inside a forced-colors media
+ * block.
+ */
+export const FORCED_COLORS_HIGHLIGHT_DECLARATIONS =
+  `    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;` as string;
 
 /**
  * The width of every focus ring: 2 pixels, and 3 under `prefers-contrast:
@@ -166,7 +212,7 @@ export const PRESSED_FILL_DECLARATION =
 
 /**
  * The stacked body of a field: its label, its control, and its messages.
- * Shared by the field, the radio group, and the progress bar.
+ * Shared by the field, the checkbox, the radio group, and the progress bar.
  */
 export const FIELD_STACK_DECLARATIONS = `  display: grid;
   min-width: 0;
@@ -187,13 +233,25 @@ export const GROUP_LEGEND_DECLARATIONS = `  max-width: 100%;
   padding: 0;
   color: var(--snui-color-text);
   font-weight: var(--snui-font-weight-bold);
-  overflow-wrap: anywhere;` as string;
+  overflow-wrap: anywhere;
+  text-wrap: balance;` as string;
+
+/**
+ * Muted prose that wraps inside its container: a panel, section, field group,
+ * dialog, or empty state description, and a confirmation message. Each rule
+ * adds its own measure, margins, or grid placement beside it.
+ */
+export const MUTED_PROSE_DECLARATIONS = `  min-width: 0;
+  color: var(--snui-color-text-muted);
+  overflow-wrap: anywhere;
+  text-wrap: pretty;` as string;
 
 /** Shared presentation for the muted description under a label. */
 export const FIELD_DESCRIPTION_DECLARATIONS = `  min-width: 0;
   color: var(--snui-color-text-muted);
   font-size: var(--snui-font-size-sm);
-  overflow-wrap: anywhere;` as string;
+  overflow-wrap: anywhere;
+  text-wrap: pretty;` as string;
 
 /** A bordered surface on the panel background, outlined with `borderToken`. */
 function surfaceDeclarations(borderToken: string): string {
@@ -326,6 +384,24 @@ export const FORCED_COLORS_INVALID_DECLARATIONS =
 export const SELECTION_GLYPH_SIZE = "1.25rem";
 
 /**
+ * The face both selection glyphs share: the checkbox box and the radio dial,
+ * at one size, on one baseline nudge, with one outline, fill, and transition.
+ * Each adds its own shape, and the checkbox its native reset, beside it.
+ */
+export const SELECTION_GLYPH_DECLARATIONS = /* @__PURE__ */ [
+  "  display: grid;",
+  "  place-content: center;",
+  `  width: ${SELECTION_GLYPH_SIZE};`,
+  `  height: ${SELECTION_GLYPH_SIZE};`,
+  "  margin: 0;",
+  `  margin-block-start: ${GLYPH_BASELINE_NUDGE};`,
+  "  border: 2px solid var(--snui-color-border);",
+  "  background: var(--snui-color-surface);",
+  // One element, so the compacted value keeps single spaces between its parts.
+  "  transition: background-color var(--snui-transition-fast), border-color var(--snui-transition-fast);",
+].join("\n");
+
+/**
  * The diameter of the tone dot. The status indicator and the toast card paint
  * the same mark, and the per-tone shapes are cut to this size, so resizing it
  * in one module alone would show two different dots in one panel.
@@ -368,6 +444,18 @@ export function bodyEdgeMarginRules(block: string): string {
     `.${block} > :last-child { margin-block-end: 0; }`,
   ].join("\n");
 }
+
+/**
+ * The row a group of actions sits in: it wraps rather than overflowing and
+ * never grows wider than its container. Shared by the section, the action
+ * bar, the collapsible section, and the dialog, each of which adds its own
+ * alignment beside it.
+ */
+export const ACTION_ROW_DECLARATIONS = `  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  flex-wrap: wrap;
+  gap: var(--snui-space-2);` as string;
 
 /**
  * The rules that stretch a button row's actions across a narrow panel, written

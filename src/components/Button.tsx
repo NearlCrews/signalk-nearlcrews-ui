@@ -204,7 +204,7 @@ function reportButtonMistakes({
     component: "Button",
     describedBy: ariaDescribedBy,
     hasReason: hasReactContent(disabledReason),
-    name: label || reactNodeText(children).trim(),
+    name: label || reactNodeText(children),
     nativeDisabled,
     noun: "button",
   });

@@ -11,6 +11,7 @@ import {
 import { flushSync } from "react-dom";
 
 import { useComposedRef } from "../hooks/use-node-ref.js";
+import { ACTION_BAR_FIXED_PROPERTIES } from "../styles/action-bar-properties.js";
 import { classNames } from "../utils/class-names.js";
 import { focusedElement } from "../utils/focus.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
@@ -168,11 +169,7 @@ function scrollFocusedTarget(
           Math.max(0, visibilityRange),
         );
       if (applied !== 0) {
-        if (typeof ancestor.scrollBy === "function") {
-          ancestor.scrollBy({ behavior: "auto", top: applied });
-        } else {
-          ancestor.scrollTop += applied;
-        }
+        ancestor.scrollTop += applied;
         remaining -= applied;
         targetTop -= applied;
         targetBottom -= applied;
@@ -539,10 +536,10 @@ function ViewportBottomActionBar({
   }, [placement]);
 
   const anchorStyle = {
-    "--snui-action-bar-fixed-bottom": `${String(placement.bottomInset)}px`,
-    "--snui-action-bar-fixed-height": `${String(placement.height)}px`,
-    "--snui-action-bar-fixed-left": `${String(placement.left)}px`,
-    "--snui-action-bar-fixed-width": `${String(placement.width)}px`,
+    [ACTION_BAR_FIXED_PROPERTIES.bottom]: `${String(placement.bottomInset)}px`,
+    [ACTION_BAR_FIXED_PROPERTIES.height]: `${String(placement.height)}px`,
+    [ACTION_BAR_FIXED_PROPERTIES.left]: `${String(placement.left)}px`,
+    [ACTION_BAR_FIXED_PROPERTIES.width]: `${String(placement.width)}px`,
   } as CSSProperties;
 
   return (
@@ -565,32 +562,14 @@ function ViewportBottomActionBar({
 }
 
 export function ActionBar({
-  actions,
-  children,
-  className,
-  ref,
-  status,
-  statusRef,
-  sticky,
   variant = "card",
   ...props
 }: ActionBarProps): React.JSX.Element {
-  requireContent(actions, "ActionBar requires at least one action.");
+  requireContent(props.actions, "ActionBar requires at least one action.");
 
   const Bar =
-    sticky === "viewport-bottom" ? ViewportBottomActionBar : ActionBarSurface;
-  return (
-    <Bar
-      {...props}
-      actions={actions}
-      className={className}
-      ref={ref}
-      status={status}
-      statusRef={statusRef}
-      sticky={sticky}
-      variant={variant}
-    >
-      {children}
-    </Bar>
-  );
+    props.sticky === "viewport-bottom"
+      ? ViewportBottomActionBar
+      : ActionBarSurface;
+  return <Bar {...props} variant={variant} />;
 }

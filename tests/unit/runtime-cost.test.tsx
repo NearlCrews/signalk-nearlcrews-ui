@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -11,6 +11,9 @@ import {
   type RowProps,
 } from "../../src/data-grid.js";
 import { PanelRoot, RELATIVE_AGE_EN, RelativeAge } from "../../src/index.js";
+import { advanceTimers } from "../helpers.js";
+import { NOW } from "./lib/clock.js";
+import { bodyRows, rowAt } from "./lib/data-grid-fixture.js";
 
 /**
  * What a scrolling panel costs is measured in the browser suite, where there
@@ -60,17 +63,14 @@ function fleetGrid(items: readonly Vessel[]): ReactElement {
 }
 
 function selectedRowNames(container: HTMLElement): string[] {
-  return [
-    ...container.querySelectorAll<HTMLElement>(
-      ".snui-data-grid__body [role='row'][aria-selected='true']",
-    ),
-  ].map((row) => row.textContent || "");
+  return [...bodyRows(container)]
+    .filter((row) => row.getAttribute("aria-selected") === "true")
+    .map((row) => row.textContent || "");
 }
 
 describe("runtime cost", () => {
   it("commits no render for a panel of settled stamps on a clock tick", () => {
-    const now = Date.UTC(2026, 8, 5, 12, 0, 0);
-    vi.useFakeTimers({ now });
+    vi.useFakeTimers({ now: NOW });
     let renders = 0;
 
     function StampList(): React.JSX.Element {
@@ -80,7 +80,7 @@ describe("runtime cost", () => {
           {STAMP_HOURS.map((hours) => (
             <li key={hours}>
               <RelativeAge
-                since={now - hours * 3_600_000}
+                since={NOW - hours * 3_600_000}
                 tickMs={1_000}
                 options={RELATIVE_AGE_EN}
               />
@@ -96,9 +96,7 @@ describe("runtime cost", () => {
 
     // Sixty ticks, and none of the twenty ages crosses into a new hour, so the
     // shared clock costs the panel nothing but the comparison each stamp makes.
-    act(() => {
-      vi.advanceTimersByTime(60_000);
-    });
+    advanceTimers(60_000);
 
     expect(renders).toBe(initial);
     expect(screen.getAllByText("3 hours ago")).toHaveLength(1);
@@ -113,19 +111,12 @@ describe("runtime cost", () => {
     const view = render(fleetGrid(FLEET.slice(0, 8)));
 
     const container = view.container;
-    const target = container.querySelectorAll<HTMLElement>(
-      ".snui-data-grid__body [role='row']",
-    )[2];
-    expect(target).toBeDefined();
-    if (target === undefined) return;
-    await user.click(target);
+    await user.click(rowAt(container, 2));
     expect(selectedRowNames(container)).toEqual(["Vessel 2"]);
 
     view.rerender(fleetGrid(FLEET));
 
-    expect(
-      container.querySelectorAll(".snui-data-grid__body [role='row']"),
-    ).toHaveLength(FLEET.length);
+    expect(bodyRows(container)).toHaveLength(FLEET.length);
     expect(selectedRowNames(container)).toEqual(["Vessel 2"]);
   });
 });

@@ -20,15 +20,6 @@ export function rovingKeyAxis(key: string): Orientation | undefined {
   return KEY_AXIS[key];
 }
 
-/**
- * Whether a key mirrors in a right-to-left panel. Callers ask before reading
- * the computed direction, which is the costly half of a roving step, so an
- * unrelated key press never reaches a style lookup.
- */
-export function mirrorsInRtl(key: string): boolean {
-  return rovingKeyAxis(key) === "horizontal";
-}
-
 /** One arrow, Home, or End press against a roving-focus group. */
 export interface RovingStep {
   /** How many items the group holds. */
@@ -38,8 +29,12 @@ export interface RovingStep {
   /** `event.key` as the browser reported it. */
   readonly key: string;
   readonly orientation: Orientation;
-  /** Whether the group reads right to left, from {@link isRightToLeft}. */
-  readonly rtl: boolean;
+  /**
+   * Whether the group reads right to left, from {@link isRightToLeft}. Asked
+   * only once a horizontal arrow has matched: the computed direction is the
+   * costly half of a step, and no other key press should reach a style lookup.
+   */
+  readonly rtl: () => boolean;
 }
 
 /**
@@ -66,11 +61,11 @@ export function nextRovingIndex({
   const horizontal = orientation === "horizontal";
   const forwardKey = horizontal ? "ArrowRight" : "ArrowDown";
   const backwardKey = horizontal ? "ArrowLeft" : "ArrowUp";
-  const mirrored = rtl && horizontal;
   let step: number;
-  if (key === forwardKey) step = mirrored ? -1 : 1;
-  else if (key === backwardKey) step = mirrored ? 1 : -1;
+  if (key === forwardKey) step = 1;
+  else if (key === backwardKey) step = -1;
   else return null;
+  if (horizontal && rtl()) step = -step;
 
   if (currentIndex < 0) return step > 0 ? 0 : count - 1;
   return (currentIndex + step + count) % count;

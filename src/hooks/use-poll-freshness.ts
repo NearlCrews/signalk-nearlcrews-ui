@@ -46,5 +46,5 @@ export function usePollFreshness(
     wakeAtMs: staleAfterMs > 0 ? lastUpdatedMs + staleAfterMs : Number.NaN,
   });
 
-  return { ...resolveFreshness(lastUpdated, nowMs, staleAfterMs), nowMs };
+  return { ...resolveFreshness(lastUpdatedMs, nowMs, staleAfterMs), nowMs };
 }

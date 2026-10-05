@@ -10,6 +10,7 @@ import {
   replaceVisualViewport,
   stubAnimationFrames,
 } from "../helpers.js";
+import { attached } from "./lib/attached.js";
 
 describe("readViewportEdges", () => {
   // lib.dom declares visualViewport as nullable, and a document that is not
@@ -20,7 +21,7 @@ describe("readViewportEdges", () => {
   ] as const)(
     "falls back to the layout viewport %s",
     (_case, visualViewport, innerWidth, innerHeight) => {
-      const restore = replaceVisualViewport(visualViewport);
+      replaceVisualViewport(visualViewport);
       vi.spyOn(window, "innerWidth", "get").mockReturnValue(innerWidth);
       vi.spyOn(window, "innerHeight", "get").mockReturnValue(innerHeight);
 
@@ -30,15 +31,11 @@ describe("readViewportEdges", () => {
         bottom: innerHeight,
         left: 0,
       });
-      restore();
     },
   );
 
   it("reads the visual viewport offsets and size when present", () => {
-    const { restore, visualViewport } = installVisualViewport({
-      height: 300,
-      width: 500,
-    });
+    const visualViewport = installVisualViewport({ height: 300, width: 500 });
     Object.assign(visualViewport, { offsetLeft: 20, offsetTop: 40 });
 
     expect(readViewportEdges(window)).toEqual({
@@ -47,7 +44,6 @@ describe("readViewportEdges", () => {
       bottom: 340,
       left: 20,
     });
-    restore();
   });
 });
 
@@ -62,9 +58,8 @@ describe("roundedLayoutValue", () => {
 describe("observePanelViewport", () => {
   it("coalesces every change signal into one call per frame", () => {
     const { frames, runAll } = stubAnimationFrames();
-    const { restore, visualViewport } = installVisualViewport({ height: 500 });
-    const root = document.createElement("div");
-    document.body.append(root);
+    const visualViewport = installVisualViewport({ height: 500 });
+    const root = attached("div");
     const onChange = vi.fn();
 
     const stop = observePanelViewport(root, onChange);
@@ -82,19 +77,14 @@ describe("observePanelViewport", () => {
     expect(onChange).toHaveBeenCalledTimes(1);
 
     stop();
-    restore();
-    root.remove();
   });
 
   it("measures for a scroller the panel sits inside and ignores one inside it", () => {
     const { frames, runAll } = stubAnimationFrames();
-    const { restore } = installVisualViewport({ height: 500 });
-    const outerScroller = document.createElement("div");
-    const root = document.createElement("div");
-    const innerScroller = document.createElement("div");
-    outerScroller.append(root);
-    root.append(innerScroller);
-    document.body.append(outerScroller);
+    installVisualViewport({ height: 500 });
+    const outerScroller = attached("div");
+    const root = attached("div", outerScroller);
+    const innerScroller = attached("div", root);
     const onChange = vi.fn();
 
     const stop = observePanelViewport(root, onChange);
@@ -122,19 +112,14 @@ describe("observePanelViewport", () => {
     expect(onChange).toHaveBeenCalledTimes(4);
 
     stop();
-    restore();
-    outerScroller.remove();
   });
 
   it("measures for a scroller that holds an extra resize target", () => {
     const { runAll } = stubAnimationFrames();
-    const { restore } = installVisualViewport({ height: 500 });
-    const root = document.createElement("div");
-    const scroller = document.createElement("div");
-    const anchor = document.createElement("div");
-    root.append(scroller);
-    scroller.append(anchor);
-    document.body.append(root);
+    installVisualViewport({ height: 500 });
+    const root = attached("div");
+    const scroller = attached("div", root);
+    const anchor = attached("div", scroller);
     const onChange = vi.fn();
 
     const stop = observePanelViewport(root, onChange, {
@@ -150,15 +135,12 @@ describe("observePanelViewport", () => {
     expect(onChange).toHaveBeenCalledTimes(2);
 
     stop();
-    restore();
-    root.remove();
   });
 
   it("stops observing and cancels the pending frame on dispose", () => {
     const { cancelled, frames, runAll } = stubAnimationFrames();
-    const { restore, visualViewport } = installVisualViewport({ height: 500 });
-    const root = document.createElement("div");
-    document.body.append(root);
+    const visualViewport = installVisualViewport({ height: 500 });
+    const root = attached("div");
     const onChange = vi.fn();
 
     const stop = observePanelViewport(root, onChange);
@@ -173,9 +155,6 @@ describe("observePanelViewport", () => {
     visualViewport.dispatchEvent(new Event("resize"));
     expect(frames).toHaveLength(0);
     expect(onChange).not.toHaveBeenCalled();
-
-    restore();
-    root.remove();
   });
 
   it("observes the root and any extra resize targets when ResizeObserver exists", () => {
@@ -194,10 +173,9 @@ describe("observePanelViewport", () => {
     }
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     stubAnimationFrames();
-    const root = document.createElement("div");
+    const root = attached("div");
     const bar = document.createElement("div");
     const anchor = document.createElement("div");
-    document.body.append(root);
 
     const stop = observePanelViewport(root, () => undefined, {
       resizeTargets: [anchor, bar],
@@ -206,7 +184,6 @@ describe("observePanelViewport", () => {
 
     stop();
     expect(disconnect).toHaveBeenCalledTimes(1);
-    root.remove();
   });
 
   it("returns a no-op disposer for a detached document without a window", () => {

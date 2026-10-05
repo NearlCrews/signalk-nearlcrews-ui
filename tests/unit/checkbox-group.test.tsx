@@ -8,7 +8,7 @@ import {
   toCheckboxGroupValue,
 } from "../../src/components/CheckboxGroup.js";
 import { CheckboxGroup } from "../../src/composites.js";
-import { formOf, panel, renderInPanel } from "../helpers.js";
+import { formOf, loggedMessages, panel, renderInPanel } from "../helpers.js";
 
 const LAYERS = [
   { label: "Depth areas", value: "depth" },
@@ -313,9 +313,37 @@ describe("CheckboxGroup empty warning", () => {
     expect(group).toHaveAttribute("aria-describedby", "layers-hint");
 
     await user.click(screen.getByRole("checkbox", { name: "Buoys" }));
+    // The warning is the group's own text, so it reads first.
     expect(group).toHaveAttribute(
       "aria-describedby",
-      `layers-hint ${screen.getByRole("status").id}`,
+      `${screen.getByRole("status").id} layers-hint`,
+    );
+  });
+
+  it("reads its own text before the ids the caller adds", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <>
+        <p id="layers-hint">Layers are imported on save.</p>
+        <p id="layers-scope">Imports cover the active chart only.</p>
+        <CheckboxGroup
+          legend="Import layers"
+          description="Choose the layers to bring in."
+          error="Check the chart source."
+          aria-describedby="layers-hint"
+          groupDescribedBy="layers-scope"
+          options={LAYERS}
+          defaultValue={["buoys"]}
+          emptyWarning="Nothing will be imported."
+        />
+      </>,
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: "Buoys" }));
+    expect(
+      screen.getByRole("group", { name: "Import layers" }),
+    ).toHaveAccessibleDescription(
+      "Choose the layers to bring in. Error.Check the chart source. Warning.Nothing will be imported. Layers are imported on save. Imports cover the active chart only.",
     );
   });
 
@@ -346,7 +374,7 @@ describe("CheckboxGroup form reset", () => {
   it("returns an uncontrolled selection to its default", async () => {
     const user = userEvent.setup();
     renderInPanel(
-      <form data-testid="layers-form">
+      <form>
         <CheckboxGroup
           legend="Import layers"
           name="layers"
@@ -522,7 +550,7 @@ describe("CheckboxGroup blocked options", () => {
       screen.getByRole("checkbox", { name: "All layers" }),
     ).toHaveAccessibleDescription("Turn on chart import first.");
     // The group names its own prop rather than the box's.
-    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+    expect(loggedMessages(warn)).toEqual([
       'CheckboxGroup select-all box "Every export layer" is blocked because no option can change, but says nothing about why. Pass selectAllDisabledReason.',
     ]);
   });
@@ -546,7 +574,7 @@ describe("CheckboxGroup blocked options", () => {
 
     // One message, from the group the consumer rendered, rather than the
     // box's own, which names a prop an option cannot take.
-    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+    expect(loggedMessages(warn)).toEqual([
       'CheckboxGroup option "Standby primary" is blocked with ariaDisabled but says nothing about why. Pass disabledReason on the option.',
     ]);
   });

@@ -3,14 +3,14 @@ import {
   FIELD_ERROR_DECLARATIONS,
   FIELD_MARKERS,
   GROUP_LEGEND_DECLARATIONS,
+  MUTED_PROSE_DECLARATIONS,
   NARROW_PANEL_QUERY,
   NON_LINK_DESCENDANTS,
   SURFACE_DECLARATIONS,
-  visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 
-/*
+/**
  * A control that holds a value the reader edits. A plain button and a hidden
  * input hold none, so neither one keeps a label live.
  */
@@ -162,7 +162,6 @@ ${SURFACE_DECLARATIONS}
  */
 .snui-field-group__legend {
   float: inline-start;
-  text-wrap: balance;
   grid-column: 1;
   grid-row: 1;
 ${GROUP_LEGEND_DECLARATIONS}
@@ -180,13 +179,10 @@ ${GROUP_LEGEND_DECLARATIONS}
 }
 
 .snui-field-group__description {
+${MUTED_PROSE_DECLARATIONS}
   grid-column: 1;
   grid-row: 2;
-  min-width: 0;
   margin-block-start: var(--snui-space-1);
-  color: var(--snui-color-text-muted);
-  overflow-wrap: anywhere;
-  text-wrap: pretty;
 }
 
 .snui-field-group__content {
@@ -263,15 +259,6 @@ ${BLOCKED_FIELD} > .snui-field__label ${FIELD_MARKERS} {
 
 .snui-checkbox-group__options--stack {
   grid-template-columns: minmax(0, 1fr);
-}
-
-/*
- * The warning region stays mounted so its announcement is not lost; while
- * empty it leaves the flow rather than the accessibility tree, matching the
- * field error regions.
- */
-.snui-checkbox-group__warning:empty {
-${visuallyHiddenDeclarations()}
 }
 
 /*

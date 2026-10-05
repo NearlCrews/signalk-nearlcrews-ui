@@ -1,5 +1,7 @@
 import type { WheelEvent } from "react";
 
+import { isFocused } from "./focus.js";
+
 /**
  * Drops focus from a focused number input before a wheel reaches it.
  *
@@ -9,5 +11,5 @@ import type { WheelEvent } from "react";
  */
 export function blurBeforeWheel(event: WheelEvent<HTMLInputElement>): void {
   const input = event.currentTarget;
-  if (input.ownerDocument.activeElement === input) input.blur();
+  if (isFocused(input)) input.blur();
 }

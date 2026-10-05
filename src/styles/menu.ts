@@ -1,10 +1,11 @@
 import {
   DISABLED_DECLARATIONS,
+  FORCED_COLORS_HIGHLIGHT_DECLARATIONS,
   FORCED_COLORS_OUTLINE_DECLARATIONS,
   focusRingDeclarations,
   OVERLAY_TRANSITION_DECLARATIONS,
   PRESSED_FILL_DECLARATION,
-  RAISED_OVERLAY_DECLARATIONS,
+  raisedOverlayDeclarations,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
@@ -19,7 +20,7 @@ export const MENU_STYLES: StyleModule = {
 /* ==== Menu (Menu, MenuItem, MenuSeparator, MenuSection) ==== */
 
 .snui-menu-popover {
-${RAISED_OVERLAY_DECLARATIONS}
+${raisedOverlayDeclarations("fast")}
 }
 
 .snui-menu-popover[data-entering],
@@ -108,9 +109,7 @@ ${FORCED_COLORS_OUTLINE_DECLARATIONS}
   .snui-menu__item[data-focused],
   .snui-menu__item[data-hovered],
   .snui-menu__item[data-pressed] {
-    forced-color-adjust: none;
-    background: Highlight;
-    color: HighlightText;
+${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
   }
 }
 `),

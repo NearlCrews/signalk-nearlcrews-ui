@@ -98,7 +98,7 @@ export function RelativeAge({
   // for five ticks out of six. Two formats are far cheaper than the render
   // they save, so a tick commits only when the words would change, and a new
   // moment is measured against a clock read as it arrives.
-  const nowMs = useClockReading(ownsClock ? sinceMs : Number.NaN, tickMs, {
+  const nowMs = useClockReading(sinceMs, tickMs, {
     changes: (candidateMs, currentMs) =>
       formatRelativeAgeSince(sinceMs, candidateMs, options) !==
       formatRelativeAgeSince(sinceMs, currentMs, options),

@@ -4,14 +4,13 @@ import {
   type ReactNode,
   type Ref,
   type RefAttributes,
-  useId,
   useRef,
   useState,
 } from "react";
 import { useControllableState } from "../hooks/use-controllable-state.js";
 import { useFocusReturnOnClose } from "../hooks/use-focus-return.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
-import { landmarkLabel, requireIdToken } from "../utils/aria.js";
+import { landmarkLabel, useIdToken } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import type { HeadingLevel } from "../utils/heading.js";
 import {
@@ -129,11 +128,7 @@ export function CollapsibleSection({
 }: CollapsibleSectionProps): React.JSX.Element {
   requireContent(title, "CollapsibleSection requires a non-empty title.");
 
-  const generatedId = useId();
-  const baseId =
-    idPrefix === undefined
-      ? generatedId
-      : requireIdToken(idPrefix, "CollapsibleSection idPrefix");
+  const baseId = useIdToken(idPrefix, "CollapsibleSection idPrefix");
   const contentId = `${baseId}-content`;
   const titleId = `${baseId}-title`;
   const toggleId = `${baseId}-toggle`;

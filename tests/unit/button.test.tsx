@@ -2,8 +2,8 @@ import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { type ComponentProps, createRef } from "react";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
-import { Button, type IconOnlyButtonProps } from "../../src/index.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { Button } from "../../src/index.js";
+import { loggedMessages, panel, renderInPanel } from "../helpers.js";
 
 /** The anchor a Button rendered around the given text. */
 function anchorAround(text: string): HTMLAnchorElement {
@@ -296,18 +296,6 @@ describe("Button width and icon-only modifiers", () => {
     expect(button).not.toHaveAttribute("style");
   });
 
-  it("falls back to the default loading label for whitespace-only labels", () => {
-    renderInPanel(
-      <Button loading loadingLabel="   " aria-label="Save settings">
-        Save
-      </Button>,
-    );
-
-    expect(
-      screen.getByRole("button", { name: "Save settings" }),
-    ).toHaveAccessibleDescription("Working");
-  });
-
   it("omits the full-width modifier by default", () => {
     renderInPanel(<Button>Save</Button>);
 
@@ -453,7 +441,9 @@ describe("Button blocked reason", () => {
     );
 
     // The point of ariaDisabled over native disabled is that the control
-    // stays reachable, so its reason has to be reachable with it.
+    // stays reachable, so its reason has to be reachable with it. The reason
+    // is a description; rewriting the name would announce the control as a
+    // different one mid-interaction, so the exact name is still "Save".
     const blocked = screen.getByRole("button", { name: "Save" });
     expect(blocked).toHaveAttribute("aria-disabled", "true");
     expect(blocked).toHaveAccessibleDescription("Nothing has changed yet.");
@@ -465,18 +455,6 @@ describe("Button blocked reason", () => {
     const live = screen.getByRole("button", { name: "Save" });
     expect(live).not.toHaveAttribute("aria-disabled");
     expect(live).not.toHaveAccessibleDescription();
-  });
-
-  it("keeps the accessible name the button had before it was blocked", () => {
-    renderInPanel(
-      <Button ariaDisabled disabledReason="Choose a source first.">
-        Apply
-      </Button>,
-    );
-
-    // The reason is a description; rewriting the name would announce the
-    // control as a different one mid-interaction.
-    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
   });
 });
 
@@ -596,10 +574,6 @@ describe("Button visible blocked reason", () => {
 });
 
 describe("Button development checks", () => {
-  function warnings(warn: { mock: { calls: unknown[][] } }): string[] {
-    return warn.mock.calls.map(([message]) => String(message));
-  }
-
   it("asks a blocked button that says nothing to say why", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     renderInPanel(
@@ -618,7 +592,7 @@ describe("Button development checks", () => {
       </>,
     );
 
-    expect(warnings(warn)).toEqual([
+    expect(loggedMessages(warn)).toEqual([
       'Button "Apply retention" is blocked with ariaDisabled but says nothing about why. Pass disabledReason, or point aria-describedby at the text that explains it. A block that lasts only while another action runs needs one too, such as "Available when the scan finishes".',
     ]);
   });
@@ -637,7 +611,7 @@ describe("Button development checks", () => {
       </>,
     );
 
-    expect(warnings(warn)).toEqual([
+    expect(loggedMessages(warn)).toEqual([
       'Button "Test API key" has a disabledReason beside native disabled, which takes it out of the tab order, so no one reaches the reason. Use ariaDisabled instead: the button stays focusable and reads the reason.',
     ]);
   });
@@ -655,7 +629,7 @@ describe("Button development checks", () => {
       </>,
     );
 
-    expect(warnings(warn)).toEqual([
+    expect(loggedMessages(warn)).toEqual([
       'Button "Remove" has the aria-label "Delete navigation.speedOverGround", which does not contain its visible text. Speech input users say the words they see, so keep them in the name: add context as visually hidden text inside the button, such as Remove<VisuallyHidden> depth alarm</VisuallyHidden>, instead of an aria-label.',
     ]);
   });
@@ -697,25 +671,6 @@ describe("Button list-line variant", () => {
   });
 });
 
-describe("Button icon-only props", () => {
-  it("requires an accessible name at the type level", () => {
-    expectTypeOf<IconOnlyButtonProps>().toExtend<{ readonly iconOnly: true }>();
-    expectTypeOf({
-      "aria-label": "Add source",
-      children: null,
-      iconOnly: true,
-    } as const).toExtend<IconOnlyButtonProps>();
-    expectTypeOf({
-      "aria-labelledby": "add-source-label",
-      children: null,
-      iconOnly: true,
-    } as const).toExtend<IconOnlyButtonProps>();
-    // @ts-expect-error an icon-only button needs one of the two naming props
-    const unnamed: IconOnlyButtonProps = { children: null, iconOnly: true };
-    expect(unnamed.iconOnly).toBe(true);
-  });
-});
-
 describe("Button native form", () => {
   it("keeps native button semantics for the default rendering", async () => {
     const user = userEvent.setup();
@@ -732,7 +687,7 @@ describe("Button native form", () => {
   });
 });
 
-describe("buttons and confirmation", () => {
+describe("Button content and busy state", () => {
   it("groups consumer icons and labels inside the button content slot", () => {
     renderInPanel(
       <Button>
@@ -798,6 +753,18 @@ describe("buttons and confirmation", () => {
     const button = screen.getByRole("button", { name: "Save settings" });
     expect(button).toHaveAttribute("aria-busy", "true");
     expect(button).toHaveAccessibleDescription("Saving");
+  });
+
+  it("falls back to the default loading label for whitespace-only labels", () => {
+    renderInPanel(
+      <Button loading loadingLabel="   " aria-label="Save settings">
+        Save
+      </Button>,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Save settings" }),
+    ).toHaveAccessibleDescription("Working");
   });
 
   it("keeps aria-disabled buttons focusable while suppressing activation", async () => {

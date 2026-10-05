@@ -1,16 +1,22 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  type RenderResult,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent, { type UserEvent } from "@testing-library/user-event";
-import { createRef } from "react";
+import { createRef, type ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   Menu,
   MenuItem,
+  type MenuProps,
   MenuSection,
   MenuSeparator,
 } from "../../src/overlays.js";
 import {
   focusRingDeclarations,
-  RAISED_OVERLAY_DECLARATIONS,
+  raisedOverlayDeclarations,
 } from "../../src/styles/fragments.js";
 import { MENU_STYLES } from "../../src/styles/menu.js";
 import { ruleBody } from "../css-helpers.js";
@@ -25,36 +31,38 @@ async function openFromKeyboard(
   await user.keyboard("{ArrowDown}");
 }
 
+/** A menu of one item, for the cases about the trigger or the list itself. */
+function fileMenu(props: Partial<MenuProps> = {}): ReactElement {
+  return (
+    <Menu label="File" {...props}>
+      <MenuItem id="open">Open</MenuItem>
+    </Menu>
+  );
+}
+
+function renderMenu(props?: Partial<MenuProps>): RenderResult {
+  return renderInPanel(fileMenu(props));
+}
+
+/** A label that renders no text, as an icon-only trigger carries. */
+const ICON_LABEL = <span aria-hidden="true">⋯</span>;
+
 describe("Menu", () => {
   it("rejects rendering outside PanelRoot", () => {
-    expect(() =>
-      render(
-        <Menu label="File">
-          <MenuItem id="open">Open</MenuItem>
-        </Menu>,
-      ),
-    ).toThrow("signalk-nearlcrews-ui: Menu must be rendered inside PanelRoot.");
+    expect(() => render(fileMenu())).toThrow(
+      "signalk-nearlcrews-ui: Menu must be rendered inside PanelRoot.",
+    );
   });
 
   it("throws when the label is empty", () => {
-    expect(() =>
-      renderInPanel(
-        <Menu label="  ">
-          <MenuItem id="open">Open</MenuItem>
-        </Menu>,
-      ),
-    ).toThrow(
+    expect(() => renderMenu({ label: "  " })).toThrow(
       "signalk-nearlcrews-ui: Menu requires a non-empty label to name its trigger button.",
     );
   });
 
   it("opens on click and portals the menu into the panel root", async () => {
     const user = userEvent.setup();
-    renderInPanel(
-      <Menu label="File">
-        <MenuItem id="open">Open</MenuItem>
-      </Menu>,
-    );
+    renderMenu();
 
     const trigger = screen.getByRole("button", { name: "File" });
     // RAC reports aria-haspopup="true" instead of "menu" to work around a
@@ -72,11 +80,7 @@ describe("Menu", () => {
 
   it("closes on Escape and restores focus to the trigger", async () => {
     const user = userEvent.setup();
-    renderInPanel(
-      <Menu label="File">
-        <MenuItem id="open">Open</MenuItem>
-      </Menu>,
-    );
+    renderMenu();
 
     const trigger = screen.getByRole("button", { name: "File" });
     await user.click(trigger);
@@ -94,9 +98,7 @@ describe("Menu", () => {
     const user = userEvent.setup();
     renderInPanel(
       <>
-        <Menu label="File">
-          <MenuItem id="open">Open</MenuItem>
-        </Menu>
+        {fileMenu()}
         <p>Outside content</p>
       </>,
     );
@@ -428,54 +430,31 @@ describe("Menu", () => {
       </>,
     );
 
-    await user.click(screen.getByRole("button", { name: "Below" }));
-    expect(
-      screen.getByRole("menu").closest(".snui-menu-popover"),
-    ).toHaveAttribute("data-placement", "bottom");
-    await user.keyboard("{Escape}");
-
-    await user.click(screen.getByRole("button", { name: "Aside" }));
-    expect(
-      screen.getByRole("menu").closest(".snui-menu-popover"),
-    ).toHaveAttribute("data-placement", "right");
-    await user.keyboard("{Escape}");
-
-    // The start edge resolves against the writing direction, so it is the
-    // left side of a left-to-right panel.
-    await user.click(screen.getByRole("button", { name: "Beside" }));
-    expect(
-      screen.getByRole("menu").closest(".snui-menu-popover"),
-    ).toHaveAttribute("data-placement", "left");
-    await user.keyboard("{Escape}");
-
-    await user.click(screen.getByRole("button", { name: "Above" }));
-    expect(
-      screen.getByRole("menu").closest(".snui-menu-popover"),
-    ).toHaveAttribute("data-placement", "top");
+    for (const [name, side] of [
+      ["Below", "bottom"],
+      ["Aside", "right"],
+      // The start edge resolves against the writing direction, so it is the
+      // left side of a left-to-right panel.
+      ["Beside", "left"],
+      ["Above", "top"],
+    ] as const) {
+      await user.click(screen.getByRole("button", { name }));
+      expect(
+        screen.getByRole("menu").closest(".snui-menu-popover"),
+      ).toHaveAttribute("data-placement", side);
+      await user.keyboard("{Escape}");
+    }
   });
 
   it("names an icon-only trigger from triggerLabel and refuses an unnamed one", async () => {
     const user = userEvent.setup();
-    renderInPanel(
-      <Menu
-        label={<span aria-hidden="true">⋯</span>}
-        triggerLabel="Row actions"
-      >
-        <MenuItem id="rename">Rename</MenuItem>
-      </Menu>,
-    );
+    renderMenu({ label: ICON_LABEL, triggerLabel: "Row actions" });
 
     const trigger = screen.getByRole("button", { name: "Row actions" });
     await user.click(trigger);
     expect(screen.getByRole("menu")).toBeInTheDocument();
 
-    expect(() =>
-      renderInPanel(
-        <Menu label={<span aria-hidden="true">⋯</span>}>
-          <MenuItem id="rename">Rename</MenuItem>
-        </Menu>,
-      ),
-    ).toThrow(
+    expect(() => renderMenu({ label: ICON_LABEL })).toThrow(
       "signalk-nearlcrews-ui: Menu requires a triggerLabel when its label renders no text, so the trigger button is not left unnamed.",
     );
   });
@@ -504,11 +483,7 @@ describe("Menu", () => {
   });
 
   it("passes variant and size through to the trigger button", () => {
-    renderInPanel(
-      <Menu label="File" triggerVariant="primary" triggerSize="compact">
-        <MenuItem id="open">Open</MenuItem>
-      </Menu>,
-    );
+    renderMenu({ triggerVariant: "primary", triggerSize: "compact" });
 
     expect(screen.getByRole("button", { name: "File" })).toHaveClass(
       "snui-button--primary",
@@ -519,20 +494,16 @@ describe("Menu", () => {
   it("styles the trigger through triggerProps, including a square icon target", async () => {
     const user = userEvent.setup();
     const triggerRef = createRef<HTMLButtonElement>();
-    renderInPanel(
-      <Menu
-        label={<span aria-hidden="true">⋯</span>}
-        triggerLabel="Row actions"
-        triggerProps={{
-          className: "plugin-row-actions",
-          "data-testid": "row-actions",
-          iconOnly: true,
-          ref: triggerRef,
-        }}
-      >
-        <MenuItem id="rename">Rename</MenuItem>
-      </Menu>,
-    );
+    renderMenu({
+      label: ICON_LABEL,
+      triggerLabel: "Row actions",
+      triggerProps: {
+        className: "plugin-row-actions",
+        "data-testid": "row-actions",
+        iconOnly: true,
+        ref: triggerRef,
+      },
+    });
 
     const trigger = screen.getByRole("button", { name: "Row actions" });
     expect(trigger).toHaveClass(
@@ -552,12 +523,10 @@ describe("Menu", () => {
     renderInPanel(
       <>
         <span id="row-actions-name">Anchor actions</span>
-        <Menu
-          label={<span aria-hidden="true">⋯</span>}
-          triggerProps={{ "aria-labelledby": "row-actions-name" }}
-        >
-          <MenuItem id="rename">Rename</MenuItem>
-        </Menu>
+        {fileMenu({
+          label: ICON_LABEL,
+          triggerProps: { "aria-labelledby": "row-actions-name" },
+        })}
       </>,
     );
 
@@ -567,17 +536,13 @@ describe("Menu", () => {
   });
 
   it("keeps a blocked trigger focusable and explains it", () => {
-    renderInPanel(
-      <Menu
-        label="Route actions"
-        triggerProps={{
-          ariaDisabled: true,
-          disabledReason: "Select a route first.",
-        }}
-      >
-        <MenuItem id="rename">Rename</MenuItem>
-      </Menu>,
-    );
+    renderMenu({
+      label: "Route actions",
+      triggerProps: {
+        ariaDisabled: true,
+        disabledReason: "Select a route first.",
+      },
+    });
 
     const trigger = screen.getByRole("button", { name: "Route actions" });
     expect(trigger).toHaveAttribute("aria-disabled", "true");
@@ -591,8 +556,7 @@ describe("Menu", () => {
   // arrows React Aria's menu trigger answers on its own. Each is tried on a
   // freshly rendered trigger, so one refused key cannot hide another that
   // opened the menu and a later key that then activated an item.
-  const OPENING_INPUTS = [
-    ["a click", null],
+  const KEY_OPENING_INPUTS = [
     ["Enter", "{Enter}"],
     ["Space", " "],
     ["ArrowDown", "{ArrowDown}"],
@@ -600,6 +564,7 @@ describe("Menu", () => {
     ["Alt+ArrowDown", "{Alt>}{ArrowDown}{/Alt}"],
     ["Alt+ArrowUp", "{Alt>}{ArrowUp}{/Alt}"],
   ] as const;
+  const OPENING_INPUTS = [["a click", null], ...KEY_OPENING_INPUTS] as const;
 
   const BLOCKED_TRIGGERS = [
     [
@@ -616,15 +581,7 @@ describe("Menu", () => {
       async (_input, keys) => {
         const user = userEvent.setup();
         const onAction = vi.fn();
-        renderInPanel(
-          <Menu
-            label="Route actions"
-            onAction={onAction}
-            triggerProps={triggerProps}
-          >
-            <MenuItem id="rename">Rename</MenuItem>
-          </Menu>,
-        );
+        renderMenu({ label: "Route actions", onAction, triggerProps });
         const trigger = screen.getByRole("button", { name: "Route actions" });
 
         if (keys === null) {
@@ -645,14 +602,10 @@ describe("Menu", () => {
   it("still hands a blocked trigger's keys to the consumer's capture handler", async () => {
     const user = userEvent.setup();
     const onKeyDownCapture = vi.fn();
-    renderInPanel(
-      <Menu
-        label="Route actions"
-        triggerProps={{ loading: true, onKeyDownCapture }}
-      >
-        <MenuItem id="rename">Rename</MenuItem>
-      </Menu>,
-    );
+    renderMenu({
+      label: "Route actions",
+      triggerProps: { loading: true, onKeyDownCapture },
+    });
     screen.getByRole("button", { name: "Route actions" }).focus();
     await user.keyboard("{ArrowDown}");
 
@@ -664,33 +617,24 @@ describe("Menu", () => {
     });
   });
 
-  it.each(OPENING_INPUTS.filter(([, keys]) => keys !== null))(
+  it.each(KEY_OPENING_INPUTS)(
     "still opens a live trigger on %s",
     async (_input, keys) => {
       const user = userEvent.setup();
-      renderInPanel(
-        <Menu label="Route actions">
-          <MenuItem id="rename">Rename</MenuItem>
-        </Menu>,
-      );
+      renderMenu({ label: "Route actions" });
       screen.getByRole("button", { name: "Route actions" }).focus();
-      await user.keyboard(keys ?? "");
+      await user.keyboard(keys);
 
       expect(screen.getByRole("menu")).toBeInTheDocument();
     },
   );
 
   it("lets triggerVariant and triggerSize name the look beside triggerProps", () => {
-    renderInPanel(
-      <Menu
-        label="File"
-        triggerVariant="ghost"
-        triggerSize="compact"
-        triggerProps={{ fullWidth: true }}
-      >
-        <MenuItem id="open">Open</MenuItem>
-      </Menu>,
-    );
+    renderMenu({
+      triggerVariant: "ghost",
+      triggerSize: "compact",
+      triggerProps: { fullWidth: true },
+    });
 
     expect(screen.getByRole("button", { name: "File" })).toHaveClass(
       "snui-button--ghost",
@@ -702,11 +646,7 @@ describe("Menu", () => {
   it("supports controlled open state", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    const { rerender } = renderInPanel(
-      <Menu label="File" open={false} onOpenChange={onOpenChange}>
-        <MenuItem id="open">Open</MenuItem>
-      </Menu>,
-    );
+    const { rerender } = renderMenu({ open: false, onOpenChange });
 
     expect(screen.queryByRole("menu")).toBeNull();
 
@@ -714,33 +654,19 @@ describe("Menu", () => {
     expect(onOpenChange).toHaveBeenCalledWith(true);
     expect(screen.queryByRole("menu")).toBeNull();
 
-    rerender(
-      panel(
-        <Menu label="File" open onOpenChange={onOpenChange}>
-          <MenuItem id="open">Open</MenuItem>
-        </Menu>,
-      ),
-    );
+    rerender(panel(fileMenu({ open: true, onOpenChange })));
     expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 
   it("opens from defaultOpen", () => {
-    renderInPanel(
-      <Menu label="File" defaultOpen>
-        <MenuItem id="open">Open</MenuItem>
-      </Menu>,
-    );
+    renderMenu({ defaultOpen: true });
 
     expect(screen.getByRole("menu")).toBeInTheDocument();
   });
 
   it("merges a consumer className onto the menu list", async () => {
     const user = userEvent.setup();
-    renderInPanel(
-      <Menu label="File" className="plugin-menu">
-        <MenuItem id="open">Open</MenuItem>
-      </Menu>,
-    );
+    renderMenu({ className: "plugin-menu" });
 
     await user.click(screen.getByRole("button", { name: "File" }));
     expect(screen.getByRole("menu")).toHaveClass("snui-menu", "plugin-menu");
@@ -765,7 +691,7 @@ describe("menu style module", () => {
     // The menu floats over arbitrary content, so its own outline keeps the
     // boundary token that separates it from whatever lies beneath.
     expect(ruleBody(MENU_STYLES.styles, ".snui-menu-popover")).toContain(
-      RAISED_OVERLAY_DECLARATIONS,
+      raisedOverlayDeclarations("fast"),
     );
   });
 });

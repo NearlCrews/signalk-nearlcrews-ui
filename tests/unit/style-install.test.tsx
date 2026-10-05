@@ -1,4 +1,5 @@
 import { render } from "@testing-library/react";
+import { Activity } from "react";
 import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -16,8 +17,12 @@ import {
 } from "../../src/styles/install.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { TABLE_STYLES } from "../../src/styles/table.js";
-import { useModuleStyles } from "../../src/styles/use-module-styles.js";
+import {
+  useModuleStyles,
+  useOptionalModuleStyles,
+} from "../../src/styles/use-module-styles.js";
 import { PACKAGE_VERSION } from "../../src/version.js";
+import { classNamesIn, moduleStyles } from "../css-helpers.js";
 import { headSheets, MODULE_SHEET, ROOT_SHEET } from "../helpers.js";
 
 function ModuleConsumer({
@@ -42,10 +47,7 @@ afterEach(() => {
  * panel root in every module, so it is dropped before the scan.
  */
 function classesIn(styles: string): Set<string> {
-  const rules = styles.replaceAll(/@scope \([^)]*\) to \([^)]*\)/g, "");
-  return new Set(
-    [...rules.matchAll(/\.(snui-[a-z0-9_-]+)/g)].map((match) => match[1] ?? ""),
-  );
+  return classNamesIn(styles.replaceAll(/@scope \([^)]*\) to \([^)]*\)/g, ""));
 }
 
 describe("style module manifest", () => {
@@ -68,35 +70,27 @@ describe("style module manifest", () => {
     "snui-toast",
   ] as const;
 
-  /*
-   * The rules that may still open with a moved class. Each belongs to a
-   * component that stayed in the root sheet: every field shares the rule that
-   * takes an empty error region out of flow.
-   */
-  const SHARED_ROOT_RULES = new Set([
-    ".snui-radio-group__error:empty",
-    ".snui-switch__error:empty",
-  ]);
-
   it("keeps every per-component block out of the root sheet", () => {
     const [root] = STYLE_MODULES;
     expect(root?.id).toBe("root");
 
-    let checked = 0;
+    const openers: string[] = [];
     for (const line of (root?.styles ?? "").split("\n")) {
       const opener = /^\s*(\.snui-[^,{]*)[,{]/.exec(line);
-      if (opener === null) continue;
-      const selector = (opener[1] ?? "").trim();
-      const block = /^\.(snui-[a-z0-9_-]+)/.exec(selector)?.[1] ?? "";
-      if (!MOVED_BLOCKS.some((moved) => block.startsWith(moved))) continue;
-      checked += 1;
-      expect(
-        SHARED_ROOT_RULES.has(selector),
-        `the root sheet still opens a rule with ${selector}`,
-      ).toBe(true);
+      if (opener !== null) openers.push((opener[1] ?? "").trim());
     }
-    // Guards the scan itself: the shared rules have to be found.
-    expect(checked).toBe(SHARED_ROOT_RULES.size);
+    // Guards the scan itself: the root sheet's own rules have to be found.
+    // The empty error region every field shares is one of them, named by the
+    // class the shared region adds rather than by each wrapper's own.
+    expect(openers).toContain(".snui-field-error:empty");
+    const moved = openers.filter((selector) => {
+      const block = /^\.(snui-[a-z0-9_-]+)/.exec(selector)?.[1] ?? "";
+      return MOVED_BLOCKS.some((prefix) => block.startsWith(prefix));
+    });
+    expect(
+      moved,
+      "the root sheet still opens a rule with a moved block",
+    ).toEqual([]);
   });
 
   /*
@@ -139,9 +133,6 @@ describe("style module manifest", () => {
   });
 
   it("styles every module's own block in that module", () => {
-    const modules = new Map(
-      STYLE_MODULES.map((module) => [module.id, module.styles]),
-    );
     for (const [id, selector] of [
       ["dialog", ".snui-dialog"],
       ["empty-state", ".snui-empty-state"],
@@ -155,7 +146,7 @@ describe("style module manifest", () => {
       ["textarea", ".snui-textarea"],
       ["toast", ".snui-toast"],
     ] as const) {
-      expect(modules.get(id), `no ${id} module`).toContain(selector);
+      expect(moduleStyles(id)).toContain(selector);
     }
   });
 });
@@ -326,6 +317,80 @@ describe("installStyleModule", () => {
   });
 });
 
+describe("installPanelStyles", () => {
+  it("deduplicates styles across independently loaded package bundles", async () => {
+    const firstBundle = await import("../../src/styles/install.js");
+    vi.resetModules();
+    const secondBundle = await import("../../src/styles/install.js");
+
+    const removeFirst = firstBundle.installPanelStyles(
+      document,
+      "fixture-version",
+      ".fixture { color: red; }",
+      undefined,
+    );
+    const removeSecond = secondBundle.installPanelStyles(
+      document,
+      "fixture-version",
+      ".fixture { color: red; }",
+      undefined,
+    );
+
+    expect(
+      headSheets('style[data-snui-styles="fixture-version"]'),
+    ).toHaveLength(1);
+    removeFirst();
+    expect(
+      headSheets('style[data-snui-styles="fixture-version"]'),
+    ).toHaveLength(1);
+    removeSecond();
+    expect(
+      headSheets('style[data-snui-styles="fixture-version"]'),
+    ).toHaveLength(0);
+  });
+
+  it("rejects conflicting styles that claim the same version", () => {
+    const remove = installPanelStyles(
+      document,
+      "conflicting-version",
+      ".fixture { color: red; }",
+      undefined,
+    );
+
+    expect(() =>
+      installPanelStyles(
+        document,
+        "conflicting-version",
+        ".fixture { color: blue; }",
+        undefined,
+      ),
+    ).toThrow(/^signalk-nearlcrews-ui: Conflicting styles were loaded/);
+    remove();
+  });
+
+  it("rejects same-version style conflicts across different nonces", () => {
+    const remove = installPanelStyles(
+      document,
+      "cross-nonce-conflict",
+      ".fixture { color: red; }",
+      "first-nonce",
+    );
+
+    expect(() =>
+      installPanelStyles(
+        document,
+        "cross-nonce-conflict",
+        ".fixture { color: blue; }",
+        "second-nonce",
+      ),
+    ).toThrow(/^signalk-nearlcrews-ui: Conflicting styles were loaded/);
+    expect(
+      headSheets('style[data-snui-styles="cross-nonce-conflict"]'),
+    ).toHaveLength(1);
+    remove();
+  });
+});
+
 describe("style install errors", () => {
   it("names the package and the missing feature on an unsupported browser", () => {
     const error = new UnsupportedBrowserError();
@@ -350,37 +415,40 @@ describe("style install errors", () => {
       ),
     );
   });
+
+  it("rejects browser engines with an undefined CSS scope constructor", () => {
+    const unsupportedDocument = {
+      defaultView: {
+        CSSScopeRule: undefined,
+        navigator: { userAgent: "unsupported-browser" },
+      },
+    } as unknown as Document;
+
+    expect(() =>
+      installPanelStyles(
+        unsupportedDocument,
+        "unsupported-version",
+        ".fixture { color: red; }",
+        undefined,
+      ),
+    ).toThrow(UnsupportedBrowserError);
+    expect(supportsNativeCssScope(unsupportedDocument.defaultView)).toBe(false);
+    expect(supportsNativeCssScope(window)).toBe(true);
+  });
 });
 
 describe("supportsNativeCssScope", () => {
-  const descriptor = Object.getOwnPropertyDescriptor(window, "CSSScopeRule");
-
-  afterEach(() => {
-    if (descriptor === undefined) {
-      Reflect.deleteProperty(window, "CSSScopeRule");
-    } else {
-      Object.defineProperty(window, "CSSScopeRule", descriptor);
-    }
-  });
-
-  function stubScopeSupport(value: unknown): void {
-    Object.defineProperty(window, "CSSScopeRule", {
-      configurable: true,
-      value,
-    });
-  }
-
-  it("reads the ambient window when called with no argument", () => {
-    stubScopeSupport(function CSSScopeRule() {
+  it("answers from whether the window defines CSSScopeRule", () => {
+    vi.stubGlobal("CSSScopeRule", function CSSScopeRule() {
       return undefined;
     });
     expect(supportsNativeCssScope()).toBe(true);
 
-    stubScopeSupport(undefined);
+    vi.stubGlobal("CSSScopeRule", undefined);
     expect(supportsNativeCssScope()).toBe(false);
   });
 
-  it("reads the module's own window when the caller names none", () => {
+  it("answers no where there is no window", () => {
     expect(supportsNativeCssScope()).toBe(true);
 
     // The default argument is what a non-browser evaluation reaches: a build
@@ -550,14 +618,60 @@ describe("useOptionalModuleStyles", () => {
     expect(headSheets(MODULE_SHEET)).toHaveLength(0);
     expect(headSheets(ROOT_SHEET)).toHaveLength(0);
   });
+
+  it("renders a control mounted into a resolved panel once and styles it at once", () => {
+    const rendered = vi.fn();
+    function InFlowControl(): React.JSX.Element {
+      useOptionalModuleStyles(TABLE_STYLES);
+      rendered();
+      return <p>Depth</p>;
+    }
+    const { rerender, unmount } = render(<PanelRoot>{null}</PanelRoot>);
+
+    rerender(
+      <PanelRoot>
+        <InFlowControl />
+      </PanelRoot>,
+    );
+
+    expect(rendered).toHaveBeenCalledOnce();
+    expect(
+      headSheets(MODULE_SHEET).map((sheet) => sheet.dataset.snuiStyleModule),
+    ).toEqual(["table"]);
+    unmount();
+    expect(headSheets(MODULE_SHEET)).toHaveLength(0);
+  });
+
+  it("styles a control that mounts with its panel, and again once the panel is shown", () => {
+    // Both times the control's layout effect runs before the root's ref
+    // attaches, so it has to ask again rather than latch the first answer.
+    const panel = (mode: "hidden" | "visible"): React.JSX.Element => (
+      <Activity mode={mode}>
+        <PanelRoot>
+          <Switch label="Autopilot" />
+        </PanelRoot>
+      </Activity>
+    );
+    const moduleIds = (): (string | undefined)[] =>
+      headSheets(MODULE_SHEET).map((sheet) => sheet.dataset.snuiStyleModule);
+    const { rerender, unmount } = render(panel("visible"));
+    expect(moduleIds()).toEqual(["switch"]);
+
+    rerender(panel("hidden"));
+    expect(moduleIds()).toEqual([]);
+
+    rerender(panel("visible"));
+    expect(moduleIds()).toEqual(["switch"]);
+    unmount();
+  });
 });
 
 describe("a module installing with no root sheet", () => {
   it("names the missing root sheet rather than styling the document blind", () => {
     // Unreachable through the public API, because PanelRoot installs the root
-    // sheet in a callback ref that runs before every layout effect. Dropping
-    // the shared registry is a consumer reaching past the package, which is
-    // the case the guard is kept for.
+    // sheet in the callback ref that makes the root resolvable. Dropping the
+    // shared registry is a consumer reaching past the package, which is the
+    // case the guard is kept for.
     const { rerender } = render(
       <PanelRoot>
         <ModuleConsumer module={DIALOG_STYLES} name="Dialog" />

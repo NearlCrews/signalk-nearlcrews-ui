@@ -1,4 +1,4 @@
-import { act, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,7 +9,8 @@ import {
   type SaveActionBarLabels,
   type SaveActionBarProps,
 } from "../../src/composites.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { advanceTimers, panel, renderInPanel } from "../helpers.js";
+import { NOW } from "./lib/clock.js";
 
 const LABELS: SaveActionBarLabels = {
   clean: "Nothing to save",
@@ -21,8 +22,10 @@ const LABELS: SaveActionBarLabels = {
   unsaved: "Unsaved changes",
 };
 
-/** The instant every saved-window spec freezes the clock at. */
-const NOW = Date.UTC(2026, 8, 10, 9, 0, 0);
+/** The bar's status line, found by the hook the package publishes for it. */
+function statusLine(container: HTMLElement): HTMLElement | null {
+  return container.querySelector<HTMLElement>("[data-snui-action-bar-status]");
+}
 
 /** A clean bar with inert handlers unless the spec passes its own. */
 function saveBar(props: Partial<SaveActionBarProps> = {}): React.JSX.Element {
@@ -348,11 +351,11 @@ describe("SaveActionBar", () => {
 
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(onSave).toHaveBeenCalledOnce();
-    expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
+    expect(statusLine(container)).toHaveFocus();
 
     await user.click(screen.getByRole("button", { name: "Discard" }));
     expect(onDiscard).toHaveBeenCalledOnce();
-    expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
+    expect(statusLine(container)).toHaveFocus();
     expect(screen.getByTestId("footer")).toHaveClass("snui-action-bar");
   });
 });
@@ -368,9 +371,7 @@ describe("SaveActionBar saved message window", () => {
     const status = screen.getByRole("status");
     expect(status).toHaveTextContent("Save sent to the server");
 
-    act(() => {
-      vi.advanceTimersByTime(2_500);
-    });
+    advanceTimers(2_500);
     // The bar falls back to the state underneath, which is what a panel used
     // to do by writing the timestamp back to null.
     expect(status).toHaveTextContent("Nothing to save");
@@ -383,21 +384,15 @@ describe("SaveActionBar saved message window", () => {
   it("restarts the window for a second save rather than inheriting the first", () => {
     const { rerender } = renderInPanel(saveBar({ saveRequestedAt: NOW }));
 
-    act(() => {
-      vi.advanceTimersByTime(2_000);
-    });
+    advanceTimers(2_000);
     rerender(panel(saveBar({ saveRequestedAt: NOW + 2_000 })));
 
-    act(() => {
-      vi.advanceTimersByTime(2_000);
-    });
+    advanceTimers(2_000);
     expect(screen.getByRole("status")).toHaveTextContent(
       "Save sent to the server",
     );
 
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
+    advanceTimers(500);
     expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
   });
 
@@ -435,9 +430,7 @@ describe("SaveActionBar saved message window", () => {
     // A host clock a minute ahead of this one cannot stretch the window.
     rerender(panel(saveBar({ saveRequestedAt: NOW + 60_000 })));
     expect(vi.getTimerCount()).toBe(idleTimers + 1);
-    act(() => {
-      vi.advanceTimersByTime(2_500);
-    });
+    advanceTimers(2_500);
     expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
   });
 
@@ -446,15 +439,11 @@ describe("SaveActionBar saved message window", () => {
       saveBar({ saveRequestedAt: NOW, savedMessageDurationMs: 6_000 }),
     );
 
-    act(() => {
-      vi.advanceTimersByTime(5_999);
-    });
+    advanceTimers(5_999);
     expect(screen.getByRole("status")).toHaveTextContent(
       "Save sent to the server",
     );
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    advanceTimers(1);
     expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
 
     rerender(
@@ -464,9 +453,7 @@ describe("SaveActionBar saved message window", () => {
     );
     // Nothing is waiting to take it down: the panel owns the window again.
     expect(vi.getTimerCount()).toBe(0);
-    act(() => {
-      vi.advanceTimersByTime(600_000);
-    });
+    advanceTimers(600_000);
     expect(screen.getByRole("status")).toHaveTextContent(
       "Save sent to the server",
     );
@@ -482,13 +469,26 @@ describe("SaveActionBar saved message window", () => {
     // A timer handed any of these fires at once, which would take the message
     // down as it appeared. Each reads as zero instead: the message stays up
     // until the panel ends the window.
-    act(() => {
-      vi.advanceTimersByTime(600_000);
-    });
+    advanceTimers(600_000);
     expect(screen.getByRole("status")).toHaveTextContent(
       "Save sent to the server",
     );
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("reopens the saved window for a second save stamped with the same instant", () => {
+    const { rerender } = renderInPanel(saveBar({ saveRequestedAt: NOW }));
+
+    advanceTimers(2_500);
+    expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
+
+    // An edit and a second save inside the same millisecond carry the same
+    // timestamp, and the second one is still its own request.
+    rerender(panel(saveBar({ dirty: true, saveRequestedAt: NOW })));
+    rerender(panel(saveBar({ saveRequestedAt: NOW })));
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Save sent to the server",
+    );
   });
 });
 
@@ -507,9 +507,7 @@ describe("SaveActionBar focus targets", () => {
         {saveBar({ dirty: true, onSave })}
       </>,
     );
-    const status = container.querySelector<HTMLElement>(
-      ".snui-action-bar__status",
-    );
+    const status = statusLine(container);
     const statusFocus = vi.fn();
     status?.addEventListener("focus", statusFocus);
 
@@ -551,14 +549,14 @@ describe("SaveActionBar focus targets", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
     // A target that is not on the page cannot hold focus, and the pressed
     // button is about to disable itself, so the status is still the place.
-    expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
+    expect(statusLine(container)).toHaveFocus();
 
     rerender(
       panel(saveBar({ dirty: true, onSave: () => createRef<HTMLElement>() })),
     );
     screen.getByRole("button", { name: "Save" }).focus();
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
+    expect(statusLine(container)).toHaveFocus();
   });
 
   it("falls back to the status when a target on the page refuses focus", async () => {
@@ -579,7 +577,7 @@ describe("SaveActionBar focus targets", () => {
     // bar checks where focus actually went rather than trusting the call, so
     // the status still takes it before the pressed button disables itself.
     expect(screen.getByRole("textbox", { name: "Port" })).not.toHaveFocus();
-    expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
+    expect(statusLine(container)).toHaveFocus();
   });
 
   it("moves an async handler's focus to the status without awaiting it", async () => {
@@ -587,6 +585,11 @@ describe("SaveActionBar focus targets", () => {
     const { container } = renderInPanel(
       <>
         <input aria-label="Port" />
+        {/*
+         * Written out rather than through saveBar: the lint rule against a
+         * promise where nothing is expected reads object properties and
+         * leaves JSX attributes alone, which is where a panel passes one.
+         */}
         <SaveActionBar
           dirty
           onDiscard={vi.fn()}
@@ -600,7 +603,7 @@ describe("SaveActionBar focus targets", () => {
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     // A returned promise is not a target, so the bar's own rule applies.
-    expect(container.querySelector(".snui-action-bar__status")).toHaveFocus();
+    expect(statusLine(container)).toHaveFocus();
   });
 
   it("leaves focus where the handler itself put it", async () => {
@@ -622,6 +625,22 @@ describe("SaveActionBar focus targets", () => {
     // The status takes focus only from the pressed button, so a handler that
     // moved focus on its own keeps the destination it chose.
     expect(screen.getByRole("textbox", { name: "Port" })).toHaveFocus();
+  });
+
+  it("leaves focus alone when the panel owns the destination", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    const { container } = renderInPanel(
+      saveBar({ dirty: true, focusOnAction: "none", onSave }),
+    );
+
+    const save = screen.getByRole("button", { name: "Save" });
+    await user.click(save);
+    expect(onSave).toHaveBeenCalledOnce();
+    // The panel sends focus to the field it refused, so the bar must not have
+    // taken it first.
+    expect(statusLine(container)).not.toHaveFocus();
+    expect(save).toHaveFocus();
   });
 });
 
@@ -645,43 +664,5 @@ describe("SaveActionBar outcome", () => {
     expect(save).toBeEnabled();
     expect(save).not.toHaveAttribute("aria-disabled");
     expect(screen.getByRole("button", { name: "Discard" })).toBeDisabled();
-  });
-});
-
-describe("SaveActionBar focus and repeated requests", () => {
-  it("leaves focus alone when the panel owns the destination", async () => {
-    const user = userEvent.setup();
-    const onSave = vi.fn();
-    const { container } = renderInPanel(
-      saveBar({ dirty: true, focusOnAction: "none", onSave }),
-    );
-
-    const save = screen.getByRole("button", { name: "Save" });
-    await user.click(save);
-    expect(onSave).toHaveBeenCalledOnce();
-    // The panel sends focus to the field it refused, so the bar must not have
-    // taken it first.
-    expect(
-      container.querySelector(".snui-action-bar__status"),
-    ).not.toHaveFocus();
-    expect(save).toHaveFocus();
-  });
-
-  it("reopens the saved window for a second save stamped with the same instant", () => {
-    vi.useFakeTimers({ now: NOW });
-    const { rerender } = renderInPanel(saveBar({ saveRequestedAt: NOW }));
-
-    act(() => {
-      vi.advanceTimersByTime(2_500);
-    });
-    expect(screen.getByRole("status")).toHaveTextContent("Nothing to save");
-
-    // An edit and a second save inside the same millisecond carry the same
-    // timestamp, and the second one is still its own request.
-    rerender(panel(saveBar({ dirty: true, saveRequestedAt: NOW })));
-    rerender(panel(saveBar({ saveRequestedAt: NOW })));
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Save sent to the server",
-    );
   });
 });

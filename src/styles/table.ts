@@ -12,18 +12,20 @@ import { scopeStyles } from "./scope.js";
 /**
  * Cell and row selectors, written once. Each carries the role fallback the
  * virtualized grid needs, and each is long enough that a typo in one copy
- * would silently match nothing.
+ * would silently match nothing. The role-only forms match by the role React
+ * Aria writes on every cell in both layouts.
  */
 const CELL_ROLES = ':is(td, [role="rowheader"], [role="gridcell"])';
+const BODY_CELL_ROLE_ONLY = ':is([role="rowheader"], [role="gridcell"])';
 const HEADER_CELL = '.snui-data-grid__header :is(th, [role="columnheader"])';
+const HEADER_ROLE_CELL = '.snui-data-grid__header [role="columnheader"]';
 const BODY_CELL = `.snui-data-grid__body ${CELL_ROLES}`;
 const SORTABLE_HEADER = `${HEADER_CELL}[data-allows-sorting]`;
 const BODY_ROW = '.snui-data-grid__body [role="row"]';
 const SELECTABLE_ROW = `${BODY_ROW}[data-selection-mode]`;
 const SELECTED_ROW = `${BODY_ROW}[data-selected]`;
 const FOCUSED_ROW = `${BODY_ROW}[data-focus-visible]`;
-const VIRTUALIZED_BODY_CELL =
-  '.snui-data-grid--virtualized .snui-data-grid__body :is([role="rowheader"], [role="gridcell"])';
+const VIRTUALIZED_BODY_CELL = `.snui-data-grid--virtualized .snui-data-grid__body ${BODY_CELL_ROLE_ONLY}`;
 /*
  * The first column, by the index React Aria writes on every cell in both
  * layouts rather than by position: a virtualized grid wraps each cell in an
@@ -35,11 +37,27 @@ const FIRST_HEADER_CELL = `${HEADER_CELL}[aria-colindex="1"]`;
 const FIRST_COLUMN = '[data-column-index="0"]';
 
 /**
+ * Custom property holding the minimum width of a data-grid column. `DataGrid`
+ * writes it on the cells of a column pinned narrower than the default floor,
+ * which lowers the floor for those cells alone.
+ *
+ * @internal
+ */
+export const DATA_GRID_COLUMN_MIN_PROPERTY = "--snui-data-grid-column-min";
+
+/**
  * Floor a column may not shrink below, as a custom property so a column pinned
  * narrower carries the smaller value on its own cells and the panel can lower
  * the floor for a whole grid.
  */
-const COLUMN_MIN = "var(--snui-data-grid-column-min, 6rem)";
+const COLUMN_MIN = `var(${DATA_GRID_COLUMN_MIN_PROPERTY}, 6rem)`;
+
+/**
+ * The row floor compact density trades for. A compact row has to measure the
+ * same virtualized or not, so both layouts read it from here.
+ */
+const COMPACT_ROW_FLOOR =
+  "calc(var(--snui-control-min-height) - var(--snui-space-3))";
 
 const TABLE_CSS = scopeStyles(`
 .snui-data-grid {
@@ -160,7 +178,7 @@ ${SELECTABLE_ROW} {
 }
 
 .snui-data-grid--compact:not(.snui-data-grid--virtualized) ${SELECTABLE_ROW} {
-  height: calc(var(--snui-control-min-height) - var(--snui-space-3));
+  height: ${COMPACT_ROW_FLOOR};
 }
 
 ${SELECTABLE_ROW}[data-hovered] {
@@ -267,7 +285,7 @@ ${focusRingDeclarations("inset", false)}
   width: 100%;
 }
 
-.snui-data-grid--virtualized .snui-data-grid__header [role="columnheader"] {
+.snui-data-grid--virtualized ${HEADER_ROLE_CELL} {
   display: flex;
   align-items: center;
   width: 100%;
@@ -284,7 +302,7 @@ ${focusRingDeclarations("inset", false)}
 }
 
 .snui-data-grid--compact.snui-data-grid--virtualized ${BODY_ROW} {
-  min-height: calc(var(--snui-control-min-height) - var(--snui-space-3));
+  min-height: ${COMPACT_ROW_FLOOR};
 }
 
 /*
@@ -346,7 +364,7 @@ ${VIRTUALIZED_BODY_CELL}[data-focus-visible] .snui-data-grid__cell-text {
   }
 
   ${SELECTED_ROW},
-  ${SELECTED_ROW} :is([role="rowheader"], [role="gridcell"]) {
+  ${SELECTED_ROW} ${BODY_CELL_ROLE_ONLY} {
     color: HighlightText;
   }
 
@@ -372,7 +390,7 @@ ${VIRTUALIZED_BODY_CELL}[data-focus-visible] .snui-data-grid__cell-text {
   }
 
   ${FOCUSED_ROW},
-  .snui-data-grid__header [role="columnheader"][data-focus-visible] {
+  ${HEADER_ROLE_CELL}[data-focus-visible] {
     outline-color: Highlight;
   }
 
@@ -385,8 +403,8 @@ ${VIRTUALIZED_BODY_CELL}[data-focus-visible] .snui-data-grid__cell-text {
     outline-color: HighlightText;
   }
 
-  .snui-data-grid__header [role="columnheader"][data-allows-sorting]::after,
-  .snui-data-grid__header [role="columnheader"][data-sort-direction]::after {
+  ${HEADER_ROLE_CELL}[data-allows-sorting]::after,
+  ${HEADER_ROLE_CELL}[data-sort-direction]::after {
     color: CanvasText;
   }
 }

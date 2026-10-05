@@ -6,22 +6,23 @@ import { FOUNDATION_STYLES } from "../../src/styles/foundation.js";
 import {
   SELECTION_GLYPH_SIZE,
   TRACK_THICKNESS,
+  TRACK_THICKNESS_COARSE,
 } from "../../src/styles/fragments.js";
 import { LAYOUT_STYLES } from "../../src/styles/layout.js";
 import { RADIO_STYLES } from "../../src/styles/radio.js";
 import { RANGE_STYLES } from "../../src/styles/range.js";
 import { SWITCH_STYLES } from "../../src/styles/switch.js";
 import { TEXTAREA_STYLES } from "../../src/styles/textarea.js";
+import { normalizedCss, ruleBody } from "../css-helpers.js";
+
+/** The form sheet with its whitespace collapsed, read by several cases. */
+const FORMS = normalizedCss(FORM_STYLES);
 
 /**
- * The sheet with every run of whitespace collapsed, so an assertion reads the
- * rule rather than the formatter's line breaks and indentation.
+ * Every rule body a selector opens, for the cases that count or compare the
+ * rules a sheet writes for one selector. A single rule goes through the
+ * shared ruleBody.
  */
-function normalizedCss(css: string): string {
-  return css.replace(/\s+/g, " ");
-}
-
-/** The rule bodies a selector opens, comments and nesting left as they are. */
 function ruleBodies(css: string, selector: string): string[] {
   const bodies: string[] = [];
   let from = 0;
@@ -48,11 +49,11 @@ describe("radio group styles", () => {
   });
 
   it("sizes the dial from the shared selection glyph measurement", () => {
-    expect(
-      ruleBodies(RADIO_STYLES.styles, ".snui-radio__control")[0],
-    ).toContain(`width: ${SELECTION_GLYPH_SIZE};`);
+    expect(ruleBody(RADIO_STYLES.styles, ".snui-radio__control")).toContain(
+      `width: ${SELECTION_GLYPH_SIZE};`,
+    );
     // The checkbox box and the radio dial read as one size side by side.
-    expect(ruleBodies(CONTROL_STYLES, ".snui-checkbox__input")[0]).toContain(
+    expect(ruleBody(CONTROL_STYLES, ".snui-checkbox__input")).toContain(
       `width: ${SELECTION_GLYPH_SIZE};`,
     );
   });
@@ -60,27 +61,24 @@ describe("radio group styles", () => {
 
 describe("range styles", () => {
   it("states the disabled presentation in one rule", () => {
-    expect(
-      ruleBodies(RANGE_STYLES.styles, ".snui-range:disabled"),
-    ).toHaveLength(1);
-    expect(
-      ruleBodies(RANGE_STYLES.styles, ".snui-range:disabled")[0],
-    ).toContain(
+    const disabled = ruleBodies(RANGE_STYLES.styles, ".snui-range:disabled");
+    expect(disabled).toHaveLength(1);
+    expect(disabled[0]).toContain(
       "--snui-range-progress-color: var(--snui-color-text-disabled);",
     );
   });
 
   it("keeps the fill boundary visible while the value is invalid", () => {
-    const invalid = ruleBodies(
+    const invalid = ruleBody(
       RANGE_STYLES.styles,
       '.snui-range[aria-invalid="true"]',
     );
-    expect(invalid[0]).toContain(
+    expect(invalid).toContain(
       "--snui-range-progress-color: var(--snui-color-danger);",
     );
     // Recoloring the remainder too would flatten the two halves into one bar
     // and take the value reading with it.
-    expect(invalid[0]).not.toContain("--snui-range-track-color");
+    expect(invalid).not.toContain("--snui-range-track-color");
   });
 
   it("centers the thumb against the one track thickness", () => {
@@ -102,7 +100,7 @@ describe("range styles", () => {
       expect.stringContaining("background: var(--snui-range-progress-color);"),
       // The coarse-pointer block raises the track between the two, the way it
       // raises the progress bar's.
-      expect.stringContaining("height: 0.5rem;"),
+      expect.stringContaining(`height: ${TRACK_THICKNESS_COARSE};`),
       expect.stringContaining("background: Highlight;"),
     ]);
   });
@@ -136,10 +134,7 @@ describe("field group legend row", () => {
     // A first legend child that is not floated is drawn in the fieldset's
     // border and never becomes a grid item, so the row placement written
     // beside it would never apply.
-    const [legend] = ruleBodies(
-      normalizedCss(FORM_STYLES),
-      ".snui-field-group__legend",
-    );
+    const legend = ruleBody(FORMS, ".snui-field-group__legend");
     // Every engine at the floor takes the logical keyword, so no physical
     // fallback rides beside it.
     expect(legend).toContain("float: inline-start;");
@@ -148,7 +143,7 @@ describe("field group legend row", () => {
     expect(legend).toContain("grid-row: 1;");
     // Consumer legends keep the reset, which only the group's own class
     // outweighs.
-    const [reset] = ruleBodies(normalizedCss(FOUNDATION_STYLES), " legend");
+    const reset = ruleBody(normalizedCss(FOUNDATION_STYLES), " legend");
     expect(reset).toContain("float: none;");
   });
 });
@@ -157,13 +152,13 @@ describe("text control height", () => {
   it("lets the control floor set the height of single-line fields and keeps the textarea inset", () => {
     // With the separation token as block padding, a 1.5 line box made inputs
     // and selects taller than the buttons beside them on every pointer.
-    const [input] = ruleBodies(normalizedCss(CONTROL_STYLES), ".snui-input");
+    const input = ruleBody(normalizedCss(CONTROL_STYLES), ".snui-input");
     expect(input).toContain("min-height: var(--snui-control-min-height);");
     expect(input).toContain(
       "padding: var(--snui-space-1) var(--snui-space-3);",
     );
     // Multi-line text keeps its room above the first line and below the last.
-    const [textarea] = ruleBodies(
+    const textarea = ruleBody(
       normalizedCss(TEXTAREA_STYLES.styles),
       ".snui-textarea",
     );
@@ -173,13 +168,12 @@ describe("text control height", () => {
 
 describe("field error row", () => {
   it("sets the danger glyph apart from its message and hangs wrapped lines past it", () => {
-    const css = normalizedCss(FORM_STYLES);
     // The message is its own flex item, so a wrapped line starts under the
     // text rather than under the glyph.
-    const [row] = ruleBodies(css, ".snui-field-error__row");
+    const row = ruleBody(FORMS, ".snui-field-error__row");
     expect(row).toContain("display: flex;");
     expect(row).toContain("align-items: baseline;");
-    const [text] = ruleBodies(css, ".snui-field-error__text");
+    const text = ruleBody(FORMS, ".snui-field-error__text");
     expect(text).toContain("min-width: 0;");
     // The gap is the one every glyph in front of its own text takes.
     const shared =
@@ -195,16 +189,14 @@ describe("inline field without a description", () => {
   it("keeps the control in the label's row, so the label centers on it", () => {
     // With no description, a control spanning two rows split its height into
     // an empty second row and the label centered in a short first one.
-    const [rule] = ruleBodies(
-      normalizedCss(FORM_STYLES),
+    const rule = ruleBody(
+      FORMS,
       ".snui-field--inline:not(:has(> .snui-field__description)) > .snui-field__control",
     );
     expect(rule).toContain("grid-row: 1;");
     // A narrow panel stacks the field, so there the control follows the
     // label again rather than sharing its row.
-    const narrow = normalizedCss(FORM_STYLES).slice(
-      normalizedCss(FORM_STYLES).lastIndexOf("@container"),
-    );
+    const narrow = FORMS.slice(FORMS.lastIndexOf("@container"));
     expect(narrow).toMatch(
       /\.snui-field--inline:not\(:has\(> \.snui-field__description\)\) > \.snui-field__control, \.snui-field--inline > \.snui-field__error \{ grid-column: 1; grid-row: auto; \}/,
     );
@@ -215,10 +207,7 @@ describe("optional marker", () => {
   it("draws the marker at the regular weight, apart from the semibold label", () => {
     // In Night the muted color sits almost on the text color, so weight is
     // the cue that separates the marker from the label.
-    const [mark] = ruleBodies(
-      normalizedCss(FORM_STYLES),
-      ".snui-optional-mark",
-    );
+    const mark = ruleBody(FORMS, ".snui-optional-mark");
     expect(mark).toContain("color: var(--snui-color-text-muted);");
     expect(mark).toContain("font-weight: normal;");
   });

@@ -148,6 +148,32 @@ describe("RadioGroup", () => {
     expect(error).not.toHaveAttribute("role");
   });
 
+  it("reads its own text before the ids the caller adds", () => {
+    renderInPanel(
+      <>
+        <p id="mode-note">The autopilot follows the chosen mode.</p>
+        <RadioGroup
+          label="Mode"
+          description="Propulsion choice"
+          error="Pick a mode"
+          aria-describedby="mode-note"
+          defaultValue="sail"
+        >
+          <Radio value="sail">Sail</Radio>
+        </RadioGroup>
+      </>,
+    );
+
+    const group = screen.getByRole("radiogroup", { name: "Mode" });
+    const description = screen.getByText("Propulsion choice");
+    const error = screen.getByText("Pick a mode").closest("[id]");
+    expect(group.getAttribute("aria-describedby")?.split(" ")).toEqual([
+      description.id,
+      error?.id,
+      "mode-note",
+    ]);
+  });
+
   it("mounts an announcing error region before content arrives", () => {
     const { rerender } = renderInPanel(
       <RadioGroup label="Mode" errorLive="polite">

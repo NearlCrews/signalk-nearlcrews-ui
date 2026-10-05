@@ -10,17 +10,6 @@ import type { SemanticTone } from "../utils/tone.js";
 import { TONE_BAR_WIDTH } from "./fragments.js";
 
 /**
- * The semantic tones in the order every rule set lists them. Checked against
- * the tone union rather than restating it, so a typo cannot compile.
- */
-const SEMANTIC_TONES = [
-  "info",
-  "success",
-  "warning",
-  "danger",
-] as const satisfies readonly SemanticTone[];
-
-/**
  * The modifier class a block carries for one tone. Every generator below
  * builds its selectors from this, so a block's tone classes are spelled once.
  */
@@ -77,8 +66,8 @@ export function toneBlockColorRules(
 
 /**
  * The leading tone bar Banner introduced, shared with every surface that marks
- * itself with a tone (Card, Toast). The prefix lets a block offer a decorative
- * variant (`accent-`) beside its semantic one.
+ * itself with a tone (Card, CollapsibleSection, Toast). The prefix lets a block
+ * offer a decorative variant (`accent-`) beside its semantic one.
  */
 export function toneAccentBarRules(block: string, modifierPrefix = ""): string {
   return toneBlockColorRules(
@@ -145,6 +134,16 @@ export const TONE_SHAPE_DECLARATIONS: Readonly<Record<SemanticTone, string>> = {
   danger:
     "  clip-path: polygon(\n    50% 0,\n    100% 25%,\n    100% 75%,\n    50% 100%,\n    0 75%,\n    0 25%\n  );\n  border-radius: 0;",
 };
+
+/**
+ * The semantic tones in the order every rule set lists them: the keys of the
+ * shape table, which is typed against the tone union, so a tone added to the
+ * union and left out of the table fails to compile. Declared below the
+ * generators that read it, which only run once this module has loaded.
+ */
+const SEMANTIC_TONES = /* @__PURE__ */ Object.keys(
+  TONE_SHAPE_DECLARATIONS,
+) as SemanticTone[];
 
 /**
  * Gives each tone a distinct dot shape, so a state never depends on color

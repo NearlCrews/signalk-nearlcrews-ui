@@ -29,7 +29,7 @@ import {
 import { expectNoAxeViolations } from "../helpers.js";
 
 describe("composites accessibility", () => {
-  it("has no detectable accessibility violations across the new primitives", async () => {
+  it("has no detectable accessibility violations across the composites", async () => {
     const { container } = render(
       <main>
         <PanelRoot>

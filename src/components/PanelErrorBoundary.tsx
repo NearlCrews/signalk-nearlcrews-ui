@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import { usePanelAnnouncer } from "../utils/announcer.js";
-import { focusedElement, focusIsOnBody } from "../utils/focus.js";
+import { focusIsNowhere } from "../utils/focus.js";
 import { useContentHeading } from "../utils/heading-level.js";
 import { resolveBundledContent } from "../utils/labels.js";
 import { PANEL_ERROR_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
@@ -139,10 +139,7 @@ function PanelErrorFallback({
     // reader is left on the body, a whole Admin page away from the recovery
     // action. Focusing the fallback puts them on it and reads it out, which
     // also beats an alert that entered the DOM carrying its first message.
-    if (
-      focusedElement(ownerDocument) === null ||
-      focusIsOnBody(ownerDocument)
-    ) {
+    if (focusIsNowhere(ownerDocument)) {
       node.focus();
       return;
     }

@@ -4,6 +4,7 @@ import {
   type AnnouncementMode,
   liveRegionProps,
 } from "../utils/announcement.js";
+import { classNames } from "../utils/class-names.js";
 import type { FieldErrorState } from "../utils/field-error.js";
 import { ToneMark } from "./ToneMark.js";
 
@@ -21,7 +22,9 @@ interface FieldErrorProps {
  * The error region shared by every field wrapper. It mounts whenever the
  * resolved region says the container belongs in the DOM, so the live region
  * is in place before its text arrives, and it draws the message only while
- * the region is referenced, which is exactly while there is an error.
+ * the region is referenced, which is exactly while there is an error. Every
+ * region carries the block class beside its wrapper's own, so the one rule
+ * that takes an empty region out of the flow reaches all of them.
  */
 export function FieldError({
   as: Element = "div",
@@ -31,15 +34,13 @@ export function FieldError({
   region,
 }: FieldErrorProps): React.JSX.Element | null {
   if (!region.rendersError) return null;
-  // A roled live region does not also carry aria-live; liveRegionProps emits
-  // exactly one of the pair.
-  const { "aria-live": ariaLive, role } = liveRegionProps(live);
   return (
     <Element
       id={region.errorId}
-      className={className}
-      role={role}
-      aria-live={ariaLive}
+      className={classNames("snui-field-error", className)}
+      // A roled live region does not also carry aria-live; liveRegionProps
+      // emits exactly one of the pair.
+      {...liveRegionProps(live)}
     >
       {region.referencedErrorId === undefined ? null : (
         // The message is its own item in the row, so a wrapped line starts

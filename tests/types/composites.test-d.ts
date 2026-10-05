@@ -1,14 +1,7 @@
-import type {
-  ComponentProps,
-  ErrorInfo,
-  ReactNode,
-  Ref,
-  RefObject,
-} from "react";
+import type { ComponentProps, ErrorInfo, ReactNode, RefObject } from "react";
 import { describe, expectTypeOf, it } from "vitest";
 
 import type {
-  Accordion,
   DisclosureProps,
   SaveActionBarProps,
   TableProps,
@@ -20,21 +13,14 @@ import type {
 } from "../../src/composites.js";
 import type {
   AnnouncementMode,
-  Badge,
   CardDensity,
-  CollapsibleSection,
   Density,
   FormatRelativeAgeOptions,
   InputGroup,
-  InputGroupAddon,
   LiveRegionProps,
-  Metric,
-  Orientation,
   PanelShellProps,
   RelativeAgeProps,
-  Section,
   StackProps,
-  StatusIndicator,
   TextTone,
   ThemeChoice,
   UnsupportedBrowserNoticeProps,
@@ -42,10 +28,10 @@ import type {
 import { isThemeChoice, PACKAGE_VERSION } from "../../src/index.js";
 
 /**
- * Type-level contract for the 0.9.0 additions: element-typed layout props,
- * the shared variant vocabularies, refs on single-root components, and the
- * new root and composite exports. The tab value type and the disclosure id
- * options came with 0.10.0 and are checked here too.
+ * Type-level contract for the layout and composite surface: element-typed
+ * layout props, the shared variant vocabularies, the tab value type, the
+ * disclosure id options, and the root and composite exports that carry no
+ * spec of their own.
  */
 describe("polymorphic layout props", () => {
   it("admits form attributes and a form ref only under as=form", () => {
@@ -78,9 +64,7 @@ describe("polymorphic layout props", () => {
 });
 
 describe("shared vocabularies", () => {
-  it("pins Density and Orientation", () => {
-    expectTypeOf<Density>().toEqualTypeOf<"default" | "compact">();
-    expectTypeOf<Orientation>().toEqualTypeOf<"horizontal" | "vertical">();
+  it("pins CardDensity, the density props, and the tone and activation unions", () => {
     expectTypeOf<CardDensity>().toEqualTypeOf<
       "default" | "compact" | "flush"
     >();
@@ -88,6 +72,10 @@ describe("shared vocabularies", () => {
       Density | undefined
     >();
     expectTypeOf<TableProps["density"]>().toEqualTypeOf<Density | undefined>();
+    expectTypeOf<TextTone>().toEqualTypeOf<
+      "neutral" | "muted" | "info" | "success" | "warning" | "danger"
+    >();
+    expectTypeOf<TabsActivation>().toEqualTypeOf<"automatic" | "manual">();
   });
 
   it("types live regions with AnnouncementMode", () => {
@@ -98,10 +86,6 @@ describe("shared vocabularies", () => {
     expectTypeOf<LiveRegionProps["announceKey"]>().toEqualTypeOf<
       string | number | undefined
     >();
-    expectTypeOf<TextTone>().toEqualTypeOf<
-      "neutral" | "muted" | "info" | "success" | "warning" | "danger"
-    >();
-    expectTypeOf<TabsActivation>().toEqualTypeOf<"automatic" | "manual">();
   });
 });
 
@@ -162,38 +146,11 @@ describe("disclosure ids", () => {
   });
 });
 
-describe("refs on single-root components", () => {
-  it("resolves each ref to the element the component renders", () => {
-    expectTypeOf<ComponentProps<typeof Section>["ref"]>().toEqualTypeOf<
-      Ref<HTMLElement> | undefined
-    >();
-    expectTypeOf<
-      ComponentProps<typeof CollapsibleSection>["ref"]
-    >().toEqualTypeOf<Ref<HTMLElement> | undefined>();
-    expectTypeOf<ComponentProps<typeof Accordion>["ref"]>().toEqualTypeOf<
-      Ref<HTMLDivElement> | undefined
-    >();
-    expectTypeOf<ComponentProps<typeof Metric>["ref"]>().toEqualTypeOf<
-      Ref<HTMLDivElement> | undefined
-    >();
-    expectTypeOf<ComponentProps<typeof Badge>["ref"]>().toEqualTypeOf<
-      Ref<HTMLSpanElement> | undefined
-    >();
-    expectTypeOf<ComponentProps<typeof StatusIndicator>["ref"]>().toEqualTypeOf<
-      Ref<HTMLSpanElement> | undefined
-    >();
-    expectTypeOf<ComponentProps<typeof InputGroupAddon>["ref"]>().toEqualTypeOf<
-      Ref<HTMLSpanElement> | undefined
-    >();
-  });
-});
-
-describe("new root exports", () => {
-  it("exposes the heading level on the compatibility notice and keeps role out", () => {
+describe("root exports", () => {
+  it("exposes the heading level on the compatibility notice", () => {
     expectTypeOf<UnsupportedBrowserNoticeProps["headingLevel"]>().toEqualTypeOf<
       1 | 2 | 3 | 4 | 5 | 6 | undefined
     >();
-    expectTypeOf<"role">().not.toExtend<keyof UnsupportedBrowserNoticeProps>();
   });
 
   it("types the relative age surfaces", () => {

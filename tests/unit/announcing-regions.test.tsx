@@ -1,14 +1,24 @@
-import { act, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import type { ReactElement, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Banner, Metric, StatusIndicator } from "../../src/index.js";
+import { Radio, RadioGroup, Switch } from "../../src/forms.js";
+import {
+  Banner,
+  Checkbox,
+  FieldGroup,
+  LabeledField,
+  Metric,
+  SegmentedControl,
+  StatusIndicator,
+  TextInput,
+} from "../../src/index.js";
 import { COMPONENT_STYLES } from "../../src/styles/components.js";
 import { visuallyHiddenDeclarations } from "../../src/styles/fragments.js";
 import { LAYOUT_STYLES } from "../../src/styles/layout.js";
 import { messageLogAttributes } from "../../src/utils/announcement.js";
 import { LIVE_REGION_BLANK_MS } from "../../src/utils/repeat-announcement.js";
 import { ruleBody } from "../css-helpers.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { advanceTimers, panel, renderInPanel } from "../helpers.js";
 import { announcementOf } from "./lib/announcements.js";
 
 describe("repeat announcements on visible regions", () => {
@@ -38,9 +48,7 @@ describe("repeat announcements on visible regions", () => {
     rerender(panel(indicator(2, "Preset applied")));
     expect(status).toBeEmptyDOMElement();
 
-    act(() => {
-      vi.advanceTimersByTime(100);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS);
     expect(status).toHaveTextContent("Preset applied");
     // One region throughout: a remount would be observed by nobody.
     expect(screen.getByRole("status")).toBe(status);
@@ -71,9 +79,7 @@ describe("repeat announcements on visible regions", () => {
     // standing on it.
     expect(screen.getByRole("button", { name: "Dismiss" })).toBeVisible();
 
-    act(() => {
-      vi.advanceTimersByTime(100);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS);
     expect(banner).toHaveTextContent("Retry failed");
   });
 
@@ -120,9 +126,7 @@ describe("announcing regions mounted with their message", () => {
     }
     expect(screen.getByText("Depth below keel")).toBeVisible();
 
-    act(() => {
-      vi.advanceTimersByTime(LIVE_REGION_BLANK_MS);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS);
     expect(screen.getByTestId("banner")).toBe(banner);
     expect(banner).toHaveTextContent("Error. Save request failed");
     expect(indicator).toHaveTextContent("Warning. Status unavailable");
@@ -190,9 +194,7 @@ describe("announcing regions mounted with their message", () => {
 
     const indicator = screen.getByTestId("indicator");
     expect(indicator).toBeEmptyDOMElement();
-    act(() => {
-      vi.advanceTimersByTime(LIVE_REGION_BLANK_MS);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS);
     expect(indicator).toHaveTextContent("Provider lost");
   });
 
@@ -207,9 +209,7 @@ describe("announcing regions mounted with their message", () => {
     expect(banner).not.toHaveTextContent("Retry failed");
     expect(screen.getByRole("button", { name: "Dismiss" })).toBeVisible();
 
-    act(() => {
-      vi.advanceTimersByTime(LIVE_REGION_BLANK_MS);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS);
     expect(banner).toHaveTextContent("Retry failed");
   });
 
@@ -273,9 +273,7 @@ describe("announcing regions that wait for their words to settle", () => {
     expect(shown).toHaveAttribute("aria-hidden", "true");
     expect(region).toBeEmptyDOMElement();
 
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
+    advanceTimers(500);
     expect(screen.getByRole("status")).toBe(region);
     expect(region).toHaveTextContent("Information. 1 match");
     expect(vi.getTimerCount()).toBe(0);
@@ -311,9 +309,7 @@ describe("announcing regions that wait for their words to settle", () => {
     expect(region).toBeEmptyDOMElement();
 
     rerender(panel(quiet("4 matches")));
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
+    advanceTimers(500);
     expect(screen.getByRole("status")).toBe(region);
     expect(region).toHaveTextContent("4 matches");
   });
@@ -338,9 +334,7 @@ describe("announcing regions that wait for their words to settle", () => {
       screen.getByTestId("indicator").querySelector(".snui-status__text"),
     ).toHaveTextContent("12 matches");
 
-    act(() => {
-      vi.advanceTimersByTime(LIVE_REGION_BLANK_MS);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS);
     expect(screen.getByRole("status")).toHaveTextContent("12 matches");
   });
 
@@ -371,9 +365,7 @@ describe("announcing regions that wait for their words to settle", () => {
     );
 
     expect(screen.getByRole("status")).toBeEmptyDOMElement();
-    act(() => {
-      vi.advanceTimersByTime(LIVE_REGION_BLANK_MS);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS);
     expect(screen.getByRole("status")).toHaveTextContent("12 matches");
   });
 
@@ -410,9 +402,7 @@ describe("announcing regions that wait for their words to settle", () => {
     }
     expect(region).toBeEmptyDOMElement();
 
-    act(() => {
-      vi.advanceTimersByTime(500);
-    });
+    advanceTimers(500);
     expect(region).toHaveTextContent("Warning. 2.9 m");
   });
 
@@ -588,6 +578,56 @@ describe("settling regions waiting empty", () => {
         visuallyHiddenDeclarations(),
       );
     }
+  });
+});
+
+describe("field error regions waiting empty", () => {
+  it("takes every field wrapper's empty region out of the flow through one rule", () => {
+    const { container } = renderInPanel(
+      <>
+        <LabeledField label="Server URL" errorLive="polite">
+          <TextInput />
+        </LabeledField>
+        <Checkbox label="Accept the provider agreement" errorLive="polite" />
+        <FieldGroup legend="Notifications" errorLive="polite">
+          Content
+        </FieldGroup>
+        <RadioGroup label="Announcement level" errorLive="polite">
+          <Radio value="all">Everything</Radio>
+        </RadioGroup>
+        <SegmentedControl
+          label="Log detail"
+          errorLive="polite"
+          options={[{ value: "normal", label: "Normal" }]}
+        />
+        <Switch label="Night mode" errorLive="polite" />
+      </>,
+    );
+
+    // Each wrapper names its region with a class of its own. The block class
+    // the shared error region adds beside it is the one the rule matches, so
+    // a new wrapper is covered without joining a list.
+    for (const wrapperClass of [
+      "snui-field__error",
+      "snui-checkbox__error",
+      "snui-field-group__error",
+      "snui-radio-group__error",
+      "snui-segmented__error",
+      "snui-switch__error",
+    ]) {
+      const region = container.querySelector(`.${wrapperClass}`);
+      expect(region, wrapperClass).not.toBeNull();
+      expect(
+        region?.matches(".snui-field-error:empty"),
+        `${wrapperClass} waits empty under the block class`,
+      ).toBe(true);
+    }
+    expect(
+      ruleBody(
+        COMPONENT_STYLES,
+        ".snui-field-error:empty,\n.snui-checkbox-group__warning:empty",
+      ),
+    ).toContain(visuallyHiddenDeclarations());
   });
 });
 

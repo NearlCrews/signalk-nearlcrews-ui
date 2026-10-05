@@ -290,6 +290,15 @@ export const CONTAINER_BREAKPOINT_NARROW = "37.5rem";
 export const TRANSITION_FAST_MS = 140;
 
 /**
+ * The coarse-pointer condition, written once: the media query the token sheet
+ * grows the controls under, and the one a component asks in script when it
+ * mirrors those sizes, as the data grid does to pick its row heights.
+ *
+ * @internal
+ */
+export const COARSE_POINTER_QUERY = "(any-pointer: coarse)";
+
+/**
  * Initial data-grid row-height estimates in pixels, per density, for a coarse
  * pointer.
  *
@@ -303,7 +312,7 @@ export const TRANSITION_FAST_MS = 140;
  *
  * @internal
  */
-export const DATA_GRID_ROW_HEIGHTS = {
+export const DATA_GRID_ROW_HEIGHTS_COARSE = {
   compact: 32,
   default: 44,
 } as const;
@@ -545,7 +554,7 @@ ${NIGHT_BLOCK}
  * a moving boat lands wide. The second space step is the gap adjacent actions
  * are laid out with, so it grows with the controls it separates.
  */
-@media (any-pointer: coarse) {
+@media ${COARSE_POINTER_QUERY} {
   ${rootSelector} {
     --snui-space-2: 0.75rem;
     --snui-control-min-height: 2.75rem;

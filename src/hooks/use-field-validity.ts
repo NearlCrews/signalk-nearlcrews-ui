@@ -166,7 +166,9 @@ export function useFieldValidity(): FieldValidity {
    * child handed the validity, whose removal commits no owner render.
    */
   const forgetStale = useCallback((field?: string): void => {
-    const names = field === undefined ? [...records.current.keys()] : [field];
+    // Deleting the key just visited is defined for a Map, so the sweep walks
+    // the live keys rather than a copy made after every commit.
+    const names = field === undefined ? records.current.keys() : [field];
     for (const name of names) {
       if (!isStaleRecord(records.current.get(name))) continue;
       records.current.delete(name);

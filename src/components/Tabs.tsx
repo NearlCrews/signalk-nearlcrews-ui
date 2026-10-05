@@ -22,7 +22,7 @@ import { createRequiredContext, createValueContext } from "../utils/context.js";
 import { isRightToLeft } from "../utils/direction.js";
 import type { MountStrategy } from "../utils/mount-strategy.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
-import { mirrorsInRtl, nextRovingIndex } from "../utils/roving.js";
+import { nextRovingIndex } from "../utils/roving.js";
 import type { Orientation } from "../utils/variants.js";
 
 /** `"automatic"` selects a tab as arrow keys focus it; `"manual"` waits for Enter or Space. */
@@ -188,7 +188,7 @@ function moveFocus(
     currentIndex: current,
     key: event.key,
     orientation,
-    rtl: mirrorsInRtl(event.key) && isRightToLeft(list),
+    rtl: () => isRightToLeft(list),
   });
   if (next === null) return;
 

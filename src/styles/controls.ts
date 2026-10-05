@@ -1,23 +1,27 @@
 import { SPINNER_ANIMATION_NAME } from "../version.js";
 import {
   BLOCKED_SELECTOR,
+  CONTROL_LABEL_DECLARATIONS,
   CONTROL_ROW_DECLARATIONS,
   CONTROL_SURFACE_DECLARATIONS,
   DISABLED_DECLARATIONS,
   FIELD_DESCRIPTION_DECLARATIONS,
   FIELD_ERROR_DECLARATIONS,
   FIELD_MARKERS,
+  FIELD_STACK_DECLARATIONS,
   FOCUS_RING_WIDTH,
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
+  FORCED_COLORS_HIGHLIGHT_DECLARATIONS,
   FORCED_COLORS_INVALID_DECLARATIONS,
-  GLYPH_BASELINE_NUDGE,
   GROUP_LEGEND_DECLARATIONS,
   NARROW_PANEL_QUERY,
   NON_LINK_DESCENDANTS,
   PRESSED_FILL_DECLARATION,
+  SELECTION_GLYPH_DECLARATIONS,
   SELECTION_GLYPH_SIZE,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
+import { COARSE_POINTER_QUERY } from "./tokens.js";
 
 /**
  * Inset of the segmented group around its options. The option's own corner
@@ -29,7 +33,10 @@ const SEGMENTED_INSET = "0.375rem";
  * The inverse of BLOCKED_SELECTOR, for the live half of a hover, active, or
  * forced-colors rule. Two `:not()` arguments rather than one
  * `:not(:is(...))`, because that form weighs (0,1,0) where this one weighs
- * (0,2,0) and every rule below was written against the heavier form.
+ * (0,2,0) and every button and checkbox rule below was written against the
+ * heavier form. The segmented option rules use the one-argument
+ * `:not(${BLOCKED_SELECTOR})` instead, at (0,1,0), and the segmented rules
+ * below are weighed against that lighter form.
  */
 const NOT_BLOCKED = ':not(:disabled):not([aria-disabled="true"])';
 
@@ -43,6 +50,14 @@ function blockedIdle(button: string): string {
 
 /* A checkbox block whose box is blocked either way. */
 const BLOCKED_CHECKBOX = `.snui-checkbox:has(.snui-checkbox__input${BLOCKED_SELECTOR})`;
+
+/*
+ * The fill of a disabled control that paints an accent or a selected fill.
+ * DISABLED_DECLARATIONS recolors text alone, so such a control restates its
+ * fill beside it, in the same token.
+ */
+const DISABLED_FILL_DECLARATIONS = `  background: var(--snui-color-text-disabled);
+  color: var(--snui-color-surface);`;
 
 /*
  * Where a checkbox's description and error start: past the box and the gap
@@ -92,7 +107,6 @@ ${scopeStyles(`
   align-items: center;
   justify-content: center;
   gap: var(--snui-space-2);
-  overflow-wrap: anywhere;
 }
 
 .snui-button${NOT_BLOCKED}:active {
@@ -204,7 +218,6 @@ ${PRESSED_FILL_DECLARATION}
 .snui-button--text {
   justify-content: start;
   padding-inline: 0;
-  border-color: transparent;
   background: transparent;
   color: var(--snui-color-text);
   /* A list line reads as part of its row, at the row's own size. */
@@ -215,7 +228,6 @@ ${PRESSED_FILL_DECLARATION}
 
 .snui-button--text > .snui-button__content {
   justify-content: start;
-  text-align: start;
 }
 
 /*
@@ -239,7 +251,6 @@ ${PRESSED_FILL_DECLARATION}
 
 .snui-button-reason__text {
 ${FIELD_DESCRIPTION_DECLARATIONS}
-  text-wrap: pretty;
 }
 
 /*
@@ -290,9 +301,8 @@ ${FIELD_DESCRIPTION_DECLARATIONS}
  * 16px. Coarse pointers already get the taller control floor, so the same
  * query lifts text controls to at least 1rem without touching desktop type.
  */
-@media (any-pointer: coarse) {
-  .snui-input,
-  .snui-select {
+@media ${COARSE_POINTER_QUERY} {
+  .snui-input {
     font-size: max(1rem, var(--snui-font-size));
   }
 }
@@ -321,9 +331,7 @@ ${FIELD_DESCRIPTION_DECLARATIONS}
  * control is a label, so only it toggles when pressed.
  */
 .snui-checkbox {
-  display: grid;
-  min-width: 0;
-  gap: var(--snui-space-1);
+${FIELD_STACK_DECLARATIONS}
 }
 
 .snui-checkbox__control {
@@ -332,20 +340,10 @@ ${CONTROL_ROW_DECLARATIONS}
 
 .snui-checkbox__input {
   appearance: none;
-  display: grid;
-  place-content: center;
-  width: ${SELECTION_GLYPH_SIZE};
-  height: ${SELECTION_GLYPH_SIZE};
-  margin: 0;
-  margin-block-start: ${GLYPH_BASELINE_NUDGE};
-  border: 2px solid var(--snui-color-border);
+${SELECTION_GLYPH_DECLARATIONS}
   border-radius: 0.25rem;
-  background: var(--snui-color-surface);
   accent-color: var(--snui-color-accent-fill);
   cursor: pointer;
-  transition:
-    background-color var(--snui-transition-fast),
-    border-color var(--snui-transition-fast);
 }
 
 @media (hover: hover) {
@@ -395,17 +393,13 @@ ${CONTROL_ROW_DECLARATIONS}
 }
 
 .snui-checkbox__label {
-  min-width: 0;
-  color: var(--snui-color-text);
-  font-weight: var(--snui-font-weight-semibold);
-  overflow-wrap: anywhere;
+${CONTROL_LABEL_DECLARATIONS}
 }
 
 .snui-checkbox__description,
 .snui-checkbox__reason {
 ${FIELD_DESCRIPTION_DECLARATIONS}
   padding-inline-start: ${CHECKBOX_MESSAGE_INSET};
-  text-wrap: pretty;
 }
 
 .snui-checkbox__error {
@@ -424,13 +418,9 @@ ${FIELD_ERROR_DECLARATIONS}
 
 .snui-segmented {
   min-width: 0;
-  padding: 0;
-  margin: 0;
-  border: 0;
 }
 
 .snui-segmented__legend {
-  text-wrap: balance;
   display: block;
   margin-block-end: var(--snui-space-2);
 ${GROUP_LEGEND_DECLARATIONS}
@@ -440,7 +430,6 @@ ${GROUP_LEGEND_DECLARATIONS}
 ${FIELD_DESCRIPTION_DECLARATIONS}
   display: block;
   margin-block-end: var(--snui-space-2);
-  text-wrap: pretty;
 }
 
 .snui-segmented__error {
@@ -504,13 +493,13 @@ ${NARROW_PANEL_QUERY} {
 }
 
 @media (hover: hover) {
-  .snui-segmented__option:not(:disabled):not([aria-checked="true"]):hover {
+  .snui-segmented__option:not(${BLOCKED_SELECTOR}):not([aria-checked="true"]):hover {
     background: var(--snui-color-interactive-hover);
     color: var(--snui-color-text);
   }
 }
 
-.snui-segmented__option:not(:disabled):not([aria-checked="true"]):active {
+.snui-segmented__option:not(${BLOCKED_SELECTOR}):not([aria-checked="true"]):active {
 ${PRESSED_FILL_DECLARATION}
 }
 
@@ -520,12 +509,12 @@ ${PRESSED_FILL_DECLARATION}
 }
 
 @media (hover: hover) {
-  .snui-segmented__option[aria-checked="true"]:not(:disabled):hover {
+  .snui-segmented__option[aria-checked="true"]:not(${BLOCKED_SELECTOR}):hover {
     background: var(--snui-color-accent-fill-hover);
   }
 }
 
-.snui-segmented__option[aria-checked="true"]:not(:disabled):active {
+.snui-segmented__option[aria-checked="true"]:not(${BLOCKED_SELECTOR}):active {
   background: var(--snui-color-accent-fill-hover);
 }
 
@@ -547,8 +536,7 @@ ${blockedIdle(".snui-button--danger")} {
 }
 
 ${blockedIdle(".snui-button--primary")} {
-  background: var(--snui-color-text-disabled);
-  color: var(--snui-color-surface);
+${DISABLED_FILL_DECLARATIONS}
 }
 
 .snui-button[aria-disabled="true"] {
@@ -592,40 +580,24 @@ ${BLOCKED_CHECKBOX} .snui-checkbox__label ${FIELD_MARKERS} {
   border-color: var(--snui-color-surface);
 }
 
+/*
+ * The blocked selector keeps its :not(:disabled): that puts the fill one step
+ * above the blocked text rule below, whose color it replaces.
+ */
 .snui-segmented__option:disabled[aria-checked="true"],
-.snui-segmented[aria-disabled="true"] .snui-segmented__option[aria-checked="true"] {
-  background: var(--snui-color-text-disabled);
-  color: var(--snui-color-surface);
+.snui-segmented[aria-disabled="true"] .snui-segmented__option[aria-checked="true"],
+.snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled) {
+${DISABLED_FILL_DECLARATIONS}
 }
 
 /*
  * An option blocked through ariaDisabled keeps its tab stop and paints as a
- * natively disabled one, through hover and press as well, because nothing it
- * would do on a press is going to happen. The :not(:disabled) weight puts
- * these after the live hover and press rules they replace.
+ * natively disabled one. The live hover and press rules exclude it, so its
+ * resting look holds through both, because nothing it would do on a press is
+ * going to happen.
  */
-.snui-segmented__option[aria-disabled="true"]:not(:disabled),
-.snui-segmented__option[aria-disabled="true"]:not(:disabled):active {
-  background: transparent;
+.snui-segmented__option[aria-disabled="true"]:not(:disabled) {
 ${DISABLED_DECLARATIONS}
-}
-
-.snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled),
-.snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled):active {
-  background: var(--snui-color-text-disabled);
-  color: var(--snui-color-surface);
-}
-
-@media (hover: hover) {
-  .snui-segmented__option[aria-disabled="true"]:not(:disabled):hover {
-    background: transparent;
-    color: var(--snui-color-text-disabled);
-  }
-
-  .snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled):hover {
-    background: var(--snui-color-text-disabled);
-    color: var(--snui-color-surface);
-  }
 }
 
 @media (forced-colors: active) {
@@ -637,13 +609,20 @@ ${DISABLED_DECLARATIONS}
    */
   .snui-button--primary,
   .snui-button--primary${NOT_BLOCKED}:hover {
-    forced-color-adjust: none;
-    background: Highlight;
-    color: HighlightText;
+${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
   }
 
+  /*
+   * Danger, ghost, and secondary are each written out in system colors, so a
+   * button inside a surface that opted out of forced-color adjustment (the
+   * inline confirmation, a banner body) still paints in them rather than
+   * inheriting the opt-out with the author theme. Danger and ghost share the
+   * canvas fill; secondary below keeps the button face.
+   */
   .snui-button--danger,
-  .snui-button--danger${NOT_BLOCKED}:hover {
+  .snui-button--danger${NOT_BLOCKED}:hover,
+  .snui-button--ghost,
+  .snui-button--ghost${NOT_BLOCKED}:hover {
     forced-color-adjust: none;
     border-color: ButtonText;
     background: Canvas;
@@ -660,25 +639,11 @@ ${DISABLED_DECLARATIONS}
     outline-offset: 1px;
   }
 
-  /*
-   * Secondary and ghost buttons get the same explicit treatment, so a button
-   * inside a surface that opted out of forced-color adjustment (the inline
-   * confirmation, a banner body) still paints in system colors rather than
-   * inheriting the opt-out with the author theme.
-   */
   .snui-button--secondary,
   .snui-button--secondary${NOT_BLOCKED}:hover {
     forced-color-adjust: none;
     border-color: ButtonText;
     background: ButtonFace;
-    color: ButtonText;
-  }
-
-  .snui-button--ghost,
-  .snui-button--ghost${NOT_BLOCKED}:hover {
-    forced-color-adjust: none;
-    border-color: ButtonText;
-    background: Canvas;
     color: ButtonText;
   }
 
@@ -777,11 +742,9 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
   }
 
   .snui-segmented__option[aria-checked="true"],
-  .snui-segmented__option[aria-checked="true"]:not(:disabled):hover,
-  .snui-segmented__option[aria-checked="true"]:not(:disabled):active {
-    forced-color-adjust: none;
-    background: Highlight;
-    color: HighlightText;
+  .snui-segmented__option[aria-checked="true"]:not(${BLOCKED_SELECTOR}):hover,
+  .snui-segmented__option[aria-checked="true"]:not(${BLOCKED_SELECTOR}):active {
+${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
   }
 
   /*
@@ -792,17 +755,13 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
    */
   .snui-segmented__option:disabled[aria-checked="true"],
   .snui-segmented[aria-disabled="true"] .snui-segmented__option[aria-checked="true"],
-  .snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled),
-  .snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled):hover,
-  .snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled):active {
+  .snui-segmented__option[aria-disabled="true"][aria-checked="true"]:not(:disabled) {
     background: GrayText;
     color: Canvas;
   }
 
   /* The system grays a natively disabled option; a blocked one is told to. */
-  .snui-segmented__option[aria-disabled="true"]:not([aria-checked="true"]):not(:disabled),
-  .snui-segmented__option[aria-disabled="true"]:not([aria-checked="true"]):not(:disabled):hover,
-  .snui-segmented__option[aria-disabled="true"]:not([aria-checked="true"]):not(:disabled):active {
+  .snui-segmented__option[aria-disabled="true"]:not([aria-checked="true"]):not(:disabled) {
     color: GrayText;
   }
 }

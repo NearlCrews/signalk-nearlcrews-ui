@@ -1,18 +1,37 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef, Fragment, type RefObject } from "react";
+import { createRef, Fragment, type ReactElement, type RefObject } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Button, InlineConfirm, PanelRoot } from "../../src/index.js";
 import { COMPONENT_STYLES } from "../../src/styles/components.js";
 import { ruleBody } from "../css-helpers.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { panel, renderInPanel, stubReducedMotion } from "../helpers.js";
 import { withFrameDocument } from "./lib/frame-document.js";
+
+/** The props every confirmation requires, with fresh handlers per call. */
+function confirmationProps() {
+  return {
+    message: "This removes the cached source.",
+    onCancel: vi.fn(),
+    onConfirm: vi.fn(),
+  } as const;
+}
 
 /** The confirmation most cases ask, where the case varies something else. */
 const ROUTE_CONFIRM = {
   confirmLabel: "Delete route",
   message: "This removes the route.",
 } as const;
+
+/** A confirmation with a button before it, for a case that moves focus between the two. */
+function beside(label: string, confirmation: ReactElement): React.JSX.Element {
+  return (
+    <>
+      <Button>{label}</Button>
+      {confirmation}
+    </>
+  );
+}
 
 // This block runs first on purpose: the generic-confirmation warning is
 // reported once per module, so a later test would find it already spent.
@@ -25,9 +44,7 @@ describe("InlineConfirm destructive labeling", () => {
       <InlineConfirm
         open
         confirmLabel="Delete route"
-        message="This removes the cached source."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
+        {...confirmationProps()}
       />,
     );
 
@@ -39,14 +56,7 @@ describe("InlineConfirm destructive labeling", () => {
 
   it("reports a destructive confirmation that names no consequence", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
-    renderInPanel(
-      <InlineConfirm
-        open
-        message="This removes the cached source."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
-    );
+    renderInPanel(<InlineConfirm open {...confirmationProps()} />);
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('labeled "Confirm"'),
@@ -54,16 +64,15 @@ describe("InlineConfirm destructive labeling", () => {
   });
 });
 
-describe("InlineConfirm confirm action", () => {
+describe("InlineConfirm action variants", () => {
   it("paints the confirm action with the requested variant", () => {
     const { rerender } = renderInPanel(
       <InlineConfirm
         open
+        {...confirmationProps()}
         confirmLabel="Apply settings"
         confirmVariant="primary"
         message="This applies the pending changes."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
       />,
     );
 
@@ -72,17 +81,20 @@ describe("InlineConfirm confirm action", () => {
     );
 
     rerender(
-      panel(
-        <InlineConfirm
-          open
-          {...ROUTE_CONFIRM}
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />,
-      ),
+      panel(<InlineConfirm open {...confirmationProps()} {...ROUTE_CONFIRM} />),
     );
     expect(screen.getByRole("button", { name: "Delete route" })).toHaveClass(
       "snui-button--danger",
+    );
+  });
+
+  it("styles the cancel action with the requested variant", () => {
+    renderInPanel(
+      <InlineConfirm open cancelVariant="ghost" {...confirmationProps()} />,
+    );
+
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
+      "snui-button--ghost",
     );
   });
 });
@@ -90,30 +102,22 @@ describe("InlineConfirm confirm action", () => {
 describe("InlineConfirm keyboard guards", () => {
   it("leaves every key but Escape to the content inside it", async () => {
     const user = userEvent.setup();
-    const onCancel = vi.fn();
-    renderInPanel(
-      <InlineConfirm
-        defaultOpen
-        {...ROUTE_CONFIRM}
-        onCancel={onCancel}
-        onConfirm={vi.fn()}
-      />,
-    );
+    const props = confirmationProps();
+    renderInPanel(<InlineConfirm defaultOpen {...props} {...ROUTE_CONFIRM} />);
 
     await user.keyboard("{Enter}");
-    expect(onCancel).not.toHaveBeenCalled();
+    expect(props.onCancel).not.toHaveBeenCalled();
     expect(screen.getByRole("region")).toBeVisible();
   });
 
   it("stands aside when the consumer handled Escape itself", async () => {
     const user = userEvent.setup();
-    const onCancel = vi.fn();
+    const props = confirmationProps();
     renderInPanel(
       <InlineConfirm
         defaultOpen
+        {...props}
         {...ROUTE_CONFIRM}
-        onCancel={onCancel}
-        onConfirm={vi.fn()}
         onKeyDown={(event) => {
           if (event.key === "Escape") event.preventDefault();
         }}
@@ -121,8 +125,17 @@ describe("InlineConfirm keyboard guards", () => {
     );
 
     await user.keyboard("{Escape}");
-    expect(onCancel).not.toHaveBeenCalled();
+    expect(props.onCancel).not.toHaveBeenCalled();
     expect(screen.getByRole("region")).toBeVisible();
+  });
+
+  it("reports escape as the cancel reason", async () => {
+    const user = userEvent.setup();
+    const props = confirmationProps();
+    renderInPanel(<InlineConfirm open {...props} />);
+
+    await user.keyboard("{Escape}");
+    expect(props.onCancel).toHaveBeenCalledWith("escape");
   });
 });
 
@@ -130,15 +143,15 @@ describe("InlineConfirm open state", () => {
   it("reports every close through onOpenChange", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
-    const { unmount } = renderInPanel(
+    const confirmation = (): React.JSX.Element => (
       <InlineConfirm
         defaultOpen
+        {...confirmationProps()}
         {...ROUTE_CONFIRM}
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
         onOpenChange={onOpenChange}
-      />,
+      />
     );
+    const { unmount } = renderInPanel(confirmation());
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -146,15 +159,7 @@ describe("InlineConfirm open state", () => {
     unmount();
 
     onOpenChange.mockClear();
-    renderInPanel(
-      <InlineConfirm
-        defaultOpen
-        {...ROUTE_CONFIRM}
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-        onOpenChange={onOpenChange}
-      />,
-    );
+    renderInPanel(confirmation());
     await user.click(screen.getByRole("button", { name: "Delete route" }));
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(screen.queryByRole("region")).toBeNull();
@@ -167,9 +172,8 @@ describe("InlineConfirm open state", () => {
       <InlineConfirm
         open
         busy
+        {...confirmationProps()}
         {...ROUTE_CONFIRM}
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
         onOpenChange={onOpenChange}
       />,
     );
@@ -184,117 +188,51 @@ describe("InlineConfirm open state", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(screen.getByRole("region")).toBeVisible();
   });
-});
-
-function stubMatchMedia(matches: boolean): void {
-  // Only `matches` and `media` are consumed by the component under test.
-  vi.stubGlobal(
-    "matchMedia",
-    (query: string) => ({ matches, media: query }) as MediaQueryList,
-  );
-}
-
-describe("inline confirmation upgrades", () => {
-  afterEach(() => {
-    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
-  });
 
   it("supports uncontrolled use through defaultOpen and closes on cancel", async () => {
     const user = userEvent.setup();
-    const onCancel = vi.fn();
-    renderInPanel(
-      <InlineConfirm
-        defaultOpen
-        message="This removes the cached source."
-        onCancel={onCancel}
-        onConfirm={vi.fn()}
-      />,
-    );
+    const props = confirmationProps();
+    renderInPanel(<InlineConfirm defaultOpen {...props} />);
 
     expect(
       screen.getByRole("region", { name: "Confirm action" }),
     ).toBeVisible();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(onCancel).toHaveBeenCalledWith("cancel");
+    expect(props.onCancel).toHaveBeenCalledWith("cancel");
     expect(screen.queryByRole("region")).toBeNull();
   });
 
   it("closes an uncontrolled confirmation on confirm", async () => {
     const user = userEvent.setup();
-    const onConfirm = vi.fn();
-    renderInPanel(
-      <InlineConfirm
-        defaultOpen
-        message="This removes the cached source."
-        onCancel={vi.fn()}
-        onConfirm={onConfirm}
-      />,
-    );
+    const props = confirmationProps();
+    renderInPanel(<InlineConfirm defaultOpen {...props} />);
 
     await user.click(screen.getByRole("button", { name: "Confirm" }));
-    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(props.onConfirm).toHaveBeenCalledOnce();
     expect(screen.queryByRole("region")).toBeNull();
   });
 
   it("keeps open controlled when provided alongside defaultOpen", () => {
     const { rerender } = renderInPanel(
-      <InlineConfirm
-        open={false}
-        defaultOpen
-        message="This removes the cached source."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
+      <InlineConfirm open={false} defaultOpen {...confirmationProps()} />,
     );
     expect(screen.queryByRole("region")).toBeNull();
 
     rerender(
       panel(
-        <InlineConfirm
-          open
-          defaultOpen={false}
-          message="This removes the cached source."
-          onCancel={vi.fn()}
-          onConfirm={vi.fn()}
-        />,
+        <InlineConfirm open defaultOpen={false} {...confirmationProps()} />,
       ),
     );
     expect(
       screen.getByRole("region", { name: "Confirm action" }),
     ).toBeVisible();
   });
+});
 
-  it("reports escape as the cancel reason", async () => {
-    const user = userEvent.setup();
-    const onCancel = vi.fn();
-    renderInPanel(
-      <InlineConfirm
-        open
-        message="This removes the cached source."
-        onCancel={onCancel}
-        onConfirm={vi.fn()}
-      />,
-    );
-
-    await user.keyboard("{Escape}");
-    expect(onCancel).toHaveBeenCalledWith("escape");
-  });
-
-  it("styles the cancel action with the requested variant", () => {
-    renderInPanel(
-      <InlineConfirm
-        open
-        cancelVariant="ghost"
-        message="This removes the cached source."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
-      "snui-button--ghost",
-    );
+describe("InlineConfirm scroll and focus destinations", () => {
+  afterEach(() => {
+    delete (Element.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   });
 
   it("focuses the requested element on open instead of the container", () => {
@@ -302,14 +240,13 @@ describe("inline confirmation upgrades", () => {
     renderInPanel(
       <InlineConfirm
         open
+        {...confirmationProps()}
         initialFocusRef={initialFocusRef}
         message={
           <button ref={initialFocusRef} type="button">
             Review details
           </button>
         }
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
       />,
     );
 
@@ -320,21 +257,19 @@ describe("inline confirmation upgrades", () => {
     const scrollIntoView = vi.fn();
     Element.prototype.scrollIntoView = scrollIntoView;
     const details = createRef<HTMLButtonElement>();
-    const onCancel = vi.fn();
-    const onConfirm = vi.fn();
+    const props = confirmationProps();
     const confirmation = (
       initialFocusRef: RefObject<HTMLElement | null>,
     ): React.JSX.Element => (
       <InlineConfirm
         open
+        {...props}
         initialFocusRef={initialFocusRef}
         message={
           <button ref={details} type="button">
             Review details
           </button>
         }
-        onCancel={onCancel}
-        onConfirm={onConfirm}
       />
     );
     const { rerender } = renderInPanel(confirmation(details));
@@ -353,123 +288,52 @@ describe("inline confirmation upgrades", () => {
 
   it("returns focus to the requested destination after close", () => {
     const returnFocusRef = createRef<HTMLButtonElement>();
-    const props = {
-      message: "This removes the cached source.",
-      onCancel: vi.fn(),
-      onConfirm: vi.fn(),
-      returnFocusRef,
-    } as const;
-    const { rerender } = renderInPanel(
+    const props = { ...confirmationProps(), returnFocusRef };
+    const settings = (open: boolean): React.JSX.Element => (
       <>
         <button ref={returnFocusRef} type="button">
           Source settings
         </button>
-        <InlineConfirm {...props} open />
-      </>,
+        <InlineConfirm {...props} open={open} />
+      </>
     );
+    const { rerender } = renderInPanel(settings(true));
 
     expect(
       screen.getByRole("region", { name: "Confirm action" }),
     ).toHaveFocus();
 
-    rerender(
-      panel(
-        <>
-          <button ref={returnFocusRef} type="button">
-            Source settings
-          </button>
-          <InlineConfirm {...props} open={false} />
-        </>,
-      ),
-    );
+    rerender(panel(settings(false)));
 
     expect(returnFocusRef.current).toHaveFocus();
   });
 
-  it("scrolls the confirmation into view smoothly by default", () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
-    stubMatchMedia(false);
+  it.each([
+    [false, "smooth"],
+    [true, "auto"],
+  ] as const)(
+    "scrolls into view with reduced motion %s as %s",
+    (reduced, behavior) => {
+      const scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+      stubReducedMotion(reduced);
 
-    renderInPanel(
-      <InlineConfirm
-        open
-        message="This removes the cached source."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
-    );
+      renderInPanel(<InlineConfirm open {...confirmationProps()} />);
 
-    expect(scrollIntoView).toHaveBeenCalledWith({
-      block: "nearest",
-      behavior: "smooth",
-    });
-  });
-
-  it("jumps instead of scrolling smoothly under reduced motion", () => {
-    const scrollIntoView = vi.fn();
-    Element.prototype.scrollIntoView = scrollIntoView;
-    stubMatchMedia(true);
-
-    renderInPanel(
-      <InlineConfirm
-        open
-        message="This removes the cached source."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
-    );
-
-    expect(scrollIntoView).toHaveBeenCalledWith({
-      block: "nearest",
-      behavior: "auto",
-    });
-  });
-
-  it("drops the region landmark and its naming when landmark is false", () => {
-    const { container } = renderInPanel(
-      <InlineConfirm
-        open
-        landmark={false}
-        title="Reset configuration?"
-        message="This removes the cached source."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByRole("region")).toBeNull();
-    const confirmation = container.querySelector(".snui-inline-confirm");
-    expect(confirmation).not.toBeNull();
-    expect(confirmation).not.toHaveAttribute("aria-labelledby");
-    expect(
-      screen.getByRole("heading", { name: "Reset configuration?" }),
-    ).toBeVisible();
-  });
+      expect(scrollIntoView).toHaveBeenCalledWith({
+        block: "nearest",
+        behavior,
+      });
+    },
+  );
 });
 
-/** The props every confirmation requires, with fresh handlers per call. */
-function confirmationProps() {
-  return {
-    message: "Resetting.",
-    onCancel: vi.fn(),
-    onConfirm: vi.fn(),
-  } as const;
-}
-
-describe("buttons and confirmation", () => {
+describe("InlineConfirm focus, busy state, and naming", () => {
   it("focuses cancel in an inline confirmation and restores focus", async () => {
     const user = userEvent.setup();
-    const props = {
-      ...confirmationProps(),
-      message: "This removes the cached source.",
-    };
-    const deletion = (open: boolean): React.JSX.Element => (
-      <>
-        <Button>Delete source</Button>
-        <InlineConfirm {...props} open={open} />
-      </>
-    );
+    const props = confirmationProps();
+    const deletion = (open: boolean): React.JSX.Element =>
+      beside("Delete source", <InlineConfirm {...props} open={open} />);
     const { rerender } = renderInPanel(deletion(false));
 
     const trigger = screen.getByRole("button", { name: "Delete source" });
@@ -500,19 +364,16 @@ describe("buttons and confirmation", () => {
     const user = userEvent.setup();
     const props = confirmationProps();
     const { rerender } = renderInPanel(
-      <>
-        <Button>Start reset</Button>
-        <InlineConfirm {...props} open={false} />
-      </>,
+      beside("Start reset", <InlineConfirm {...props} open={false} />),
     );
 
     await user.click(screen.getByRole("button", { name: "Start reset" }));
     rerender(
       panel(
-        <>
-          <Button>Start reset</Button>
-          <InlineConfirm {...props} open busy title={null} />
-        </>,
+        beside(
+          "Start reset",
+          <InlineConfirm {...props} open busy title={null} />,
+        ),
       ),
     );
 
@@ -535,10 +396,7 @@ describe("buttons and confirmation", () => {
     const user = userEvent.setup();
     const props = confirmationProps();
     const { rerender } = renderInPanel(
-      <>
-        <Button>Outside action</Button>
-        <InlineConfirm {...props} open />
-      </>,
+      beside("Outside action", <InlineConfirm {...props} open />),
     );
 
     const outsideAction = screen.getByRole("button", {
@@ -548,12 +406,7 @@ describe("buttons and confirmation", () => {
     expect(outsideAction).toHaveFocus();
 
     rerender(
-      panel(
-        <>
-          <Button>Outside action</Button>
-          <InlineConfirm {...props} open busy />
-        </>,
-      ),
+      panel(beside("Outside action", <InlineConfirm {...props} open busy />)),
     );
 
     expect(outsideAction).toHaveFocus();
@@ -563,10 +416,7 @@ describe("buttons and confirmation", () => {
     const user = userEvent.setup();
     const props = confirmationProps();
     const { rerender } = renderInPanel(
-      <>
-        <Button>Outside action</Button>
-        <InlineConfirm {...props} open />
-      </>,
+      beside("Outside action", <InlineConfirm {...props} open />),
     );
 
     expect(
@@ -580,10 +430,7 @@ describe("buttons and confirmation", () => {
 
     rerender(
       panel(
-        <>
-          <Button>Outside action</Button>
-          <InlineConfirm {...props} open={false} />
-        </>,
+        beside("Outside action", <InlineConfirm {...props} open={false} />),
       ),
     );
 
@@ -661,10 +508,9 @@ describe("buttons and confirmation", () => {
     renderInPanel(
       <InlineConfirm
         open
+        {...confirmationProps()}
         title={<Fragment key="empty-title" />}
         message="Confirm this action."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
       />,
     );
 
@@ -681,17 +527,16 @@ describe("buttons and confirmation", () => {
     // The fallback title is panel wording, so it comes from the bundle; each
     // confirmation passes only the question it is asking as its own title.
     const labels = { inlineConfirm: { fallbackTitle: "Confirmer l’action" } };
-    const confirmationProps = {
+    const localized = {
+      ...confirmationProps(),
       cancelLabel: "Annuler",
       confirmLabel: "Confirmer",
       message: "Cette action est permanente.",
-      onCancel: vi.fn(),
-      onConfirm: vi.fn(),
     } as const;
     const { rerender } = renderInPanel(
       <>
         <InlineConfirm
-          {...confirmationProps}
+          {...localized}
           open
           ref={ref}
           data-testid="localized-confirmation"
@@ -717,7 +562,7 @@ describe("buttons and confirmation", () => {
     expect(screen.getByRole("button", { name: "Confirmer" })).toBeVisible();
 
     rerender(
-      panel(<InlineConfirm {...confirmationProps} open={false} ref={ref} />, {
+      panel(<InlineConfirm {...localized} open={false} ref={ref} />, {
         labels,
       }),
     );
@@ -728,16 +573,34 @@ describe("buttons and confirmation", () => {
     renderInPanel(
       <InlineConfirm
         open
+        {...confirmationProps()}
         headingLevel={4}
         title="Remove source?"
         message="Confirm this action."
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
       />,
     );
 
     expect(
       screen.getByRole("heading", { level: 4, name: "Remove source?" }),
+    ).toBeVisible();
+  });
+
+  it("drops the region landmark and its naming when landmark is false", () => {
+    const { container } = renderInPanel(
+      <InlineConfirm
+        open
+        {...confirmationProps()}
+        landmark={false}
+        title="Reset configuration?"
+      />,
+    );
+
+    expect(screen.queryByRole("region")).toBeNull();
+    const confirmation = container.querySelector(".snui-inline-confirm");
+    expect(confirmation).not.toBeNull();
+    expect(confirmation).not.toHaveAttribute("aria-labelledby");
+    expect(
+      screen.getByRole("heading", { name: "Reset configuration?" }),
     ).toBeVisible();
   });
 });
@@ -747,9 +610,8 @@ describe("InlineConfirm keyboard semantics", () => {
     renderInPanel(
       <InlineConfirm
         open
+        {...confirmationProps()}
         message="Remove this source?"
-        onCancel={vi.fn()}
-        onConfirm={vi.fn()}
       />,
     );
 

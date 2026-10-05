@@ -1,11 +1,19 @@
 import {
   FORCED_COLORS_OUTLINE_DECLARATIONS,
   OVERLAY_TRANSITION_DECLARATIONS,
-  RAISED_OVERLAY_DECLARATIONS,
   RAISED_SURFACE_TOKEN_DECLARATIONS,
+  raisedOverlayDeclarations,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
+
+/**
+ * Custom property holding the width of the popover surface, which `Popover`
+ * writes for every width but `"auto"`.
+ *
+ * @internal
+ */
+export const POPOVER_WIDTH_PROPERTY = "--snui-popover-width";
 
 /**
  * Anchored popover styles. Installed by `Popover` through `useModuleStyles`,
@@ -25,16 +33,12 @@ export const POPOVER_STYLES: StyleModule = {
 
 .snui-popover {
 ${RAISED_SURFACE_TOKEN_DECLARATIONS}
-  width: var(--snui-popover-width, auto);
+  width: var(${POPOVER_WIDTH_PROPERTY}, auto);
   max-width: min(24rem, 100%);
   padding: var(--snui-space-3);
   overflow-y: auto;
   overscroll-behavior: contain;
-${RAISED_OVERLAY_DECLARATIONS}
-  /* Free-form content settles more slowly than a menu; override the fragment. */
-  transition:
-    opacity var(--snui-transition-normal),
-    transform var(--snui-transition-normal);
+${raisedOverlayDeclarations("normal")}
 }
 
 .snui-popover[data-entering],

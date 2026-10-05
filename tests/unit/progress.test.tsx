@@ -6,6 +6,15 @@ import { PROGRESS_STYLES } from "../../src/styles/progress.js";
 import { ruleBody } from "../css-helpers.js";
 import { renderInPanel } from "../helpers.js";
 
+/** A bar that reports no value: no `aria-valuenow`, and a fill it leaves unsized. */
+function expectIndeterminate(bar: HTMLElement): void {
+  expect(bar).not.toHaveAttribute("aria-valuenow");
+  expect(bar).toHaveClass("snui-progress--indeterminate");
+  expect(bar.querySelector(".snui-progress__fill")).not.toHaveAttribute(
+    "style",
+  );
+}
+
 describe("Progress tone and description", () => {
   it("gives a toned bar a glyph and a spoken tone without renaming it", () => {
     const { container } = renderInPanel(
@@ -58,13 +67,9 @@ describe("Progress tone and description", () => {
 
     for (const name of ["Broken", "Inverted"]) {
       const bar = screen.getByRole("progressbar", { name });
-      expect(bar).toHaveClass("snui-progress--indeterminate");
-      expect(bar).not.toHaveAttribute("aria-valuenow");
+      expectIndeterminate(bar);
       expect(bar).toHaveAttribute("aria-valuemin", "0");
       expect(bar).toHaveAttribute("aria-valuemax", "100");
-      expect(bar.querySelector(".snui-progress__fill")).not.toHaveAttribute(
-        "style",
-      );
     }
   });
 });
@@ -132,11 +137,8 @@ describe("Progress", () => {
   it("omits aria-valuenow when indeterminate", () => {
     renderInPanel(<Progress label="Connecting" />);
 
-    const bar = screen.getByRole("progressbar", { name: "Connecting" });
-    expect(bar).not.toHaveAttribute("aria-valuenow");
-    expect(bar).toHaveClass("snui-progress--indeterminate");
-    expect(bar.querySelector(".snui-progress__fill")).not.toHaveAttribute(
-      "style",
+    expectIndeterminate(
+      screen.getByRole("progressbar", { name: "Connecting" }),
     );
   });
 
@@ -147,19 +149,7 @@ describe("Progress", () => {
   ])("treats a %s value as indeterminate", (_name, value) => {
     renderInPanel(<Progress label="Indexing" value={value} />);
 
-    const bar = screen.getByRole("progressbar", { name: "Indexing" });
-    expect(bar).not.toHaveAttribute("aria-valuenow");
-    expect(bar).toHaveClass("snui-progress--indeterminate");
-    expect(bar.querySelector(".snui-progress__fill")).not.toHaveAttribute(
-      "style",
-    );
-  });
-
-  it("applies the tone class", () => {
-    renderInPanel(<Progress label="Depth alarm" value={80} tone="danger" />);
-
-    const bar = screen.getByRole("progressbar", { name: "Depth alarm" });
-    expect(bar).toHaveClass("snui-progress--tone-danger");
+    expectIndeterminate(screen.getByRole("progressbar", { name: "Indexing" }));
   });
 
   it("forwards the ref to the root element", () => {

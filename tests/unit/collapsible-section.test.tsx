@@ -1,19 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, useEffect, useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import {
-  Button,
-  CollapsibleSection,
-  PanelRoot,
-  TextInput,
-} from "../../src/index.js";
+import { Button, CollapsibleSection, TextInput } from "../../src/index.js";
 import { COLLAPSIBLE_STYLES } from "../../src/styles/collapsible.js";
 import { NARROW_PANEL_QUERY } from "../../src/styles/fragments.js";
 import { ruleBody } from "../css-helpers.js";
-import { follows, panel, renderInPanel } from "../helpers.js";
+import { controlledBy, follows, panel, renderInPanel } from "../helpers.js";
 
-describe("merged collapsible contract", () => {
+describe("CollapsibleSection uncontrolled toggle", () => {
   it("opens uncontrolled from defaultOpen and reports toggle changes", async () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
@@ -248,7 +243,7 @@ describe("collapsible tone, trigger, and ids", () => {
   });
 });
 
-describe("collapsible mount strategies", () => {
+describe("CollapsibleSection open state and mount strategies", () => {
   it("pauses retained effects on collapse while keeping child state", async () => {
     const user = userEvent.setup();
     const lifecycle: string[] = [];
@@ -315,32 +310,13 @@ describe("collapsible mount strategies", () => {
     expect(screen.getByLabelText("Draft")).toHaveValue("initial");
   });
 
-  it("mounts lazily retained content only once it has been opened", async () => {
-    const user = userEvent.setup();
-    renderInPanel(
-      <CollapsibleSection title="Advanced settings" mountStrategy="lazy-retain">
-        <span>Advanced content</span>
-      </CollapsibleSection>,
-    );
-
-    expect(screen.queryByText("Advanced content")).toBeNull();
-    const toggle = screen.getByRole("button", { name: "Advanced settings" });
-    await user.click(toggle);
-    expect(screen.getByText("Advanced content")).toBeVisible();
-
-    await user.click(toggle);
-    expect(screen.getByText("Advanced content")).not.toBeVisible();
-  });
-});
-
-describe("CollapsibleSection open state and mounting", () => {
   it("supports controlled collapsible sections and unmounted content", async () => {
     const user = userEvent.setup();
 
     function Fixture(): React.JSX.Element {
       const [open, setOpen] = useState(false);
       return (
-        <PanelRoot>
+        <>
           <span id="consumer-section-label">Provider status</span>
           <CollapsibleSection
             aria-labelledby="consumer-section-label"
@@ -355,11 +331,11 @@ describe("CollapsibleSection open state and mounting", () => {
           >
             <TextInput aria-label="Advanced value" />
           </CollapsibleSection>
-        </PanelRoot>
+        </>
       );
     }
 
-    render(<Fixture />);
+    renderInPanel(<Fixture />);
     const toggle = screen.getByRole("button", {
       name: "Advanced provider settings",
     });
@@ -394,13 +370,11 @@ describe("CollapsibleSection open state and mounting", () => {
     expect(screen.queryByText("3 checks healthy")).toBeNull();
   });
 
-  it("restores disclosure focus when controlled content closes", async () => {
-    const user = userEvent.setup();
-
+  it("restores disclosure focus when controlled content closes", () => {
     function Fixture(): React.JSX.Element {
       const [open, setOpen] = useState(true);
       return (
-        <PanelRoot>
+        <>
           <Button onClick={() => setOpen(false)}>Close externally</Button>
           <CollapsibleSection
             title="Connection details"
@@ -410,11 +384,11 @@ describe("CollapsibleSection open state and mounting", () => {
           >
             <TextInput aria-label="Focused setting" />
           </CollapsibleSection>
-        </PanelRoot>
+        </>
       );
     }
 
-    render(<Fixture />);
+    renderInPanel(<Fixture />);
     const input = screen.getByRole("textbox", { name: "Focused setting" });
     input.focus();
     expect(input).toHaveFocus();
@@ -424,9 +398,6 @@ describe("CollapsibleSection open state and mounting", () => {
     expect(
       screen.getByRole("button", { name: "Connection details" }),
     ).toHaveFocus();
-    await user.click(
-      screen.getByRole("button", { name: "Connection details" }),
-    );
   });
 
   it("lazily mounts collapsible content and retains its state", async () => {
@@ -444,6 +415,7 @@ describe("CollapsibleSection open state and mounting", () => {
 
     await user.click(toggle);
     const input = screen.getByRole("textbox", { name: "Provider token" });
+    expect(input).toBeVisible();
     await user.type(input, "retained value");
     await user.click(toggle);
 
@@ -475,9 +447,7 @@ describe("CollapsibleSection open state and mounting", () => {
     );
 
     const toggle = screen.getByRole("button", { name: "Sensor details" });
-    const contentTarget = (): HTMLElement | null =>
-      document.getElementById(toggle.getAttribute("aria-controls") ?? "");
-    expect(contentTarget()).not.toBeNull();
+    expect(controlledBy(toggle)).not.toBeNull();
     expect(effectSpy).not.toHaveBeenCalled();
 
     await user.click(toggle);
@@ -488,14 +458,14 @@ describe("CollapsibleSection open state and mounting", () => {
     expect(cleanupSpy).toHaveBeenCalledTimes(1);
     expect(effectSpy).toHaveBeenCalledTimes(1);
     expect(screen.getByText("Probe content")).not.toBeVisible();
-    expect(contentTarget()).not.toBeNull();
+    expect(controlledBy(toggle)).not.toBeNull();
 
     await user.click(toggle);
     expect(effectSpy).toHaveBeenCalledTimes(2);
   });
 });
 
-describe("CollapsibleSection additions", () => {
+describe("CollapsibleSection landmark, leading slot, and variant", () => {
   it("drops the region landmark when asked and keeps the heading", () => {
     renderInPanel(
       <CollapsibleSection title="Advanced" landmark={false}>
@@ -600,17 +570,15 @@ describe("CollapsibleSection narrow rows and wrapped titles", () => {
   });
 
   it("renders the row only around a header summary or actions", () => {
-    const { container, rerender } = render(
-      <PanelRoot>
-        <CollapsibleSection
-          title="Provider status"
-          summary="3 checks healthy"
-          summaryPlacement="header"
-          actions={<Button>Refresh</Button>}
-        >
-          Content
-        </CollapsibleSection>
-      </PanelRoot>,
+    const { container, rerender } = renderInPanel(
+      <CollapsibleSection
+        title="Provider status"
+        summary="3 checks healthy"
+        summaryPlacement="header"
+        actions={<Button>Refresh</Button>}
+      >
+        Content
+      </CollapsibleSection>,
     );
     const row = container.querySelector(
       ".snui-collapsible__header > .snui-collapsible__trailing",
@@ -622,15 +590,15 @@ describe("CollapsibleSection narrow rows and wrapped titles", () => {
 
     // A summary below the header leaves the actions alone in the row.
     rerender(
-      <PanelRoot>
+      panel(
         <CollapsibleSection
           title="Provider status"
           summary="3 checks healthy"
           actions={<Button>Refresh</Button>}
         >
           Content
-        </CollapsibleSection>
-      </PanelRoot>,
+        </CollapsibleSection>,
+      ),
     );
     expect(
       container.querySelector(
@@ -645,11 +613,11 @@ describe("CollapsibleSection narrow rows and wrapped titles", () => {
 
     // With neither, no empty row starts a line of its own under the heading.
     rerender(
-      <PanelRoot>
+      panel(
         <CollapsibleSection title="Provider status" summary="3 checks healthy">
           Content
-        </CollapsibleSection>
-      </PanelRoot>,
+        </CollapsibleSection>,
+      ),
     );
     expect(container.querySelector(".snui-collapsible__trailing")).toBeNull();
   });

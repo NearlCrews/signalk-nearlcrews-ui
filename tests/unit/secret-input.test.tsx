@@ -1,16 +1,40 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import {
+  fireEvent,
+  type RenderResult,
+  render,
+  screen,
+} from "@testing-library/react";
+import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { type SyntheticEvent, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { SecretInput } from "../../src/forms.js";
 import { flushAnimationFrames, renderInPanel } from "../helpers.js";
 
 describe("SecretInput reveal focus", () => {
+  /** Renders a filled token field and hands back its input. */
+  function renderToken(): { input: HTMLInputElement; view: RenderResult } {
+    const view = renderInPanel(
+      <SecretInput aria-label="API token" defaultValue="abcdef" />,
+    );
+    return {
+      input: screen.getByLabelText<HTMLInputElement>("API token"),
+      view,
+    };
+  }
+
+  /** Selects part of the secret from the field, then presses Show. */
+  async function revealWithSelection(
+    user: UserEvent,
+    input: HTMLInputElement,
+  ): Promise<void> {
+    input.focus();
+    input.setSelectionRange(2, 5);
+    await user.click(screen.getByRole("button", { name: "Show" }));
+  }
+
   it("leaves focus on the toggle when a keyboard press follows an abandoned pointer press", async () => {
     const user = userEvent.setup();
-    renderInPanel(<SecretInput aria-label="API token" defaultValue="abcdef" />);
-
-    const input = screen.getByLabelText<HTMLInputElement>("API token");
+    const { input } = renderToken();
     const toggle = screen.getByRole("button", { name: "Show" });
     input.focus();
     input.setSelectionRange(1, 4);
@@ -33,12 +57,8 @@ describe("SecretInput reveal focus", () => {
 
   it("restores the caret when the same press does become a click", async () => {
     const user = userEvent.setup();
-    renderInPanel(<SecretInput aria-label="API token" defaultValue="abcdef" />);
-
-    const input = screen.getByLabelText<HTMLInputElement>("API token");
-    input.focus();
-    input.setSelectionRange(2, 5);
-    await user.click(screen.getByRole("button", { name: "Show" }));
+    const { input } = renderToken();
+    await revealWithSelection(user, input);
 
     expect(input).toHaveFocus();
     expect(input.selectionStart).toBe(2);
@@ -47,9 +67,7 @@ describe("SecretInput reveal focus", () => {
 
   it("leaves focus on the toggle for a keyboard press with no pointer history", async () => {
     const user = userEvent.setup();
-    renderInPanel(<SecretInput aria-label="API token" defaultValue="abcdef" />);
-
-    const input = screen.getByLabelText<HTMLInputElement>("API token");
+    const { input } = renderToken();
     const toggle = screen.getByRole("button", { name: "Show" });
     input.focus();
     await user.tab();
@@ -61,12 +79,8 @@ describe("SecretInput reveal focus", () => {
 
   it("restores the caret again in the frame after the type change", async () => {
     const user = userEvent.setup();
-    renderInPanel(<SecretInput aria-label="API token" defaultValue="abcdef" />);
-
-    const input = screen.getByLabelText<HTMLInputElement>("API token");
-    input.focus();
-    input.setSelectionRange(2, 5);
-    await user.click(screen.getByRole("button", { name: "Show" }));
+    const { input } = renderToken();
+    await revealWithSelection(user, input);
 
     // Stand in for the engine's own final selection reset after the type
     // change, which is what the second restoration is there for.
@@ -81,14 +95,8 @@ describe("SecretInput reveal focus", () => {
   it("drops the pending frame when the field leaves before it runs", async () => {
     const user = userEvent.setup();
     const cancelFrame = vi.spyOn(window, "cancelAnimationFrame");
-    const view = renderInPanel(
-      <SecretInput aria-label="API token" defaultValue="abcdef" />,
-    );
-
-    const input = screen.getByLabelText<HTMLInputElement>("API token");
-    input.focus();
-    input.setSelectionRange(2, 5);
-    await user.click(screen.getByRole("button", { name: "Show" }));
+    const { input, view } = renderToken();
+    await revealWithSelection(user, input);
 
     view.unmount();
     // Nothing is left to focus a field that is no longer on screen.
@@ -138,7 +146,7 @@ describe("SecretInput arrangement", () => {
   });
 });
 
-describe("SecretInput", () => {
+describe("SecretInput reveal state", () => {
   it("toggles an uncontrolled secret without submitting its form", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn((event: SyntheticEvent<HTMLFormElement>) =>
@@ -221,7 +229,7 @@ describe("SecretInput", () => {
   });
 });
 
-describe("SecretInput", () => {
+describe("SecretInput attributes", () => {
   it("ties the reveal button to the input through aria-controls", () => {
     renderInPanel(
       <>

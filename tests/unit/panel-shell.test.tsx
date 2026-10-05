@@ -1,10 +1,4 @@
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, useEffect } from "react";
 import {
@@ -24,7 +18,8 @@ import {
 } from "../../src/index.js";
 import { Dialog } from "../../src/overlays.js";
 import type * as ReactVersion from "../../src/utils/react-version.js";
-import { follows, renderInPanel } from "../helpers.js";
+import { LIVE_REGION_BLANK_MS } from "../../src/utils/repeat-announcement.js";
+import { advanceTimers, follows, renderInPanel } from "../helpers.js";
 import { Bomb, failure } from "./lib/failing-content.js";
 
 /** Whether the shell should read the host's React as below the floor. */
@@ -45,7 +40,6 @@ function themeGroup(): HTMLElement {
 }
 
 afterEach(() => {
-  failure.armed = true;
   reactTooOld = false;
 });
 
@@ -103,9 +97,7 @@ function regionMessages(region: HTMLElement): string[] {
 
 /** Waits out the beat the shell's regions exist empty before speaking. */
 function settleRegions(): void {
-  act(() => {
-    vi.advanceTimersByTime(100);
-  });
+  advanceTimers(LIVE_REGION_BLANK_MS);
 }
 
 describe("PanelShell", () => {
@@ -185,6 +177,19 @@ describe("PanelShell", () => {
     ).toContainElement(themeGroup());
   });
 
+  it("resolves a between placement with no title to the trailing edge", () => {
+    render(
+      <PanelShell themeToggle="between">
+        <p>Body</p>
+      </PanelShell>,
+    );
+
+    // Without a title there is nothing to sit between, and leading the panel
+    // would hand the theme selector the panel's first tab stop.
+    const toggle = themeGroup();
+    expect(follows(screen.getByText("Body"), toggle)).toBe(true);
+  });
+
   it("forwards theme toggle props and omits the title block without a title", () => {
     render(
       <PanelShell themeToggleProps={{ choices: ["light", "dark"] }}>
@@ -210,44 +215,68 @@ describe("PanelShell", () => {
     expect(screen.queryByRole("heading")).toBeNull();
   });
 
-  it("mounts both announcer regions empty and speaks politely on request", async () => {
-    const user = userEvent.setup();
-    render(
-      <PanelShell themeToggle="none">
-        <Announce message="Three paths detected." />
+  it("gives the outer stack the requested gap", () => {
+    // The spacing scale reaches the DOM only as the stack's gap class.
+    const { container, rerender } = render(
+      <PanelShell title="Sources" themeToggle="none" gap={2}>
+        <p>Body</p>
       </PanelShell>,
     );
 
-    // The regions exist before the first message, which is the whole reason
-    // the shell owns them rather than each panel mounting its own.
-    const polite = screen.getByRole("status");
-    const assertive = screen.getByRole("alert");
-    expect(polite.textContent).toBe("");
-    expect(assertive.textContent).toBe("");
-
-    await user.click(screen.getByRole("button", { name: "Announce" }));
-    await waitFor(() =>
-      expect(polite).toHaveTextContent("Three paths detected."),
+    expect(container.querySelector(".snui-stack")).toHaveClass(
+      "snui-stack--gap-2",
     );
-    expect(assertive.textContent).toBe("");
-  });
 
-  it("interrupts through the assertive region when asked", async () => {
-    const user = userEvent.setup();
-    render(
-      <PanelShell themeToggle="none">
-        <Announce assertive message="Provider offline." />
+    rerender(
+      <PanelShell title="Sources" themeToggle="none">
+        <p>Body</p>
       </PanelShell>,
     );
-
-    await user.click(screen.getByRole("button", { name: "Announce" }));
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("Provider offline."),
+    expect(container.querySelector(".snui-stack")).toHaveClass(
+      "snui-stack--gap-4",
     );
-    expect(screen.getByRole("status").textContent).toBe("");
   });
 
   describe("announcer", () => {
+    it("mounts both announcer regions empty and speaks politely on request", async () => {
+      const user = userEvent.setup();
+      render(
+        <PanelShell themeToggle="none">
+          <Announce message="Three paths detected." />
+        </PanelShell>,
+      );
+
+      // The regions exist before the first message, which is the whole reason
+      // the shell owns them rather than each panel mounting its own.
+      const polite = screen.getByRole("status");
+      const assertive = screen.getByRole("alert");
+      expect(polite.textContent).toBe("");
+      expect(assertive.textContent).toBe("");
+
+      await user.click(screen.getByRole("button", { name: "Announce" }));
+      await waitFor(() =>
+        expect(polite).toHaveTextContent("Three paths detected."),
+      );
+      expect(assertive.textContent).toBe("");
+    });
+
+    it("interrupts through the assertive region when asked", async () => {
+      const user = userEvent.setup();
+      render(
+        <PanelShell themeToggle="none">
+          <Announce assertive message="Provider offline." />
+        </PanelShell>,
+      );
+
+      await user.click(screen.getByRole("button", { name: "Announce" }));
+      await waitFor(() =>
+        expect(screen.getByRole("alert")).toHaveTextContent(
+          "Provider offline.",
+        ),
+      );
+      expect(screen.getByRole("status").textContent).toBe("");
+    });
+
     it("keeps both regions exposed while a modal dialog is open", async () => {
       const user = userEvent.setup();
       render(
@@ -375,9 +404,7 @@ describe("PanelShell", () => {
       settleRegions();
 
       fireEvent.click(screen.getByRole("button", { name: "Loading" }));
-      act(() => {
-        vi.advanceTimersByTime(3_000);
-      });
+      advanceTimers(3_000);
       fireEvent.click(screen.getByRole("button", { name: "Failure" }));
       expect(screen.getByRole("status")).toHaveTextContent(
         "Loading conversions.",
@@ -387,15 +414,11 @@ describe("PanelShell", () => {
       // Outdated status left in a hidden region is the first thing a reader
       // meets at the top of the panel in browse mode, so each message leaves
       // on its own clock, the way React Aria's announcer retires its own.
-      act(() => {
-        vi.advanceTimersByTime(4_000);
-      });
+      advanceTimers(4_000);
       expect(screen.getByRole("status").textContent).toBe("");
       expect(screen.getByRole("alert")).toHaveTextContent("Provider offline.");
 
-      act(() => {
-        vi.advanceTimersByTime(3_000);
-      });
+      advanceTimers(3_000);
       expect(screen.getByRole("alert").textContent).toBe("");
     });
 
@@ -411,26 +434,23 @@ describe("PanelShell", () => {
       // arrangement a reader misses, so they stay empty for one beat first.
       const polite = screen.getByRole("status");
       expect(polite.textContent).toBe("");
-      act(() => {
-        vi.advanceTimersByTime(99);
-      });
+      advanceTimers(LIVE_REGION_BLANK_MS - 1);
       expect(polite.textContent).toBe("");
       settleRegions();
       expect(polite).toHaveTextContent("Status unavailable.");
     });
 
-    it("ignores a blank message", async () => {
-      const user = userEvent.setup();
+    it("ignores a blank message", () => {
+      vi.useFakeTimers();
       render(
         <PanelShell themeToggle="none">
           <Announce message="   " />
         </PanelShell>,
       );
+      settleRegions();
 
-      await user.click(screen.getByRole("button", { name: "Announce" }));
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 150));
-      });
+      fireEvent.click(screen.getByRole("button", { name: "Announce" }));
+      settleRegions();
       expect(screen.getByRole("status").children).toHaveLength(0);
     });
 
@@ -459,19 +479,6 @@ describe("PanelShell", () => {
       );
       expect(screen.queryByRole("status")).toBeNull();
     });
-  });
-
-  it("resolves a between placement with no title to the trailing edge", () => {
-    render(
-      <PanelShell themeToggle="between">
-        <p>Body</p>
-      </PanelShell>,
-    );
-
-    // Without a title there is nothing to sit between, and leading the panel
-    // would hand the theme selector the panel's first tab stop.
-    const toggle = themeGroup();
-    expect(follows(screen.getByText("Body"), toggle)).toBe(true);
   });
 
   describe("heading levels", () => {
@@ -562,21 +569,8 @@ describe("PanelShell", () => {
   });
 
   describe("without native CSS scope", () => {
-    const descriptor = Object.getOwnPropertyDescriptor(window, "CSSScopeRule");
-
     beforeEach(() => {
-      Object.defineProperty(window, "CSSScopeRule", {
-        configurable: true,
-        value: undefined,
-      });
-    });
-
-    afterEach(() => {
-      if (descriptor === undefined) {
-        Reflect.deleteProperty(window, "CSSScopeRule");
-      } else {
-        Object.defineProperty(window, "CSSScopeRule", descriptor);
-      }
+      vi.stubGlobal("CSSScopeRule", undefined);
     });
 
     it("renders the compatibility notice instead of a panel root", () => {
@@ -837,28 +831,6 @@ describe("PanelShell error boundary", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(
         "This panel stopped working",
       ),
-    );
-  });
-
-  it("gives the outer stack the requested gap", () => {
-    // The spacing scale reaches the DOM only as the stack's gap class.
-    const { container, rerender } = render(
-      <PanelShell title="Sources" themeToggle="none" gap={2}>
-        <p>Body</p>
-      </PanelShell>,
-    );
-
-    expect(container.querySelector(".snui-stack")).toHaveClass(
-      "snui-stack--gap-2",
-    );
-
-    rerender(
-      <PanelShell title="Sources" themeToggle="none">
-        <p>Body</p>
-      </PanelShell>,
-    );
-    expect(container.querySelector(".snui-stack")).toHaveClass(
-      "snui-stack--gap-4",
     );
   });
 });

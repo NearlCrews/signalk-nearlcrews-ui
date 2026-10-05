@@ -9,27 +9,27 @@ import {
   Row,
   type RowProps,
 } from "../../src/data-grid.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { callsMentioning, panel, renderInPanel } from "../helpers.js";
 import {
   BOATS,
   type Boat,
+  boatFleet,
   boatGrid,
   bodyRows,
+  CELL_SELECTOR,
   cellAt,
+  keyedBoatGrid,
   NAME_DEPTH_COLUMNS,
   renderBoatRow,
   renderGrid,
+  renderKeyedBoatRow,
   rowAt,
   rowNames,
 } from "./lib/data-grid-fixture.js";
 
 describe("DataGrid", () => {
   describe("virtualization", () => {
-    const fleet: readonly Boat[] = Array.from({ length: 20 }, (_, index) => ({
-      id: `boat-${String(index)}`,
-      name: `Boat ${String(index)}`,
-      depth: index,
-    }));
+    const fleet = boatFleet(20);
 
     it("renders every row below the threshold", () => {
       const { container } = renderGrid({
@@ -167,10 +167,7 @@ describe("DataGrid", () => {
       const indices = [...bodyRows(container)].map((row) =>
         Number(row.getAttribute("aria-rowindex")),
       );
-      expect(indices).toEqual([...indices].sort((a, b) => a - b));
-      indices.forEach((index, position) => {
-        expect(index).toBe(2 + position);
-      });
+      expect(indices).toEqual(indices.map((_, position) => 2 + position));
     });
 
     it("keeps explicit grid roles without relying on native table layout", () => {
@@ -186,12 +183,7 @@ describe("DataGrid", () => {
         "role",
         "rowgroup",
       );
-      for (const row of container.querySelectorAll("[role='row']")) {
-        expect(row).toHaveAttribute("role", "row");
-      }
-      const cells = [
-        ...container.querySelectorAll("[role='rowheader'], [role='gridcell']"),
-      ];
+      const cells = [...container.querySelectorAll(CELL_SELECTOR)];
       expect(cells.length).toBeGreaterThan(0);
       const rowheaders = cells.filter(
         (cell) => cell.getAttribute("role") === "rowheader",
@@ -200,10 +192,9 @@ describe("DataGrid", () => {
         (cell) => cell.getAttribute("role") === "gridcell",
       );
       // RAC stamps rowheader on the row-header column; every other cell is a
-      // gridcell. No cell may carry a third value or none.
+      // gridcell.
       expect(rowheaders.length).toBeGreaterThan(0);
       expect(gridcells.length).toBeGreaterThan(0);
-      expect(rowheaders.length + gridcells.length).toBe(cells.length);
     });
 
     it("preserves consumer row styles in virtualized mode", () => {
@@ -360,13 +351,24 @@ describe("DataGrid", () => {
       );
     }
 
+    // The virtualizer decides which rows jsdom's empty viewport shows, so
+    // every rendered row is read rather than one by position.
+    function depths(container: HTMLElement): string[] {
+      return [...bodyRows(container)].map((row) => cellAt(row, 1).textContent);
+    }
+
+    /** Fails unless at least one row shows, and every one in `unit`. */
+    function expectEveryDepthIn(container: HTMLElement, unit: string): void {
+      const shown = depths(container);
+      expect(shown.length).toBeGreaterThan(0);
+      for (const depth of shown) {
+        expect(depth).toMatch(new RegExp(`^\\d+ ${unit}$`));
+      }
+    }
+
     it.each(["never", "always"] as const)(
       "rebuilds rows from a new renderRow over the same items (virtualize %s)",
       (virtualize) => {
-        // The virtualizer decides which rows jsdom's empty viewport shows, so
-        // every rendered row is read rather than one by position.
-        const depths = (container: HTMLElement): string[] =>
-          [...bodyRows(container)].map((row) => cellAt(row, 1).textContent);
         const view = renderGrid({ renderRow: depthRow("m"), virtualize });
         expect(depths(view.container)).toContain("12 m");
 
@@ -374,9 +376,7 @@ describe("DataGrid", () => {
           panel(boatGrid({ renderRow: depthRow("ft"), virtualize })),
         );
 
-        const after = depths(view.container);
-        expect(after.length).toBeGreaterThan(0);
-        for (const depth of after) expect(depth).toMatch(/^\d+ ft$/);
+        expectEveryDepthIn(view.container, "ft");
       },
     );
 
@@ -402,33 +402,17 @@ describe("DataGrid", () => {
           );
         const tree = (unit: string): ReactElement =>
           panel(
-            <DataGrid
-              aria-label="Boats"
-              columns={NAME_DEPTH_COLUMNS}
-              items={BOATS}
-              renderRow={functionDepthRow(unit)}
-              virtualize={virtualize}
-            >
-              {(column) => (
-                <Column
-                  id={column.key}
-                  numeric={numeric && column.key === "depth"}
-                >
-                  {column.key}
-                </Column>
-              )}
-            </DataGrid>,
+            keyedBoatGrid((key) => ({ numeric: numeric && key === "depth" }), {
+              renderRow: functionDepthRow(unit),
+              virtualize,
+            }),
           );
-        const depths = (container: HTMLElement): string[] =>
-          [...bodyRows(container)].map((row) => cellAt(row, 1).textContent);
         const view = render(tree("m"));
         expect(depths(view.container)).toContain("12 m");
 
         view.rerender(tree("ft"));
 
-        const after = depths(view.container);
-        expect(after.length).toBeGreaterThan(0);
-        for (const depth of after) expect(depth).toMatch(/^\d+ ft$/);
+        expectEveryDepthIn(view.container, "ft");
       },
     );
 
@@ -438,42 +422,19 @@ describe("DataGrid", () => {
       const error = vi
         .spyOn(console, "error")
         .mockImplementation(() => undefined);
-      const renderRow = (boat: Boat): ReactElement<RowProps<Boat>> => (
-        <Row columns={NAME_DEPTH_COLUMNS} dependencies={[boat.depth]}>
-          {(column) => (
-            <Cell>{column.key === "name" ? boat.name : boat.depth}</Cell>
-          )}
-        </Row>
-      );
+      const renderRow = (boat: Boat): ReactElement<RowProps<Boat>> =>
+        renderKeyedBoatRow(boat, { dependencies: [boat.depth] });
       const tree = (numeric: boolean): ReactElement =>
         panel(
-          <DataGrid
-            aria-label="Boats"
-            columns={NAME_DEPTH_COLUMNS}
-            items={BOATS}
-            renderRow={renderRow}
-          >
-            {(column) => (
-              <Column
-                id={column.key}
-                numeric={numeric && column.key === "depth"}
-              >
-                {column.key}
-              </Column>
-            )}
-          </DataGrid>,
+          keyedBoatGrid((key) => ({ numeric: numeric && key === "depth" }), {
+            renderRow,
+          }),
         );
       const view = render(tree(false));
       view.rerender(tree(true));
       view.rerender(tree(false));
 
-      const sizeChanges = error.mock.calls.filter((args) =>
-        args.some(
-          (arg) =>
-            typeof arg === "string" && arg.includes("changed size between"),
-        ),
-      );
-      expect(sizeChanges).toEqual([]);
+      expect(callsMentioning(error, "changed size between")).toEqual([]);
       expect(cellAt(rowAt(view.container, 0), 1)).not.toHaveAttribute(
         "data-snui-numeric",
       );
@@ -510,31 +471,12 @@ describe("DataGrid", () => {
     });
 
     it("carries a column option change to cells a row renders from a function", () => {
-      const renderRow = (boat: Boat): ReactElement<RowProps<Boat>> => (
-        <Row columns={NAME_DEPTH_COLUMNS}>
-          {(column) => (
-            <Cell>{column.key === "name" ? boat.name : boat.depth}</Cell>
-          )}
-        </Row>
-      );
       const tree = (nameWrap: boolean): ReactElement =>
         panel(
-          <DataGrid
-            aria-label="Boats"
-            columns={NAME_DEPTH_COLUMNS}
-            items={BOATS}
-            renderRow={renderRow}
-          >
-            {(column) => (
-              <Column
-                id={column.key}
-                numeric={column.key === "depth"}
-                wrap={column.key === "name" && nameWrap}
-              >
-                {column.key}
-              </Column>
-            )}
-          </DataGrid>,
+          keyedBoatGrid((key) => ({
+            numeric: key === "depth",
+            wrap: key === "name" && nameWrap,
+          })),
         );
       const view = render(tree(false));
       expect(cellAt(rowAt(view.container, 0), 0)).not.toHaveAttribute(
@@ -587,11 +529,7 @@ describe("DataGrid", () => {
   });
 
   describe("the cell that holds focus", () => {
-    const fleet: readonly Boat[] = Array.from({ length: 12 }, (_, index) => ({
-      id: `boat-${String(index)}`,
-      name: `Boat ${String(index)}`,
-      depth: index,
-    }));
+    const fleet = boatFleet(12);
 
     /**
      * A body row by its position in the data. The virtualizer may place a
@@ -617,13 +555,11 @@ describe("DataGrid", () => {
       // anew, so the rows focus moves between are rebuilt and no other.
       const user = userEvent.setup();
       const renderRow = vi.fn(renderBoatRow);
-      const { container } = renderInPanel(
-        boatGrid({
-          items: fleet,
-          renderRow,
-          virtualize: "always",
-        }),
-      );
+      const { container } = renderGrid({
+        items: fleet,
+        renderRow,
+        virtualize: "always",
+      });
       const first = dataRow(container, 0);
       first.focus();
       renderRow.mockClear();
@@ -679,9 +615,11 @@ describe("DataGrid", () => {
     it("rebuilds nothing when the grid does not virtualize", async () => {
       const user = userEvent.setup();
       const renderRow = vi.fn(renderBoatRow);
-      const { container } = renderInPanel(
-        boatGrid({ items: fleet, renderRow, virtualize: "never" }),
-      );
+      const { container } = renderGrid({
+        items: fleet,
+        renderRow,
+        virtualize: "never",
+      });
       rowAt(container, 0).focus();
       renderRow.mockClear();
 

@@ -29,13 +29,37 @@ export function focusedElement(ownerDocument: Document): HTMLElement | null {
 /**
  * Whether focus has fallen to the document body, which is where a close that
  * had nowhere to hand focus back to leaves it. The body is what
- * `activeElement` reports when nothing is focused, so the test that a reader
- * was left nowhere is written once rather than per overlay.
+ * `activeElement` reports when nothing is focused, so an overlay that asks
+ * whether its close stranded the reader asks this.
  *
  * @internal
  */
 export function focusIsOnBody(ownerDocument: Document): boolean {
   return ownerDocument.activeElement === ownerDocument.body;
+}
+
+/**
+ * Whether a reader holds focus on nothing they could act from: the body, or
+ * no element at all, as between documents. The test that a reader was left
+ * nowhere, written once.
+ *
+ * @internal
+ */
+export function focusIsNowhere(ownerDocument: Document): boolean {
+  return (
+    (focusedElement(ownerDocument) ?? ownerDocument.body) === ownerDocument.body
+  );
+}
+
+/**
+ * Whether an element is the one its document has focused. Asked after a
+ * `focus()` call to learn whether the element took it, and before a blur to
+ * learn whether there is anything to give up.
+ *
+ * @internal
+ */
+export function isFocused(element: Element): boolean {
+  return element.ownerDocument.activeElement === element;
 }
 
 /**
@@ -66,7 +90,7 @@ export function focusPanelRoot(panelRoot: HTMLElement): void {
   // A root that refused the focus hands the attribute back now: the blur that
   // would return it never comes, and a tabindex left behind makes the root a
   // click-focus target for the rest of the panel's life.
-  if (panelRoot.ownerDocument.activeElement !== panelRoot) returnTabIndex?.();
+  if (!isFocused(panelRoot)) returnTabIndex?.();
 }
 
 export interface RevealOptions {

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createDocumentRegistry,
   type DocumentRegistryRecord,
+  once,
 } from "../../src/utils/document-registry.js";
 
 interface FixtureValue {
@@ -177,5 +178,15 @@ describe("createDocumentRegistry", () => {
 
     registry.release(document, "key");
     registry.release(otherDocument, "key");
+  });
+});
+
+describe("once", () => {
+  it("releases at most once however often it is called", () => {
+    const release = vi.fn();
+    const guarded = once(release);
+    guarded();
+    guarded();
+    expect(release).toHaveBeenCalledOnce();
   });
 });

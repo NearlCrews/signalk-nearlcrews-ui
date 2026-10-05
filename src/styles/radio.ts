@@ -8,16 +8,17 @@ import {
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
   FORCED_COLORS_INVALID_DECLARATIONS,
   focusRingDeclarations,
-  GLYPH_BASELINE_NUDGE,
-  SELECTION_GLYPH_SIZE,
+  SELECTION_GLYPH_DECLARATIONS,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
 /**
- * Radio and radio group styles. Installed by `RadioGroup` through
- * `useOptionalModuleStyles`, which covers the `Radio` children it wraps, so a
- * panel without a radio group never injects them. The rule that hides an
+ * Radio and radio group styles. `RadioGroup` and each `Radio` install them
+ * through `useOptionalModuleStyles`, so a panel without a radio never injects
+ * them. The option installs as well because it can also sit inside a React
+ * Aria `RadioGroup` the package did not draw, and the install is reference
+ * counted, so the group's options add no second sheet. The rule that hides an
  * empty error region stays in the root sheet, shared with every other field.
  */
 export const RADIO_STYLES: StyleModule = {
@@ -32,7 +33,6 @@ ${CONTROL_LABEL_DECLARATIONS}
 }
 
 .snui-radio-group__description {
-  text-wrap: pretty;
   display: block;
 ${FIELD_DESCRIPTION_DECLARATIONS}
 }
@@ -73,17 +73,8 @@ ${CONTROL_ROW_DECLARATIONS}
 }
 
 .snui-radio__control {
-  display: grid;
-  place-content: center;
-  width: ${SELECTION_GLYPH_SIZE};
-  height: ${SELECTION_GLYPH_SIZE};
-  margin: ${GLYPH_BASELINE_NUDGE} 0 0;
-  border: 2px solid var(--snui-color-border);
+${SELECTION_GLYPH_DECLARATIONS}
   border-radius: 50%;
-  background: var(--snui-color-surface);
-  transition:
-    background-color var(--snui-transition-fast),
-    border-color var(--snui-transition-fast);
 }
 
 .snui-radio__button[data-hovered]:not([data-disabled]) .snui-radio__control {
@@ -167,8 +158,8 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
     background: Highlight;
   }
 
+  /* The dot is the dial's own pseudo-element, so it inherits the opt-out. */
   .snui-radio__button[data-selected] .snui-radio__control::before {
-    forced-color-adjust: none;
     background: HighlightText;
   }
 

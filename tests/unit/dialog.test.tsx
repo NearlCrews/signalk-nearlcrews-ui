@@ -11,12 +11,7 @@ import { createRef, useState } from "react";
 import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { describe, expect, it, vi } from "vitest";
 
-import {
-  Button,
-  InlineConfirm,
-  PanelRoot,
-  type PanelRootProps,
-} from "../../src/index.js";
+import { Button, InlineConfirm, PanelRoot } from "../../src/index.js";
 import {
   AlertDialog,
   type AlertDialogProps,
@@ -29,18 +24,57 @@ import {
   PanelPortalProvider,
   usePanelPortalContainer,
 } from "../../src/utils/portal.js";
-import { ruleBody } from "../css-helpers.js";
-import { flushAnimationFrames, renderInPanel } from "../helpers.js";
+import { ruleBody, stylesFrom } from "../css-helpers.js";
+import {
+  flushAnimationFrames,
+  panelRootOf,
+  renderInPanel,
+} from "../helpers.js";
+
+/** The dialog most specs here mount, with the caller's props. */
+function dialogElement(
+  props: Omit<DialogProps, "children" | "title"> = {},
+): React.JSX.Element {
+  return (
+    <Dialog title="Connection settings" {...props}>
+      <p>Dialog body</p>
+    </Dialog>
+  );
+}
 
 function renderDialog(
   props: Omit<DialogProps, "children" | "title"> = {},
-  panelProps?: Omit<PanelRootProps, "children">,
 ): RenderResult {
-  return renderInPanel(
-    <Dialog title="Connection settings" {...props}>
-      <p>Dialog body</p>
-    </Dialog>,
-    panelProps,
+  return renderInPanel(dialogElement(props));
+}
+
+/** The open dialog the placement rejections mount. */
+const OPEN_DIALOG = dialogElement({ defaultOpen: true });
+
+interface ControlledDialogProps
+  extends Omit<DialogProps, "children" | "open" | "title"> {
+  readonly initiallyOpen?: boolean;
+}
+
+/** A dialog whose owner holds the open state, beside the button that opens it. */
+function ControlledDialog({
+  initiallyOpen = false,
+  onOpenChange,
+  ...props
+}: ControlledDialogProps): React.JSX.Element {
+  const [open, setOpen] = useState(initiallyOpen);
+  return (
+    <PanelRoot>
+      <Button onClick={() => setOpen(true)}>Open dialog</Button>
+      {dialogElement({
+        ...props,
+        open,
+        onOpenChange: (next) => {
+          onOpenChange?.(next);
+          setOpen(next);
+        },
+      })}
+    </PanelRoot>
   );
 }
 
@@ -73,46 +107,31 @@ function getScrim(container: HTMLElement): Element {
 
 describe("Dialog", () => {
   it("rejects rendering outside PanelRoot", () => {
-    expect(() =>
-      render(
-        <Dialog title="Connection settings" defaultOpen>
-          <p>Dialog body</p>
-        </Dialog>,
-      ),
-    ).toThrow(
+    expect(() => render(OPEN_DIALOG)).toThrow(
       "signalk-nearlcrews-ui: Dialog must be rendered inside PanelRoot.",
     );
   });
 
-  it("rejects a nested provider that redirects its portal outside PanelRoot", () => {
+  it.each([
+    [
+      "rejects a nested provider that redirects its portal outside PanelRoot",
+      () => document.body,
+      "The resolved container is another element.",
+    ],
+    [
+      "names a cleared portal container apart from a redirected one",
+      null,
+      "No portal container is installed.",
+    ],
+  ])("%s", (_title, getContainer, reason) => {
     expect(() =>
-      render(
-        <PanelRoot>
-          <UNSAFE_PortalProvider getContainer={() => document.body}>
-            <Dialog title="Connection settings" defaultOpen>
-              <p>Dialog body</p>
-            </Dialog>
-          </UNSAFE_PortalProvider>
-        </PanelRoot>,
+      renderInPanel(
+        <UNSAFE_PortalProvider getContainer={getContainer}>
+          {OPEN_DIALOG}
+        </UNSAFE_PortalProvider>,
       ),
     ).toThrow(
-      "signalk-nearlcrews-ui: Dialog portal container must be its owning PanelRoot. The resolved container is another element.",
-    );
-  });
-
-  it("names a cleared portal container apart from a redirected one", () => {
-    expect(() =>
-      render(
-        <PanelRoot>
-          <UNSAFE_PortalProvider getContainer={null}>
-            <Dialog title="Connection settings" defaultOpen>
-              <p>Dialog body</p>
-            </Dialog>
-          </UNSAFE_PortalProvider>
-        </PanelRoot>,
-      ),
-    ).toThrow(
-      "signalk-nearlcrews-ui: Dialog portal container must be its owning PanelRoot. No portal container is installed.",
+      `signalk-nearlcrews-ui: Dialog portal container must be its owning PanelRoot. ${reason}`,
     );
   });
 
@@ -136,26 +155,7 @@ describe("Dialog", () => {
     const user = userEvent.setup();
     const onOpenChange = vi.fn();
 
-    function Harness(): React.JSX.Element {
-      const [open, setOpen] = useState(false);
-      return (
-        <PanelRoot>
-          <Button onClick={() => setOpen(true)}>Open dialog</Button>
-          <Dialog
-            title="Connection settings"
-            open={open}
-            onOpenChange={(next) => {
-              onOpenChange(next);
-              setOpen(next);
-            }}
-          >
-            <p>Dialog body</p>
-          </Dialog>
-        </PanelRoot>
-      );
-    }
-
-    render(<Harness />);
+    render(<ControlledDialog onOpenChange={onOpenChange} />);
     expect(screen.queryByRole("dialog")).toBeNull();
 
     await user.click(screen.getByRole("button", { name: "Open dialog" }));
@@ -304,28 +304,16 @@ describe("Dialog", () => {
     const onCancel = vi.fn();
     let closeFromAction: (() => void) | undefined;
 
-    function Harness(): React.JSX.Element {
-      const [open, setOpen] = useState(true);
-      return (
-        <PanelRoot>
-          <Button onClick={() => setOpen(true)}>Open dialog</Button>
-          <Dialog
-            title="Connection settings"
-            open={open}
-            onOpenChange={setOpen}
-            onCancel={onCancel}
-            actions={(close) => {
-              closeFromAction = close;
-              return <Button onClick={close}>Done</Button>;
-            }}
-          >
-            <p>Dialog body</p>
-          </Dialog>
-        </PanelRoot>
-      );
-    }
-
-    render(<Harness />);
+    render(
+      <ControlledDialog
+        initiallyOpen
+        onCancel={onCancel}
+        actions={(close) => {
+          closeFromAction = close;
+          return <Button onClick={close}>Done</Button>;
+        }}
+      />,
+    );
 
     // Escape closes first, then the action's own close arrives late, as an
     // asynchronous save that finished after the user gave up would.
@@ -423,10 +411,9 @@ describe("Dialog", () => {
   it("portals inside the panel root element", () => {
     const { container } = renderDialog({ defaultOpen: true });
 
-    const root = container.querySelector(".snui-root");
-    expect(root).not.toBeNull();
+    const root = panelRootOf(container);
     const dialog = screen.getByRole("dialog");
-    expect(root?.contains(dialog)).toBe(true);
+    expect(root.contains(dialog)).toBe(true);
     expect(dialog.closest(".snui-root")).toBe(root);
   });
 
@@ -594,8 +581,7 @@ describe("Dialog", () => {
     // The button that opened the dialog is gone, so react-aria has nothing to
     // restore to; focus must stay in the panel rather than drop to the body.
     await flushAnimationFrames();
-    const root = container.querySelector(".snui-root");
-    expect(document.activeElement).toBe(root);
+    expect(document.activeElement).toBe(panelRootOf(container));
   });
 
   it("supports an explicit heading level for the title", () => {
@@ -814,9 +800,7 @@ describe("dialog style module", () => {
   it("stretches every narrow-panel action, a button with a visible reason included", () => {
     // A button that shows why it is blocked is wrapped with its reason, and
     // the wrapper, not the button, is then the row's child.
-    const narrow = DIALOG_STYLES.styles.slice(
-      DIALOG_STYLES.styles.indexOf("@container"),
-    );
+    const narrow = stylesFrom(DIALOG_STYLES.styles, "@container");
     expect(
       ruleBody(
         narrow,

@@ -1,5 +1,5 @@
-import { act, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FreshnessNote } from "../../src/components/FreshnessNote.js";
 import { usePollFreshness } from "../../src/hooks/use-poll-freshness.js";
@@ -9,13 +9,51 @@ import {
 } from "../../src/utils/announcer.js";
 import { formatRelativeAgeSince } from "../../src/utils/format-relative-age.js";
 import { resolveFreshness } from "../../src/utils/freshness.js";
+import { advanceTimers, stubDocumentHidden } from "../helpers.js";
+import { DAY_MS, NOW } from "./lib/clock.js";
 
-/** The instant every clock-driven spec measures from. */
-const NOW = Date.UTC(2026, 8, 28, 12, 0, 0);
+describe("resolveFreshness", () => {
+  it("reports no age and no staleness before the first sample", () => {
+    expect(resolveFreshness(undefined, NOW, 1_000)).toEqual({
+      ageMs: undefined,
+      stale: false,
+    });
+    expect(resolveFreshness("not a date", NOW, 1_000).stale).toBe(false);
+  });
+
+  it("measures the age of the last sample", () => {
+    expect(resolveFreshness(NOW - 2_500, NOW, 10_000)).toEqual({
+      ageMs: 2_500,
+      stale: false,
+    });
+  });
+
+  it("goes stale past the threshold", () => {
+    expect(resolveFreshness(NOW - 10_001, NOW, 10_000).stale).toBe(true);
+  });
+
+  it("never goes stale without a threshold", () => {
+    expect(resolveFreshness(NOW - 60_000, NOW, 0).stale).toBe(false);
+  });
+
+  it("accepts the timestamp forms a Signal K delta carries", () => {
+    const iso = new Date(NOW - 1_000).toISOString();
+    expect(resolveFreshness(iso, NOW, 10_000).ageMs).toBe(1_000);
+  });
+
+  it("gives a sample past the Date range no age rather than a huge one", () => {
+    for (const sample of [1e16, -1e16]) {
+      expect(resolveFreshness(sample, NOW, 10_000)).toEqual({
+        ageMs: undefined,
+        stale: false,
+      });
+    }
+  });
+});
 
 describe("resolveFreshness clock skew", () => {
   it("reads a sample a little ahead of the browser as fresh", () => {
-    for (const aheadMs of [1, 30_000, 60_000]) {
+    for (const aheadMs of [1, 5_000, 30_000, 60_000]) {
       expect(resolveFreshness(NOW + aheadMs, NOW, 10_000)).toEqual({
         ageMs: 0,
         stale: false,
@@ -52,6 +90,7 @@ describe("resolveFreshness clock skew", () => {
   });
 });
 
+/** Prints what the hook reports: the stale flag as text, the age beside it. */
 function FreshnessProbe({
   lastUpdated,
   staleAfterMs,
@@ -61,58 +100,89 @@ function FreshnessProbe({
   readonly staleAfterMs: number;
   readonly tickMs?: number;
 }): React.JSX.Element {
-  const { stale } = usePollFreshness(lastUpdated, { staleAfterMs, tickMs });
-  return <span data-testid="freshness">{stale ? "stale" : "current"}</span>;
+  const { ageMs, stale } = usePollFreshness(lastUpdated, {
+    staleAfterMs,
+    tickMs,
+  });
+  return (
+    <span data-testid="freshness" data-age={String(ageMs)}>
+      {stale ? "stale" : "current"}
+    </span>
+  );
 }
 
 function reading(): string | null {
   return screen.getByTestId("freshness").textContent;
 }
 
-describe("usePollFreshness stale timing", () => {
-  it("flips stale the moment the threshold passes, not on the next tick", () => {
+/** The age the probe last rendered, "undefined" where the hook states none. */
+function ageReading(): string | null {
+  return screen.getByTestId("freshness").getAttribute("data-age");
+}
+
+describe("usePollFreshness age", () => {
+  beforeEach(() => {
     vi.useFakeTimers({ now: NOW });
+  });
+
+  it("reports the age of the last sample against the shared clock", () => {
+    render(
+      <FreshnessProbe
+        lastUpdated={NOW - 2_000}
+        staleAfterMs={5_000}
+        tickMs={1_000}
+      />,
+    );
+    expect(reading()).toBe("current");
+    expect(ageReading()).toBe("2000");
+
+    advanceTimers(4_000);
+    expect(reading()).toBe("stale");
+    expect(ageReading()).toBe("6000");
+  });
+
+  it("reports no age at all before the first sample", () => {
+    render(<FreshnessProbe lastUpdated={null} staleAfterMs={1_000} />);
+    expect(reading()).toBe("current");
+    expect(ageReading()).toBe("undefined");
+  });
+});
+
+describe("usePollFreshness stale timing", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ now: NOW });
+  });
+
+  it("flips stale the moment the threshold passes, not on the next tick", () => {
     // The default clock ticks every ten seconds, well after the threshold.
     render(<FreshnessProbe lastUpdated={NOW} staleAfterMs={3_000} />);
 
-    act(() => {
-      vi.advanceTimersByTime(3_000);
-    });
+    advanceTimers(3_000);
     // Exactly at the threshold the sample is still inside it.
     expect(reading()).toBe("current");
 
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    advanceTimers(1);
     expect(reading()).toBe("stale");
   });
 
   it("measures the threshold from the newest sample", () => {
-    vi.useFakeTimers({ now: NOW });
     const { rerender } = render(
       <FreshnessProbe lastUpdated={NOW} staleAfterMs={3_000} />,
     );
 
-    act(() => {
-      vi.advanceTimersByTime(2_000);
-    });
+    advanceTimers(2_000);
     rerender(<FreshnessProbe lastUpdated={NOW + 2_000} staleAfterMs={3_000} />);
 
     // The first sample's deadline has passed; the second one's has not.
-    act(() => {
-      vi.advanceTimersByTime(2_000);
-    });
+    advanceTimers(2_000);
     expect(reading()).toBe("current");
 
-    act(() => {
-      vi.advanceTimersByTime(1_001);
-    });
+    advanceTimers(1_001);
     expect(reading()).toBe("stale");
   });
 
   it("schedules nothing once stale, without a sample, or with the clock stopped", () => {
-    vi.useFakeTimers({ now: NOW });
-    const { rerender } = render(
+    const { rerender, unmount } = render(
       <FreshnessProbe
         lastUpdated={NOW - 5_000}
         staleAfterMs={3_000}
@@ -132,10 +202,16 @@ describe("usePollFreshness stale timing", () => {
       <FreshnessProbe lastUpdated={NOW} staleAfterMs={3_000} tickMs={0} />,
     );
     expect(vi.getTimerCount()).toBe(0);
+
+    // And from the first render, not only once a sample replaces another.
+    unmount();
+    render(
+      <FreshnessProbe lastUpdated={NOW} staleAfterMs={1_000} tickMs={0} />,
+    );
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("reads a cadence longer than one timer can hold as a stopped clock", () => {
-    vi.useFakeTimers({ now: NOW });
     // One millisecond past the longest delay a timer holds, written out so the
     // case states the number it means.
     render(
@@ -154,98 +230,72 @@ describe("usePollFreshness stale timing", () => {
   });
 
   it("reads a zero or negative threshold as none: aged on the tick, never stale", () => {
-    vi.useFakeTimers({ now: NOW });
-    function AgeProbe({
-      staleAfterMs,
-    }: {
-      readonly staleAfterMs: number;
-    }): React.JSX.Element {
-      const { ageMs, stale } = usePollFreshness(NOW, {
-        staleAfterMs,
-        tickMs: 60_000,
-      });
-      return (
-        <span data-testid="freshness">
-          {`${String(ageMs)} ${stale ? "stale" : "current"}`}
-        </span>
-      );
-    }
+    const readings = (): (string | null)[] => [ageReading(), reading()];
 
     for (const staleAfterMs of [0, -1]) {
       vi.setSystemTime(NOW);
-      const { unmount } = render(<AgeProbe staleAfterMs={staleAfterMs} />);
-      expect(reading()).toBe("0 current");
+      const { unmount } = render(
+        <FreshnessProbe
+          lastUpdated={NOW}
+          staleAfterMs={staleAfterMs}
+          tickMs={60_000}
+        />,
+      );
+      expect(readings()).toEqual(["0", "current"]);
 
       // No threshold means no wake to re-read the clock at, so the age moves
       // only when the clock ticks, and however old it gets it is not stale.
-      act(() => {
-        vi.advanceTimersByTime(59_999);
-      });
-      expect(reading()).toBe("0 current");
-      act(() => {
-        vi.advanceTimersByTime(1);
-      });
-      expect(reading()).toBe("60000 current");
-      act(() => {
-        vi.advanceTimersByTime(60 * 60_000);
-      });
-      expect(reading()).toBe("3660000 current");
+      advanceTimers(59_999);
+      expect(readings()).toEqual(["0", "current"]);
+      advanceTimers(1);
+      expect(readings()).toEqual(["60000", "current"]);
+      advanceTimers(60 * 60_000);
+      expect(readings()).toEqual(["3660000", "current"]);
       unmount();
     }
   });
 
   it("waits out a threshold longer than one timer can hold", () => {
-    vi.useFakeTimers({ now: NOW });
-    const dayMs = 86_400_000;
-    const monthMs = 30 * dayMs;
+    const monthMs = 30 * DAY_MS;
     render(
       <FreshnessProbe
         lastUpdated={NOW}
         staleAfterMs={monthMs}
-        tickMs={dayMs}
+        tickMs={DAY_MS}
       />,
     );
 
     // A delay past the timer ceiling would fire at once and spin; the wait is
     // capped and taken again instead.
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    advanceTimers(1);
     expect(reading()).toBe("current");
 
-    act(() => {
-      vi.advanceTimersByTime(25 * dayMs);
-    });
+    advanceTimers(25 * DAY_MS);
     expect(reading()).toBe("current");
 
-    act(() => {
-      vi.advanceTimersByTime(5 * dayMs);
-    });
+    advanceTimers(5 * DAY_MS);
     expect(reading()).toBe("stale");
   });
 });
 
 describe("usePollFreshness measuring a new sample", () => {
-  /** Mounts a probe, lets `elapsedMs` pass, then delivers a sample stamped now. */
-  function deliverAfter(
-    elapsedMs: number,
-    tickMs: number | undefined,
-  ): ReturnType<typeof render> {
+  beforeEach(() => {
     vi.useFakeTimers({ now: NOW });
+  });
+
+  /** Mounts a probe, lets `elapsedMs` pass, then delivers a sample stamped now. */
+  function deliverAfter(elapsedMs: number, tickMs: number): void {
     const probe = (lastUpdated: number): React.JSX.Element => (
       <FreshnessProbe
         lastUpdated={lastUpdated}
         staleAfterMs={300_000}
-        {...(tickMs === undefined ? {} : { tickMs })}
+        tickMs={tickMs}
       />
     );
-    const view = render(probe(NOW));
-    act(() => {
-      vi.advanceTimersByTime(elapsedMs);
-    });
+    const { rerender } = render(probe(NOW));
+    advanceTimers(elapsedMs);
     // A poll delivers a sample stamped from the browser's clock at receipt.
-    view.rerender(probe(Date.now()));
-    return view;
+    rerender(probe(Date.now()));
   }
 
   it("reads a new sample as current between ticks longer than a minute", () => {
@@ -263,28 +313,20 @@ describe("usePollFreshness measuring a new sample", () => {
   });
 
   it("measures a new sample that arrives while the document is hidden", () => {
-    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
-    vi.useFakeTimers({ now: NOW });
+    const setHidden = stubDocumentHidden();
     const probe = (lastUpdated: number): React.JSX.Element => (
       <FreshnessProbe lastUpdated={lastUpdated} staleAfterMs={300_000} />
     );
     const { rerender } = render(probe(NOW));
 
     // Hidden, the shared clock stops ticking.
-    hidden.mockReturnValue(true);
-    act(() => {
-      document.dispatchEvent(new Event("visibilitychange"));
-    });
-    act(() => {
-      vi.advanceTimersByTime(90_000);
-    });
+    setHidden(true);
+    advanceTimers(90_000);
     rerender(probe(Date.now()));
     expect(reading()).toBe("current");
-    hidden.mockRestore();
   });
 
   it("never lets a paired note announce a turn for a sample that was current", () => {
-    vi.useFakeTimers({ now: NOW });
     const announce = vi.fn<PanelAnnounce>();
     function Panel({
       lastUpdated,
@@ -302,9 +344,7 @@ describe("usePollFreshness measuring a new sample", () => {
       );
     }
     const { rerender } = render(<Panel lastUpdated={NOW} />);
-    act(() => {
-      vi.advanceTimersByTime(110_000);
-    });
+    advanceTimers(110_000);
     rerender(<Panel lastUpdated={Date.now()} />);
 
     // Not even an intermediate commit may read stale: the note announces

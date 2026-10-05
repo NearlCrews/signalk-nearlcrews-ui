@@ -119,7 +119,7 @@ function handleStorage(event: StorageEvent): void {
     (event.key === THEME_STORAGE_KEY || event.key === null) &&
     isLocalStorageEvent(event)
   ) {
-    handleThemeChange(event);
+    adoptSharedTheme();
   }
 }
 
@@ -214,9 +214,9 @@ export function ThemeProvider({
     seedTheme(defaultTheme);
     return subscribe(listener);
   });
-  // An unresolved preference stays "auto" so the panel follows an explicit
-  // host theme and otherwise uses the library's light fallback. Operating-system
-  // preferences are reserved for the explicit "system" choice.
+  // An unresolved preference resolves to the seed, else "auto", which follows
+  // an explicit host theme and otherwise uses the library's light fallback.
+  // Operating-system preferences are reserved for the explicit "system" choice.
   const theme = useSyncExternalStore(
     subscribeSeeded,
     getSnapshot,

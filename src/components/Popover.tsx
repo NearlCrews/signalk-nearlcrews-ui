@@ -1,19 +1,20 @@
-import type {
-  AriaAttributes,
-  ComponentProps,
-  CSSProperties,
-  ReactElement,
-  ReactNode,
-  RefAttributes,
+import {
+  type AriaAttributes,
+  type ComponentProps,
+  type CSSProperties,
+  type ReactElement,
+  type ReactNode,
+  type RefAttributes,
+  useLayoutEffect,
+  useMemo,
+  useRef,
 } from "react";
-import { useLayoutEffect, useMemo, useRef } from "react";
 import { DialogTrigger, Pressable } from "react-aria-components";
-import { POPOVER_STYLES } from "../styles/popover.js";
+import { POPOVER_STYLES, POPOVER_WIDTH_PROPERTY } from "../styles/popover.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
 import { packageError } from "../utils/errors.js";
 import { SectionOutlineReset } from "../utils/heading-level.js";
-import { usePanelPortalContainerReady } from "../utils/portal.js";
 import { definedProps } from "../utils/props.js";
 import {
   type OverlayOpenState,
@@ -123,8 +124,7 @@ export function Popover({
 }: PopoverProps): React.JSX.Element {
   const triggerRef = useRef<HTMLElement | null>(null);
   const validatedTrigger = useRef<HTMLElement | null>(null);
-  useModuleStyles(POPOVER_STYLES, "Popover");
-  const portalReady = usePanelPortalContainerReady("Popover");
+  const portalReady = useModuleStyles(POPOVER_STYLES, "Popover") !== null;
 
   // Revalidated after every commit rather than once, because `trigger` can
   // render a different element without this component's props changing, and
@@ -157,7 +157,7 @@ export function Popover({
     () => ({
       ...style,
       ...definedProps({
-        "--snui-popover-width": width === "auto" ? undefined : width,
+        [POPOVER_WIDTH_PROPERTY]: width === "auto" ? undefined : width,
       }),
     }),
     [style, width],

@@ -95,9 +95,10 @@ interface TextBearingProps {
 
 /**
  * Concatenates the text a node renders, descending into element children and
- * skipping hidden and aria-hidden elements, as an accessible name would.
- * Components that render text internally contribute nothing, so a node made of
- * such components needs an explicit text value from its caller.
+ * skipping hidden and aria-hidden elements, as an accessible name would, with
+ * no space at either end. Components that render text internally contribute
+ * nothing, so a node made of such components needs an explicit text value
+ * from its caller.
  *
  * @internal
  */
@@ -118,8 +119,8 @@ export function reactNodeText(node: ReactNode): string {
   // joined edge to edge, two spans reading "Delete" and "route" would run
   // together into one word and typeahead on the second word would never
   // match. Runs of whitespace collapse so the join does not double a space the
-  // caller wrote.
-  return fragments.join(" ").replace(WHITESPACE_RUN, " ");
+  // caller wrote, and the ends are trimmed so no caller has to.
+  return fragments.join(" ").replace(WHITESPACE_RUN, " ").trim();
 }
 
 /**
@@ -135,18 +136,16 @@ export function reactNodeText(node: ReactNode): string {
  * @internal
  */
 export function plainReactNodeText(node: ReactNode): string | undefined {
-  if (typeof node === "string" || typeof node === "number") {
-    const only = String(node);
-    return only.trim() === "" ? undefined : only;
-  }
-
-  const parts = Children.toArray(node);
-  if (parts.length === 0) return undefined;
-
   let text = "";
-  for (const part of parts) {
-    if (typeof part !== "string" && typeof part !== "number") return undefined;
-    text += String(part);
+  if (typeof node === "string" || typeof node === "number") {
+    text = String(node);
+  } else {
+    for (const part of Children.toArray(node)) {
+      if (typeof part !== "string" && typeof part !== "number") {
+        return undefined;
+      }
+      text += String(part);
+    }
   }
   return text.trim() === "" ? undefined : text;
 }

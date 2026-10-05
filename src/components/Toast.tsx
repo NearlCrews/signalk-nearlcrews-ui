@@ -14,7 +14,11 @@ import {
 import { createPortal } from "react-dom";
 
 import { useNodeRef } from "../hooks/use-node-ref.js";
-import { TOAST_STYLES } from "../styles/toast.js";
+import {
+  TOAST_HOST_LENGTH_PROPERTIES,
+  TOAST_HOST_VISIBLE_ATTRIBUTE,
+  TOAST_STYLES,
+} from "../styles/toast.js";
 import {
   type FoundationTokenName,
   TRANSITION_FAST_MS,
@@ -23,6 +27,7 @@ import { useModuleStyles } from "../styles/use-module-styles.js";
 import {
   type AnnouncementMode,
   messageLogAttributes,
+  type SpokenMode,
 } from "../utils/announcement.js";
 import { classNames } from "../utils/class-names.js";
 import {
@@ -31,8 +36,7 @@ import {
   once,
 } from "../utils/document-registry.js";
 import { createEmitter } from "../utils/emitter.js";
-import { packageError } from "../utils/errors.js";
-import { focusPanelRoot, isElementNode } from "../utils/focus.js";
+import { focusPanelRoot, isElementNode, isFocused } from "../utils/focus.js";
 import {
   DEFAULT_DISMISS_LABEL,
   resolveBundledLabel,
@@ -41,7 +45,6 @@ import {
 import { prefersReducedMotion } from "../utils/motion.js";
 import { TOAST_REGION_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
-import { usePanelPortalContainer } from "../utils/portal.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { LIVE_REGION_BLANK_MS } from "../utils/repeat-announcement.js";
 import { isTimerDelay } from "../utils/shared-clock.js";
@@ -159,14 +162,11 @@ function exitTransitionMs(view: Window, card: HTMLElement | null): number {
   return Number.isFinite(duration) ? duration : TRANSITION_FAST_MS;
 }
 
-/** The modes a toast is spoken in; "off" speaks nothing. */
-type ToastAnnouncementMode = Exclude<AnnouncementMode, "off">;
-
 /**
  * Speaks a toast's words and returns the call that takes them away again.
  * Called once per toast while it is queued.
  */
-type AnnounceToast = (mode: ToastAnnouncementMode, text: string) => () => void;
+type AnnounceToast = (mode: SpokenMode, text: string) => () => void;
 
 /**
  * The words an element shows assistive technology: its text, less anything
@@ -200,7 +200,7 @@ interface ToastAnnouncer {
 
 function createAnnouncementRegion(
   ownerDocument: Document,
-  mode: ToastAnnouncementMode,
+  mode: SpokenMode,
 ): HTMLDivElement {
   const region = ownerDocument.createElement("div");
   // A message log, like the panel announcer's: each toast adds a line of its
@@ -223,7 +223,7 @@ function createToastAnnouncer(
   ownerDocument: Document,
   ownerWindow: Window | null,
 ): ToastAnnouncer {
-  const regions: Record<ToastAnnouncementMode, HTMLDivElement> = {
+  const regions: Record<SpokenMode, HTMLDivElement> = {
     polite: createAnnouncementRegion(ownerDocument, "polite"),
     assertive: createAnnouncementRegion(ownerDocument, "assertive"),
   };
@@ -283,25 +283,18 @@ interface ToastHostHandle {
   readonly restoreFocus: () => void;
 }
 
+/** A measured host length, each written to a custom property of its own. */
+type ToastHostLength = keyof typeof TOAST_HOST_LENGTH_PROPERTIES;
+
 /** The host geometry last written, so a frame that moved nothing writes nothing. */
-interface ToastHostPlacement {
-  readonly bottom: number;
-  readonly left: number;
-  readonly top: number;
+interface ToastHostPlacement extends Readonly<Record<ToastHostLength, number>> {
   readonly visible: boolean;
-  readonly width: number;
 }
 
-/** The custom property each measured host length is written to. */
-const TOAST_HOST_LENGTH_PROPERTIES = [
-  ["--snui-toast-host-top", "top"],
-  ["--snui-toast-host-bottom", "bottom"],
-  ["--snui-toast-host-left", "left"],
-  ["--snui-toast-host-width", "width"],
-] as const satisfies readonly (readonly [
-  string,
-  Exclude<keyof ToastHostPlacement, "visible">,
-])[];
+/** The lengths the style module names, read once so a frame allocates none. */
+const TOAST_HOST_LENGTHS = /* @__PURE__ */ Object.keys(
+  TOAST_HOST_LENGTH_PROPERTIES,
+) as ToastHostLength[];
 
 function createToastHost(
   panelRoot: HTMLElement,
@@ -380,9 +373,12 @@ function createToastHost(
     if (placement !== null && layoutMatches(placement, next)) return;
     placement = next;
 
-    element.toggleAttribute("data-snui-toast-host-visible", next.visible);
-    for (const [property, length] of TOAST_HOST_LENGTH_PROPERTIES) {
-      element.style.setProperty(property, `${String(next[length])}px`);
+    element.toggleAttribute(TOAST_HOST_VISIBLE_ATTRIBUTE, next.visible);
+    for (const length of TOAST_HOST_LENGTHS) {
+      element.style.setProperty(
+        TOAST_HOST_LENGTH_PROPERTIES[length],
+        `${String(next[length])}px`,
+      );
     }
   };
 
@@ -409,7 +405,7 @@ function createToastHost(
     lastFocusedOutside = null;
     if (target?.isConnected) {
       target.focus({ preventScroll: true });
-      if (ownerDocument.activeElement === target) return;
+      if (isFocused(target)) return;
     }
     focusPanelRoot(panelRoot);
   };
@@ -966,22 +962,19 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
           TOAST_REGION_LABEL_DEFAULTS.label,
         )
       : label.trim();
-  if (!effectiveLabel) {
-    throw packageError("ToastRegion requires a non-empty label.");
-  }
+  requireContent(effectiveLabel, "ToastRegion requires a non-empty label.");
   const effectiveDismissLabel = resolveBundledLabel(
     dismissLabel,
     bundledRegionLabels?.dismiss,
     DEFAULT_DISMISS_LABEL,
   );
 
-  useModuleStyles(TOAST_STYLES, "ToastRegion");
+  const panelRoot = useModuleStyles(TOAST_STYLES, "ToastRegion");
   const toasts = useSyncExternalStore(
     queue.subscribe,
     queue.getSnapshot,
     getServerToasts,
   );
-  const panelRoot = usePanelPortalContainer("ToastRegion");
   const host = useToastHost(panelRoot);
 
   const regionRef = useRef<HTMLElement | null>(null);

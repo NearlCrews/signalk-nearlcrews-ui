@@ -6,11 +6,13 @@ import { describe, expect, it, vi } from "vitest";
 import {
   Disclosure,
   DisclosurePanel,
+  type DisclosurePanelProps,
   DisclosureTrigger,
   useDisclosure,
 } from "../../src/composites.js";
-import { PanelRoot } from "../../src/index.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { Card, Cluster, MetricGrid, Stack } from "../../src/index.js";
+import { ALL_MODULE_STYLES, ruleBody } from "../css-helpers.js";
+import { controlledBy, panel, renderInPanel } from "../helpers.js";
 
 describe("Disclosure", () => {
   it("wires the trigger and panel and hands focus across on open and close", async () => {
@@ -26,8 +28,7 @@ describe("Disclosure", () => {
 
     const trigger = screen.getByRole("button", { name: "Show reports" });
     expect(trigger).toHaveAttribute("aria-expanded", "false");
-    const panelId = trigger.getAttribute("aria-controls") ?? "";
-    const region = document.getElementById(panelId);
+    const region = controlledBy(trigger);
     expect(region).not.toBeNull();
     expect(region).not.toBeVisible();
     expect(region).toHaveAttribute("aria-labelledby", trigger.id);
@@ -45,26 +46,18 @@ describe("Disclosure", () => {
 
   it("supports controlled state and leaves focus alone for programmatic changes", () => {
     const onOpenChange = vi.fn();
-    const { rerender } = renderInPanel(
-      <Disclosure open={false} onOpenChange={onOpenChange}>
+    const editor = (open: boolean): React.JSX.Element => (
+      <Disclosure open={open} onOpenChange={onOpenChange}>
         <DisclosureTrigger>Edit prompt</DisclosureTrigger>
         <DisclosurePanel aria-label="Prompt editor">
           <textarea aria-label="Prompt" />
         </DisclosurePanel>
-      </Disclosure>,
+      </Disclosure>
     );
+    const { rerender } = renderInPanel(editor(false));
 
     expect(screen.queryByRole("region")).toBeNull();
-    rerender(
-      panel(
-        <Disclosure open onOpenChange={onOpenChange}>
-          <DisclosureTrigger>Edit prompt</DisclosureTrigger>
-          <DisclosurePanel aria-label="Prompt editor">
-            <textarea aria-label="Prompt" />
-          </DisclosurePanel>
-        </Disclosure>,
-      ),
-    );
+    rerender(panel(editor(true)));
 
     const region = screen.getByRole("region", { name: "Prompt editor" });
     expect(region).toBeVisible();
@@ -79,22 +72,19 @@ describe("Disclosure", () => {
     function Owner(): React.JSX.Element {
       const [open, setOpen] = useState(false);
       return (
-        <PanelRoot>
-          <Disclosure open={open} onOpenChange={setOpen}>
-            <DisclosureTrigger>{open ? "Hide" : "Show"}</DisclosureTrigger>
-            <DisclosurePanel mountStrategy="unmount">
-              <p>Mounted only while open</p>
-            </DisclosurePanel>
-          </Disclosure>
-        </PanelRoot>
+        <Disclosure open={open} onOpenChange={setOpen}>
+          <DisclosureTrigger>{open ? "Hide" : "Show"}</DisclosureTrigger>
+          <DisclosurePanel mountStrategy="unmount">
+            <p>Mounted only while open</p>
+          </DisclosurePanel>
+        </Disclosure>
       );
     }
 
-    render(<Owner />);
+    renderInPanel(<Owner />);
     expect(screen.queryByText("Mounted only while open")).toBeNull();
     const trigger = screen.getByRole("button", { name: "Show" });
-    const panelId = trigger.getAttribute("aria-controls") ?? "";
-    expect(document.getElementById(panelId)).not.toBeNull();
+    expect(controlledBy(trigger)).not.toBeNull();
 
     await user.click(trigger);
     expect(screen.getByText("Mounted only while open")).toBeVisible();
@@ -112,18 +102,16 @@ describe("Disclosure", () => {
 
     function Owner({ open }: { readonly open: boolean }): React.JSX.Element {
       return (
-        <PanelRoot>
-          <Disclosure open={open} onOpenChange={onOpenChange}>
-            <DisclosureTrigger>Show reports</DisclosureTrigger>
-            <DisclosurePanel aria-label="Reports">
-              <p>Report body</p>
-            </DisclosurePanel>
-          </Disclosure>
-        </PanelRoot>
+        <Disclosure open={open} onOpenChange={onOpenChange}>
+          <DisclosureTrigger>Show reports</DisclosureTrigger>
+          <DisclosurePanel aria-label="Reports">
+            <p>Report body</p>
+          </DisclosurePanel>
+        </Disclosure>
       );
     }
 
-    const { rerender } = render(<Owner open={false} />);
+    const { rerender } = renderInPanel(<Owner open={false} />);
     const trigger = screen.getByRole("button", { name: "Show reports" });
 
     await user.click(trigger);
@@ -132,7 +120,7 @@ describe("Disclosure", () => {
 
     // The owner opens the panel later for its own reasons, which is a change
     // the consumer made directly, so it must leave focus where it was.
-    rerender(<Owner open />);
+    rerender(panel(<Owner open />));
     const region = screen.getByRole("region", { name: "Reports" });
     expect(region).toBeVisible();
     expect(region).not.toHaveFocus();
@@ -244,8 +232,7 @@ describe("Disclosure", () => {
     const diagnostics = screen.getByRole("button", { name: "Diagnostics" });
     expect(diagnostics.id).not.toBe("");
     expect(diagnostics.id).not.toBe(reports.id);
-    const generatedPanelId = diagnostics.getAttribute("aria-controls") ?? "";
-    expect(document.getElementById(generatedPanelId)).toHaveAttribute(
+    expect(controlledBy(diagnostics)).toHaveAttribute(
       "aria-labelledby",
       diagnostics.id,
     );
@@ -263,9 +250,8 @@ describe("Disclosure", () => {
 
     const trigger = screen.getByRole("button", { name: "Show reports" });
     expect(trigger.id).toBe("engine-toggle");
-    const panelId = trigger.getAttribute("aria-controls") ?? "";
-    expect(panelId).not.toBe("");
-    expect(document.getElementById(panelId)).toHaveAttribute(
+    expect(trigger.getAttribute("aria-controls")).toBeTruthy();
+    expect(controlledBy(trigger)).toHaveAttribute(
       "aria-labelledby",
       "engine-toggle",
     );
@@ -309,24 +295,26 @@ describe("Disclosure", () => {
     );
   });
 
+  /** A drawer whose panel holds a Close button wired to the owner's setter. */
+  function SelfClosingDrawer({
+    mountStrategy,
+  }: Pick<DisclosurePanelProps, "mountStrategy">): React.JSX.Element {
+    const [open, setOpen] = useState(false);
+    return (
+      <Disclosure open={open} onOpenChange={setOpen}>
+        <DisclosureTrigger>Show reports</DisclosureTrigger>
+        <DisclosurePanel mountStrategy={mountStrategy}>
+          <button type="button" onClick={() => setOpen(false)}>
+            Close
+          </button>
+        </DisclosurePanel>
+      </Disclosure>
+    );
+  }
+
   it("returns focus to the trigger when the panel closes itself", async () => {
     const user = userEvent.setup();
-
-    function Drawer(): React.JSX.Element {
-      const [open, setOpen] = useState(false);
-      return (
-        <Disclosure open={open} onOpenChange={setOpen}>
-          <DisclosureTrigger>Show reports</DisclosureTrigger>
-          <DisclosurePanel mountStrategy="unmount">
-            <button type="button" onClick={() => setOpen(false)}>
-              Close
-            </button>
-          </DisclosurePanel>
-        </Disclosure>
-      );
-    }
-
-    renderInPanel(<Drawer />);
+    renderInPanel(<SelfClosingDrawer mountStrategy="unmount" />);
     const trigger = screen.getByRole("button", { name: "Show reports" });
     await user.click(trigger);
 
@@ -341,22 +329,7 @@ describe("Disclosure", () => {
 
   it("returns focus to the trigger when a retained panel hides itself", async () => {
     const user = userEvent.setup();
-
-    function Drawer(): React.JSX.Element {
-      const [open, setOpen] = useState(false);
-      return (
-        <Disclosure open={open} onOpenChange={setOpen}>
-          <DisclosureTrigger>Show reports</DisclosureTrigger>
-          <DisclosurePanel>
-            <button type="button" onClick={() => setOpen(false)}>
-              Close
-            </button>
-          </DisclosurePanel>
-        </Disclosure>
-      );
-    }
-
-    renderInPanel(<Drawer />);
+    renderInPanel(<SelfClosingDrawer mountStrategy="retain" />);
     const trigger = screen.getByRole("button", { name: "Show reports" });
     await user.click(trigger);
 
@@ -557,6 +530,50 @@ describe("useDisclosure", () => {
 
     expect(acknowledge).toHaveFocus();
     expect(onOpenChange).not.toHaveBeenCalled();
+  });
+});
+
+describe("useDisclosure panel on a layout block", () => {
+  it("keeps a closed panel hidden where the block's class sets a display", () => {
+    function Blocks(): React.JSX.Element {
+      const { panelProps: stack } = useDisclosure({ idPrefix: "stack" });
+      const { panelProps: cluster } = useDisclosure({ idPrefix: "cluster" });
+      const { panelProps: card } = useDisclosure({ idPrefix: "card" });
+      const { panelProps: grid } = useDisclosure({ idPrefix: "grid" });
+      return (
+        <>
+          <Stack {...stack}>Stack body</Stack>
+          <Cluster {...cluster}>Cluster body</Cluster>
+          <Card {...card}>Card body</Card>
+          <MetricGrid {...grid}>Grid body</MetricGrid>
+        </>
+      );
+    }
+    renderInPanel(<Blocks />);
+
+    // Each block's class sets a display of its own, which outranks the
+    // user-agent rule for the hidden attribute, so the attribute alone would
+    // leave a closed panel on screen and in the tab order.
+    for (const [id, blockClass] of [
+      ["stack-panel", "snui-stack"],
+      ["cluster-panel", "snui-cluster"],
+      ["card-panel", "snui-card"],
+      ["grid-panel", "snui-metric-grid"],
+    ] as const) {
+      const block = document.getElementById(id);
+      expect(block, id).toHaveClass(blockClass);
+      expect(block?.matches("[hidden]"), id).toBe(true);
+    }
+
+    // One scoped rule hides every hidden element inside a panel. It is
+    // important, and the only important display the package declares, so no
+    // block rule of any weight can put a hidden panel back on screen.
+    expect(ruleBody(ALL_MODULE_STYLES, "\n[hidden]")).toContain(
+      "display: none !important;",
+    );
+    expect(ALL_MODULE_STYLES.match(/display:[^;{}]*!important/g)).toEqual([
+      "display: none !important",
+    ]);
   });
 });
 

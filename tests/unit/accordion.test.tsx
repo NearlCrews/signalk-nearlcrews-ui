@@ -85,15 +85,8 @@ describe("accordion coordination", () => {
         </Accordion>,
       ),
     ).toThrow(
-      "signalk-nearlcrews-ui: Accordion accepts only CollapsibleSection children; received",
+      "signalk-nearlcrews-ui: Accordion accepts only CollapsibleSection children; received <div>.",
     );
-    expect(() =>
-      renderInPanel(
-        <Accordion>
-          <div>Not a section</div>
-        </Accordion>,
-      ),
-    ).toThrow("<div>");
   });
 
   it("tells the replaced section about the close the accordion made", async () => {
@@ -215,7 +208,6 @@ describe("accordion coordination", () => {
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining("Accordion owns the open state of every child"),
     );
-    warn.mockRestore();
   });
 });
 

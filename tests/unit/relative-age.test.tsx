@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { Activity, createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,13 +9,16 @@ import {
   RelativeAge,
 } from "../../src/index.js";
 import { subscribeToClock } from "../../src/utils/shared-clock.js";
-import { renderInPanel } from "../helpers.js";
+import {
+  advanceTimers,
+  renderInPanel,
+  stubDocumentHidden,
+} from "../helpers.js";
+import { DAY_MS, NOW } from "./lib/clock.js";
+import { countConstructors } from "./lib/relative-time-format.js";
 
 const EN = { locale: "en" } as const;
 const NARROW_EN = { ...RELATIVE_AGE_NARROW, ...EN } as const;
-const DAY_MS = 86_400_000;
-/** The instant every clock-driven spec measures from. */
-const NOW = Date.UTC(2026, 8, 5, 12, 0, 0);
 /** Finite, and past the 8.64e15 millisecond range a Date can hold. */
 const OUT_OF_DATE_RANGE_MS = 1e16;
 
@@ -112,15 +115,7 @@ describe("formatRelativeAge locales", () => {
   });
 
   it("builds one formatter per locale and option set", () => {
-    const Original = Intl.RelativeTimeFormat;
-    const constructed = vi.fn();
-    vi.spyOn(Intl, "RelativeTimeFormat").mockImplementation(function (
-      this: unknown,
-      ...args: ConstructorParameters<typeof Intl.RelativeTimeFormat>
-    ) {
-      constructed();
-      return new Original(...args);
-    });
+    const constructorCount = countConstructors();
     const options = {
       locale: "en-GB",
       numeric: "always",
@@ -131,7 +126,7 @@ describe("formatRelativeAge locales", () => {
     formatRelativeAge(2_000, options);
     formatRelativeAge(3_000, options);
 
-    expect(constructed).toHaveBeenCalledTimes(1);
+    expect(constructorCount()).toBe(1);
   });
 });
 
@@ -187,9 +182,7 @@ describe("RelativeAge", () => {
     expect(time.tagName).toBe("TIME");
     expect(time).toHaveAttribute("datetime", new Date(since).toISOString());
 
-    act(() => {
-      vi.advanceTimersByTime(60_000);
-    });
+    advanceTimers(60_000);
     expect(time).toHaveTextContent("1 minute ago");
 
     unmount();
@@ -210,9 +203,7 @@ describe("RelativeAge", () => {
     expect(screen.getAllByText("5 seconds ago")).toHaveLength(3);
     expect(vi.getTimerCount()).toBe(2);
 
-    act(() => {
-      vi.advanceTimersByTime(60_000);
-    });
+    advanceTimers(60_000);
     expect(screen.getAllByText("1 minute ago")).toHaveLength(3);
 
     unmount();
@@ -270,9 +261,7 @@ describe("RelativeAge", () => {
     // A hidden Activity tears the subscription down while keeping the state,
     // which is what a collapsed section does to the ages inside it.
     rerender(<Section visible={false} />);
-    act(() => {
-      vi.advanceTimersByTime(3_600_000);
-    });
+    advanceTimers(3_600_000);
     rerender(<Section visible />);
 
     expect(screen.getByText("1 hour ago")).toBeInTheDocument();
@@ -290,13 +279,9 @@ describe("RelativeAge", () => {
     expect(vi.getTimerCount()).toBe(1);
 
     // The old cadence would have ticked 59 times by now.
-    act(() => {
-      vi.advanceTimersByTime(59_000);
-    });
+    advanceTimers(59_000);
     expect(screen.getByText("5 seconds ago")).toBeInTheDocument();
-    act(() => {
-      vi.advanceTimersByTime(1_000);
-    });
+    advanceTimers(1_000);
     expect(screen.getByText("1 minute ago")).toBeInTheDocument();
 
     rerender(<RelativeAge ageMs={120_000} options={EN} />);
@@ -414,15 +399,11 @@ describe("RelativeAge", () => {
 
     // A settled age formats the same tick after tick, so the stamp stays put
     // rather than committing a render that changes no text.
-    act(() => {
-      vi.advanceTimersByTime(60_000);
-    });
+    advanceTimers(60_000);
     expect(renders).toBe(initial);
     expect(screen.getByText("3 hours ago")).toBeInTheDocument();
 
-    act(() => {
-      vi.advanceTimersByTime(3_600_000);
-    });
+    advanceTimers(3_600_000);
     expect(screen.getByText("4 hours ago")).toBeInTheDocument();
   });
 
@@ -434,9 +415,7 @@ describe("RelativeAge", () => {
     // A settled age keeps the clock it last rendered with for as long as
     // its words hold, here an hour.
     const { rerender } = render(age(NOW - 2 * 3_600_000));
-    act(() => {
-      vi.advanceTimersByTime(5 * 60_000);
-    });
+    advanceTimers(5 * 60_000);
     expect(screen.getByTestId("age")).toHaveTextContent("2 hours ago");
 
     // A new moment from the browser's clock is measured against a clock read
@@ -472,28 +451,23 @@ describe("shared clock", () => {
   it("stops while the document is hidden and catches up on the way back", () => {
     vi.useFakeTimers();
     const onTick = vi.fn();
-    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+    const setHidden = stubDocumentHidden();
 
     const stop = subscribeToClock(1_000, onTick);
     onTick.mockClear();
 
-    hidden.mockReturnValue(true);
-    document.dispatchEvent(new Event("visibilitychange"));
+    setHidden(true);
     expect(vi.getTimerCount()).toBe(0);
-    act(() => {
-      vi.advanceTimersByTime(10_000);
-    });
+    advanceTimers(10_000);
     expect(onTick).not.toHaveBeenCalled();
 
     // Back on screen, the reader is told the instant at once rather than
     // showing the age from before the pause until the cadence next fires.
-    hidden.mockReturnValue(false);
-    document.dispatchEvent(new Event("visibilitychange"));
+    setHidden(false);
     expect(onTick).toHaveBeenCalledTimes(1);
     expect(vi.getTimerCount()).toBe(1);
 
     stop();
-    hidden.mockRestore();
     expect(vi.getTimerCount()).toBe(0);
   });
 

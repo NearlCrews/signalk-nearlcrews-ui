@@ -95,8 +95,8 @@ ${visuallyHiddenDeclarations()}
   text-align: end;
 }
 
-/* The of-type form tolerates a script or a comment node sitting in the body,
-   which consumer-authored markup can carry, and matches the data grid. */
+/* The of-type form tolerates a script or template element sitting in the
+   body, which consumer-authored markup can carry, and matches the data grid. */
 .snui-table--zebra tbody > tr:nth-of-type(even) > td,
 .snui-table--zebra tbody > tr:nth-of-type(even) > th {
   background: var(--snui-color-surface-stripe);

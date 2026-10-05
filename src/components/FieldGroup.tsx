@@ -5,9 +5,9 @@ import {
   useId,
 } from "react";
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { idReferenceList, joinIdReferences } from "../utils/aria.js";
+import { idReferenceList } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { resolveFieldRegions } from "../utils/field-error.js";
+import { fieldDescribedBy, resolveFieldRegions } from "../utils/field-error.js";
 import {
   hasReactContent,
   resolveLabelContent,
@@ -74,7 +74,7 @@ export function FieldGroup({
     error,
     errorLive,
   );
-  const { descriptionId, hasDescription, referencedErrorId } = regions;
+  const { descriptionId, hasDescription } = regions;
 
   return (
     <fieldset
@@ -84,10 +84,9 @@ export function FieldGroup({
       // A fieldset exposes the group role, which supports neither
       // aria-invalid nor aria-errormessage, so the error joins the
       // description instead and screen readers read it on entering the group.
-      aria-describedby={joinIdReferences(
+      aria-describedby={fieldDescribedBy(
+        regions,
         ariaDescribedBy,
-        descriptionId,
-        referencedErrorId,
         ...idReferenceList(groupDescribedBy),
       )}
     >

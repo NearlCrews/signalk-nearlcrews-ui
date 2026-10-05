@@ -2,8 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Checkbox, PanelRoot } from "../../src/index.js";
-import { formOf, panel, renderInPanel } from "../helpers.js";
+import { Checkbox } from "../../src/index.js";
+import { formOf, loggedMessages, panel, renderInPanel } from "../helpers.js";
 
 describe("Checkbox", () => {
   it("renders a self-labeled checkbox with a description", () => {
@@ -48,18 +48,16 @@ describe("Checkbox", () => {
     function Harness(): React.JSX.Element {
       const [checked, setChecked] = useState(false);
       return (
-        <PanelRoot>
-          <Checkbox
-            label="Partially enabled"
-            indeterminate
-            checked={checked}
-            onChange={(event) => setChecked(event.currentTarget.checked)}
-          />
-        </PanelRoot>
+        <Checkbox
+          label="Partially enabled"
+          indeterminate
+          checked={checked}
+          onChange={(event) => setChecked(event.currentTarget.checked)}
+        />
       );
     }
 
-    render(<Harness />);
+    renderInPanel(<Harness />);
     const checkbox = screen.getByRole("checkbox", {
       name: "Partially enabled",
     });
@@ -110,8 +108,33 @@ describe("Checkbox", () => {
     const checkbox = screen.getByRole("checkbox", {
       name: "Provider state Enable provider",
     });
+    // The box reads its own words before the ones the caller points at.
     expect(checkbox).toHaveAccessibleDescription(
-      "Required by this plugin. Starts the provider.",
+      "Starts the provider. Required by this plugin.",
+    );
+  });
+
+  it("reads its description, reason, and error before the ids the caller adds", () => {
+    renderInPanel(
+      <>
+        <span id="provider-note">Applies to every vessel.</span>
+        <Checkbox
+          ariaDisabled
+          label="Primary provider"
+          description="Answers first."
+          disabledReason="At least one provider stays selected."
+          error="Check the key."
+          aria-describedby="provider-note"
+          checked
+          onChange={() => undefined}
+        />
+      </>,
+    );
+
+    expect(
+      screen.getByRole("checkbox", { name: "Primary provider" }),
+    ).toHaveAccessibleDescription(
+      "Answers first. At least one provider stays selected. Error.Check the key. Applies to every vessel.",
     );
   });
 });
@@ -205,6 +228,32 @@ describe("Checkbox form reset", () => {
     // controlled prop must win once the reset lands.
     formOf(checkbox).reset();
     await waitFor(() => expect(checkbox).toBeChecked());
+  });
+
+  it("resets from the latest controlled props", async () => {
+    const tree = (checked: boolean, indeterminate: boolean) => (
+      <form>
+        <Checkbox
+          checked={checked}
+          indeterminate={indeterminate}
+          label="Enable provider"
+          readOnly
+        />
+      </form>
+    );
+    const { rerender } = renderInPanel(tree(false, false));
+    const checkbox = screen.getByRole<HTMLInputElement>("checkbox", {
+      name: "Enable provider",
+    });
+
+    rerender(panel(tree(true, true)));
+    checkbox.checked = false;
+    checkbox.indeterminate = false;
+    formOf(checkbox).reset();
+
+    await Promise.resolve();
+    expect(checkbox).toBeChecked();
+    expect(checkbox).toBePartiallyChecked();
   });
 });
 
@@ -493,7 +542,7 @@ describe("Checkbox blocked reason", () => {
       </>,
     );
 
-    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+    expect(loggedMessages(warn)).toEqual([
       'Checkbox "Unexplained box" is blocked with ariaDisabled but says nothing about why. Pass disabledReason, or point aria-describedby at the text that explains it.',
       'Checkbox "Disabled box" has a disabledReason beside native disabled, which takes it out of the tab order, so no one reaches the reason. Use ariaDisabled instead: the box stays focusable and reads the reason.',
     ]);

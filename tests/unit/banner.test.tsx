@@ -1,8 +1,8 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, useEffect, useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Banner, Button, PanelRoot, TextInput } from "../../src/index.js";
+import { Banner, Button, TextInput } from "../../src/index.js";
 import { FEEDBACK_STYLES } from "../../src/styles/feedback.js";
 import { NARROW_PANEL_QUERY } from "../../src/styles/fragments.js";
 import { ruleBody } from "../css-helpers.js";
@@ -166,7 +166,7 @@ describe("Banner announcements, actions, and focus", () => {
       const [visible, setVisible] = useState(true);
 
       return (
-        <PanelRoot>
+        <>
           {visible ? (
             <Banner
               dismissFocusRef={destinationRef}
@@ -176,11 +176,11 @@ describe("Banner announcements, actions, and focus", () => {
             </Banner>
           ) : null}
           <Button ref={destinationRef}>Provider settings</Button>
-        </PanelRoot>
+        </>
       );
     }
 
-    render(<Fixture />);
+    renderInPanel(<Fixture />);
     await user.click(screen.getByRole("button", { name: "Dismiss" }));
 
     await expectFocusHandedOn();
@@ -194,7 +194,7 @@ describe("Banner announcements, actions, and focus", () => {
       const [failed, setFailed] = useState(true);
 
       return (
-        <PanelRoot>
+        <>
           {failed ? (
             <Banner
               tone="danger"
@@ -206,11 +206,11 @@ describe("Banner announcements, actions, and focus", () => {
             </Banner>
           ) : null}
           <Button ref={destinationRef}>Provider settings</Button>
-        </PanelRoot>
+        </>
       );
     }
 
-    render(<Fixture />);
+    renderInPanel(<Fixture />);
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
     await expectFocusHandedOn();
@@ -224,7 +224,7 @@ describe("Banner announcements, actions, and focus", () => {
       const [failure, setFailure] = useState("The provider stopped answering.");
 
       return (
-        <PanelRoot>
+        <>
           <Banner
             live="polite"
             tone="danger"
@@ -238,11 +238,11 @@ describe("Banner announcements, actions, and focus", () => {
             {failure}
           </Banner>
           <Button ref={destinationRef}>Provider settings</Button>
-        </PanelRoot>
+        </>
       );
     }
 
-    render(<Fixture />);
+    renderInPanel(<Fixture />);
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
     await expectFocusHandedOn();
@@ -266,7 +266,7 @@ describe("Banner announcements, actions, and focus", () => {
       const [failed, setFailed] = useState(true);
 
       return (
-        <PanelRoot>
+        <>
           {failed ? (
             <Banner
               tone="danger"
@@ -279,11 +279,11 @@ describe("Banner announcements, actions, and focus", () => {
             <Replacement />
           )}
           <Button ref={destinationRef}>Provider settings</Button>
-        </PanelRoot>
+        </>
       );
     }
 
-    render(<Fixture />);
+    renderInPanel(<Fixture />);
     await user.click(screen.getByRole("button", { name: "Retry" }));
 
     // The banner hands focus on before the replacement mounts, so the panel's

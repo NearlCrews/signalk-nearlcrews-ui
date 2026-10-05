@@ -3,15 +3,13 @@ import {
   type KeyboardEvent,
   type ReactNode,
   type RefAttributes,
-  useCallback,
   useId,
   useLayoutEffect,
   useMemo,
-  useRef,
 } from "react";
 
 import { useControllableState } from "../hooks/use-controllable-state.js";
-import { useNodeRef } from "../hooks/use-node-ref.js";
+import { useResettableControl } from "../hooks/use-resettable-control.js";
 import {
   blockedActivationProps,
   reportBlockedReason,
@@ -21,8 +19,7 @@ import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { isRightToLeft } from "../utils/direction.js";
 import { isDevelopment } from "../utils/environment.js";
-import { resolveFieldRegions } from "../utils/field-error.js";
-import { observeFormReset } from "../utils/form-reset.js";
+import { fieldDescribedBy, resolveFieldRegions } from "../utils/field-error.js";
 import { requireNonEmptyUniqueOptions } from "../utils/options.js";
 import { type DataAttributes, definedProps } from "../utils/props.js";
 import {
@@ -30,11 +27,7 @@ import {
   reactNodeText,
   requireContent,
 } from "../utils/react-node.js";
-import {
-  mirrorsInRtl,
-  nextRovingIndex,
-  rovingKeyAxis,
-} from "../utils/roving.js";
+import { nextRovingIndex, rovingKeyAxis } from "../utils/roving.js";
 import type { Orientation, Visibility } from "../utils/variants.js";
 import { FieldError } from "./FieldError.js";
 import { HiddenDescription } from "./HiddenDescription.js";
@@ -54,12 +47,12 @@ export type SegmentedControlLabelVisibility = Visibility;
  * generic value, so the user agent is the fallback either way, and
  * `navigator.userAgentData` is absent in two engines and undefined outside a
  * secure context, which is how a panel is normally reached over a boat LAN.
+ * It is read when a key is handled, which only happens in a browser, so the
+ * module resolves nothing as it loads.
  */
-const platformHint =
-  typeof navigator === "undefined" ? "" : navigator.userAgent;
-const FOCUS_MOVE_MODIFIER: "ctrlKey" | "metaKey" = /Mac/i.test(platformHint)
-  ? "metaKey"
-  : "ctrlKey";
+function focusMoveModifier(): "ctrlKey" | "metaKey" {
+  return /Mac/i.test(navigator.userAgent) ? "metaKey" : "ctrlKey";
+}
 
 const OPTION_SELECTOR = '[role="radio"]';
 
@@ -117,7 +110,7 @@ function reportOptionReasons(
       describedBy: undefined,
       fix: "Pass disabledReason on the option.",
       hasReason: hasReactContent(option.disabledReason),
-      name: reactNodeText(option.label).trim(),
+      name: reactNodeText(option.label),
       nativeDisabled,
       noun: "option",
     });
@@ -208,11 +201,7 @@ export function SegmentedControl<Value extends string>({
   const regions = resolveFieldRegions(groupId, description, error, errorLive);
   const { descriptionId, hasDescription, hasError, referencedErrorId } =
     regions;
-  const describedBy = joinIdReferences(
-    ariaDescribedBy,
-    descriptionId,
-    referencedErrorId,
-  );
+  const describedBy = fieldDescribedBy(regions, ariaDescribedBy);
   const [effectiveValue, select, setInternalValue] = useControllableState<
     Value | undefined
   >(
@@ -227,40 +216,30 @@ export function SegmentedControl<Value extends string>({
   );
   const fallbackValue = enabledOptions[0]?.value;
 
-  // The reset listener reads the latest value props through refs so the
-  // callback ref below stays stable: a controlled selection change must not
-  // detach and reattach the hidden input on every render.
-  const valueRef = useRef(value);
-  const defaultValueRef = useRef(defaultValue);
-  const hiddenInput = useRef<HTMLInputElement | null>(null);
-  useLayoutEffect(() => {
-    valueRef.current = value;
-    defaultValueRef.current = defaultValue;
-    // The input's own default follows the prop, so a default changed after
-    // mount cannot leave a native reset restoring the one captured then.
-    const node = hiddenInput.current;
-    if (node !== null) node.defaultValue = defaultValue ?? "";
-  }, [defaultValue, value]);
-
   // Mirror platform radio groups by restoring the selection on a form reset.
-  const restoreOnReset = useCallback(
-    (node: HTMLInputElement) =>
-      observeFormReset(node, (input) => {
-        const controlledValue = valueRef.current;
-        if (controlledValue === undefined) {
-          setInternalValue(defaultValueRef.current);
-          return;
-        }
-        // A controlled selection belongs to the parent, so the reset leaves it
-        // alone. The native reset still rewrites the input, and no rerender
-        // follows to correct it, so the submitted value is restored here.
-        input.value = controlledValue;
-      }),
-    // The setter is the stable useState one the hook hands back, so the ref
-    // callback keeps its identity and never detaches the hidden input.
-    [setInternalValue],
+  // The hidden input exists only while the control has a name, so the name
+  // is what the registration follows.
+  const hiddenInputRef = useResettableControl<HTMLInputElement>(
+    undefined,
+    name,
+    (input) => {
+      if (value === undefined) {
+        setInternalValue(defaultValue);
+        return;
+      }
+      // A controlled selection belongs to the parent, so the reset leaves it
+      // alone. The native reset still rewrites the input, and no rerender
+      // follows to correct it, so the submitted value is restored here.
+      input.value = value;
+    },
   );
-  const attachHiddenInput = useNodeRef(hiddenInput, undefined, restoreOnReset);
+
+  // The input's own default follows the prop, so a default changed after
+  // mount cannot leave a native reset restoring the one captured then.
+  useLayoutEffect(() => {
+    const node = hiddenInputRef.current;
+    if (node !== null) node.defaultValue = defaultValue ?? "";
+  }, [defaultValue, hiddenInputRef]);
 
   // A reset that lands while this control sits in a paused subtree, inside a
   // collapsed CollapsibleSection for example, restores the input's default in
@@ -268,7 +247,7 @@ export function SegmentedControl<Value extends string>({
   // value prop it believes is unchanged. Resyncing here keeps the submitted
   // value equal to the selection the control displays.
   useLayoutEffect(() => {
-    const node = hiddenInput.current;
+    const node = hiddenInputRef.current;
     const selected = effectiveValue ?? "";
     if (node !== null && node.value !== selected) node.value = selected;
   });
@@ -285,7 +264,7 @@ export function SegmentedControl<Value extends string>({
       ),
       key: event.key,
       orientation: axis,
-      rtl: mirrorsInRtl(event.key) && isRightToLeft(event.currentTarget),
+      rtl: () => isRightToLeft(event.currentTarget),
     });
     if (nextIndex === null) return;
     const nextOption = enabledOptions[nextIndex];
@@ -297,7 +276,7 @@ export function SegmentedControl<Value extends string>({
     // reached without being chosen.
     if (
       !readOnly &&
-      !event[FOCUS_MOVE_MODIFIER] &&
+      !event[focusMoveModifier()] &&
       nextOption.ariaDisabled !== true
     ) {
       select(nextOption.value);
@@ -400,7 +379,7 @@ export function SegmentedControl<Value extends string>({
       />
       {name === undefined ? null : (
         <input
-          ref={attachHiddenInput}
+          ref={hiddenInputRef}
           type="hidden"
           disabled={disabled}
           name={name}

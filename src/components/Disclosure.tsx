@@ -3,7 +3,6 @@ import {
   type ReactNode,
   type RefAttributes,
   useCallback,
-  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -14,7 +13,11 @@ import {
   useOpenIntentLatch,
 } from "../hooks/use-focus-return.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
-import { hasAccessibleName, requireIdToken } from "../utils/aria.js";
+import {
+  hasAccessibleName,
+  requireIdToken,
+  useIdToken,
+} from "../utils/aria.js";
 import { createValueContext } from "../utils/context.js";
 import { packageError } from "../utils/errors.js";
 import { focusIsOnBody } from "../utils/focus.js";
@@ -92,11 +95,7 @@ export function useDisclosure({
   onOpenChange,
   open,
 }: UseDisclosureOptions = {}): UseDisclosureResult {
-  const generatedId = useId();
-  const baseId =
-    idPrefix === undefined
-      ? generatedId
-      : requireIdToken(idPrefix, "useDisclosure idPrefix");
+  const baseId = useIdToken(idPrefix, "useDisclosure idPrefix");
   const triggerId =
     id === undefined
       ? `${baseId}-trigger`

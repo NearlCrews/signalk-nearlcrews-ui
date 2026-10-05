@@ -13,9 +13,8 @@ import {
 import { SWITCH_STYLES } from "../styles/switch.js";
 import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { resolveFieldRegions } from "../utils/field-error.js";
+import { fieldDescribedBy, resolveFieldRegions } from "../utils/field-error.js";
 import { definedProps } from "../utils/props.js";
 import { racDomProps } from "../utils/react-aria.js";
 import { resolveLabelContent, type WithLabel } from "../utils/react-node.js";
@@ -120,10 +119,10 @@ export function Switch({
         isSelected: checked,
         defaultSelected: defaultChecked,
         onChange: onCheckedChange,
-        // The field's own error is read before the ids the caller adds, the
-        // order LabeledField keeps.
-        "aria-describedby": joinIdReferences(
-          referencedErrorId,
+        // React Aria puts the description slot ahead of these ids, which
+        // completes the order every field reads in.
+        "aria-describedby": fieldDescribedBy(
+          { referencedErrorId },
           ariaDescribedBy,
         ),
         "aria-errormessage": referencedErrorId,

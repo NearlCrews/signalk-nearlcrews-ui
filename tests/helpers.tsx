@@ -1,7 +1,6 @@
 /** Shared helpers for the unit specs. */
 
 import { act, type RenderResult, render } from "@testing-library/react";
-import axe from "axe-core";
 import type { ReactNode } from "react";
 import { expect, vi } from "vitest";
 
@@ -16,13 +15,27 @@ import { PanelRoot, type PanelRootProps } from "../src/index.js";
  * it was added to. Contrast is the one exclusion because jsdom computes no
  * rendered colors; the browser suite grades contrast against real layout and
  * the token pairs are audited directly in the contrast spec.
+ *
+ * The engine is loaded here rather than at the top of the module, because
+ * nearly every spec imports these helpers and only a handful run a sweep.
  */
 export async function expectNoAxeViolations(container: Element): Promise<void> {
+  const { default: axe } = await import("axe-core");
   const result = await axe.run(container, {
     rules: { "color-contrast": { enabled: false } },
   });
 
   expect(result.violations).toEqual([]);
+}
+
+/**
+ * Advances the fake timers inside `act`, so the state updates the elapsed
+ * timers schedule are committed before the spec asserts on them.
+ */
+export function advanceTimers(ms: number): void {
+  act(() => {
+    vi.advanceTimersByTime(ms);
+  });
 }
 
 /**
@@ -77,12 +90,6 @@ export function stubAnimationFrames(): AnimationFrameStub {
   };
 }
 
-/** A stub visual viewport together with the restore its spec must run. */
-export interface VisualViewportStub {
-  readonly restore: () => void;
-  readonly visualViewport: VisualViewport;
-}
-
 /** Options for {@link installVisualViewport}. Sizes are CSS pixels. */
 export interface VisualViewportOptions {
   readonly height: number;
@@ -98,7 +105,7 @@ export interface VisualViewportOptions {
  */
 export function installVisualViewport(
   options: VisualViewportOptions,
-): VisualViewportStub {
+): VisualViewport {
   const { height, innerHeight = 600, innerWidth = 800, width = 800 } = options;
   const visualViewport = Object.assign(new EventTarget(), {
     height,
@@ -109,33 +116,69 @@ export function installVisualViewport(
     scale: 1,
     width,
   }) as VisualViewport;
-  const restore = replaceVisualViewport(visualViewport);
+  replaceVisualViewport(visualViewport);
   vi.spyOn(window, "innerHeight", "get").mockReturnValue(innerHeight);
   vi.spyOn(window, "innerWidth", "get").mockReturnValue(innerWidth);
 
-  return { restore, visualViewport };
+  return visualViewport;
 }
 
 /**
  * Replaces `window.visualViewport`, which is null for a document that is not
- * fully active and absent on an engine that implements none, and returns the
- * restore its spec must run.
+ * fully active and absent on an engine that implements none. Vitest hands the
+ * stubbed global back before the next test, whether this one passed or
+ * failed, so no spec restores it.
  */
 export function replaceVisualViewport(
   value: VisualViewport | null | undefined,
-): () => void {
-  const original = Object.getOwnPropertyDescriptor(window, "visualViewport");
-  Object.defineProperty(window, "visualViewport", {
-    configurable: true,
-    value,
-  });
-  return () => {
-    if (original === undefined) {
-      Reflect.deleteProperty(window, "visualViewport");
-      return;
-    }
-    Object.defineProperty(window, "visualViewport", original);
+): void {
+  vi.stubGlobal("visualViewport", value);
+}
+
+/**
+ * Answers the reduced-motion preference, which jsdom cannot answer. Every
+ * other query reads as unmatched.
+ */
+export function stubReducedMotion(reduced = true): void {
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: reduced && query === "(prefers-reduced-motion: reduce)",
+    media: query,
+  }));
+}
+
+/**
+ * Stubs `document.hidden` as visible and returns a setter that changes it and
+ * announces the change. The shared clock reads the flag only when
+ * `visibilitychange` fires, so the two have to move together.
+ */
+export function stubDocumentHidden(): (hidden: boolean) => void {
+  const spy = vi.spyOn(document, "hidden", "get").mockReturnValue(false);
+  return (hidden) => {
+    spy.mockReturnValue(hidden);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
   };
+}
+
+/** The part of a console spy the two readers below consume. */
+interface RecordedCalls {
+  readonly mock: { readonly calls: readonly (readonly unknown[])[] };
+}
+
+/** The first argument of every call a console spy recorded, as text. */
+export function loggedMessages(spy: RecordedCalls): string[] {
+  return spy.mock.calls.map(([message]) => String(message));
+}
+
+/** The calls a console spy recorded with `text` in any string argument. */
+export function callsMentioning(
+  spy: RecordedCalls,
+  text: string,
+): (readonly unknown[])[] {
+  return spy.mock.calls.filter((args) =>
+    args.some((arg) => typeof arg === "string" && arg.includes(text)),
+  );
 }
 
 /** The root sheet `PanelRoot` installs in the head. */
@@ -164,6 +207,20 @@ export function formOf(control: HTMLElement): HTMLFormElement {
   const form = control.closest("form");
   if (form === null) throw new Error("Control did not join its form.");
   return form;
+}
+
+/** The element a trigger names in `aria-controls`, or null when none has that id. */
+export function controlledBy(trigger: HTMLElement): HTMLElement | null {
+  return trigger.ownerDocument.getElementById(
+    trigger.getAttribute("aria-controls") ?? "",
+  );
+}
+
+/** Returns the panel root a container holds, failing loudly when it holds none. */
+export function panelRootOf(container: HTMLElement): HTMLElement {
+  const root = container.querySelector<HTMLElement>(".snui-root");
+  if (root === null) throw new Error("Container holds no panel root.");
+  return root;
 }
 
 /** Wraps children in a PanelRoot so overlays portal and theme resolves. */

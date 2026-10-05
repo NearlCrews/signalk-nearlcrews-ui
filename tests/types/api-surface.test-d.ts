@@ -22,9 +22,12 @@ import type {
   ActionBar,
   ActionBarSticky,
   AnnouncementMode,
+  Banner,
   BannerTone,
+  Button,
   ButtonAsAnchorProps,
   ButtonAsButtonProps,
+  Checkbox,
   CheckboxLabelVisibility,
   CheckboxProps,
   FieldControlProps,
@@ -37,6 +40,7 @@ import type {
   NumberDraftResolution,
   NumberFieldProps,
   PanelLocale,
+  PanelRoot,
   SegmentedControlLabelVisibility,
   SegmentedControlOption,
   SegmentedControlProps,
@@ -77,33 +81,25 @@ describe("controls that accept two naming props", () => {
    * that guarantee for a crash inside a consumer's panel.
    */
   it("accepts either naming prop", () => {
-    const labelled: SwitchProps = { label: "Enabled" };
-    const withChildren: SwitchProps = { children: "Enabled" };
-    const labelledRadio: RadioProps = { label: "One", value: "one" };
-    const radioChildren: RadioProps = { children: "One", value: "one" };
-    const labelledGroup: SegmentedControlProps<"a"> = {
-      label: "View",
-      options: [{ label: "A", value: "a" }],
-    };
-    expectTypeOf(labelled).not.toBeNever();
-    expectTypeOf(withChildren).not.toBeNever();
-    expectTypeOf(labelledRadio).not.toBeNever();
-    expectTypeOf(radioChildren).not.toBeNever();
-    expectTypeOf(labelledGroup).not.toBeNever();
+    expectTypeOf<{ label: "Enabled" }>().toExtend<SwitchProps>();
+    expectTypeOf<{ children: "Enabled" }>().toExtend<SwitchProps>();
+    expectTypeOf<{ label: "One"; value: "one" }>().toExtend<RadioProps>();
+    expectTypeOf<{ children: "One"; value: "one" }>().toExtend<RadioProps>();
+    expectTypeOf<{
+      label: "View";
+      options: [{ label: "A"; value: "a" }];
+    }>().toExtend<SegmentedControlProps<"a">>();
   });
 
   it("rejects a control that carries neither", () => {
-    // @ts-expect-error a Switch with no label and no children has no name
-    const unnamedSwitch: SwitchProps = { checked: true };
-    // @ts-expect-error a Radio with no label and no children has no name
-    const unnamedRadio: RadioProps = { value: "one" };
-    // @ts-expect-error a SegmentedControl is named by `label`
-    const unnamedGroup: SegmentedControlProps<"a"> = {
-      options: [{ label: "A", value: "a" }],
-    };
-    expectTypeOf(unnamedSwitch).not.toBeNever();
-    expectTypeOf(unnamedRadio).not.toBeNever();
-    expectTypeOf(unnamedGroup).not.toBeNever();
+    // A Switch with no label and no children has no name.
+    expectTypeOf<{ checked: true }>().not.toExtend<SwitchProps>();
+    // A Radio with no label and no children has no name.
+    expectTypeOf<{ value: "one" }>().not.toExtend<RadioProps>();
+    // A SegmentedControl is named by `label`.
+    expectTypeOf<{
+      options: [{ label: "A"; value: "a" }];
+    }>().not.toExtend<SegmentedControlProps<"a">>();
   });
 });
 
@@ -187,6 +183,12 @@ describe("labeled field children", () => {
       (controlProps: { bogus: true }) => ReactNode
     >().not.toExtend<LabeledFieldChild>();
   });
+
+  it("keeps the control attributes and the id in the split control props", () => {
+    expectTypeOf<SplitLabeledFieldControlProps["controlProps"]>().toExtend<
+      FieldControlProps & { readonly id: string }
+    >();
+  });
 });
 
 describe("text input types", () => {
@@ -227,6 +229,9 @@ describe("shared vocabularies", () => {
     expectTypeOf<CheckboxLabelVisibility>().toEqualTypeOf<Visibility>();
     expectTypeOf<SegmentedControlLabelVisibility>().toEqualTypeOf<Visibility>();
     expectTypeOf<TableCaptionVisibility>().toEqualTypeOf<Visibility>();
+    expectTypeOf<CheckboxProps["labelVisibility"]>().toEqualTypeOf<
+      "hidden" | "visible" | undefined
+    >();
   });
 
   it("types announcement props with AnnouncementMode", () => {
@@ -249,8 +254,6 @@ describe("selection control labels and value callbacks", () => {
       ReactNode | undefined
     >();
     expectTypeOf<RadioProps["label"]>().toEqualTypeOf<ReactNode | undefined>();
-    expectTypeOf<{ label: "Autopilot" }>().toExtend<SwitchProps>();
-    expectTypeOf<{ value: "sail"; label: "Sail" }>().toExtend<RadioProps>();
   });
 
   it("names value callbacks by their payload", () => {
@@ -292,9 +295,6 @@ describe("text control modifiers", () => {
     >();
     expectTypeOf<TextareaProps["minRows"]>().toEqualTypeOf<
       number | undefined
-    >();
-    expectTypeOf<CheckboxProps["labelVisibility"]>().toEqualTypeOf<
-      "hidden" | "visible" | undefined
     >();
   });
 });
@@ -351,9 +351,6 @@ describe("number field value contract", () => {
             | "belowMin"
             | "aboveMax";
         }
-    >();
-    expectTypeOf<SplitLabeledFieldControlProps["controlProps"]>().toExtend<
-      FieldControlProps & { readonly id: string }
     >();
   });
 });
@@ -565,8 +562,25 @@ describe("save action bar rules as data", () => {
   });
 });
 
+/**
+ * `exactOptionalPropertyTypes` is enabled, so every optional public prop must
+ * admit `undefined` or consumers cannot pass a computed optional value.
+ */
 describe("exact optional public props", () => {
   it("accepts explicit undefined for custom optional props", () => {
+    expectTypeOf<undefined>().toExtend<
+      ComponentProps<typeof Button>["loadingLabel"]
+    >();
+    expectTypeOf<undefined>().toExtend<
+      ComponentProps<typeof Button>["variant"]
+    >();
+    expectTypeOf<undefined>().toExtend<ComponentProps<typeof Banner>["tone"]>();
+    expectTypeOf<undefined>().toExtend<
+      ComponentProps<typeof PanelRoot>["styleNonce"]
+    >();
+    expectTypeOf<undefined>().toExtend<
+      ComponentProps<typeof Checkbox>["indeterminate"]
+    >();
     expectTypeOf<{ gap: undefined }>().toExtend<Pick<StackProps, "gap">>();
     expectTypeOf<{ density: undefined }>().toExtend<
       Pick<DataGridProps<unknown>, "density">

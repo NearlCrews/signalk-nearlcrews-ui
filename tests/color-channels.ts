@@ -3,6 +3,9 @@
  * imported, so the unit suites and the browser specs share them.
  */
 
+/** The brightest green or blue channel Night lets a color carry. */
+export const NIGHT_CHANNEL_CAP = 0x40;
+
 /** The red, green, and blue channels of a `#rrggbb` color. */
 export function hexChannels(hex: string): [number, number, number] {
   const value = hex.replace("#", "");

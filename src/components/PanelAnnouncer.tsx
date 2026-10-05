@@ -6,13 +6,17 @@ import {
   useState,
 } from "react";
 
-import { messageLogAttributes } from "../utils/announcement.js";
+import {
+  messageLogAttributes,
+  type SpokenMode,
+} from "../utils/announcement.js";
 import {
   type PanelAnnounce,
   PanelAnnouncerProvider,
 } from "../utils/announcer.js";
 import { trimmedText } from "../utils/labels.js";
 import { useFirstMessageHold } from "../utils/repeat-announcement.js";
+import { startTimer } from "../utils/timer.js";
 
 /**
  * How long a message stays in its region. Long enough for every reader to
@@ -48,7 +52,7 @@ function AnnouncerRegion({
   live,
   messages,
 }: {
-  readonly live: "assertive" | "polite";
+  readonly live: SpokenMode;
   readonly messages: readonly QueuedMessage[];
 }): React.JSX.Element {
   return (
@@ -103,7 +107,7 @@ export function PanelAnnouncer({
   const oldest = messages[0];
   useEffect(() => {
     if (oldest === undefined) return undefined;
-    const timer = setTimeout(
+    return startTimer(
       () => {
         setMessages((current) =>
           current.filter((message) => message !== oldest),
@@ -111,9 +115,6 @@ export function PanelAnnouncer({
       },
       Math.max(0, oldest.expiresAt - Date.now()),
     );
-    return () => {
-      clearTimeout(timer);
-    };
   }, [oldest]);
 
   const shown = holding ? NO_MESSAGES : messages;

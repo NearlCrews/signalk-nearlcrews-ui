@@ -35,6 +35,7 @@ import {
   ToastRegion,
 } from "../../src/overlays.js";
 import { renderInPanel } from "../helpers.js";
+import { Bomb } from "./lib/failing-content.js";
 
 /** Every string of a defaults group, flattened so nested groups count too. */
 function groupStrings(group: object): string[] {
@@ -71,10 +72,6 @@ function pageShows(wording: string): boolean {
   return [...document.querySelectorAll("[aria-label]")].some(
     (element) => element.getAttribute("aria-label") === text,
   );
-}
-
-function Bomb(): React.JSX.Element {
-  throw new Error("chart tiles failed");
 }
 
 /**
@@ -123,10 +120,14 @@ function ToastSurface(): React.JSX.Element {
 /**
  * One render per bundle group that shows every string in it at once. Keyed by
  * the defaults type, so a group added to the bundle fails to compile here
- * until it has a surface.
+ * until it has a surface. The unsupported-browser group has no entry, because
+ * `renderSurface` renders the shell itself for it.
  */
 const SURFACES: Readonly<
-  Record<keyof PanelLabelDefaults, () => React.JSX.Element>
+  Record<
+    Exclude<keyof PanelLabelDefaults, "unsupportedBrowser">,
+    () => React.JSX.Element
+  >
 > = {
   banner: () => (
     <Banner tone="info" onDismiss={() => undefined}>
@@ -214,9 +215,6 @@ const SURFACES: Readonly<
     </>
   ),
   toastRegion: ToastSurface,
-  // The notice renders instead of the panel, so this surface is the shell on
-  // an engine without native CSS scope, rendered without a PanelRoot.
-  unsupportedBrowser: () => <p>Unused</p>,
 };
 
 /** Renders one group's surface, with or without a bundle. */
@@ -224,6 +222,8 @@ function renderSurface(
   group: keyof PanelLabelDefaults,
   labels: PanelLabels | undefined,
 ): void {
+  // The notice renders instead of the panel, so this surface is the shell on
+  // an engine without native CSS scope, rendered without a PanelRoot.
   if (group === "unsupportedBrowser") {
     vi.stubGlobal("CSSScopeRule", undefined);
     render(
@@ -455,25 +455,8 @@ describe("panel label bundle", () => {
   it("titles an empty grid and a confirmation from the bundle", () => {
     renderInPanel(
       <>
-        <DataGrid<{ readonly id: string }>
-          aria-label="Waypoints"
-          items={[]}
-          renderRow={(waypoint) => (
-            <Row>
-              <Cell>{waypoint.id}</Cell>
-            </Row>
-          )}
-        >
-          <Column id="id" isRowHeader>
-            Name
-          </Column>
-        </DataGrid>
-        <InlineConfirm
-          open
-          message="This cannot be undone."
-          onCancel={() => undefined}
-          onConfirm={() => undefined}
-        />
+        <SURFACES.dataGrid />
+        <SURFACES.inlineConfirm />
       </>,
       { labels: DUTCH },
     );
@@ -566,11 +549,5 @@ describe("panel label bundle", () => {
     );
 
     expect(screen.getByText("Bezig")).toBeVisible();
-  });
-
-  it("keeps the English defaults with no bundle", () => {
-    renderInPanel(<Button loading>Save</Button>);
-
-    expect(screen.getByText("Working")).toBeInTheDocument();
   });
 });

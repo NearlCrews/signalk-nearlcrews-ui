@@ -79,9 +79,8 @@ function PanelSurface({
   );
   const setRootRef = useNodeRef(rootElement, undefined, installStyles);
 
-  // The caller ref is composed separately, in a layout effect, keeping the
-  // commit-phase timing the imperative handle provided, so swapping the ref
-  // does not reinstall the style element.
+  // The caller ref is composed separately, in a layout effect, so swapping
+  // the ref does not reinstall the style element.
   useComposedRef(rootElement, ref);
 
   // Overlay components (Dialog, Menu, Toast) portal into the panel root so

@@ -3,7 +3,12 @@ import userEvent from "@testing-library/user-event";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Switch } from "../../src/forms.js";
-import { expectNoAxeViolations, panel, renderInPanel } from "../helpers.js";
+import {
+  expectNoAxeViolations,
+  formOf,
+  panel,
+  renderInPanel,
+} from "../helpers.js";
 
 describe("Switch", () => {
   it("requires a non-empty label", () => {
@@ -72,15 +77,15 @@ describe("Switch", () => {
   it("participates in native forms and resets to defaultChecked", async () => {
     const user = userEvent.setup();
     renderInPanel(
-      <form data-testid="switch-form">
+      <form>
         <Switch name="autopilot" value="enabled" defaultChecked required>
           Autopilot
         </Switch>
       </form>,
     );
 
-    const form = screen.getByTestId<HTMLFormElement>("switch-form");
     const toggle = screen.getByRole("switch", { name: "Autopilot" });
+    const form = formOf(toggle);
     expect(new FormData(form).get("autopilot")).toBe("enabled");
     await user.click(toggle);
     expect(new FormData(form).has("autopilot")).toBe(false);

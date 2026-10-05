@@ -2,18 +2,13 @@ import {
   type InputHTMLAttributes,
   type MouseEventHandler,
   type ReactNode,
-  type Ref,
   type RefAttributes,
-  type RefObject,
   type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
-  useEffectEvent,
-  useId,
   useLayoutEffect,
-  useRef,
 } from "react";
-import { useComposedRef, useNodeRef } from "../hooks/use-node-ref.js";
-import { RANGE_STYLES } from "../styles/range.js";
+import { useResettableControl } from "../hooks/use-resettable-control.js";
+import { RANGE_PROGRESS_PROPERTY, RANGE_STYLES } from "../styles/range.js";
 import { TEXTAREA_STYLES } from "../styles/textarea.js";
 import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import {
@@ -24,18 +19,15 @@ import {
   resolveAriaDisabled,
 } from "../utils/activation.js";
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { joinIdReferences, requireIdToken } from "../utils/aria.js";
+import { joinIdReferences, useIdToken } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { isDevelopment } from "../utils/environment.js";
-import { resolveFieldRegions } from "../utils/field-error.js";
+import { fieldDescribedBy, resolveFieldRegions } from "../utils/field-error.js";
 import {
   markForwardsFieldControlProps,
   withoutFieldLookupIds,
 } from "../utils/field-forwarding.js";
-import {
-  afterMicrotaskIfConnected,
-  observeFormReset,
-} from "../utils/form-reset.js";
+import { afterMicrotaskIfConnected } from "../utils/form-reset.js";
 import {
   hasReactContent,
   reactNodeText,
@@ -84,46 +76,6 @@ function inputClassNames(
     monospace && "snui-input--monospace",
     className,
   );
-}
-
-/**
- * Owns a control for a whole mount and puts it back after its own form has
- * been reset.
- *
- * A native reset restores a control from its `value` and `checked` content
- * attributes, and a select from its options' `selected` ones, which a
- * React-controlled control does not carry, and React neither re-renders nor
- * fires a change afterwards, so each control says here how to restore itself.
- * The resync is an effect event, so it reads current props without
- * registering again. The caller's own ref is composed separately, because
- * rebuilding the callback ref every render would detach the node on every
- * commit, which an ordinary inline consumer ref would otherwise cause. The
- * registration is keyed on the `form` attribute, because a control moved to
- * another form has to listen to the form it now belongs to.
- */
-function useResettableControl<
-  Control extends HTMLInputElement | HTMLSelectElement,
->(
-  ref: Ref<Control> | undefined,
-  formId: string | undefined,
-  onReset: (node: Control) => void,
-): readonly [RefObject<Control | null>, (node: Control) => () => void] {
-  const nodeRef = useRef<Control | null>(null);
-  const setNode = useNodeRef(nodeRef, undefined);
-  useComposedRef(nodeRef, ref);
-  const resync = useEffectEvent(onReset);
-
-  // The form id is a change signal rather than a value read here: the
-  // registration resolves the control's own form, so a control moved to
-  // another form has to register again on that one.
-  useLayoutEffect(() => {
-    const node = nodeRef.current;
-    if (node === null) return undefined;
-
-    return observeFormReset(node, resync);
-  }, [formId]);
-
-  return [nodeRef, setNode];
 }
 
 /** Puts a controlled text or numeric value back after a native form reset. */
@@ -182,7 +134,7 @@ export const TextInput = /* @__PURE__ */ markForwardsFieldControlProps(
     value,
     ...props
   }: TextInputProps): React.JSX.Element {
-    const [, attachInput] = useResettableControl(
+    const inputRef = useResettableControl(
       ref,
       props.form,
       restoreControlledValue(value),
@@ -191,7 +143,7 @@ export const TextInput = /* @__PURE__ */ markForwardsFieldControlProps(
     return (
       <input
         {...withoutFieldLookupIds(props)}
-        ref={attachInput}
+        ref={inputRef}
         type={type}
         value={value}
         className={inputClassNames(monospace, className)}
@@ -216,7 +168,7 @@ export const NumberInput = /* @__PURE__ */ markForwardsFieldControlProps(
     value,
     ...props
   }: NumberInputProps): React.JSX.Element {
-    const [, attachInput] = useResettableControl(
+    const inputRef = useResettableControl(
       ref,
       props.form,
       restoreControlledValue(value),
@@ -225,7 +177,7 @@ export const NumberInput = /* @__PURE__ */ markForwardsFieldControlProps(
     return (
       <input
         {...withoutFieldLookupIds(props)}
-        ref={attachInput}
+        ref={inputRef}
         type="number"
         value={value}
         className={inputClassNames(monospace, className)}
@@ -260,7 +212,7 @@ function setRangeProgress(element: HTMLInputElement): void {
   const ratio = span > 0 ? (Number(element.value) - minimum) / span : 0;
   const percent = Math.min(Math.max(ratio * 100, 0), 100);
   const safePercent = Number.isFinite(percent) ? percent : 0;
-  element.style.setProperty("--snui-range-progress", `${String(safePercent)}%`);
+  element.style.setProperty(RANGE_PROGRESS_PROPERTY, `${String(safePercent)}%`);
 }
 
 /**
@@ -300,11 +252,7 @@ export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
       setRangeValueText(element, ownsValueText, spokenUnit);
     };
 
-    const [inputRef, attachInput] = useResettableControl(
-      ref,
-      props.form,
-      syncRange,
-    );
+    const inputRef = useResettableControl(ref, props.form, syncRange);
 
     // The fill is a style property rather than an attribute, so nothing repaints
     // it on its own. This runs after every render, including the first, because
@@ -317,7 +265,7 @@ export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
     return (
       <input
         {...withoutFieldLookupIds(props)}
-        ref={attachInput}
+        ref={inputRef}
         type="range"
         aria-valuetext={ariaValueText}
         className={classNames("snui-range", className)}
@@ -345,7 +293,7 @@ export const Select = /* @__PURE__ */ markForwardsFieldControlProps(
     value,
     ...props
   }: SelectProps): React.JSX.Element {
-    const [, attachSelect] = useResettableControl(
+    const selectRef = useResettableControl(
       ref,
       props.form,
       restoreControlledSelection(value),
@@ -354,7 +302,7 @@ export const Select = /* @__PURE__ */ markForwardsFieldControlProps(
     return (
       <select
         {...withoutFieldLookupIds(props)}
-        ref={attachSelect}
+        ref={selectRef}
         value={value}
         className={inputClassNames(monospace, className, "snui-select")}
       />
@@ -500,24 +448,16 @@ export function Checkbox({
 }: CheckboxProps): React.JSX.Element {
   requireContent(label, "Checkbox requires a non-empty label.");
 
-  const generatedId = useId();
-  // The id seeds the label, description, and error ids, so an id carrying a
-  // space would point aria-describedby at ids that exist nowhere.
-  const controlId =
-    id === undefined ? generatedId : requireIdToken(id, "Checkbox id");
+  const controlId = useIdToken(id, "Checkbox id");
   const labelId = `${controlId}-label`;
 
-  const [inputRef, attachInput] = useResettableControl(
-    ref,
-    props.form,
-    (node) => {
-      // A native reset restores checkedness from defaultChecked but never
-      // touches the indeterminate IDL property, so re-assert the prop-driven
-      // state once the reset lands.
-      if (checked !== undefined) node.checked = checked;
-      node.indeterminate = indeterminate ?? false;
-    },
-  );
+  const inputRef = useResettableControl(ref, props.form, (node) => {
+    // A native reset restores checkedness from defaultChecked but never
+    // touches the indeterminate IDL property, so re-assert the prop-driven
+    // state once the reset lands.
+    if (checked !== undefined) node.checked = checked;
+    node.indeterminate = indeterminate ?? false;
+  });
 
   // Checkedness is a change signal rather than a value read here: a platform
   // toggle clears the mixed state and reports the new checkedness, and
@@ -557,7 +497,7 @@ export function Checkbox({
       component: "Checkbox",
       describedBy: ariaDescribedBy,
       hasReason,
-      name: reactNodeText(label).trim(),
+      name: reactNodeText(label),
       nativeDisabled,
       noun: "box",
     });
@@ -568,11 +508,9 @@ export function Checkbox({
     regions;
   // The reason follows the description, which says what the box does, and
   // comes before an error about the value it holds.
-  const describedBy = joinIdReferences(
+  const describedBy = fieldDescribedBy(
+    { ...regions, reasonId: showsReason ? reasonId : undefined },
     ariaDescribedBy,
-    descriptionId,
-    showsReason ? reasonId : undefined,
-    referencedErrorId,
   );
   const errorMessage = joinIdReferences(ariaErrorMessage, referencedErrorId);
 
@@ -626,7 +564,7 @@ export function Checkbox({
       <label className="snui-checkbox__control" htmlFor={controlId}>
         <input
           {...props}
-          ref={attachInput}
+          ref={inputRef}
           id={controlId}
           type="checkbox"
           checked={checked}

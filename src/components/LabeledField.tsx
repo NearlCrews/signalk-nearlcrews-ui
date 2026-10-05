@@ -12,7 +12,7 @@ import { idReferenceList, joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { isDevelopment } from "../utils/environment.js";
 import { packageError } from "../utils/errors.js";
-import { resolveFieldRegions } from "../utils/field-error.js";
+import { fieldDescribedBy, resolveFieldRegions } from "../utils/field-error.js";
 import { forwardsFieldControlProps } from "../utils/field-forwarding.js";
 import { definedProps } from "../utils/props.js";
 import { requireContent } from "../utils/react-node.js";
@@ -206,9 +206,8 @@ export function LabeledField({
   // whichever route it arrived by: an `aria-describedby` already on the child
   // element and the ids in `controlDescribedBy` both follow the description
   // and the error rather than displacing them.
-  const describedBy = joinIdReferences(
-    descriptionId,
-    referencedErrorId,
+  const describedBy = fieldDescribedBy(
+    regions,
     elementChild?.props["aria-describedby"],
     ...idReferenceList(controlDescribedBy),
   );

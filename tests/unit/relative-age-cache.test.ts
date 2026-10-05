@@ -1,17 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type * as FormatRelativeAgeModule from "../../src/utils/format-relative-age.js";
+import {
+  countConstructors,
+  interceptConstructors,
+} from "./lib/relative-time-format.js";
 
 /**
- * Mirrors FORMATTER_CACHE_LIMIT in the module under test: the cache is emptied
- * once it holds this many formatters.
+ * Mirrors FORMATTER_CACHE_LIMIT in src/utils/intl.ts, the cache this module
+ * formats through: it is emptied once it holds this many formatters.
  */
 const FORMATTER_CACHE_LIMIT = 32;
-const FIRST_LOCALE = "en-x-p0";
-const LAST_LOCALE = `en-x-p${String(FORMATTER_CACHE_LIMIT)}`;
-const LOCALES = Array.from(
-  { length: FORMATTER_CACHE_LIMIT + 1 },
-  (_, index) => `en-x-p${String(index)}`,
+/** A distinct private-use tag per index, so each one builds its own formatter. */
+const localeAt = (index: number): string => `en-x-p${String(index)}`;
+const FIRST_LOCALE = localeAt(0);
+const LAST_LOCALE = localeAt(FORMATTER_CACHE_LIMIT);
+const LOCALES = Array.from({ length: FORMATTER_CACHE_LIMIT + 1 }, (_, index) =>
+  localeAt(index),
 );
 
 /**
@@ -23,30 +28,6 @@ async function loadFormatRelativeAge(): Promise<
 > {
   vi.resetModules();
   return import("../../src/utils/format-relative-age.js");
-}
-
-/**
- * Runs `onConstruct` ahead of every formatter the module builds, keeping the
- * real behavior for each one it lets through.
- */
-function interceptConstructors(onConstruct: () => void): void {
-  const Original = Intl.RelativeTimeFormat;
-  vi.spyOn(Intl, "RelativeTimeFormat").mockImplementation(function (
-    this: unknown,
-    ...args: ConstructorParameters<typeof Intl.RelativeTimeFormat>
-  ) {
-    onConstruct();
-    return new Original(...args);
-  });
-}
-
-/** Counts every formatter the module builds. */
-function countConstructors(): () => number {
-  let constructed = 0;
-  interceptConstructors(() => {
-    constructed += 1;
-  });
-  return () => constructed;
 }
 
 describe("relative age formatter cache", () => {

@@ -55,14 +55,14 @@ export interface RequiredContext<T> {
 export function createRequiredContext<T>(
   displayName: string,
 ): RequiredContext<T> {
-  const Context = createContext<T | null>(null);
+  const { Provider, useValue: useOptionalValue } = createValueContext<T | null>(
+    null,
+  );
   return {
-    Provider: ({ children, value }) => (
-      <Context value={value}>{children}</Context>
-    ),
-    useOptionalValue: () => useContext(Context),
+    Provider,
+    useOptionalValue,
     useValue: (component: string): T => {
-      const value = useContext(Context);
+      const value = useOptionalValue();
       if (value === null) {
         throw packageError(
           `${component} must be rendered inside ${displayName}.`,

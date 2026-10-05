@@ -1,8 +1,9 @@
-import { type ReactNode, useId, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useLayoutEffect, useRef } from "react";
 import { useControllableState } from "../hooks/use-controllable-state.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
-import { requireIdToken } from "../utils/aria.js";
+import { useIdToken } from "../utils/aria.js";
 import { markForwardsFieldControlProps } from "../utils/field-forwarding.js";
+import { isFocused } from "../utils/focus.js";
 import {
   DEFAULT_HIDE_LABEL,
   DEFAULT_SHOW_LABEL,
@@ -41,7 +42,7 @@ interface SelectionSnapshot {
 function readSelection(input: HTMLInputElement | null): SelectionSnapshot {
   return {
     end: input?.selectionEnd ?? null,
-    focused: input?.ownerDocument.activeElement === input,
+    focused: input !== null && isFocused(input),
     start: input?.selectionStart ?? null,
   };
 }
@@ -70,11 +71,7 @@ export const SecretInput = /* @__PURE__ */ markForwardsFieldControlProps(
     trailingContent,
     ...props
   }: SecretInputProps): React.JSX.Element {
-    const generatedId = useId();
-    // The id is spent on a relationship as well as on the input, and an id
-    // carrying a space would point aria-controls at two ids that exist nowhere.
-    const inputId =
-      id === undefined ? generatedId : requireIdToken(id, "SecretInput id");
+    const inputId = useIdToken(id, "SecretInput id");
     const [effectiveRevealed, commitRevealed] = useControllableState(
       revealed,
       defaultRevealed,

@@ -153,6 +153,13 @@ function datetimeFields(state = ""): string {
   ).join(",\n");
 }
 
+/**
+ * The pair Night marks a selection with: selected text, and the date or time
+ * segment being edited, which stands in for one.
+ */
+const NIGHT_SELECTION_DECLARATIONS = `  background-color: var(--snui-color-accent-fill);
+  color: var(--snui-color-on-accent);`;
+
 /** The inset fill that covers the browser's own autofill background. */
 const AUTOFILL_COVER = "inset 0 0 0 100vmax var(--snui-color-surface)";
 
@@ -458,8 +465,7 @@ ${NIGHT_ROOT} {
 
 ${NIGHT_ROOT}::selection,
 ${NIGHT_ROOT} ::selection {
-  background-color: var(--snui-color-accent-fill);
-  color: var(--snui-color-on-accent);
+${NIGHT_SELECTION_DECLARATIONS}
 }
 
 /*
@@ -550,8 +556,7 @@ ${datetimeFields()} {
  * same reason as the picker ring.
  */
 ${datetimeFields(":focus-within")} {
-  background-color: var(--snui-color-accent-fill);
-  color: var(--snui-color-on-accent);
+${NIGHT_SELECTION_DECLARATIONS}
 }
 
 /*

@@ -1,5 +1,5 @@
 import { isValidElement, type ReactNode } from "react";
-import { trimmedText } from "./labels.js";
+import { hasText, trimmedText } from "./labels.js";
 import { hasReactContent, reactNodeText } from "./react-node.js";
 
 /**
@@ -45,7 +45,7 @@ export function isNamedUnit(unit: UnitContent): unit is NamedUnit {
  */
 export function hasUnitContent(unit: UnitContent): boolean {
   return isNamedUnit(unit)
-    ? hasReactContent(unit.symbol) || trimmedText(unit.name) !== ""
+    ? hasReactContent(unit.symbol) || hasText(unit.name)
     : hasReactContent(unit);
 }
 
@@ -58,8 +58,8 @@ export function hasUnitContent(unit: UnitContent): boolean {
  */
 export function unitSpokenText(unit: UnitContent): string | undefined {
   const text = isNamedUnit(unit)
-    ? trimmedText(unit.name) || reactNodeText(unit.symbol).trim()
-    : reactNodeText(unit).trim();
+    ? trimmedText(unit.name) || reactNodeText(unit.symbol)
+    : reactNodeText(unit);
   return text === "" ? undefined : text;
 }
 

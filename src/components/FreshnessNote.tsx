@@ -140,7 +140,7 @@ export function FreshnessNote({
   ref,
   since,
   stale,
-  tickMs,
+  tickMs = DEFAULT_CLOCK_TICK_MS,
   toneLabel,
   ...props
 }: FreshnessNoteProps): React.JSX.Element {
@@ -172,15 +172,11 @@ export function FreshnessNote({
   // re-renders only when that answer flips, and a new sample is measured
   // against a clock read as it arrives.
   const negative = options?.negative;
-  const nowMs = useClockReading(
-    hasSample ? sinceMs : Number.NaN,
-    tickMs ?? DEFAULT_CLOCK_TICK_MS,
-    {
-      changes: (candidateMs, currentMs) =>
-        ageCannotBeStated(sinceMs, candidateMs, negative) !==
-        ageCannotBeStated(sinceMs, currentMs, negative),
-    },
-  );
+  const nowMs = useClockReading(sinceMs, tickMs, {
+    changes: (candidateMs, currentMs) =>
+      ageCannotBeStated(sinceMs, candidateMs, negative) !==
+      ageCannotBeStated(sinceMs, currentMs, negative),
+  });
   const ageUnknown = hasSample && ageCannotBeStated(sinceMs, nowMs, negative);
 
   const age = <RelativeAge since={since} options={options} tickMs={tickMs} />;

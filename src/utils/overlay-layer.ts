@@ -3,9 +3,6 @@ import { createValueContext } from "./context.js";
 export const { Provider: OverlayLayerProvider, useValue: useOverlayLayer } =
   createValueContext(0);
 
-/** One z-index expression per layer, because a layer rarely changes. */
-const OVERLAY_Z_INDEX = new Map<number, string>();
-
 /**
  * The z-index an overlay paints at for its nesting layer.
  *
@@ -16,13 +13,7 @@ const OVERLAY_Z_INDEX = new Map<number, string>();
  * dialog raised from either covers both.
  */
 export function overlayZIndex(layer: number): string {
-  const cached = OVERLAY_Z_INDEX.get(layer);
-  if (cached !== undefined) return cached;
-
-  const zIndex =
-    layer <= 0
-      ? "var(--snui-z-overlay)"
-      : `calc(var(--snui-z-modal) + ${String(layer)})`;
-  OVERLAY_Z_INDEX.set(layer, zIndex);
-  return zIndex;
+  return layer <= 0
+    ? "var(--snui-z-overlay)"
+    : `calc(var(--snui-z-modal) + ${String(layer)})`;
 }

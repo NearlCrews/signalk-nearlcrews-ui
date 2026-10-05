@@ -1,3 +1,4 @@
+import { MUTED_PROSE_DECLARATIONS } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
@@ -36,11 +37,8 @@ export const EMPTY_STATE_STYLES: StyleModule = {
 }
 
 .snui-empty-state__description {
-  min-width: 0;
+${MUTED_PROSE_DECLARATIONS}
   max-width: 100%;
-  color: var(--snui-color-text-muted);
-  overflow-wrap: anywhere;
-  text-wrap: pretty;
 }
 
 /*

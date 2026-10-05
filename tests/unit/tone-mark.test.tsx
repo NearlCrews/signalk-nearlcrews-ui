@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { Badge, Banner, Metric, StatusIndicator } from "../../src/index.js";
 import { COMPONENT_STYLES } from "../../src/styles/components.js";
 import { TONE_SHAPE_DECLARATIONS } from "../../src/styles/tone-rules.js";
-import { ruleBody } from "../css-helpers.js";
+import { ruleBody, SEMANTIC_TONES } from "../css-helpers.js";
 import { renderInPanel } from "../helpers.js";
 import { announcementOf } from "./lib/announcements.js";
 
@@ -32,7 +32,7 @@ describe("tone marks", () => {
 
     const glyphs = [...container.querySelectorAll(".snui-tone-glyph")];
     expect(glyphs.map((glyph) => glyph.className)).toEqual(
-      ["info", "success", "warning", "danger"].map(
+      SEMANTIC_TONES.map(
         (tone) =>
           `snui-tone-glyph snui-tone-glyph--${tone} snui-badge__tone-glyph`,
       ),

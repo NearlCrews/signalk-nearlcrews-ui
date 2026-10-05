@@ -5,6 +5,7 @@ import {
   MAX_TIMER_DELAY_MS,
   subscribeToClock,
 } from "../utils/shared-clock.js";
+import { startTimer } from "../utils/timer.js";
 
 /** A clock reading and the moment it was taken for. */
 interface ClockReading {
@@ -101,12 +102,9 @@ export function useClockReading(
       MAX_TIMER_DELAY_MS,
       Math.max(0, wakeMs - Date.now()) + 1,
     );
-    const timer = setTimeout(() => {
+    return startTimer(() => {
       setReading((previous) => ({ ...previous, nowMs: Date.now() }));
     }, delayMs);
-    return () => {
-      clearTimeout(timer);
-    };
   }, [nowMs, wakeMs]);
 
   return nowMs;

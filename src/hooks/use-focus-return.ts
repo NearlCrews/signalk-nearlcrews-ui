@@ -1,6 +1,5 @@
 import {
   type RefObject,
-  useCallback,
   useEffectEvent,
   useLayoutEffect,
   useMemo,
@@ -26,16 +25,6 @@ export interface FocusReturnOptions {
   readonly returnFocusRef?: RefObject<HTMLElement | null> | undefined;
 }
 
-export interface FocusReturn {
-  /** Whether focus sits inside the region right now. */
-  readonly holdsFocus: () => boolean;
-  /**
-   * Moves focus to the destination and reports whether it went there. It runs
-   * whether or not the region held focus, for a caller acting on a press.
-   */
-  readonly returnFocus: () => boolean;
-}
-
 /**
  * Hands focus back when a region that held it closes.
  *
@@ -54,7 +43,7 @@ export function useFocusReturnOnClose<T extends Element>(
   nodeRef: RefObject<T | null>,
   open: boolean,
   { capturePreviousFocus = false, returnFocusRef }: FocusReturnOptions = {},
-): FocusReturn {
+): void {
   const holdsFocusRef = useFocusWithin(nodeRef, open);
   const previousFocusRef = useRef<HTMLElement | null>(null);
 
@@ -71,35 +60,18 @@ export function useFocusReturnOnClose<T extends Element>(
     capturePrevious();
   }, [capturePreviousFocus, open]);
 
-  // A plain callback rather than an effect event, because the caller holds it
-  // and presses it from an event handler of its own. The destination ref is
-  // the only prop it reads, so its identity changes with that ref alone.
-  const returnFocus = useCallback((): boolean => {
+  const restoreWhenHeld = useEffectEvent((): void => {
+    if (!holdsFocusRef.current) return;
     const destination = returnFocusRef?.current ?? previousFocusRef.current;
     previousFocusRef.current = null;
     holdsFocusRef.current = false;
-    if (destination?.isConnected !== true) return false;
-
-    destination.focus();
-    return true;
-  }, [holdsFocusRef, returnFocusRef]);
-
-  const restoreWhenHeld = useEffectEvent((): void => {
-    if (holdsFocusRef.current) returnFocus();
+    if (destination?.isConnected === true) destination.focus();
   });
 
   useLayoutEffect(() => {
     if (open) return;
     restoreWhenHeld();
   }, [open]);
-
-  return useMemo(
-    () => ({
-      holdsFocus: () => holdsFocusRef.current,
-      returnFocus,
-    }),
-    [holdsFocusRef, returnFocus],
-  );
 }
 
 /** A press waiting for the state change it asked for. */

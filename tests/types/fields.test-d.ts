@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { AriaAttributes, ReactNode } from "react";
 import { describe, expectTypeOf, it } from "vitest";
 import type {
   CheckboxGroupOption,
@@ -10,7 +10,9 @@ import type {
   ButtonReasonVisibility,
   CheckboxProps,
   CheckboxReasonVisibility,
+  FieldControlProps,
   FieldValidity,
+  IconOnlyButtonProps,
   NamedUnit,
   NumberDraft,
   NumberFieldMessage,
@@ -121,5 +123,31 @@ describe("field control additions", () => {
     expectTypeOf<FieldValidity["firstInvalid"]>().toEqualTypeOf<
       () => HTMLElement | null
     >();
+  });
+});
+
+/** What a control has to accept, and what a nameless one has to supply. */
+describe("field control contracts", () => {
+  it("exports the complete native aria-invalid type", () => {
+    expectTypeOf<FieldControlProps["aria-invalid"]>().toEqualTypeOf<
+      AriaAttributes["aria-invalid"]
+    >();
+  });
+
+  it("requires an icon-only button to carry an accessible name", () => {
+    expectTypeOf<IconOnlyButtonProps>().toExtend<{ readonly iconOnly: true }>();
+    expectTypeOf({
+      "aria-label": "Add source",
+      children: null,
+      iconOnly: true,
+    } as const).toExtend<IconOnlyButtonProps>();
+    expectTypeOf({
+      "aria-labelledby": "add-source-label",
+      children: null,
+      iconOnly: true,
+    } as const).toExtend<IconOnlyButtonProps>();
+    // @ts-expect-error an icon-only button needs one of the two naming props
+    const unnamed: IconOnlyButtonProps = { children: null, iconOnly: true };
+    expectTypeOf(unnamed).not.toBeNever();
   });
 });

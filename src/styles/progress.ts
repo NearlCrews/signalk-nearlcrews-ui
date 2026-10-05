@@ -8,6 +8,7 @@ import {
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
+import { COARSE_POINTER_QUERY } from "./tokens.js";
 import { toneDescendantColorRules } from "./tone-rules.js";
 
 /** Keyframe name for the indeterminate slide. */
@@ -82,7 +83,7 @@ ${toneDescendantColorRules("snui-progress", ".snui-progress__tone-glyph", "color
  * has to read as a length at a glance. The control height and the range thumb
  * already scale here; the track is the last measured element that did not.
  */
-@media (any-pointer: coarse) {
+@media ${COARSE_POINTER_QUERY} {
   .snui-progress__track {
     height: ${TRACK_THICKNESS_COARSE};
   }

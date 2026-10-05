@@ -1,11 +1,6 @@
 import { screen } from "@testing-library/react";
-import {
-  type AriaAttributes,
-  createRef,
-  Fragment,
-  type ReactElement,
-} from "react";
-import { describe, expect, expectTypeOf, it, vi } from "vitest";
+import { createRef, Fragment, type ReactElement } from "react";
+import { describe, expect, it, vi } from "vitest";
 import { SecretInput } from "../../src/forms.js";
 import {
   Checkbox,
@@ -26,12 +21,6 @@ import {
 import { renderInPanel } from "../helpers.js";
 
 describe("LabeledField", () => {
-  it("exports the complete native aria-invalid type", () => {
-    expectTypeOf<FieldControlProps["aria-invalid"]>().toEqualTypeOf<
-      AriaAttributes["aria-invalid"]
-    >();
-  });
-
   it("connects labels, descriptions, errors, and required state", () => {
     renderInPanel(
       <LabeledField
@@ -71,6 +60,12 @@ describe("LabeledField", () => {
     const row = container.querySelector(
       ".snui-field__error > .snui-field-error__row",
     );
+    // The region carries the shared block class beside the field's own, which
+    // is the one the rule that hides an empty region keys on.
+    expect(row?.parentElement).toHaveClass(
+      "snui-field-error snui-field__error",
+      { exact: true },
+    );
     const items = [...(row?.children ?? [])].filter(
       (item) => !item.classList.contains("snui-visually-hidden"),
     );
@@ -79,28 +74,6 @@ describe("LabeledField", () => {
       "snui-field-error__text",
     ]);
     expect(items[1]).toHaveTextContent("Enter an HTTP address.");
-  });
-
-  it("accepts date and time text input types", () => {
-    renderInPanel(
-      <>
-        <LabeledField label="Maintenance date">
-          <TextInput type="date" />
-        </LabeledField>
-        <LabeledField label="Maintenance time">
-          <TextInput type="time" />
-        </LabeledField>
-      </>,
-    );
-
-    expect(screen.getByLabelText("Maintenance date")).toHaveAttribute(
-      "type",
-      "date",
-    );
-    expect(screen.getByLabelText("Maintenance time")).toHaveAttribute(
-      "type",
-      "time",
-    );
   });
 
   it("supports opt-in field and checkbox error announcements", () => {

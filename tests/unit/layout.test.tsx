@@ -1,5 +1,4 @@
 import { screen, within } from "@testing-library/react";
-import { createRef, type ReactElement, type Ref } from "react";
 import { describe, expect, it } from "vitest";
 import {
   Badge,
@@ -7,12 +6,9 @@ import {
   Card,
   Cluster,
   InputGroup,
-  InputGroupAddon,
-  InputGroupControl,
   type LayoutJustification,
   Metric,
   MetricGrid,
-  Section,
   Stack,
   StatusIndicator,
 } from "../../src/index.js";
@@ -75,20 +71,13 @@ describe("Card tone mark placement", () => {
       "Updated just now",
     );
   });
-
-  it("adds no wrapper for a decorative accent, which renders no glyph", () => {
-    const { container } = renderInPanel(
-      <Card accent="info">Accented body</Card>,
-    );
-
-    const card = cardOf(container);
-    expect(card).toHaveClass("snui-card--accent-info");
-    expect(card.querySelector(".snui-card__body")).toBeNull();
-    expect(card.querySelector(".snui-card__tone-glyph")).toBeNull();
-  });
 });
 
 describe("Card naming", () => {
+  // Built at runtime, as a computed name would be: a literal blank is what
+  // the lint rule already refuses.
+  const BLANK = " ".repeat(2);
+
   it("groups and names a card from a label", () => {
     renderInPanel(<Card label="Speed over ground">Row body</Card>);
 
@@ -125,11 +114,8 @@ describe("Card naming", () => {
   });
 
   it("gives a blank native name no group role", () => {
-    // Built at runtime, as a computed name would be: a literal blank is what
-    // the lint rule already refuses.
-    const blank = " ".repeat(2);
     const { container } = renderInPanel(
-      <Card aria-label={blank} aria-labelledby={blank}>
+      <Card aria-label={BLANK} aria-labelledby={BLANK}>
         Row body
       </Card>,
     );
@@ -173,9 +159,8 @@ describe("Card naming", () => {
   });
 
   it("names a card by its label when the native name is blank", () => {
-    const blank = " ".repeat(2);
     renderInPanel(
-      <Card aria-label={blank} label="Speed over ground">
+      <Card aria-label={BLANK} label="Speed over ground">
         Row body
       </Card>,
     );
@@ -403,11 +388,10 @@ describe("metric units", () => {
       <Metric label="Depth" value="12.4" unit="m" />,
     );
 
-    const unit = container.querySelector(".snui-metric__unit");
-    expect(unit?.innerHTML).toBe("m");
-    expect(container.querySelector(".snui-metric__value")).toHaveTextContent(
-      "12.4 m",
-    );
+    // The unit is a suffix inside the value, so it is read through it.
+    const value = container.querySelector(".snui-metric__value");
+    expect(value?.querySelector(".snui-metric__unit")?.innerHTML).toBe("m");
+    expect(value).toHaveTextContent("12.4 m");
   });
 
   it("falls back to the symbol when the name is blank", () => {
@@ -625,12 +609,12 @@ describe("layout primitives on semantic elements", () => {
       </Card>,
     );
 
-    const card = container.querySelector(".snui-card");
+    const card = cardOf(container);
     expect(card).toHaveClass("snui-card--compact");
-    expect(card?.querySelector(".snui-card__header")).toHaveTextContent(
+    expect(card.querySelector(".snui-card__header")).toHaveTextContent(
       "Engine",
     );
-    expect(card?.querySelector(".snui-card__footer")).toHaveTextContent(
+    expect(card.querySelector(".snui-card__footer")).toHaveTextContent(
       "Updated just now",
     );
   });
@@ -642,20 +626,10 @@ describe("layout primitives on semantic elements", () => {
       </Card>,
     );
 
-    const card = container.querySelector(".snui-card");
-    expect(card?.className).not.toMatch(/snui-card--/);
-    expect(card?.querySelector(".snui-card__header")).toBeNull();
-    expect(card?.querySelector(".snui-card__footer")).toBeNull();
-  });
-
-  it("renders the metric unit as a muted suffix on the value", () => {
-    const { container } = renderInPanel(
-      <Metric label="Depth" value="12.4" unit="m" />,
-    );
-
-    const value = container.querySelector(".snui-metric__value");
-    expect(value?.querySelector(".snui-metric__unit")).toHaveTextContent("m");
-    expect(value).toHaveTextContent("12.4 m");
+    const card = cardOf(container);
+    expect(card.className).not.toMatch(/snui-card--/);
+    expect(card.querySelector(".snui-card__header")).toBeNull();
+    expect(card.querySelector(".snui-card__footer")).toBeNull();
   });
 
   it("announces metric values through a polite live region", () => {
@@ -728,9 +702,11 @@ describe("Card variants", () => {
         Body
       </Card>,
     );
-    const card = container.querySelector(".snui-card");
+    const card = cardOf(container);
     expect(card).toHaveClass("snui-card--accent-success");
-    expect(card?.className).not.toMatch(/snui-card--success/);
+    expect(card.className).not.toMatch(/snui-card--success/);
+    // No glyph to keep beside the content, so no body wrapper either.
+    expect(card.querySelector(".snui-card__body")).toBeNull();
     expect(container.querySelector(".snui-card__tone-glyph")).toBeNull();
     expect(container.querySelector(".snui-visually-hidden")).toBeNull();
   });
@@ -741,9 +717,9 @@ describe("Card variants", () => {
         Body
       </Card>,
     );
-    const card = container.querySelector(".snui-card");
+    const card = cardOf(container);
     expect(card).toHaveClass("snui-card--danger");
-    expect(card?.className).not.toMatch(/snui-card--accent-/);
+    expect(card.className).not.toMatch(/snui-card--accent-/);
   });
 
   it("supports flush density and a toned accent with its glyph in the header", () => {
@@ -753,9 +729,9 @@ describe("Card variants", () => {
       </Card>,
     );
 
-    const card = container.querySelector(".snui-card");
+    const card = cardOf(container);
     expect(card).toHaveClass("snui-card--flush", "snui-card--warning");
-    const header = card?.querySelector(".snui-card__header");
+    const header = card.querySelector(".snui-card__header");
     expect(header?.querySelector(".snui-card__tone-glyph")).toHaveTextContent(
       "!",
     );
@@ -769,10 +745,10 @@ describe("Card variants", () => {
       </Card>,
     );
 
-    const card = container.querySelector(".snui-card");
+    const card = cardOf(container);
     expect(card).toHaveClass("snui-card--compact");
-    expect(card?.className).not.toMatch(/snui-card--neutral/);
-    expect(card?.querySelector(".snui-tone-glyph")).toBeNull();
+    expect(card.className).not.toMatch(/snui-card--neutral/);
+    expect(card.querySelector(".snui-tone-glyph")).toBeNull();
   });
 });
 
@@ -798,107 +774,7 @@ describe("InputGroup density", () => {
   });
 });
 
-/** Every component that gained a ref, with the element it must resolve to. */
-const REF_CASES: readonly {
-  readonly name: string;
-  readonly tagName: string;
-  readonly render: (ref: Ref<never>) => ReactElement;
-}[] = [
-  {
-    name: "Stack",
-    tagName: "DIV",
-    render: (ref) => <Stack ref={ref} data-testid="target" />,
-  },
-  {
-    name: "Stack as form",
-    tagName: "FORM",
-    render: (ref) => (
-      <Stack as="form" ref={ref} action="/save" data-testid="target" />
-    ),
-  },
-  {
-    name: "Cluster",
-    tagName: "UL",
-    render: (ref) => <Cluster as="ul" ref={ref} data-testid="target" />,
-  },
-  {
-    name: "Card",
-    tagName: "SECTION",
-    render: (ref) => (
-      <Card as="section" ref={ref} data-testid="target">
-        Body
-      </Card>
-    ),
-  },
-  {
-    name: "MetricGrid",
-    tagName: "DIV",
-    render: (ref) => <MetricGrid ref={ref} data-testid="target" />,
-  },
-  {
-    name: "Metric",
-    tagName: "DIV",
-    render: (ref) => (
-      <Metric ref={ref} data-testid="target" label="Depth" value="12" />
-    ),
-  },
-  {
-    name: "Badge",
-    tagName: "SPAN",
-    render: (ref) => (
-      <Badge ref={ref} data-testid="target">
-        Beta
-      </Badge>
-    ),
-  },
-  {
-    name: "StatusIndicator",
-    tagName: "SPAN",
-    render: (ref) => (
-      <StatusIndicator ref={ref} data-testid="target">
-        Idle
-      </StatusIndicator>
-    ),
-  },
-  {
-    name: "Section",
-    tagName: "SECTION",
-    render: (ref) => (
-      <Section ref={ref} data-testid="target" title="Connection">
-        Body
-      </Section>
-    ),
-  },
-  {
-    name: "InputGroup",
-    tagName: "DIV",
-    render: (ref) => <InputGroup ref={ref} data-testid="target" />,
-  },
-  {
-    name: "InputGroupControl",
-    tagName: "DIV",
-    render: (ref) => <InputGroupControl ref={ref} data-testid="target" />,
-  },
-  {
-    name: "InputGroupAddon",
-    tagName: "SPAN",
-    render: (ref) => <InputGroupAddon ref={ref} data-testid="target" />,
-  },
-];
-
-describe("refs and attribute passthrough", () => {
-  it.each(REF_CASES)(
-    "resolves the $name ref to its root element",
-    ({ render: renderCase, tagName }) => {
-      const ref = createRef<never>();
-      renderInPanel(renderCase(ref));
-
-      const target = screen.getByTestId("target");
-      expect(target.tagName).toBe(tagName);
-      expect(ref.current).toBe(target);
-    },
-  );
-
+describe("attribute passthrough", () => {
   it("passes form attributes through a form stack", () => {
     renderInPanel(
       <Stack as="form" action="/save" noValidate aria-label="Settings">

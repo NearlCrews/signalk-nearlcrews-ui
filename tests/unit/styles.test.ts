@@ -18,7 +18,8 @@ import {
   ROOT_SELECTOR,
   SPINNER_ANIMATION_NAME,
 } from "../../src/version.js";
-import { hexChannels } from "../color-channels.js";
+import { hexChannels, NIGHT_CHANNEL_CAP } from "../color-channels.js";
+import { blockAt, themeSelector } from "../css-helpers.js";
 
 /** The package version the way a keyframe name carries it. */
 const VERSION_MARKER = PACKAGE_VERSION.replaceAll(".", "-");
@@ -26,16 +27,24 @@ const VERSION_MARKER = PACKAGE_VERSION.replaceAll(".", "-");
 /** A keyframe declaration, with its name captured. */
 const KEYFRAMES_PATTERN = /@keyframes\s+([A-Za-z0-9_-]+)/g;
 
+/** The name of every keyframe a sheet declares. */
+function keyframeNames(styles: string): string[] {
+  return [...styles.matchAll(KEYFRAMES_PATTERN)].map((match) => match[1] ?? "");
+}
+
 describe("versioned keyframes", () => {
   it("derives the spinner keyframe name from the package version", () => {
     expect(SPINNER_ANIMATION_NAME).toBe(`snui-v${VERSION_MARKER}-spin`);
   });
 
   it("defines every keyframe a module animates in that module or the root", () => {
-    const rootKeyframes = defined(PANEL_STYLES);
+    const rootKeyframes = keyframeNames(PANEL_STYLES);
     let referenceCount = 0;
     for (const module of STYLE_MODULES) {
-      const declared = new Set([...rootKeyframes, ...defined(module.styles)]);
+      const declared = new Set([
+        ...rootKeyframes,
+        ...keyframeNames(module.styles),
+      ]);
       const references = [
         ...module.styles.matchAll(/animation:\s*([^;]+);/g),
       ].map((match) => match[1] ?? "");
@@ -73,14 +82,10 @@ describe("versioned keyframes", () => {
   });
 
   it("qualifies the spinner keyframe so two package versions cannot collide", () => {
-    expect(defined(PANEL_STYLES)).toContain(SPINNER_ANIMATION_NAME);
+    expect(keyframeNames(PANEL_STYLES)).toContain(SPINNER_ANIMATION_NAME);
     expect(SPINNER_ANIMATION_NAME).toContain(VERSION_MARKER);
   });
 });
-
-function defined(styles: string): string[] {
-  return [...styles.matchAll(KEYFRAMES_PATTERN)].map((match) => match[1] ?? "");
-}
 
 /**
  * Blocks whose public API takes children, so one instance can contain another.
@@ -119,40 +124,6 @@ describe("nestable block modifiers", () => {
 });
 
 /**
- * Every region a component keeps mounted while it has nothing to say. Each one
- * is empty in the DOM sense while it waits, so the rule that takes it out of
- * the flow is keyed on `:empty`.
- */
-const SILENT_REGION_SELECTORS = [
-  ".snui-banner:empty",
-  ".snui-status:empty",
-  ".snui-metric__value:empty",
-  ".snui-field__error:empty",
-  ".snui-checkbox-group__warning:empty",
-] as const;
-
-/** Declarations that leave nothing of an element on screen. */
-const NO_VISIBLE_BOX = [
-  "position: absolute",
-  "width: 1px",
-  "height: 1px",
-  "padding: 0",
-  "margin: -1px",
-  "border: 0",
-  "overflow: hidden",
-  "clip-path: inset(50%)",
-] as const;
-
-/** The declarations of the first rule whose selector list names `selector`. */
-function declarationsFor(css: string, selector: string): string {
-  const index = css.indexOf(selector);
-  if (index === -1) throw new Error(`No rule opens with ${selector}.`);
-  const open = css.indexOf("{", index);
-  const close = css.indexOf("}", open);
-  return css.slice(open + 1, close);
-}
-
-/**
  * The controls a finger presses. `touch-action: manipulation` drops the
  * double-tap zoom delay and the ghost click behind it, which is what a gloved
  * hand at a helm feels as a control that ignored the first press.
@@ -166,10 +137,7 @@ const PRESSABLE_SELECTORS = [
 
 describe("touch presses", () => {
   it("takes the double-tap delay off every pressable control", () => {
-    const declarations = declarationsFor(
-      PANEL_STYLES,
-      PRESSABLE_SELECTORS.join(",\n"),
-    );
+    const declarations = blockAt(PANEL_STYLES, PRESSABLE_SELECTORS.join(",\n"));
     expect(declarations).toContain("touch-action: manipulation");
   });
 });
@@ -177,7 +145,7 @@ describe("touch presses", () => {
 describe("host element reset", () => {
   it("repaints the highlight in package tokens rather than erasing it", () => {
     // Newline anchored, so the search cannot land on .snui-required-mark.
-    const declarations = declarationsFor(PANEL_STYLES, "\nmark {");
+    const declarations = blockAt(PANEL_STYLES, "\nmark {");
     expect(declarations).toContain(
       "background: var(--snui-color-accent-subtle);",
     );
@@ -185,17 +153,23 @@ describe("host element reset", () => {
   });
 
   it("puts the list indent on the space scale", () => {
-    const declarations = declarationsFor(PANEL_STYLES, "ul,\nol {");
+    const declarations = blockAt(PANEL_STYLES, "ul,\nol {");
     expect(declarations).toContain("padding-inline-start: var(--snui-space-5)");
   });
 
   it("keeps the safe-area padding on physical sides", () => {
     // env() insets name physical edges, so an RTL panel would pad the wrong
     // hardware edge if these went through the logical shorthand.
-    const declarations = declarationsFor(PANEL_STYLES, ".snui-root__content {");
+    const declarations = blockAt(PANEL_STYLES, ".snui-root__content {");
     expect(declarations).toContain("padding-left: max(");
     expect(declarations).toContain("padding-right: max(");
     expect(declarations).not.toContain("padding-inline:");
+  });
+
+  it("draws a plain rule as a divider, in the subtle border", () => {
+    expect(blockAt(FOUNDATION_STYLES, "hr {")).toContain(
+      "border-block-start: 1px solid var(--snui-color-border-subtle);",
+    );
   });
 });
 
@@ -232,26 +206,10 @@ describe("panel root box", () => {
     // the room it may grow into against the viewport. A positioned panel root
     // becomes the containing block for that overlay and mixes the two frames,
     // which collapses every overlay opened once a tall panel has scrolled.
-    const declarations = declarationsFor(PANEL_STYLES, ":scope {");
+    const declarations = blockAt(PANEL_STYLES, ":scope {");
     expect(declarations).toContain("position: static");
   });
 });
-
-/** The body of the whole block that opens with `opening`, braces matched. */
-function blockAt(css: string, opening: string): string {
-  const start = css.indexOf(opening);
-  if (start === -1) throw new Error(`No block opens with ${opening}.`);
-  const open = css.indexOf("{", start);
-  let depth = 0;
-  for (let index = open; index < css.length; index += 1) {
-    if (css[index] === "{") depth += 1;
-    if (css[index] === "}") {
-      depth -= 1;
-      if (depth === 0) return css.slice(open + 1, index);
-    }
-  }
-  throw new Error(`Unterminated block ${opening}.`);
-}
 
 /**
  * Specificity of a compound selector list entry as the (0, b, 0) column these
@@ -270,12 +228,9 @@ const HOST_DARK_SELECTORS = [
   `[data-coreui-theme="dark"] ${ROOT_SELECTOR}:not([data-snui-theme])`,
   `.dark-mode ${ROOT_SELECTOR}:not([data-snui-theme])`,
 ] as const;
-const EXPLICIT_THEME_SELECTORS = [
-  `${ROOT_SELECTOR}[data-snui-theme="system"]`,
-  `${ROOT_SELECTOR}[data-snui-theme="light"]`,
-  `${ROOT_SELECTOR}[data-snui-theme="dark"]`,
-  `${ROOT_SELECTOR}[data-snui-theme="night"]`,
-] as const;
+const EXPLICIT_THEME_SELECTORS = ["system", "light", "dark", "night"].map(
+  themeSelector,
+);
 
 describe("increased contrast request", () => {
   const CONTRAST_MEDIA = "@media (prefers-contrast: more)";
@@ -444,14 +399,6 @@ describe("focus rings", () => {
     expect(rule).toContain(`outline-offset: ${INSET_FOCUS_RING_OFFSET};`);
     // The browser still decides whether the ring shows and in what color.
     expect(rule).not.toMatch(/outline(-style|-color)?:/);
-  });
-});
-
-describe("host element resets", () => {
-  it("draws a plain rule as a divider, in the subtle border", () => {
-    expect(blockAt(FOUNDATION_STYLES, "hr {")).toContain(
-      "border-block-start: 1px solid var(--snui-color-border-subtle);",
-    );
   });
 });
 
@@ -678,18 +625,43 @@ describe("Night browser chrome", () => {
       const [, green, blue] = hexChannels(
         NIGHT_TOKENS[token as keyof typeof NIGHT_TOKENS],
       );
-      expect(green, `${token} green`).toBeLessThanOrEqual(0x40);
-      expect(blue, `${token} blue`).toBeLessThanOrEqual(0x40);
+      expect(green, `${token} green`).toBeLessThanOrEqual(NIGHT_CHANNEL_CAP);
+      expect(blue, `${token} blue`).toBeLessThanOrEqual(NIGHT_CHANNEL_CAP);
     }
   });
 });
+
+/**
+ * Every region a component keeps mounted while it has nothing to say. Each one
+ * is empty in the DOM sense while it waits, so the rule that takes it out of
+ * the flow is keyed on `:empty`.
+ */
+const SILENT_REGION_SELECTORS = [
+  ".snui-banner:empty",
+  ".snui-status:empty",
+  ".snui-metric__value:empty",
+  ".snui-field-error:empty",
+  ".snui-checkbox-group__warning:empty",
+] as const;
+
+/** Declarations that leave nothing of an element on screen. */
+const NO_VISIBLE_BOX = [
+  "position: absolute",
+  "width: 1px",
+  "height: 1px",
+  "padding: 0",
+  "margin: -1px",
+  "border: 0",
+  "overflow: hidden",
+  "clip-path: inset(50%)",
+] as const;
 
 describe("mounted regions with nothing to announce", () => {
   it("costs no box, border, padding, or margin while a region waits", () => {
     for (const selector of SILENT_REGION_SELECTORS) {
       // Anchored at the start of a line, where a rule's selector list begins:
       // the same selectors also appear inside other rules' :not() lists.
-      const declarations = declarationsFor(PANEL_STYLES, `\n${selector}`);
+      const declarations = blockAt(PANEL_STYLES, `\n${selector}`);
       for (const declaration of NO_VISIBLE_BOX) {
         expect(
           declarations,
@@ -714,8 +686,8 @@ const CARD_CHROME_SPACING = ["gap", "padding"] as const;
 
 describe("flush cards", () => {
   it("clears every spacing the default card sets", () => {
-    const base = declarationsFor(PANEL_STYLES, ".snui-card {");
-    const flush = declarationsFor(PANEL_STYLES, ".snui-card--flush {");
+    const base = blockAt(PANEL_STYLES, ".snui-card {");
+    const flush = blockAt(PANEL_STYLES, ".snui-card--flush {");
 
     for (const property of CARD_CHROME_SPACING) {
       expect(base, `.snui-card no longer sets ${property}`).toContain(

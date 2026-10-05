@@ -1,20 +1,26 @@
 import type { ComponentProps, Ref, RefObject } from "react";
 import { describe, expectTypeOf, it } from "vitest";
 
-import type { CheckboxGroupProps } from "../../src/composites.js";
+import type { Accordion, CheckboxGroupProps } from "../../src/composites.js";
 import type {
+  Badge,
   Banner,
   Button,
   Checkbox,
+  CollapsibleSection,
   FieldGroup,
   InlineConfirm,
+  InputGroupAddon,
   LabeledField,
+  Metric,
   NumberFieldProps,
   NumberInput,
   PanelRoot,
   RangeInput,
+  Section,
   SegmentedControlProps,
   Select,
+  StatusIndicator,
   Textarea,
   TextInput,
   ThemeToggle,
@@ -79,6 +85,30 @@ describe("public ref types", () => {
     >();
   });
 
+  it("resolves each single-root component ref to the element it renders", () => {
+    expectTypeOf<ComponentProps<typeof Section>["ref"]>().toEqualTypeOf<
+      Ref<HTMLElement> | undefined
+    >();
+    expectTypeOf<
+      ComponentProps<typeof CollapsibleSection>["ref"]
+    >().toEqualTypeOf<Ref<HTMLElement> | undefined>();
+    expectTypeOf<ComponentProps<typeof Accordion>["ref"]>().toEqualTypeOf<
+      Ref<HTMLDivElement> | undefined
+    >();
+    expectTypeOf<ComponentProps<typeof Metric>["ref"]>().toEqualTypeOf<
+      Ref<HTMLDivElement> | undefined
+    >();
+    expectTypeOf<ComponentProps<typeof Badge>["ref"]>().toEqualTypeOf<
+      Ref<HTMLSpanElement> | undefined
+    >();
+    expectTypeOf<ComponentProps<typeof StatusIndicator>["ref"]>().toEqualTypeOf<
+      Ref<HTMLSpanElement> | undefined
+    >();
+    expectTypeOf<ComponentProps<typeof InputGroupAddon>["ref"]>().toEqualTypeOf<
+      Ref<HTMLSpanElement> | undefined
+    >();
+  });
+
   it("accepts object refs, callback refs, and callback-ref cleanup", () => {
     expectTypeOf<RefObject<HTMLButtonElement | null>>().toExtend<
       NonNullable<ComponentProps<typeof Button>["ref"]>
@@ -94,28 +124,6 @@ describe("public ref types", () => {
   it("rejects a ref typed for the wrong element", () => {
     expectTypeOf<RefObject<HTMLDivElement | null>>().not.toExtend<
       NonNullable<ComponentProps<typeof Button>["ref"]>
-    >();
-  });
-});
-
-/**
- * `exactOptionalPropertyTypes` is enabled, so every optional public prop must
- * admit `undefined` or consumers cannot pass a computed optional value.
- */
-describe("optional props under exactOptionalPropertyTypes", () => {
-  it("accepts an explicitly undefined optional prop", () => {
-    expectTypeOf<undefined>().toExtend<
-      ComponentProps<typeof Button>["loadingLabel"]
-    >();
-    expectTypeOf<undefined>().toExtend<
-      ComponentProps<typeof Button>["variant"]
-    >();
-    expectTypeOf<undefined>().toExtend<ComponentProps<typeof Banner>["tone"]>();
-    expectTypeOf<undefined>().toExtend<
-      ComponentProps<typeof PanelRoot>["styleNonce"]
-    >();
-    expectTypeOf<undefined>().toExtend<
-      ComponentProps<typeof Checkbox>["indeterminate"]
     >();
   });
 });

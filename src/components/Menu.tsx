@@ -27,7 +27,6 @@ import { packageError } from "../utils/errors.js";
 import { hasText, resolveBundledLabel } from "../utils/labels.js";
 import { MENU_ITEM_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
-import { usePanelPortalContainerReady } from "../utils/portal.js";
 import type { DataAttributes } from "../utils/props.js";
 import { racDomProps } from "../utils/react-aria.js";
 import {
@@ -195,8 +194,7 @@ export function Menu({
     );
   }
 
-  useModuleStyles(MENU_STYLES, "Menu");
-  const portalReady = usePanelPortalContainerReady("Menu");
+  const portalReady = useModuleStyles(MENU_STYLES, "Menu") !== null;
   const domProps = racDomProps<RACMenuProps<object>>(props);
 
   // React Aria's collection keys are strings or numbers; the library reports
@@ -310,7 +308,7 @@ export function MenuItem({
   // costly half of rendering an item, and the answer changes only when the
   // children do, so opening or closing the menu walks no item again.
   const resolvedTextValue = useMemo(
-    () => textValue ?? reactNodeText(children).trim(),
+    () => textValue ?? reactNodeText(children),
     [children, textValue],
   );
   const danger = tone === "danger";

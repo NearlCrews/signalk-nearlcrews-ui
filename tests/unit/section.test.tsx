@@ -1,7 +1,6 @@
 import { renderHook, screen, within } from "@testing-library/react";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Accordion } from "../../src/composites.js";
 import {
   Button,
   CollapsibleSection,
@@ -22,6 +21,30 @@ import {
 } from "../../src/utils/heading-level.js";
 import { ruleBody } from "../css-helpers.js";
 import { follows, renderInPanel } from "../helpers.js";
+
+/** The level a heading sits at, read inside `scope` where one is given. */
+function levelOf(name: string, scope?: HTMLElement): number {
+  const queries = scope === undefined ? screen : within(scope);
+  return Number(queries.getByRole("heading", { name }).tagName.slice(1));
+}
+
+/** An open confirmation asking `title`, at a named level where one is given. */
+function confirm(
+  title: string,
+  headingLevel?: 2 | 3 | 4 | 5 | 6,
+): React.JSX.Element {
+  return (
+    <InlineConfirm
+      open
+      title={title}
+      confirmLabel="Remove"
+      message="This cannot be undone."
+      onCancel={vi.fn()}
+      onConfirm={vi.fn()}
+      {...(headingLevel === undefined ? {} : { headingLevel })}
+    />
+  );
+}
 
 describe("section landmark opt-out", () => {
   it("keeps the section element and heading without region naming", () => {
@@ -57,7 +80,9 @@ describe("section landmark opt-out", () => {
       "aria-labelledby",
     );
   });
+});
 
+describe("section heading ref", () => {
   it("gives a consumer the heading as a focus destination", () => {
     const headingRef = createRef<HTMLHeadingElement>();
     renderInPanel(
@@ -143,9 +168,7 @@ describe("section landmarks by context", () => {
       </>,
     );
 
-    expect(
-      screen.getAllByRole("region").map((region) => region.textContent),
-    ).toHaveLength(3);
+    expect(screen.getAllByRole("region")).toHaveLength(3);
     expect(
       screen.getByRole("region", { name: "Primary provider" }),
     ).toBeInTheDocument();
@@ -195,17 +218,6 @@ describe("section landmarks by context", () => {
       screen.getByRole("region", { name: "Replace the chart set?" }),
     ).toBeInTheDocument();
   });
-
-  it("keeps an accordion's sections out of the list", () => {
-    renderInPanel(
-      <Accordion>
-        <CollapsibleSection title="Charts">Content</CollapsibleSection>
-        <CollapsibleSection title="Routes">Content</CollapsibleSection>
-      </Accordion>,
-    );
-
-    expect(screen.queryByRole("region")).toBeNull();
-  });
 });
 
 describe("section outline across overlays", () => {
@@ -214,14 +226,7 @@ describe("section outline across overlays", () => {
       <Section title="Outer">
         <SectionOutlineReset>
           <Section title="Inside dialog">Content</Section>
-          <InlineConfirm
-            open
-            title="Remove it?"
-            confirmLabel="Remove path"
-            message="This removes the path."
-            onCancel={vi.fn()}
-            onConfirm={vi.fn()}
-          />
+          {confirm("Remove it?")}
         </SectionOutlineReset>
       </Section>,
     );
@@ -241,14 +246,7 @@ describe("section outline across overlays", () => {
       <Section title="Outer">
         <Dialog open title="Edit path" onOpenChange={vi.fn()}>
           <Section title="Inside dialog">Content</Section>
-          <InlineConfirm
-            open
-            title="Remove it?"
-            confirmLabel="Remove path"
-            message="This removes the path."
-            onCancel={vi.fn()}
-            onConfirm={vi.fn()}
-          />
+          {confirm("Remove it?")}
         </Dialog>
       </Section>,
     );
@@ -259,46 +257,24 @@ describe("section outline across overlays", () => {
     ).toBeInTheDocument();
     // Below the dialog's own title rather than below the section it was
     // opened from, so the outline under the dialog skips no level.
-    const title = within(dialog).getByRole("heading", { name: "Edit path" });
-    const confirmation = within(dialog).getByRole("heading", {
-      name: "Remove it?",
-    });
-    expect(Number(confirmation.tagName.slice(1))).toBe(
-      Number(title.tagName.slice(1)) + 1,
+    expect(levelOf("Remove it?", dialog)).toBe(
+      levelOf("Edit path", dialog) + 1,
     );
   });
 });
 
 describe("sections inside dialogs", () => {
-  /** The level a heading inside `scope` sits at. */
-  function levelIn(scope: HTMLElement, name: string): number {
-    return Number(
-      within(scope).getByRole("heading", { name }).tagName.slice(1),
-    );
-  }
-
-  const removeConfirm = (
-    <InlineConfirm
-      open
-      title="Remove it?"
-      confirmLabel="Remove path"
-      message="This removes the path."
-      onCancel={vi.fn()}
-      onConfirm={vi.fn()}
-    />
-  );
-
   it("nests a section under the dialog title, and a confirmation under the section", () => {
     renderInPanel(
       <Dialog open title="Edit path" onOpenChange={vi.fn()}>
-        <Section title="Source">{removeConfirm}</Section>
+        <Section title="Source">{confirm("Remove it?")}</Section>
       </Dialog>,
     );
 
     const dialog = screen.getByRole("dialog", { name: "Edit path" });
-    expect(levelIn(dialog, "Edit path")).toBe(2);
-    expect(levelIn(dialog, "Source")).toBe(3);
-    expect(levelIn(dialog, "Remove it?")).toBe(4);
+    expect(levelOf("Edit path", dialog)).toBe(2);
+    expect(levelOf("Source", dialog)).toBe(3);
+    expect(levelOf("Remove it?", dialog)).toBe(4);
     // The dialog title heads the dialog the way a shell title heads the
     // panel, so its first sections are top sections and take the larger step.
     expect(within(dialog).getByRole("heading", { name: "Source" })).toHaveClass(
@@ -310,15 +286,15 @@ describe("sections inside dialogs", () => {
     renderInPanel(
       <AlertDialog open title="Discard route?" cancelLabel="Keep route">
         <CollapsibleSection title="Waypoints" defaultOpen>
-          {removeConfirm}
+          {confirm("Remove it?")}
         </CollapsibleSection>
       </AlertDialog>,
     );
 
     const dialog = screen.getByRole("alertdialog", { name: "Discard route?" });
-    expect(levelIn(dialog, "Discard route?")).toBe(2);
-    expect(levelIn(dialog, "Waypoints")).toBe(3);
-    expect(levelIn(dialog, "Remove it?")).toBe(4);
+    expect(levelOf("Discard route?", dialog)).toBe(2);
+    expect(levelOf("Waypoints", dialog)).toBe(3);
+    expect(levelOf("Remove it?", dialog)).toBe(4);
   });
 
   it("follows a dialog title level the consumer names", () => {
@@ -332,9 +308,9 @@ describe("sections inside dialogs", () => {
     );
 
     const dialog = screen.getByRole("dialog", { name: "Edit path" });
-    expect(levelIn(dialog, "Source")).toBe(4);
+    expect(levelOf("Source", dialog)).toBe(4);
     // An explicit level still decides.
-    expect(levelIn(dialog, "Named")).toBe(5);
+    expect(levelOf("Named", dialog)).toBe(5);
   });
 
   it("leaves sections outside dialogs and inside popovers at the shell level", () => {
@@ -358,24 +334,6 @@ describe("sections inside dialogs", () => {
 });
 
 describe("headings inside sections", () => {
-  /** The level a heading element sits at. */
-  function levelOf(name: string): number {
-    const heading = screen.getByRole("heading", { name });
-    return Number(heading.tagName.slice(1));
-  }
-
-  const confirm = (title: string, headingLevel?: 2 | 3 | 4 | 5 | 6) => (
-    <InlineConfirm
-      open
-      title={title}
-      confirmLabel="Delete route"
-      message="This removes the route."
-      onCancel={vi.fn()}
-      onConfirm={vi.fn()}
-      {...(headingLevel === undefined ? {} : { headingLevel })}
-    />
-  );
-
   it("heads a confirmation at level 2 outside any section", () => {
     renderInPanel(confirm("Delete the route?"));
 
@@ -607,31 +565,6 @@ describe("section shells share one surface", () => {
     expect(ruleBody(narrow, ".snui-section--compact")).toContain(
       "--snui-section-inset: var(--snui-space-2);",
     );
-  });
-
-  it("stretches a button with a drawn reason in a narrow action bar", () => {
-    const narrow = ruleBody(COMPONENT_STYLES, NARROW_PANEL_QUERY);
-    // The wrapper that draws a blocked reason is the row's child, not the
-    // button, so the stretch rule names both.
-    expect(
-      ruleBody(
-        narrow,
-        ".snui-action-bar__actions > :is(.snui-button, .snui-button-reason)",
-      ),
-    ).toContain("flex: 1 1 auto;");
-    expect(
-      ruleBody(narrow, ".snui-action-bar__actions > .snui-button-reason"),
-    ).toContain("align-items: stretch;");
-  });
-
-  it("wraps a long unbroken status rather than widening the action bar", () => {
-    // The status slot takes any content, and a bare string brings no
-    // wrapping rule of its own, so one unbroken word scrolled a 320 px page
-    // sideways. A StatusIndicator in the slot already wraps on its own.
-    const status = ruleBody(COMPONENT_STYLES, ".snui-action-bar__status");
-    expect(status).toContain("min-width: 0;");
-    expect(status).toContain("max-width: 100%;");
-    expect(status).toContain("overflow-wrap: anywhere;");
   });
 
   it("gives both titles one weight", () => {

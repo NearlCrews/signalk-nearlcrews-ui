@@ -7,7 +7,7 @@ import {
   EmptyState,
   Progress,
 } from "../../src/composites.js";
-import { Cell, Column, DataGrid, Row } from "../../src/data-grid.js";
+import { Column, DataGrid } from "../../src/data-grid.js";
 import { Radio, RadioGroup, SecretInput, Switch } from "../../src/forms.js";
 import {
   ActionBar,
@@ -34,21 +34,10 @@ import {
   ThemeToggle,
 } from "../../src/index.js";
 import { expectNoAxeViolations } from "../helpers.js";
-
-interface FixtureRow {
-  readonly id: string;
-  readonly name: string;
-  readonly state: string;
-}
-
-const GRID_ROWS: readonly FixtureRow[] = [
-  { id: "depth", name: "Depth", state: "Fresh" },
-  { id: "wind", name: "Wind", state: "Stale" },
-  { id: "gps", name: "GPS", state: "Fresh" },
-];
+import { BOATS, renderBoatRow } from "./lib/data-grid-fixture.js";
 
 describe("accessibility", () => {
-  it("has no detectable serious accessibility violations", async () => {
+  it("has no detectable accessibility violations", async () => {
     // Overlays (Dialog, AlertDialog, Menu, Popover, Toast) stay out of this
     // fixture: they portal and need open state, so their unit tests own the
     // rendered markup and the browser suite runs axe against them live.
@@ -113,18 +102,9 @@ describe("accessibility", () => {
             <Badge tone="success">Healthy</Badge>
           </Card>
           <Progress label="Sync progress" value={40} />
-          <DataGrid
-            aria-label="Data freshness"
-            items={GRID_ROWS}
-            renderRow={(row) => (
-              <Row>
-                <Cell>{row.name}</Cell>
-                <Cell>{row.state}</Cell>
-              </Row>
-            )}
-          >
-            <Column id="name">Source</Column>
-            <Column id="state">State</Column>
+          <DataGrid aria-label="Boats" items={BOATS} renderRow={renderBoatRow}>
+            <Column id="name">Name</Column>
+            <Column id="depth">Depth</Column>
           </DataGrid>
           <EmptyState
             title="No waypoints stored"

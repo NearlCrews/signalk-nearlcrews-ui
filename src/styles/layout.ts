@@ -48,24 +48,25 @@ const GAP_RULES = SPACE_SCALE.map((space) => {
 }`;
 }).join("\n");
 
+/** Strips the list chrome from a block that may render as a list. */
+const LIST_RESET_DECLARATIONS = `  margin: 0;
+  padding: 0;
+  list-style: none;`;
+
 export const LAYOUT_STYLES = scopeStyles(`
 /* Stacks, clusters, and metric grids may render as lists; strip list chrome. */
 .snui-stack {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+${LIST_RESET_DECLARATIONS}
 }
 
 .snui-cluster {
   display: flex;
   min-width: 0;
   flex-wrap: wrap;
-  margin: 0;
-  padding: 0;
-  list-style: none;
+${LIST_RESET_DECLARATIONS}
 }
 
 ${GAP_RULES}
@@ -85,18 +86,6 @@ ${GAP_RULES}
 .snui-stack--divided > ${SHOWN_ITEM} ~ ${SHOWN_ITEM} {
   padding-block-start: var(--snui-stack-divider-space);
   border-block-start: 1px solid var(--snui-color-border-subtle);
-}
-
-/*
- * A closed disclosure panel spread onto one of these carries the hidden
- * attribute, whose user-agent rule loses to a class rule of the same
- * specificity, so the panel would stay on screen and in the tab order.
- */
-.snui-stack[hidden],
-.snui-cluster[hidden],
-.snui-card[hidden],
-.snui-metric-grid[hidden] {
-  display: none;
 }
 
 .snui-layout--align-start { align-items: flex-start; }
@@ -219,9 +208,7 @@ ${toneAccentBar("snui-card", "accent-")}
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(var(--snui-grid-track-min), 100%), 1fr));
   gap: var(--snui-space-3);
-  margin: 0;
-  padding: 0;
-  list-style: none;
+${LIST_RESET_DECLARATIONS}
 }
 
 .snui-metric {

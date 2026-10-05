@@ -8,7 +8,7 @@ import {
 
 import {
   type AnnouncementMode,
-  resolveAnnouncingRegion,
+  liveRegionProps,
 } from "../utils/announcement.js";
 import { hasAccessibleName, joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
@@ -25,11 +25,7 @@ import {
   type StatusTone,
 } from "../utils/tone.js";
 import { hasUnitContent, renderUnit, type UnitContent } from "../utils/unit.js";
-import {
-  type Density,
-  resolveDensity,
-  type SpaceScale,
-} from "../utils/variants.js";
+import type { Density, SpaceScale } from "../utils/variants.js";
 import { ToneEchoRegion } from "./ToneEchoRegion.js";
 import { ToneGlyph, ToneMark } from "./ToneMark.js";
 
@@ -169,7 +165,6 @@ export function InputGroup({
   ref,
   ...props
 }: InputGroupProps): React.JSX.Element {
-  const effectiveDensity = resolveDensity(density);
   return (
     <div
       {...props}
@@ -179,8 +174,7 @@ export function InputGroup({
         // Only the non-default step names itself: the default is what the
         // block class already paints, and a modifier no rule answers is a
         // hook the package never promised.
-        effectiveDensity !== "default" &&
-          `snui-input-group--${effectiveDensity}`,
+        density !== "default" && `snui-input-group--${density}`,
         className,
       )}
     />
@@ -454,7 +448,7 @@ export function Metric({
    */
   const hasValue = hasReactContent(value);
   const hasUnit = hasUnitContent(unit);
-  const { attributes } = resolveAnnouncingRegion(live, undefined, hasValue);
+  const attributes = liveRegionProps(live);
   // A reading present on the first render is held for a beat, so the region
   // exists empty before the number arrives. A settling value speaks through a
   // region of its own, which owns the hold, so the visible reading never waits.

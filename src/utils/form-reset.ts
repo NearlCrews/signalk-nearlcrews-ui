@@ -1,5 +1,5 @@
 /** A control that participates in its form, whether or not it has one. */
-interface FormAssociated {
+export interface FormAssociated {
   readonly form: HTMLFormElement | null;
   readonly isConnected: boolean;
 }

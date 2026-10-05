@@ -1,4 +1,9 @@
-import { createElement, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  createElement,
+  Fragment,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import { describe, expect, it, type Mock, vi } from "vitest";
 import {
   BLOCKED_SELECTOR,
@@ -11,14 +16,23 @@ import {
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
   FORCED_COLORS_INVALID_DECLARATIONS,
   GROUP_LEGEND_DECLARATIONS,
+  MUTED_PROSE_DECLARATIONS,
+  NARROW_PANEL_QUERY,
+  overlayFadeTransition,
+  PROSE_MEASURE_DECLARATION,
+  RAISED_PAINT_DECLARATIONS,
   RAISED_SURFACE_TOKEN_DECLARATIONS,
+  raisedOverlayDeclarations,
   SAFE_AREA_PADDING_DECLARATIONS,
   SURFACE_DECLARATIONS,
   stretchedActionRules,
   TABLE_CAPTION_DECLARATIONS,
 } from "../../src/styles/fragments.js";
-import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { PANEL_STYLES } from "../../src/styles/root-sheet.js";
+import {
+  CONTAINER_BREAKPOINT_NARROW,
+  PANEL_CONTAINER_NAME,
+} from "../../src/styles/tokens.js";
 import {
   OVERLAY_TONE_ACCENT_BAR_DECLARATIONS,
   TONE_ACCENT_BAR_DECLARATIONS,
@@ -33,23 +47,35 @@ import {
   CHECKBOX_ACTIVATION_KEYS,
   resolveAriaDisabled,
 } from "../../src/utils/activation.js";
-import { resolveAnnouncingRegion } from "../../src/utils/announcement.js";
-import { landmarkLabel, requireAccessibleName } from "../../src/utils/aria.js";
+import {
+  liveRegionProps,
+  resolveAnnouncingRegion,
+} from "../../src/utils/announcement.js";
+import {
+  joinIdReferences,
+  landmarkLabel,
+  requireAccessibleName,
+  resolveDescriptionId,
+} from "../../src/utils/aria.js";
+import { classNames } from "../../src/utils/class-names.js";
 import { isRightToLeft } from "../../src/utils/direction.js";
-import { once } from "../../src/utils/document-registry.js";
 import { createEmitter } from "../../src/utils/emitter.js";
 import {
   describeReceived,
   ERROR_PREFIX,
   packageError,
 } from "../../src/utils/errors.js";
-import { resolveFieldRegions } from "../../src/utils/field-error.js";
+import {
+  fieldDescribedBy,
+  resolveFieldRegions,
+} from "../../src/utils/field-error.js";
 import {
   forwardsFieldControlProps,
   markForwardsFieldControlProps,
 } from "../../src/utils/field-forwarding.js";
 import {
   focusedElement,
+  focusIsNowhere,
   focusPanelRoot,
   isElementNode,
   revealAndFocus,
@@ -59,13 +85,16 @@ import { observeFormReset } from "../../src/utils/form-reset.js";
 import {
   formatRelativeAge,
   RELATIVE_AGE_EN,
+  timestampToMs,
 } from "../../src/utils/format-relative-age.js";
-import { resolveFreshness } from "../../src/utils/freshness.js";
 import { createFormatterCache } from "../../src/utils/intl.js";
 import {
+  DEFAULT_DISMISS_LABEL,
   DEFAULT_HIDE_LABEL,
+  DEFAULT_LOADING_LABEL,
   DEFAULT_SHOW_LABEL,
   hasText,
+  resolveLabel,
   trimmedText,
 } from "../../src/utils/labels.js";
 import { requireNonEmptyUniqueOptions } from "../../src/utils/options.js";
@@ -76,6 +105,7 @@ import {
 } from "../../src/utils/reachability.js";
 import { racDomProps } from "../../src/utils/react-aria.js";
 import {
+  hasReactContent,
   plainReactNodeText,
   reactNodeText,
   resolveLabelContent,
@@ -96,17 +126,17 @@ import {
   subscribeToClock,
 } from "../../src/utils/shared-clock.js";
 import { formatCount, joinList } from "../../src/utils/text.js";
+import {
+  isSemanticTone,
+  TONE_GLYPHS,
+  TONE_LABELS,
+} from "../../src/utils/tone.js";
 import { SPACE_SCALE } from "../../src/utils/variants.js";
 import { windowGlobal } from "../../src/utils/window-global.js";
-import { ruleBody } from "../css-helpers.js";
+import { moduleStyles, ruleBody, SEMANTIC_TONES } from "../css-helpers.js";
+import { stubReducedMotion } from "../helpers.js";
+import { attached } from "./lib/attached.js";
 import { withFrameDocument } from "./lib/frame-document.js";
-
-/** The rules of one installed style module, by its id. */
-function moduleStyles(id: string): string {
-  const module = STYLE_MODULES.find((candidate) => candidate.id === id);
-  if (module === undefined) throw new Error(`No style module named ${id}.`);
-  return module.styles;
-}
 
 /**
  * A stub event beside the two spies it carries, so a spec asserts on the
@@ -203,6 +233,25 @@ describe("definedProps", () => {
 
   it("returns an empty object when nothing is set", () => {
     expect(definedProps({ id: undefined })).toEqual({});
+  });
+});
+
+describe("classNames", () => {
+  it("joins truthy class names with a single space", () => {
+    expect(classNames("snui-button", "snui-button--primary")).toBe(
+      "snui-button snui-button--primary",
+    );
+  });
+
+  it("drops false, null, undefined, and empty values", () => {
+    expect(classNames("snui-button", false, null, undefined, "", "extra")).toBe(
+      "snui-button extra",
+    );
+  });
+
+  it("returns an empty string when nothing applies", () => {
+    expect(classNames()).toBe("");
+    expect(classNames(false, undefined)).toBe("");
   });
 });
 
@@ -392,6 +441,29 @@ describe("landmarkLabel", () => {
   });
 });
 
+describe("resolveDescriptionId", () => {
+  it("derives the description id only when a description renders", () => {
+    expect(resolveDescriptionId("field-1", true)).toBe("field-1-description");
+    expect(resolveDescriptionId("field-1", false)).toBeUndefined();
+  });
+});
+
+describe("joinIdReferences", () => {
+  it("joins multiple ids with a single space", () => {
+    expect(joinIdReferences("a", "b", "c")).toBe("a b c");
+  });
+
+  it("filters undefined and empty ids", () => {
+    expect(joinIdReferences(undefined, "", "field-error")).toBe("field-error");
+    expect(joinIdReferences("field-label", undefined)).toBe("field-label");
+  });
+
+  it("returns undefined when nothing usable remains", () => {
+    expect(joinIdReferences()).toBeUndefined();
+    expect(joinIdReferences(undefined, "")).toBeUndefined();
+  });
+});
+
 describe("resolveAriaDisabled", () => {
   it("lets the documented prop decide whenever it is set", () => {
     expect(resolveAriaDisabled(false, true)).toBe(false);
@@ -509,6 +581,19 @@ describe("resolveAnnouncingRegion", () => {
   });
 });
 
+describe("liveRegionProps role", () => {
+  it("maps assertive to alert and polite to status", () => {
+    expect(liveRegionProps("assertive").role).toBe("alert");
+    expect(liveRegionProps("polite").role).toBe("status");
+  });
+
+  it("returns no role when announcements are off", () => {
+    // "off" must not produce a live-region role, or the element would still
+    // announce despite the caller opting out.
+    expect(liveRegionProps("off").role).toBeUndefined();
+  });
+});
+
 describe("resolveFieldRegions", () => {
   it("names only the regions the field renders", () => {
     // Blank text reads as absent, the way every slot in the package reads it.
@@ -554,6 +639,29 @@ describe("resolveFieldRegions", () => {
   });
 });
 
+describe("fieldDescribedBy", () => {
+  it("reads the field's own text before the ids the caller adds", () => {
+    expect(
+      fieldDescribedBy(
+        {
+          descriptionId: "field-description",
+          reasonId: "field-reason",
+          referencedErrorId: "field-error",
+        },
+        "caller-note",
+        "prop-note",
+      ),
+    ).toBe("field-description field-reason field-error caller-note prop-note");
+  });
+
+  it("names only the text the field is showing", () => {
+    expect(fieldDescribedBy({ referencedErrorId: undefined })).toBeUndefined();
+    expect(
+      fieldDescribedBy({ referencedErrorId: "field-error" }, undefined, "note"),
+    ).toBe("field-error note");
+  });
+});
+
 describe("label text", () => {
   it("ships the built-in reveal labels", () => {
     expect(DEFAULT_SHOW_LABEL).toBe("Show");
@@ -566,6 +674,20 @@ describe("label text", () => {
     expect(hasText(" Save ")).toBe(true);
     expect(trimmedText(" Save ")).toBe("Save");
     expect(trimmedText(undefined)).toBe("");
+  });
+});
+
+describe("resolveLabel", () => {
+  it("trims caller labels and falls back on missing or blank input", () => {
+    expect(resolveLabel(" Dismiss panel ", DEFAULT_DISMISS_LABEL)).toBe(
+      "Dismiss panel",
+    );
+    expect(resolveLabel(undefined, DEFAULT_DISMISS_LABEL)).toBe(
+      DEFAULT_DISMISS_LABEL,
+    );
+    expect(resolveLabel("   ", DEFAULT_LOADING_LABEL)).toBe(
+      DEFAULT_LOADING_LABEL,
+    );
   });
 });
 
@@ -602,6 +724,18 @@ describe("reactNodeText", () => {
       ]),
     ).toBe("Dismiss");
   });
+
+  it("trims the ends, including the space an empty element child leaves", () => {
+    expect(
+      reactNodeText([" Save ", createElement("span", null, "changes "), "\n"]),
+    ).toBe("Save changes");
+    expect(
+      reactNodeText([
+        createElement("span", null, createElement("svg")),
+        "Save",
+      ]),
+    ).toBe("Save");
+  });
 });
 
 describe("plainReactNodeText", () => {
@@ -626,8 +760,44 @@ describe("plainReactNodeText", () => {
   });
 });
 
+describe("hasReactContent", () => {
+  it("counts numeric zero as content", () => {
+    // A metric value of 0 must not read as empty.
+    expect(hasReactContent(0)).toBe(true);
+  });
+
+  it("flattens nested arrays before judging content", () => {
+    expect(hasReactContent([[0]])).toBe(true);
+    expect(hasReactContent([["", null]])).toBe(false);
+  });
+
+  it("looks through fragments", () => {
+    expect(hasReactContent(createElement(Fragment))).toBe(false);
+    expect(hasReactContent(createElement(Fragment, null, 0))).toBe(true);
+    expect(
+      hasReactContent(
+        createElement(Fragment, null, createElement(Fragment, null, "")),
+      ),
+    ).toBe(false);
+  });
+
+  it("rejects blank strings and empty nodes", () => {
+    expect(hasReactContent("  ")).toBe(false);
+    expect(hasReactContent(false)).toBe(false);
+    expect(hasReactContent(null)).toBe(false);
+    expect(hasReactContent(undefined)).toBe(false);
+  });
+
+  it("accepts plain text and elements", () => {
+    expect(hasReactContent("Ready")).toBe(true);
+    expect(hasReactContent(createElement("span", null, "Ready"))).toBe(true);
+  });
+});
+
 describe("nextRovingIndex", () => {
-  const group = { count: 3, orientation: "horizontal", rtl: false } as const;
+  const ltr = (): boolean => false;
+  const rtl = (): boolean => true;
+  const group = { count: 3, orientation: "horizontal", rtl: ltr } as const;
 
   it("walks and wraps along a horizontal group", () => {
     expect(
@@ -647,7 +817,7 @@ describe("nextRovingIndex", () => {
         ...group,
         currentIndex: 1,
         key: "ArrowRight",
-        rtl: true,
+        rtl,
       }),
     ).toBe(0);
     expect(
@@ -655,13 +825,13 @@ describe("nextRovingIndex", () => {
         ...group,
         currentIndex: 1,
         key: "ArrowLeft",
-        rtl: true,
+        rtl,
       }),
     ).toBe(2);
   });
 
   it("never mirrors a vertical group and ignores the other axis", () => {
-    const vertical = { count: 3, orientation: "vertical", rtl: true } as const;
+    const vertical = { count: 3, orientation: "vertical", rtl } as const;
     expect(
       nextRovingIndex({ ...vertical, currentIndex: 0, key: "ArrowDown" }),
     ).toBe(1);
@@ -687,6 +857,25 @@ describe("nextRovingIndex", () => {
     ).toBe(2);
   });
 
+  it("asks for the direction only once a horizontal arrow has matched", () => {
+    const direction = vi.fn(() => true);
+    const horizontal = { ...group, currentIndex: 1, rtl: direction };
+    const vertical = { ...horizontal, orientation: "vertical" } as const;
+
+    // The computed direction is a style lookup, so no other press reaches it.
+    nextRovingIndex({ ...horizontal, key: "Home" });
+    nextRovingIndex({ ...horizontal, key: "End" });
+    nextRovingIndex({ ...horizontal, key: "Tab" });
+    nextRovingIndex({ ...horizontal, key: "ArrowDown" });
+    nextRovingIndex({ ...vertical, key: "ArrowDown" });
+    nextRovingIndex({ ...vertical, key: "ArrowRight" });
+    nextRovingIndex({ ...horizontal, count: 0, key: "ArrowRight" });
+    expect(direction).not.toHaveBeenCalled();
+
+    expect(nextRovingIndex({ ...horizontal, key: "ArrowRight" })).toBe(0);
+    expect(direction).toHaveBeenCalledOnce();
+  });
+
   it("leaves every other key to the consumer", () => {
     expect(
       nextRovingIndex({ ...group, currentIndex: 0, key: "Tab" }),
@@ -699,13 +888,11 @@ describe("nextRovingIndex", () => {
 
 describe("isRightToLeft", () => {
   it("reads the computed direction rather than a :dir() selector", () => {
-    const element = document.createElement("div");
-    document.body.append(element);
+    const element = attached("div");
     expect(isRightToLeft(element)).toBe(false);
 
     element.style.direction = "rtl";
     expect(isRightToLeft(element)).toBe(true);
-    element.remove();
   });
 
   it("reads left to right for an element in a document with no view", () => {
@@ -739,16 +926,29 @@ describe("isElementNode", () => {
 
 describe("focusedElement", () => {
   it("reports the focused element", () => {
-    const button = document.createElement("button");
-    document.body.append(button);
+    const button = attached("button");
     button.focus();
     expect(focusedElement(document)).toBe(button);
-    button.remove();
   });
 
   it("reports nothing for a document with no view", () => {
     const detached = document.implementation.createHTMLDocument("detached");
     expect(focusedElement(detached)).toBeNull();
+  });
+});
+
+describe("focusIsNowhere", () => {
+  it("answers yes on the body and where no element can hold focus", () => {
+    const button = attached("button");
+    button.focus();
+    expect(focusIsNowhere(document)).toBe(false);
+
+    button.blur();
+    expect(document.activeElement).toBe(document.body);
+    expect(focusIsNowhere(document)).toBe(true);
+    expect(
+      focusIsNowhere(document.implementation.createHTMLDocument("detached")),
+    ).toBe(true);
   });
 });
 
@@ -769,8 +969,7 @@ describe("forwardsFieldControlProps", () => {
 
 describe("focusPanelRoot", () => {
   it("borrows a tabindex and gives it back on blur", () => {
-    const root = document.createElement("div");
-    document.body.append(root);
+    const root = attached("div");
 
     focusPanelRoot(root);
     expect(document.activeElement).toBe(root);
@@ -778,12 +977,10 @@ describe("focusPanelRoot", () => {
 
     root.blur();
     expect(root).not.toHaveAttribute("tabindex");
-    root.remove();
   });
 
   it("hands the tabindex back at once when the root refuses focus", () => {
-    const root = document.createElement("div");
-    document.body.append(root);
+    const root = attached("div");
     // A root that never takes focus gets no blur, so the attribute would stay
     // and make the root a click-focus target for the rest of the panel's life.
     Object.defineProperty(root, "focus", { value: () => undefined });
@@ -796,26 +993,22 @@ describe("focusPanelRoot", () => {
       "blur",
       expect.any(Function),
     );
-    root.remove();
   });
 
   it("leaves a tabindex the panel already carries alone", () => {
-    const root = document.createElement("div");
+    const root = attached("div");
     root.setAttribute("tabindex", "0");
-    document.body.append(root);
 
     focusPanelRoot(root);
     root.blur();
 
     expect(root).toHaveAttribute("tabindex", "0");
-    root.remove();
   });
 });
 
-describe("revealElement", () => {
+describe("revealElement and revealAndFocus", () => {
   it("scrolls smoothly and then focuses", () => {
-    const element = document.createElement("button");
-    document.body.append(element);
+    const element = attached("button");
     const scrollIntoView = vi.fn();
     Object.assign(element, { scrollIntoView });
 
@@ -826,18 +1019,13 @@ describe("revealElement", () => {
       block: "nearest",
     });
     expect(document.activeElement).toBe(element);
-    element.remove();
   });
 
   it("jumps instead of scrolling when motion is reduced", () => {
-    const element = document.createElement("div");
-    document.body.append(element);
+    const element = attached("div");
     const scrollIntoView = vi.fn();
     Object.assign(element, { scrollIntoView });
-    vi.stubGlobal(
-      "matchMedia",
-      vi.fn(() => ({ matches: true })),
-    );
+    stubReducedMotion();
 
     revealElement(element, { block: "center" });
 
@@ -845,7 +1033,6 @@ describe("revealElement", () => {
       behavior: "auto",
       block: "center",
     });
-    element.remove();
   });
 
   it("does nothing where the engine implements no scrolling", () => {
@@ -858,10 +1045,8 @@ describe("revealElement", () => {
 
 describe("observeFormReset", () => {
   it("resyncs the control once the reset has landed", async () => {
-    const form = document.createElement("form");
-    const input = document.createElement("input");
-    form.append(input);
-    document.body.append(form);
+    const form = attached("form");
+    const input = attached("input", form);
     const onReset = vi.fn();
 
     const release = observeFormReset(input, onReset);
@@ -875,14 +1060,11 @@ describe("observeFormReset", () => {
     form.dispatchEvent(new Event("reset"));
     await Promise.resolve();
     expect(onReset).toHaveBeenCalledOnce();
-    form.remove();
   });
 
   it("skips a control that left the document before the reset landed", async () => {
-    const form = document.createElement("form");
-    const input = document.createElement("input");
-    form.append(input);
-    document.body.append(form);
+    const form = attached("form");
+    const input = attached("input", form);
     const onReset = vi.fn();
 
     observeFormReset(input, onReset);
@@ -891,7 +1073,6 @@ describe("observeFormReset", () => {
 
     await Promise.resolve();
     expect(onReset).not.toHaveBeenCalled();
-    form.remove();
   });
 
   it("registers nothing for a control with no form", () => {
@@ -900,45 +1081,6 @@ describe("observeFormReset", () => {
     expect(() => {
       release();
     }).not.toThrow();
-  });
-});
-
-describe("resolveFreshness", () => {
-  const nowMs = 1_700_000_000_000;
-
-  it("reports no age and no staleness before the first sample", () => {
-    expect(resolveFreshness(undefined, nowMs, 1_000)).toEqual({
-      ageMs: undefined,
-      stale: false,
-    });
-    expect(resolveFreshness("not a date", nowMs, 1_000).stale).toBe(false);
-  });
-
-  it("measures the age of the last sample", () => {
-    expect(resolveFreshness(nowMs - 2_500, nowMs, 10_000)).toEqual({
-      ageMs: 2_500,
-      stale: false,
-    });
-  });
-
-  it("goes stale past the threshold", () => {
-    expect(resolveFreshness(nowMs - 10_001, nowMs, 10_000).stale).toBe(true);
-  });
-
-  it("reads clock skew as fresh rather than as an age", () => {
-    expect(resolveFreshness(nowMs + 5_000, nowMs, 10_000)).toEqual({
-      ageMs: 0,
-      stale: false,
-    });
-  });
-
-  it("never goes stale without a threshold", () => {
-    expect(resolveFreshness(nowMs - 60_000, nowMs, 0).stale).toBe(false);
-  });
-
-  it("accepts the timestamp forms a Signal K delta carries", () => {
-    const iso = new Date(nowMs - 1_000).toISOString();
-    expect(resolveFreshness(iso, nowMs, 10_000).ageMs).toBe(1_000);
   });
 });
 
@@ -971,16 +1113,6 @@ describe("select-all state", () => {
     expect(selectAllTarget(0, 3)).toBe(true);
     expect(selectAllTarget(2, 3)).toBe(true);
     expect(selectAllTarget(3, 3)).toBe(false);
-  });
-});
-
-describe("once", () => {
-  it("releases at most once however often it is called", () => {
-    const release = vi.fn();
-    const guarded = once(release);
-    guarded();
-    guarded();
-    expect(release).toHaveBeenCalledOnce();
   });
 });
 
@@ -1079,6 +1211,17 @@ describe("RELATIVE_AGE_EN", () => {
   });
 });
 
+describe("timestampToMs", () => {
+  it("reads a number only inside the range a Date can hold", () => {
+    expect(timestampToMs(8.64e15)).toBe(8.64e15);
+    expect(timestampToMs(-8.64e15)).toBe(-8.64e15);
+    // Compared, not round-tripped through a Date, so nothing is truncated.
+    expect(timestampToMs(1_700_000_000_000.5)).toBe(1_700_000_000_000.5);
+    expect(timestampToMs(8.64e15 + 1)).toBeNaN();
+    expect(timestampToMs(-1e16)).toBeNaN();
+  });
+});
+
 describe("style fragments", () => {
   it("states the field stack exactly as the shipped rules do", () => {
     expect(PANEL_STYLES).toContain(FIELD_STACK_DECLARATIONS);
@@ -1096,6 +1239,12 @@ describe("style fragments", () => {
   it("states the muted description exactly as the shipped rules do", () => {
     expect(PANEL_STYLES).toContain(FIELD_DESCRIPTION_DECLARATIONS);
     expect(moduleStyles("radio")).toContain(FIELD_DESCRIPTION_DECLARATIONS);
+  });
+
+  it("states the muted prose exactly as the shipped rules do", () => {
+    expect(PANEL_STYLES).toContain(MUTED_PROSE_DECLARATIONS);
+    expect(moduleStyles("dialog")).toContain(MUTED_PROSE_DECLARATIONS);
+    expect(moduleStyles("empty-state")).toContain(MUTED_PROSE_DECLARATIONS);
   });
 
   it("stretches a narrow button row's buttons and reason wrappers alike", () => {
@@ -1152,6 +1301,19 @@ describe("style fragments", () => {
     for (const id of ["dialog", "popover", "toast"]) {
       expect(moduleStyles(id)).toContain(RAISED_SURFACE_TOKEN_DECLARATIONS);
     }
+    for (const id of ["dialog", "menu", "popover", "toast"]) {
+      expect(moduleStyles(id)).toContain(RAISED_PAINT_DECLARATIONS);
+    }
+    // A popover settles at the slower step and carries no fast transition
+    // for its own rule to override.
+    expect(moduleStyles("popover")).toContain(
+      raisedOverlayDeclarations("normal"),
+    );
+    expect(moduleStyles("popover")).not.toContain(
+      overlayFadeTransition("fast"),
+    );
+    expect(moduleStyles("toast")).toContain(overlayFadeTransition("fast"));
+    expect(moduleStyles("dialog")).toContain(overlayFadeTransition("normal"));
     expect(moduleStyles("dialog")).toContain(SAFE_AREA_PADDING_DECLARATIONS);
     expect(moduleStyles("toast")).toContain(SAFE_AREA_PADDING_DECLARATIONS);
   });
@@ -1172,6 +1334,44 @@ describe("style fragments", () => {
       bodyEdgeMarginRules("snui-dialog__body"),
     );
   });
+
+  it("caps prose at a measure the shipped rules use", () => {
+    expect(PROSE_MEASURE_DECLARATION.trim()).toMatch(/^max-width: \d+ch;$/);
+    expect(PANEL_STYLES).toContain(PROSE_MEASURE_DECLARATION);
+  });
+
+  it("states the narrow-panel condition from the published constants", () => {
+    // A container condition cannot read a custom property, so both halves are
+    // constants and the query is the one place they meet.
+    expect(NARROW_PANEL_QUERY).toBe(
+      `@container ${PANEL_CONTAINER_NAME} (max-width: ${CONTAINER_BREAKPOINT_NARROW})`,
+    );
+    expect(PANEL_STYLES).toContain(NARROW_PANEL_QUERY);
+  });
+});
+
+describe("isSemanticTone", () => {
+  it("treats neutral as presentational and every other tone as semantic", () => {
+    expect(isSemanticTone("neutral")).toBe(false);
+    expect(isSemanticTone("info")).toBe(true);
+    expect(isSemanticTone("success")).toBe(true);
+    expect(isSemanticTone("warning")).toBe(true);
+    expect(isSemanticTone("danger")).toBe(true);
+  });
+});
+
+describe("tone tables", () => {
+  it("provides a glyph and a label for exactly the semantic tones", () => {
+    expect(Object.keys(TONE_GLYPHS).sort()).toEqual([...SEMANTIC_TONES].sort());
+    expect(Object.keys(TONE_LABELS).sort()).toEqual([...SEMANTIC_TONES].sort());
+  });
+
+  it("keeps every glyph and label non-empty", () => {
+    for (const tone of SEMANTIC_TONES) {
+      expect(TONE_GLYPHS[tone].trim().length).toBeGreaterThan(0);
+      expect(TONE_LABELS[tone].trim().length).toBeGreaterThan(0);
+    }
+  });
 });
 
 describe("toneDescendantColorRules", () => {
@@ -1187,12 +1387,25 @@ describe("toneDescendantColorRules", () => {
       ":is(.snui-toast__tone, .snui-toast__tone-glyph)",
     );
     const toast = moduleStyles("toast");
-    for (const tone of ["info", "success", "warning", "danger"]) {
+    for (const tone of SEMANTIC_TONES) {
       expect(rules).toContain(`.snui-toast--${tone} `);
       expect(toast).toContain(
         `.snui-toast--${tone} :is(.snui-toast__tone, .snui-toast__tone-glyph) { color: var(--snui-color-${tone}); }`,
       );
     }
+  });
+
+  it("reaches a descendant through a prefixed modifier", () => {
+    expect(
+      toneDescendantColorRules(
+        "snui-progress",
+        ".snui-progress__fill",
+        "background",
+        "tone-",
+      ),
+    ).toContain(
+      ".snui-progress--tone-warning .snui-progress__fill { background: var(--snui-color-warning); }",
+    );
   });
 });
 
@@ -1211,7 +1424,9 @@ describe("toneBlockColorRules", () => {
       ".snui-card--accent-danger { border-inline-start-color: var(--snui-color-danger); }",
     );
   });
+});
 
+describe("tone accent bar", () => {
   it("outlines a toned container with the subtle border behind its tone bar", () => {
     // A toned Card, CollapsibleSection, or Banner is a container in the page:
     // its outline steps back with every other container, while the tone bar
@@ -1237,19 +1452,6 @@ describe("toneBlockColorRules", () => {
     expect(PANEL_STYLES).toContain(toneAccentBar("snui-card"));
     expect(PANEL_STYLES).toContain(toneAccentBar("snui-card", "accent-"));
     expect(PANEL_STYLES).toContain(toneAccentBar("snui-collapsible"));
-  });
-
-  it("reaches a descendant through a prefixed modifier", () => {
-    expect(
-      toneDescendantColorRules(
-        "snui-progress",
-        ".snui-progress__fill",
-        "background",
-        "tone-",
-      ),
-    ).toContain(
-      ".snui-progress--tone-warning .snui-progress__fill { background: var(--snui-color-warning); }",
-    );
   });
 });
 

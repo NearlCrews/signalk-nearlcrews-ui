@@ -6,16 +6,15 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import * as ReactActual from "react";
-import { createRef, useState } from "react";
-import * as JSXDevRuntime from "react/jsx-dev-runtime";
-import * as JSXRuntime from "react/jsx-runtime";
+import { createRef, type ReactElement, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   CollapsibleSection,
   SegmentedControl,
+  type SegmentedControlOption,
   type ThemeChoice,
 } from "../../src/index.js";
+import { formOf, loggedMessages } from "../helpers.js";
 
 const OPTIONS = [
   { label: "Metric", value: "metric" },
@@ -176,7 +175,6 @@ describe("SegmentedControl form participation", () => {
     const submitted: FormData[] = [];
     const view = render(
       <form
-        data-testid="units-form"
         onSubmit={(event) => {
           event.preventDefault();
           submitted.push(new FormData(event.currentTarget));
@@ -195,8 +193,9 @@ describe("SegmentedControl form participation", () => {
     expect(hidden).toHaveProperty("name", "units");
     expect(hidden).toHaveProperty("value", "metric");
 
-    fireEvent.click(screen.getByRole("radio", { name: "Imperial" }));
-    fireEvent.submit(screen.getByTestId("units-form"));
+    const imperial = screen.getByRole("radio", { name: "Imperial" });
+    fireEvent.click(imperial);
+    fireEvent.submit(formOf(imperial));
 
     expect(submitted[0]?.get("units")).toBe("imperial");
   });
@@ -215,7 +214,7 @@ describe("SegmentedControl form participation", () => {
 
   it("omits a disabled control from native form data", () => {
     render(
-      <form data-testid="units-form">
+      <form>
         <SegmentedControl
           disabled
           label="Units"
@@ -226,13 +225,13 @@ describe("SegmentedControl form participation", () => {
       </form>,
     );
 
-    const form = screen.getByTestId<HTMLFormElement>("units-form");
+    const form = formOf(screen.getByRole("radio", { name: "Metric" }));
     expect(new FormData(form).has("units")).toBe(false);
   });
 
   it("restores the defaultValue selection on form reset", async () => {
     render(
-      <form data-testid="units-form">
+      <form>
         <SegmentedControl
           label="Units"
           name="units"
@@ -248,7 +247,7 @@ describe("SegmentedControl form participation", () => {
       "true",
     );
 
-    const form = screen.getByTestId<HTMLFormElement>("units-form");
+    const form = formOf(screen.getByRole("radio", { name: "Imperial" }));
     // The restore waits a microtask, because a native reset finishes
     // rewriting its controls only once the event has finished dispatching.
     await act(async () => {
@@ -266,7 +265,7 @@ describe("SegmentedControl form participation", () => {
 
   it("leaves a controlled selection to the parent on form reset", async () => {
     render(
-      <form data-testid="units-form">
+      <form>
         <SegmentedControl
           label="Units"
           name="units"
@@ -276,7 +275,7 @@ describe("SegmentedControl form participation", () => {
       </form>,
     );
 
-    const form = screen.getByTestId<HTMLFormElement>("units-form");
+    const form = formOf(screen.getByRole("radio", { name: "Imperial" }));
     act(() => {
       form.reset();
     });
@@ -293,7 +292,7 @@ describe("SegmentedControl form participation", () => {
   it("keeps the submitted value on the displayed selection through a collapse", async () => {
     const user = userEvent.setup();
     render(
-      <form data-testid="units-form">
+      <form>
         <CollapsibleSection title="Units" defaultOpen>
           <SegmentedControl
             label="Units"
@@ -305,7 +304,7 @@ describe("SegmentedControl form participation", () => {
       </form>,
     );
     const toggle = screen.getByRole("button", { name: "Units" });
-    const form = screen.getByTestId<HTMLFormElement>("units-form");
+    const form = formOf(toggle);
     await user.click(screen.getByRole("radio", { name: "Imperial" }));
 
     // A retained subtree keeps its state while its effects and refs are torn
@@ -341,9 +340,7 @@ describe("SegmentedControl label and controlled value", () => {
 
   it("keeps the hidden input attached while the controlled value changes", () => {
     const addListener = vi.spyOn(HTMLFormElement.prototype, "addEventListener");
-    const tree = (
-      value: (typeof OPTIONS)[number]["value"],
-    ): ReactActual.ReactElement => (
+    const tree = (value: (typeof OPTIONS)[number]["value"]): ReactElement => (
       <form>
         <SegmentedControl
           label="Units"
@@ -361,7 +358,8 @@ describe("SegmentedControl label and controlled value", () => {
     view.rerender(tree("imperial"));
     view.rerender(tree("nautical"));
 
-    // A stable callback ref means the reset listener registered once.
+    // The registration follows the name, not the value, so the reset
+    // listener registered once.
     expect(resetListeners()).toBe(1);
     expect(view.container.querySelector("input[type=hidden]")).toHaveProperty(
       "value",
@@ -606,42 +604,43 @@ describe("SegmentedControl blocked option", () => {
 });
 
 describe("SegmentedControl blocked option reason", () => {
+  const REASON = "The chart set is metric only.";
+  /** Metric beside an Imperial option that carries the reason and the flags. */
+  const withImperial = (
+    flags: Pick<
+      SegmentedControlOption<"imperial">,
+      "ariaDisabled" | "disabled"
+    >,
+  ) =>
+    [
+      { label: "Metric", value: "metric" },
+      {
+        label: "Imperial",
+        value: "imperial",
+        disabledReason: REASON,
+        ...flags,
+      },
+    ] as const;
+
   it("reads a blocked option's reason as its description and drops it once live", () => {
     const { rerender } = render(
       <SegmentedControl
         label="Units"
         defaultValue="metric"
-        options={[
-          { label: "Metric", value: "metric" },
-          {
-            label: "Imperial",
-            value: "imperial",
-            ariaDisabled: true,
-            disabledReason: "The chart set is metric only.",
-          },
-        ]}
+        options={withImperial({ ariaDisabled: true })}
       />,
     );
 
     const imperial = screen.getByRole("radio", { name: "Imperial" });
     // A description, so the option keeps the name it had before it was
     // blocked.
-    expect(imperial).toHaveAccessibleDescription(
-      "The chart set is metric only.",
-    );
+    expect(imperial).toHaveAccessibleDescription(REASON);
 
     rerender(
       <SegmentedControl
         label="Units"
         defaultValue="metric"
-        options={[
-          { label: "Metric", value: "metric" },
-          {
-            label: "Imperial",
-            value: "imperial",
-            disabledReason: "The chart set is metric only.",
-          },
-        ]}
+        options={withImperial({})}
       />,
     );
     expect(
@@ -673,16 +672,10 @@ describe("SegmentedControl blocked option reason", () => {
           label="Units"
           defaultValue="metric"
           disabled={groupDisabled}
-          options={[
-            { label: "Metric", value: "metric" },
-            {
-              label: "Imperial",
-              value: "imperial",
-              ariaDisabled: true,
-              disabled: optionDisabled,
-              disabledReason: "The chart set is metric only.",
-            },
-          ]}
+          options={withImperial({
+            ariaDisabled: true,
+            disabled: optionDisabled,
+          })}
         />,
       );
 
@@ -692,10 +685,8 @@ describe("SegmentedControl blocked option reason", () => {
       expect(imperial).toBeDisabled();
       expect(imperial).not.toHaveAttribute("aria-describedby");
       expect(imperial).not.toHaveAccessibleDescription();
-      expect(screen.queryByText("The chart set is metric only.")).toBeNull();
-      expect(warn.mock.calls.map(([message]) => String(message))).toEqual(
-        warnings,
-      );
+      expect(screen.queryByText(REASON)).toBeNull();
+      expect(loggedMessages(warn)).toEqual(warnings);
     },
   );
 
@@ -718,32 +709,10 @@ describe("SegmentedControl blocked option reason", () => {
       />,
     );
 
-    expect(warn.mock.calls.map(([message]) => String(message))).toEqual([
+    expect(loggedMessages(warn)).toEqual([
       'SegmentedControl option "Fathoms" is blocked with ariaDisabled but says nothing about why. Pass disabledReason on the option.',
       'SegmentedControl option "Feet" has a disabledReason beside native disabled, which takes it out of the tab order, so no one reaches the reason. Use ariaDisabled instead: the option stays focusable and reads the reason.',
     ]);
-  });
-});
-
-describe("SegmentedControl option data attribute values", () => {
-  it("writes numbers and booleans the way a data attribute on any element takes them", () => {
-    render(
-      <SegmentedControl
-        label="Waypoint"
-        defaultValue="first"
-        options={[
-          {
-            label: "First",
-            value: "first",
-            dataAttributes: { "data-index": 1, "data-default": true },
-          },
-        ]}
-      />,
-    );
-
-    const first = screen.getByRole("radio", { name: "First" });
-    expect(first).toHaveAttribute("data-index", "1");
-    expect(first).toHaveAttribute("data-default", "true");
   });
 });
 
@@ -776,6 +745,26 @@ describe("SegmentedControl option data attributes", () => {
       "data-snui-theme-choice",
       "night",
     );
+  });
+
+  it("writes numbers and booleans the way a data attribute on any element takes them", () => {
+    render(
+      <SegmentedControl
+        label="Waypoint"
+        defaultValue="first"
+        options={[
+          {
+            label: "First",
+            value: "first",
+            dataAttributes: { "data-index": 1, "data-default": true },
+          },
+        ]}
+      />,
+    );
+
+    const first = screen.getByRole("radio", { name: "First" });
+    expect(first).toHaveAttribute("data-index", "1");
+    expect(first).toHaveAttribute("data-default", "true");
   });
 
   it("accepts options a consumer typed with an interface", () => {
@@ -828,27 +817,47 @@ describe("SegmentedControl focus-only movement", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
-  it("uses Cmd as the focus modifier on macOS", async () => {
-    vi.stubGlobal("navigator", {
-      platform: "MacIntel",
-      userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)",
-    });
-    vi.resetModules();
-    // The re-imported module must share the renderer's React copy.
-    vi.doMock("react", () => ReactActual);
-    vi.doMock("react/jsx-runtime", () => JSXRuntime);
-    vi.doMock("react/jsx-dev-runtime", () => JSXDevRuntime);
-
-    try {
-      // Dynamic import is required here: the macOS modifier resolves once at
-      // module scope, so the module must be re-evaluated after stubbing
-      // navigator. React is mocked back to the renderer's copy above.
-      const { SegmentedControl: MacSegmentedControl } = await import(
-        "../../src/components/SegmentedControl.js"
-      );
+  // The modifier is read from the user agent when a key is handled, so
+  // stubbing navigator before the render is enough: Cmd on every Apple
+  // platform, Ctrl on every other one.
+  it.each([
+    [
+      "macOS",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
+      "metaKey",
+    ],
+    [
+      "iOS",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
+      "metaKey",
+    ],
+    [
+      "Windows",
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "ctrlKey",
+    ],
+    [
+      "Linux",
+      "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
+      "ctrlKey",
+    ],
+    [
+      "Android",
+      "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+      "ctrlKey",
+    ],
+    [
+      "ChromeOS",
+      "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+      "ctrlKey",
+    ],
+  ] as const)(
+    "moves focus with the %s focus modifier and selects with the other",
+    (_platform, userAgent, modifier) => {
+      vi.stubGlobal("navigator", { userAgent });
       const onChange = vi.fn();
       render(
-        <MacSegmentedControl
+        <SegmentedControl
           label="Units"
           defaultValue="metric"
           onValueChange={onChange}
@@ -858,40 +867,38 @@ describe("SegmentedControl focus-only movement", () => {
 
       const metric = screen.getByRole("radio", { name: "Metric" });
       metric.focus();
-      fireEvent.keyDown(metric, { key: "ArrowRight", metaKey: true });
+      fireEvent.keyDown(metric, { key: "ArrowRight", [modifier]: true });
 
       expect(screen.getByRole("radio", { name: "Imperial" })).toHaveFocus();
       expect(metric).toHaveAttribute("aria-checked", "true");
       expect(onChange).not.toHaveBeenCalled();
 
-      // Ctrl is not the focus modifier on macOS, so it still selects.
+      // The modifier the platform does not use for focus still selects.
       fireEvent.keyDown(screen.getByRole("radio", { name: "Imperial" }), {
         key: "ArrowRight",
-        ctrlKey: true,
+        [modifier === "metaKey" ? "ctrlKey" : "metaKey"]: true,
       });
       expect(onChange).toHaveBeenCalledWith("nautical");
-    } finally {
-      vi.doUnmock("react");
-      vi.doUnmock("react/jsx-runtime");
-      vi.doUnmock("react/jsx-dev-runtime");
-      vi.resetModules();
-    }
-  });
+    },
+  );
 });
 
 describe("SegmentedControl ref", () => {
-  it("forwards ref to the radiogroup container", () => {
+  it("forwards its ref and native attributes to the radiogroup container", () => {
     const ref = createRef<HTMLDivElement>();
     render(
       <SegmentedControl
         ref={ref}
+        data-testid="units-control"
         label="Units"
         value="metric"
         options={OPTIONS}
       />,
     );
 
-    expect(ref.current).toBe(screen.getByRole("radiogroup", { name: "Units" }));
+    const group = screen.getByRole("radiogroup", { name: "Units" });
+    expect(ref.current).toBe(group);
+    expect(screen.getByTestId("units-control")).toBe(group);
   });
 });
 
@@ -911,6 +918,27 @@ describe("SegmentedControl description and error", () => {
     expect(group).toHaveAttribute("aria-errormessage");
     expect(group).toHaveAccessibleDescription(
       "Applies to every reading in this panel. Error.Pick the units the crew reads.",
+    );
+  });
+
+  it("reads its own text before the ids the caller adds", () => {
+    render(
+      <>
+        <p id="units-note">The chart set follows the same units.</p>
+        <SegmentedControl
+          label="Units"
+          description="Applies to every reading in this panel."
+          error="Pick the units the crew reads."
+          aria-describedby="units-note"
+          options={OPTIONS}
+        />
+      </>,
+    );
+
+    expect(
+      screen.getByRole("radiogroup", { name: "Units" }),
+    ).toHaveAccessibleDescription(
+      "Applies to every reading in this panel. Error.Pick the units the crew reads. The chart set follows the same units.",
     );
   });
 
@@ -1011,38 +1039,6 @@ describe("SegmentedControl", () => {
     expect(screen.getByRole("radio", { name: "Night" })).toHaveAttribute(
       "aria-checked",
       "true",
-    );
-  });
-
-  it("forwards native attributes and a root ref", () => {
-    const rootRef = createRef<HTMLDivElement>();
-    render(
-      <SegmentedControl
-        ref={rootRef}
-        data-testid="display-mode"
-        label="Display mode"
-        value="auto"
-        onValueChange={() => undefined}
-        options={[{ label: "Auto", value: "auto" }]}
-      />,
-    );
-
-    expect(rootRef.current).toBe(screen.getByTestId("display-mode"));
-    expect(rootRef.current).toHaveAttribute("aria-orientation", "horizontal");
-  });
-
-  it("rejects a whitespace-only legend", () => {
-    expect(() =>
-      render(
-        <SegmentedControl
-          label="  "
-          value="auto"
-          onValueChange={() => undefined}
-          options={[{ label: "Auto", value: "auto" }]}
-        />,
-      ),
-    ).toThrow(
-      "signalk-nearlcrews-ui: SegmentedControl requires a non-empty label.",
     );
   });
 });

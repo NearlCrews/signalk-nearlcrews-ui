@@ -1,7 +1,7 @@
-import { useLayoutEffect } from "react";
+import { useLayoutEffect, useReducer } from "react";
 import { packageError } from "../utils/errors.js";
 import {
-  useOptionalPanelRoot,
+  useOptionalPanelRootResolver,
   usePanelPortalContainer,
 } from "../utils/portal.js";
 import { PACKAGE_VERSION } from "../version.js";
@@ -26,12 +26,20 @@ import {
  * `componentName` appears in the error thrown outside `PanelRoot`, so it is
  * required: a default would name this hook in a message a consumer reads about
  * the component they wrote.
+ *
+ * Returns the owning root it resolved, null until that commit, so an overlay
+ * that portals into the root asks once rather than resolving it again.
  */
 export function useModuleStyles(
   module: StyleModule,
   componentName: string,
-): void {
-  useModuleStylesForRoot(module, usePanelPortalContainer(componentName));
+): HTMLElement | null {
+  const panelRoot = usePanelPortalContainer(componentName);
+  useLayoutEffect(() => {
+    if (panelRoot === null) return undefined;
+    return installModuleStylesForRoot(panelRoot.ownerDocument, module);
+  }, [module, panelRoot]);
+  return panelRoot;
 }
 
 /**
@@ -42,20 +50,25 @@ export function useModuleStyles(
  * to portal to and throws; an in-flow control has always rendered there
  * unstyled, exactly as it did while its rules traveled in the root sheet, so
  * this hook installs nothing and stays silent.
+ *
+ * It asks for the root inside the layout effect rather than a commit later.
+ * A control mounted into a panel whose root has resolved installs at once and
+ * renders once. Only when the root's ref has not attached yet, on the panel's
+ * first commit or when a retained subtree is shown again, does the effect find
+ * nothing and render the control once more to ask again, still before paint.
  */
 export function useOptionalModuleStyles(module: StyleModule): void {
-  useModuleStylesForRoot(module, useOptionalPanelRoot());
-}
-
-/** Installs the module into the owning root's document, once it resolves. */
-function useModuleStylesForRoot(
-  module: StyleModule,
-  panelRoot: HTMLElement | null,
-): void {
+  const resolvePanelRoot = useOptionalPanelRootResolver();
+  const [attempt, askAgain] = useReducer((count: number) => count + 1, 0);
   useLayoutEffect(() => {
-    if (panelRoot === null) return undefined;
+    if (resolvePanelRoot === null) return undefined;
+    const panelRoot = resolvePanelRoot();
+    if (panelRoot === null) {
+      askAgain();
+      return undefined;
+    }
     return installModuleStylesForRoot(panelRoot.ownerDocument, module);
-  }, [module, panelRoot]);
+  }, [module, resolvePanelRoot, attempt]);
 }
 
 function installModuleStylesForRoot(
@@ -64,11 +77,11 @@ function installModuleStylesForRoot(
 ): () => void {
   const nonces = installedRootStyleNonces(ownerDocument, PACKAGE_VERSION);
   // Unreachable through the public API, and deliberately kept. PanelRoot
-  // installs the root sheet in its callback ref, which runs before every
-  // layout effect, and releases it only when that ref detaches at unmount,
-  // while this effect runs only once the owning root has resolved. The guard
-  // survives for a consumer reaching past the package, and for the day one of
-  // those orderings changes.
+  // installs the root sheet in the callback ref that makes the root
+  // resolvable, and releases it only when that ref detaches at unmount, while
+  // this runs only once the owning root has resolved. The guard survives for a
+  // consumer reaching past the package, and for the day one of those
+  // orderings changes.
   if (nonces.length === 0) {
     throw packageError(
       `Panel styles for version ${PACKAGE_VERSION} are not installed in this document; render inside PanelRoot.`,

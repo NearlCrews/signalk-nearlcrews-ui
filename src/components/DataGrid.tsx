@@ -32,9 +32,13 @@ import {
 } from "react-aria-components";
 import { TableLayout, Virtualizer } from "react-aria-components/Virtualizer";
 import { useNodeRef } from "../hooks/use-node-ref.js";
-import { TABLE_STYLES } from "../styles/table.js";
 import {
-  DATA_GRID_ROW_HEIGHTS,
+  DATA_GRID_COLUMN_MIN_PROPERTY,
+  TABLE_STYLES,
+} from "../styles/table.js";
+import {
+  COARSE_POINTER_QUERY,
+  DATA_GRID_ROW_HEIGHTS_COARSE,
   DATA_GRID_ROW_HEIGHTS_FINE,
 } from "../styles/tokens.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
@@ -74,15 +78,8 @@ export type DataGridVirtualizeMode = "always" | "auto" | "never";
 
 const DEFAULT_VIRTUALIZE_THRESHOLD = 100;
 
-/**
- * Custom property holding the minimum width of a data-grid column. The style
- * module reads it with a fallback, so a column pinned narrower than the
- * default floor lowers the floor for its own cells alone.
- */
-const COLUMN_MIN_PROPERTY = "--snui-data-grid-column-min";
-
 type ColumnMinStyle = CSSProperties &
-  Record<typeof COLUMN_MIN_PROPERTY, string>;
+  Record<typeof DATA_GRID_COLUMN_MIN_PROPERTY, string>;
 
 /*
  * Which set of estimates the layout starts from. The pointer is a property of
@@ -93,8 +90,8 @@ type ColumnMinStyle = CSSProperties &
  * height during a fast scroll. jsdom implements no matchMedia, which reads as
  * the fine pointer a development machine has.
  */
-const ROW_HEIGHTS = mediaMatches(globalThis, "(any-pointer: coarse)")
-  ? DATA_GRID_ROW_HEIGHTS
+const ROW_HEIGHTS = mediaMatches(globalThis, COARSE_POINTER_QUERY)
+  ? DATA_GRID_ROW_HEIGHTS_COARSE
   : DATA_GRID_ROW_HEIGHTS_FINE;
 
 /**
@@ -443,7 +440,7 @@ function decorateCell(
     // that would otherwise win the column back, so the floor travels with it.
     const style: ColumnMinStyle = {
       ...cellStyle,
-      [COLUMN_MIN_PROPERTY]: decoration.minWidth,
+      [DATA_GRID_COLUMN_MIN_PROPERTY]: decoration.minWidth,
     };
     props.style = style;
     decorated = true;
@@ -698,7 +695,6 @@ export function DataGrid<TRow, TColumn = unknown>({
   emptyDescription,
   emptyState,
   emptyTitle,
-  id,
   items,
   onSelectionChange,
   onSortChange,
@@ -707,7 +703,6 @@ export function DataGrid<TRow, TColumn = unknown>({
   selectedKeys,
   selectionMode = "none",
   sortDescriptor,
-  style,
   virtualize = "auto",
   virtualizeThreshold = DEFAULT_VIRTUALIZE_THRESHOLD,
   zebra = false,
@@ -860,13 +855,15 @@ export function DataGrid<TRow, TColumn = unknown>({
       />
     );
 
+  // What the two bodies share, written once so neither can drift.
+  const bodyProps = {
+    className: "snui-data-grid__body",
+    dependencies: rowDependencies,
+    renderEmptyState: renderEmpty,
+  };
+
   const body = virtualized ? (
-    <TableBody
-      className="snui-data-grid__body"
-      dependencies={rowDependencies}
-      items={renderedItems}
-      renderEmptyState={renderEmpty}
-    >
+    <TableBody {...bodyProps} items={renderedItems}>
       {(entry) => {
         const row = renderGridRow(entry.value);
         const parityProps: ZebraRowProps<TRow> = {
@@ -885,12 +882,7 @@ export function DataGrid<TRow, TColumn = unknown>({
       }}
     </TableBody>
   ) : (
-    <TableBody
-      className="snui-data-grid__body"
-      dependencies={rowDependencies}
-      items={items}
-      renderEmptyState={renderEmpty}
-    >
+    <TableBody {...bodyProps} items={items}>
       {renderGridRow}
     </TableBody>
   );
@@ -933,8 +925,6 @@ export function DataGrid<TRow, TColumn = unknown>({
         zebra && "snui-data-grid--zebra",
         className,
       )}
-      id={id}
-      style={style}
     >
       {hasCaption ? (
         <div

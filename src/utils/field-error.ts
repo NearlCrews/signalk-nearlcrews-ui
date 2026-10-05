@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { AnnouncementMode } from "./announcement.js";
-import { resolveDescriptionId } from "./aria.js";
+import { joinIdReferences, resolveDescriptionId } from "./aria.js";
 import { hasReactContent } from "./react-node.js";
 
 export interface FieldErrorState {
@@ -47,9 +47,8 @@ export interface FieldRegions extends FieldErrorState {
 /**
  * Resolves every id and mounting rule a field's own text needs, so a field,
  * a group, a checkbox, a radio group, and a segmented control all answer the
- * description and error questions the same way, blank content included. Each
- * caller still builds its own `aria-describedby`, because the reading order
- * of the ids the consumer adds belongs to the component that renders them.
+ * description and error questions the same way, blank content included.
+ * `fieldDescribedBy` then reads the ids out in one order.
  */
 export function resolveFieldRegions(
   idBase: string,
@@ -65,4 +64,36 @@ export function resolveFieldRegions(
     hasError,
     ...resolveFieldError(idBase, hasError, errorLive),
   };
+}
+
+/** The ids of the text a field renders for itself, in reading order. */
+export interface FieldTextIds {
+  /**
+   * The description element. Left out by a control whose React Aria
+   * primitive wires its description slot itself.
+   */
+  readonly descriptionId?: string | undefined;
+  /** The reason a blocked control gives, while it shows one. */
+  readonly reasonId?: string | undefined;
+  /** The error, while there is one to read. */
+  readonly referencedErrorId: string | undefined;
+}
+
+/**
+ * The `aria-describedby` every field carries: its own text first, the
+ * description, then a blocked control's reason, then the error, and the ids
+ * the caller adds after it, whichever route they arrived by. One order for
+ * every field and group, so a screen reader reads each of them the same way
+ * and a caller's note never displaces the field's own words.
+ */
+export function fieldDescribedBy(
+  { descriptionId, reasonId, referencedErrorId }: FieldTextIds,
+  ...callerIds: readonly (string | undefined)[]
+): string | undefined {
+  return joinIdReferences(
+    descriptionId,
+    reasonId,
+    referencedErrorId,
+    ...callerIds,
+  );
 }

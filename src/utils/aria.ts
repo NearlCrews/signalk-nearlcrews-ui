@@ -1,3 +1,5 @@
+import { useId } from "react";
+
 import { packageError } from "./errors.js";
 import { hasText } from "./labels.js";
 import { joinList } from "./text.js";
@@ -47,6 +49,18 @@ export function requireIdToken(id: string, option: string): string {
     );
   }
   return id;
+}
+
+/**
+ * The id a component wires its ARIA references with: the one a consumer
+ * supplied, held to {@link requireIdToken}, or a generated one. `option`
+ * names the prop in the failure, for example "CollapsibleSection idPrefix".
+ *
+ * @internal
+ */
+export function useIdToken(id: string | undefined, option: string): string {
+  const generatedId = useId();
+  return id === undefined ? generatedId : requireIdToken(id, option);
 }
 
 /**

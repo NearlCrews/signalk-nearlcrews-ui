@@ -1,5 +1,7 @@
 import { versionedAnimationName } from "../version.js";
 import {
+  overlayFadeTransition,
+  RAISED_PAINT_DECLARATIONS,
   RAISED_SURFACE_TOKEN_DECLARATIONS,
   SAFE_AREA_PADDING_DECLARATIONS,
   TONE_DOT_DECLARATIONS,
@@ -16,6 +18,28 @@ import {
 
 /** The keyframe name the toast card animates in with. */
 const TOAST_ENTER_ANIMATION = versionedAnimationName("toast-enter");
+
+/**
+ * The custom property each measured host length is written to, by the name
+ * `ToastRegion` measures the length under. The host rule reads each with a
+ * fallback for the frame before the first measurement.
+ *
+ * @internal
+ */
+export const TOAST_HOST_LENGTH_PROPERTIES = {
+  top: "--snui-toast-host-top",
+  bottom: "--snui-toast-host-bottom",
+  left: "--snui-toast-host-left",
+  width: "--snui-toast-host-width",
+} as const;
+
+/**
+ * The attribute `ToastRegion` keeps on the host while any of the panel is in
+ * the visual viewport, and the host rule clips the host without.
+ *
+ * @internal
+ */
+export const TOAST_HOST_VISIBLE_ATTRIBUTE = "data-snui-toast-host-visible";
 
 /**
  * Toast region and card styles. Installed by `ToastRegion` through
@@ -36,13 +60,13 @@ ${scopeStyles(`
 
 .snui-toast-region-host {
   position: fixed;
-  inset-block-start: var(--snui-toast-host-top, 0px);
-  inset-block-end: var(--snui-toast-host-bottom, 0px);
+  inset-block-start: var(${TOAST_HOST_LENGTH_PROPERTIES.top}, 0px);
+  inset-block-end: var(${TOAST_HOST_LENGTH_PROPERTIES.bottom}, 0px);
   /* JavaScript measures a physical viewport coordinate, including in RTL. */
-  left: var(--snui-toast-host-left, 0px);
+  left: var(${TOAST_HOST_LENGTH_PROPERTIES.left}, 0px);
   z-index: var(--snui-z-toast);
   display: flex;
-  width: var(--snui-toast-host-width, 100%);
+  width: var(${TOAST_HOST_LENGTH_PROPERTIES.width}, 100%);
   flex-direction: column;
   align-items: flex-end;
   gap: var(--snui-space-2);
@@ -63,7 +87,7 @@ ${SAFE_AREA_PADDING_DECLARATIONS}
  * position inside the panel instead of a viewport coordinate the panel no
  * longer occupies.
  */
-.snui-toast-region-host:not([data-snui-toast-host-visible]) {
+.snui-toast-region-host:not([${TOAST_HOST_VISIBLE_ATTRIBUTE}]) {
   inset: auto;
 ${visuallyHiddenDeclarations()}
 }
@@ -97,14 +121,10 @@ ${RAISED_SURFACE_TOKEN_DECLARATIONS}
      the dialog, menu, and popover outlines keep. */
 ${OVERLAY_TONE_ACCENT_BAR_DECLARATIONS}
   border-radius: var(--snui-radius-md);
-  background: var(--snui-color-surface-raised);
-  box-shadow: var(--snui-shadow-overlay);
-  color: var(--snui-color-text);
+${RAISED_PAINT_DECLARATIONS}
   pointer-events: auto;
   animation: ${TOAST_ENTER_ANIMATION} var(--snui-transition-fast);
-  transition:
-    opacity var(--snui-transition-fast),
-    transform var(--snui-transition-fast);
+${overlayFadeTransition("fast")}
 }
 
 .snui-toast[data-exiting] {

@@ -1,8 +1,11 @@
+import { ACTION_BAR_FIXED_PROPERTIES } from "./action-bar-properties.js";
 import {
+  ACTION_ROW_DECLARATIONS,
   CONTROL_LABEL_DECLARATIONS,
   FIELD_DESCRIPTION_DECLARATIONS,
   FIELD_ERROR_DECLARATIONS,
   FIELD_STACK_DECLARATIONS,
+  MUTED_PROSE_DECLARATIONS,
   NARROW_PANEL_QUERY,
   PROSE_MEASURE_DECLARATION,
   stretchedActionRules,
@@ -23,6 +26,27 @@ import {
  */
 const STICKY_CLEARANCE_TARGETS =
   ".snui-root__content :is(button, input, select, textarea, a[href], [tabindex])";
+
+/**
+ * The panel-level surfaces that keep one inline inset: the two section shells
+ * and the action bar. One list for the base step and the narrow one, so a
+ * narrow panel cannot tighten two of them and leave the third behind.
+ */
+const INSET_SURFACES =
+  ":is(.snui-section, .snui-collapsible, .snui-action-bar)";
+
+/**
+ * A title set at the body size and the title weight: the section title and
+ * the confirmation title. The leading is pinned because the heading level,
+ * and the leading the reset gives it, follows the outline around it.
+ */
+const BODY_SIZE_TITLE_DECLARATIONS = `  min-width: 0;
+  margin: 0;
+  font-size: var(--snui-font-size);
+  font-weight: var(--snui-font-weight-bold);
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  text-wrap: balance;`;
 
 export const COMPONENT_STYLES = scopeStyles(`
 /*
@@ -106,11 +130,8 @@ ${TONE_SHAPE_DECLARATIONS.danger}
 }
 
 .snui-panel-shell__description {
-  min-width: 0;
+${MUTED_PROSE_DECLARATIONS}
 ${PROSE_MEASURE_DECLARATION}
-  color: var(--snui-color-text-muted);
-  overflow-wrap: anywhere;
-  text-wrap: pretty;
 }
 
 /*
@@ -119,7 +140,7 @@ ${PROSE_MEASURE_DECLARATION}
  * panel and a save bar's status and buttons line up with the section content
  * above them. A narrow panel tightens all three together, below.
  */
-:is(.snui-section, .snui-collapsible, .snui-action-bar) {
+${INSET_SURFACES} {
   --snui-section-inset: var(--snui-space-4);
 }
 
@@ -183,12 +204,8 @@ ${PROSE_MEASURE_DECLARATION}
 }
 
 .snui-section__actions {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-  flex-wrap: wrap;
+${ACTION_ROW_DECLARATIONS}
   justify-content: flex-end;
-  gap: var(--snui-space-2);
 }
 
 .snui-section__actions > * {
@@ -203,24 +220,15 @@ ${PROSE_MEASURE_DECLARATION}
  * sizes are set together.
  */
 .snui-section__title {
-  min-width: 0;
-  margin: 0;
+${BODY_SIZE_TITLE_DECLARATIONS}
   color: var(--snui-color-text);
-  font-size: var(--snui-font-size);
-  font-weight: var(--snui-font-weight-bold);
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-  text-wrap: balance;
 }
 
 .snui-section__description {
-  min-width: 0;
+${MUTED_PROSE_DECLARATIONS}
 ${PROSE_MEASURE_DECLARATION}
   margin: 0;
   margin-block-start: var(--snui-space-1);
-  color: var(--snui-color-text-muted);
-  overflow-wrap: anywhere;
-  text-wrap: pretty;
 }
 
 .snui-field {
@@ -231,12 +239,11 @@ ${FIELD_STACK_DECLARATIONS}
 ${CONTROL_LABEL_DECLARATIONS}
 }
 
-/* The most numerous prose in a panel, so it takes the balanced last line and
-   the measure cap the other body copy takes. */
+/* The most numerous prose in a panel, so it takes the measure cap the other
+   body copy takes. */
 .snui-field__description {
 ${FIELD_DESCRIPTION_DECLARATIONS}
 ${PROSE_MEASURE_DECLARATION}
-  text-wrap: pretty;
 }
 
 .snui-field__error {
@@ -247,13 +254,12 @@ ${FIELD_ERROR_DECLARATIONS}
  * An announcing error region stays mounted so a screen reader observes it
  * before the message arrives. While empty it is taken out of flow rather than
  * hidden, because display: none would remove it from the accessibility tree.
+ * Every field wrapper's region carries the block class the shared error
+ * region adds, so one selector reaches them all, and the checkbox group's
+ * warning region waits empty the same way.
  */
-.snui-field__error:empty,
-.snui-checkbox__error:empty,
-.snui-field-group__error:empty,
-.snui-radio-group__error:empty,
-.snui-segmented__error:empty,
-.snui-switch__error:empty {
+.snui-field-error:empty,
+.snui-checkbox-group__warning:empty {
 ${visuallyHiddenDeclarations()}
 }
 
@@ -368,7 +374,7 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
 }
 
 .snui-action-bar__viewport-anchor--docked {
-  block-size: var(--snui-action-bar-fixed-height);
+  block-size: var(${ACTION_BAR_FIXED_PROPERTIES.height});
 }
 
 /*
@@ -398,10 +404,10 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
   z-index: var(--snui-z-sticky);
   inset-block-end: max(
     env(safe-area-inset-bottom, 0px),
-    var(--snui-action-bar-fixed-bottom, 0px)
+    var(${ACTION_BAR_FIXED_PROPERTIES.bottom}, 0px)
   );
-  left: var(--snui-action-bar-fixed-left);
-  width: var(--snui-action-bar-fixed-width);
+  left: var(${ACTION_BAR_FIXED_PROPERTIES.left});
+  width: var(${ACTION_BAR_FIXED_PROPERTIES.width});
 }
 
 /*
@@ -452,11 +458,7 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
 }
 
 .snui-action-bar__actions {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-  flex-wrap: wrap;
-  gap: var(--snui-space-2);
+${ACTION_ROW_DECLARATIONS}
   margin-inline-start: auto;
 }
 
@@ -476,22 +478,13 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
  * the leading the reset gives it, follows the section around it.
  */
 .snui-inline-confirm__title {
-  min-width: 0;
-  text-wrap: balance;
-  margin: 0;
-  font-size: var(--snui-font-size);
-  font-weight: var(--snui-font-weight-bold);
-  line-height: 1.3;
-  overflow-wrap: anywhere;
+${BODY_SIZE_TITLE_DECLARATIONS}
 }
 
 .snui-inline-confirm__message {
-  min-width: 0;
+${MUTED_PROSE_DECLARATIONS}
 ${PROSE_MEASURE_DECLARATION}
   margin: 0;
-  color: var(--snui-color-text-muted);
-  overflow-wrap: anywhere;
-  text-wrap: pretty;
 }
 
 .snui-inline-confirm__actions {
@@ -503,7 +496,7 @@ ${PROSE_MEASURE_DECLARATION}
 }
 
 ${NARROW_PANEL_QUERY} {
-  :is(.snui-section, .snui-collapsible, .snui-action-bar) {
+  ${INSET_SURFACES} {
     --snui-section-inset: var(--snui-space-3);
   }
 

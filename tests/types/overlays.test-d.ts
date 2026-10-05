@@ -34,7 +34,7 @@ import type { Density, Visibility } from "../../src/utils/variants.js";
  * These assertions fail if a component loses its ref, resolves it to the
  * wrong element, or drifts from the shared vocabularies.
  */
-describe("overlay and data-grid ref types", () => {
+describe("overlay and data-grid refs and forwarded props", () => {
   it("types each ref against its owning element", () => {
     expectTypeOf<ComponentProps<typeof Menu>["ref"]>().toEqualTypeOf<
       Ref<HTMLDivElement> | undefined
@@ -98,7 +98,6 @@ describe("overlay prop vocabularies", () => {
       NonNullable<AlertDialogProps["actions"]>
     >();
     expectTypeOf<undefined>().toExtend<DialogProps["keyboardDismissable"]>();
-    expectTypeOf<undefined>().toExtend<DialogProps["onCancel"]>();
   });
 
   it("accepts a CSS length string for popover width and refuses a bare number", () => {

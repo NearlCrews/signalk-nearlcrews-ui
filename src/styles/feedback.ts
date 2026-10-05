@@ -53,7 +53,7 @@ ${visuallyHiddenDeclarations()}
 }
 
 /* Larger and heavier than the inline mark it refines, and no glyph margin:
-   the flex row above owns the gap between the mark and the text. */
+   the content row owns the gap between the mark and the text. */
 .snui-banner__tone-icon {
   display: inline-grid;
   width: ${BANNER_TONE_ICON_SIZE};

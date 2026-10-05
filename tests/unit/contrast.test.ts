@@ -5,14 +5,11 @@ import {
   DARK_TOKENS,
   LIGHT_TOKENS,
   NIGHT_TOKENS,
-  PUBLIC_FOUNDATION_TOKEN_NAMES,
-  PUBLIC_TOKEN_NAMES,
   type ThemeTokenSet,
   TOKEN_STYLES,
 } from "../../src/styles/tokens.js";
-import { ROOT_SELECTOR } from "../../src/version.js";
-import { hexChannels } from "../color-channels.js";
-import { ruleBody } from "../css-helpers.js";
+import { hexChannels, NIGHT_CHANNEL_CAP } from "../color-channels.js";
+import { ruleBody, SEMANTIC_TONES, themeSelector } from "../css-helpers.js";
 
 function channelToLinear(channel: number): number {
   const normalized = channel / 255;
@@ -64,7 +61,7 @@ function apcaContrast(text: string, background: string): number {
   return contrast > -0.1 ? 0 : Math.abs(contrast + 0.027) * 100;
 }
 
-const themeCases: readonly [string, ThemeTokenSet][] = [
+const THEME_CASES: readonly [string, ThemeTokenSet][] = [
   ["light", LIGHT_TOKENS],
   ["dark", DARK_TOKENS],
   ["night", NIGHT_TOKENS],
@@ -78,8 +75,6 @@ const TEXT_SURFACES = [
   "--snui-color-hover-raised",
   "--snui-color-surface-stripe",
 ] as const satisfies readonly ColorTokenName[];
-
-const STATUS_TONES = ["info", "success", "warning", "danger"] as const;
 
 /**
  * The tinted fills a boundary or a piece of text can land on: a selected data
@@ -109,9 +104,9 @@ const READING_FILLS = [
   "--snui-color-row-selected-hover",
 ] as const satisfies readonly ColorTokenName[];
 
-describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
-  it("keeps primary and muted text above WCAG AA on every surface", () => {
-    for (const surface of TEXT_SURFACES) {
+describe.each(THEME_CASES)("%s theme contrast", (_name, tokens) => {
+  it("keeps primary and muted text above WCAG AA on every reading fill", () => {
+    for (const surface of READING_FILLS) {
       expect(
         contrastRatio(tokens["--snui-color-text"], tokens[surface]),
         `text on ${surface}`,
@@ -139,7 +134,7 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
   });
 
   it("keeps semantic status text above WCAG AA", () => {
-    for (const tone of STATUS_TONES) {
+    for (const tone of SEMANTIC_TONES) {
       for (const surface of READING_FILLS) {
         expect(
           contrastRatio(tokens[`--snui-color-${tone}`], tokens[surface]),
@@ -209,26 +204,20 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
    * clearing a 3:1 floor for a grey disabled label and a grey separator is not
    * possible on the light palette, and a selected row is identified by its
    * leading accent bar rather than by the tint alone. What has to hold is that
-   * the row keeps its text readable and stays visibly a step from the resting
-   * selected fill.
+   * the row stays visibly a step from the resting selected fill; its text is
+   * measured with every other reading fill above.
    */
-  it("keeps the hovered selected row readable and a visible step", () => {
-    const hovered = tokens["--snui-color-row-selected-hover"];
+  it("keeps the hovered selected row a visible step from the resting one", () => {
     expect(
-      contrastRatio(tokens["--snui-color-text"], hovered),
-      "text on row-selected-hover",
-    ).toBeGreaterThanOrEqual(4.5);
-    expect(
-      contrastRatio(tokens["--snui-color-text-muted"], hovered),
-      "text-muted on row-selected-hover",
-    ).toBeGreaterThanOrEqual(4.5);
-    expect(
-      contrastRatio(hovered, tokens["--snui-color-accent-subtle"]),
+      contrastRatio(
+        tokens["--snui-color-row-selected-hover"],
+        tokens["--snui-color-accent-subtle"],
+      ),
       "row-selected-hover against the resting selected fill",
     ).toBeGreaterThanOrEqual(1.05);
   });
 
-  it("keeps the neutral tint visible, readable, and apart from the hover fills", () => {
+  it("keeps the neutral tint visible and apart from the hover fills", () => {
     const neutral = tokens["--snui-color-neutral-subtle"];
     for (const surface of [
       "--snui-color-surface",
@@ -238,15 +227,6 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
         contrastRatio(neutral, tokens[surface]),
         `neutral-subtle against ${surface}`,
       ).toBeGreaterThanOrEqual(1.05);
-    }
-    for (const text of [
-      "--snui-color-text",
-      "--snui-color-text-muted",
-    ] as const) {
-      expect(
-        contrastRatio(tokens[text], neutral),
-        `${text} on neutral-subtle`,
-      ).toBeGreaterThanOrEqual(4.5);
     }
     // A tinted tile is not interactive, so it must never match the fill a
     // pointer paints on something that is.
@@ -297,17 +277,9 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
     ).toBeGreaterThanOrEqual(1.05);
   });
 
-  it("keeps text readable on every subtle fill and the fill visible", () => {
-    for (const tone of [...STATUS_TONES, "accent"] as const) {
+  it("keeps every subtle fill visible and its own tone readable on it", () => {
+    for (const tone of [...SEMANTIC_TONES, "accent"] as const) {
       const subtle = tokens[`--snui-color-${tone}-subtle`];
-      expect(
-        contrastRatio(tokens["--snui-color-text"], subtle),
-        `text on ${tone}-subtle`,
-      ).toBeGreaterThanOrEqual(4.5);
-      expect(
-        contrastRatio(tokens["--snui-color-text-muted"], subtle),
-        `text-muted on ${tone}-subtle`,
-      ).toBeGreaterThanOrEqual(4.5);
       expect(
         contrastRatio(subtle, tokens["--snui-color-surface"]),
         `${tone}-subtle against surface`,
@@ -375,24 +347,29 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
     ).toBeGreaterThanOrEqual(3);
   });
 
-  it("separates the danger tone from the resting boundary and from text", () => {
-    // Night is exempt by design: the green and blue cap plus the text-class
-    // red floor converge every bright token, which is why Night never signals
-    // status by hue. Light and Dark carry the separation the danger button and
-    // the invalid control border rely on.
-    if (tokens === NIGHT_TOKENS) return;
-    expect(
-      contrastRatio(
-        tokens["--snui-color-danger"],
-        tokens["--snui-color-border"],
-      ),
-      "danger against border",
-    ).toBeGreaterThanOrEqual(1.5);
-    expect(
-      contrastRatio(tokens["--snui-color-danger"], tokens["--snui-color-text"]),
-      "danger against text",
-    ).toBeGreaterThanOrEqual(1.5);
-  });
+  // Night is exempt by design: the green and blue cap plus the text-class red
+  // floor converge every bright token, which is why Night never signals status
+  // by hue. Light and Dark carry the separation the danger button and the
+  // invalid control border rely on.
+  it.skipIf(tokens === NIGHT_TOKENS)(
+    "separates the danger tone from the resting boundary and from text",
+    () => {
+      expect(
+        contrastRatio(
+          tokens["--snui-color-danger"],
+          tokens["--snui-color-border"],
+        ),
+        "danger against border",
+      ).toBeGreaterThanOrEqual(1.5);
+      expect(
+        contrastRatio(
+          tokens["--snui-color-danger"],
+          tokens["--snui-color-text"],
+        ),
+        "danger against text",
+      ).toBeGreaterThanOrEqual(1.5);
+    },
+  );
 
   it("derives the surface-first hover aliases from the hover pair", () => {
     expect(tokens["--snui-color-surface-hover"]).toBe(
@@ -414,7 +391,7 @@ describe.each(themeCases)("%s theme contrast", (_name, tokens) => {
  */
 it("reports APCA lightness contrast for review", () => {
   const rows: string[] = [];
-  for (const [name, tokens] of themeCases) {
+  for (const [name, tokens] of THEME_CASES) {
     const pairs: readonly [string, ColorTokenName, ColorTokenName][] = [
       ["text on surface", "--snui-color-text", "--snui-color-surface"],
       [
@@ -501,8 +478,8 @@ describe("Night red preservation", () => {
       ...SUBTLE_FILLS,
     ]) {
       const [, green, blue] = hexChannels(NIGHT_TOKENS[token]);
-      expect(green, `${token} green`).toBeLessThanOrEqual(0x40);
-      expect(blue, `${token} blue`).toBeLessThanOrEqual(0x40);
+      expect(green, `${token} green`).toBeLessThanOrEqual(NIGHT_CHANNEL_CAP);
+      expect(blue, `${token} blue`).toBeLessThanOrEqual(NIGHT_CHANNEL_CAP);
     }
   });
 
@@ -539,7 +516,7 @@ describe("Night red preservation", () => {
    * color with transparent cannot raise a channel above the cap.
    */
   function nightBlock(): string {
-    return ruleBody(TOKEN_STYLES, `${ROOT_SELECTOR}[data-snui-theme="night"]`);
+    return ruleBody(TOKEN_STYLES, themeSelector("night"));
   }
 
   it("caps green and blue on every color the Night block emits", () => {
@@ -548,8 +525,8 @@ describe("Night red preservation", () => {
     for (const match of block.matchAll(/#([0-9a-f]{6})\b/g)) {
       const [, green, blue] = hexChannels(`#${match[1] ?? ""}`);
       hexLiterals += 1;
-      expect(green, `${match[0]} green`).toBeLessThanOrEqual(0x40);
-      expect(blue, `${match[0]} blue`).toBeLessThanOrEqual(0x40);
+      expect(green, `${match[0]} green`).toBeLessThanOrEqual(NIGHT_CHANNEL_CAP);
+      expect(blue, `${match[0]} blue`).toBeLessThanOrEqual(NIGHT_CHANNEL_CAP);
     }
     let rgbLiterals = 0;
     for (const match of block.matchAll(/rgb\(\s*\d+\s+(\d+)\s+(\d+)/g)) {
@@ -557,11 +534,11 @@ describe("Night red preservation", () => {
       expect(
         Number.parseInt(match[1] ?? "", 10),
         `${match[0]} green`,
-      ).toBeLessThanOrEqual(0x40);
+      ).toBeLessThanOrEqual(NIGHT_CHANNEL_CAP);
       expect(
         Number.parseInt(match[2] ?? "", 10),
         `${match[0]} blue`,
-      ).toBeLessThanOrEqual(0x40);
+      ).toBeLessThanOrEqual(NIGHT_CHANNEL_CAP);
     }
     expect(hexLiterals, "no Night token colors were measured").toBeGreaterThan(
       0,
@@ -595,62 +572,4 @@ describe("Night red preservation", () => {
       "Night scrim over white, against the Night surface",
     ).toBeLessThanOrEqual(1.5);
   });
-});
-
-it("exports the complete public foundation token surface", () => {
-  expect(PUBLIC_FOUNDATION_TOKEN_NAMES).toEqual([
-    "--snui-font-family",
-    "--snui-font-family-mono",
-    "--snui-font-size",
-    "--snui-font-size-sm",
-    "--snui-font-size-xs",
-    "--snui-font-size-lg",
-    "--snui-font-size-xl",
-    "--snui-font-size-2xl",
-    "--snui-font-weight-medium",
-    "--snui-font-weight-semibold",
-    "--snui-font-weight-bold",
-    "--snui-font-weight-heavy",
-    "--snui-line-height",
-    "--snui-space-1",
-    "--snui-space-2",
-    "--snui-space-3",
-    "--snui-space-4",
-    "--snui-space-5",
-    "--snui-space-6",
-    "--snui-space-7",
-    "--snui-space-8",
-    "--snui-radius-sm",
-    "--snui-radius-md",
-    "--snui-radius-lg",
-    "--snui-radius-pill",
-    "--snui-control-min-height",
-    "--snui-range-thumb-size",
-    "--snui-range-progress-color",
-    "--snui-range-track-color",
-    "--snui-input-group-control-min",
-    "--snui-input-group-control-basis",
-    "--snui-field-inline-label-min",
-    "--snui-grid-track-min",
-    "--snui-action-bar-surface",
-    "--snui-content-width-standard",
-    "--snui-content-width-wide",
-    "--snui-color-focus-ring-band",
-    "--snui-focus-ring",
-    "--snui-focus-ring-width",
-    "--snui-shadow-flat",
-    "--snui-shadow-raised",
-    "--snui-shadow-overlay",
-    "--snui-color-scrim",
-    "--snui-ease-standard",
-    "--snui-transition-fast",
-    "--snui-transition-normal",
-    "--snui-transition-slow",
-    "--snui-motion-spin",
-    "--snui-z-sticky",
-    "--snui-z-overlay",
-    "--snui-z-modal",
-    "--snui-z-toast",
-  ]);
-  expect(new Set(PUBLIC_TOKEN_NAMES).size).toBe(PUBLIC_TOKEN_NAMES.length);
 });

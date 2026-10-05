@@ -1,10 +1,17 @@
 export type AnnouncementMode = "off" | "polite" | "assertive";
 
+/**
+ * The modes that speak; "off" speaks nothing.
+ *
+ * @internal
+ */
+export type SpokenMode = Exclude<AnnouncementMode, "off">;
+
 /** The live-region role that speaks at each announcing mode. */
 const ANNOUNCEMENT_ROLES = {
   assertive: "alert",
   polite: "status",
-} as const satisfies Readonly<Record<Exclude<AnnouncementMode, "off">, string>>;
+} as const satisfies Readonly<Record<SpokenMode, string>>;
 
 /** The live-region role that speaks at a mode, and none for "off". */
 function announcementRole(
@@ -143,9 +150,7 @@ export interface MessageLogAttributes {
  *
  * @internal
  */
-export function messageLogAttributes(
-  mode: "assertive" | "polite",
-): MessageLogAttributes {
+export function messageLogAttributes(mode: SpokenMode): MessageLogAttributes {
   return {
     "aria-atomic": "false",
     className: "snui-visually-hidden",

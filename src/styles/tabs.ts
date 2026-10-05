@@ -1,6 +1,7 @@
 import {
   DISABLED_DECLARATIONS,
   FOCUS_RING_WIDTH,
+  FORCED_COLORS_HIGHLIGHT_DECLARATIONS,
   INSET_FOCUS_RING_OFFSET,
   NARROW_PANEL_QUERY,
 } from "./fragments.js";
@@ -13,6 +14,19 @@ import { scopeStyles } from "./scope.js";
  */
 const UNSELECTED_TAB_HOVER =
   '.snui-tab:not(:disabled):not([aria-selected="true"]):hover';
+
+/*
+ * The values the two orientations share, named once because a narrow panel
+ * sends a vertical set back to the horizontal arrangement: the rule line under
+ * or beside the tablist, the selection bar with the overlap that seats it on
+ * that line, the radius of a tab that stands on the line, and the gap above
+ * the panel.
+ */
+const TABLIST_RULE_LINE = "1px solid var(--snui-color-border-subtle)";
+const TAB_BAR = "2px solid transparent";
+const TAB_BAR_OVERLAP = "-1px";
+const HORIZONTAL_TAB_RADIUS = "var(--snui-radius-sm) var(--snui-radius-sm) 0 0";
+const TABPANEL_LEAD = "var(--snui-space-3)";
 
 /**
  * Tab styles. Installed by `Tabs` through `useOptionalModuleStyles`, so a panel
@@ -30,13 +44,13 @@ export const TABS_STYLES: StyleModule = {
   min-width: 0;
   flex-wrap: wrap;
   gap: var(--snui-space-1);
-  border-block-end: 1px solid var(--snui-color-border-subtle);
+  border-block-end: ${TABLIST_RULE_LINE};
 }
 
 .snui-tabs--vertical .snui-tablist {
   flex-direction: column;
   border-block-end: 0;
-  border-inline-end: 1px solid var(--snui-color-border-subtle);
+  border-inline-end: ${TABLIST_RULE_LINE};
 }
 
 /*
@@ -52,9 +66,9 @@ export const TABS_STYLES: StyleModule = {
   gap: var(--snui-space-2);
   padding: var(--snui-space-2) var(--snui-space-3);
   border: 0;
-  border-block-end: 2px solid transparent;
-  margin-block-end: -1px;
-  border-radius: var(--snui-radius-sm) var(--snui-radius-sm) 0 0;
+  border-block-end: ${TAB_BAR};
+  margin-block-end: ${TAB_BAR_OVERLAP};
+  border-radius: ${HORIZONTAL_TAB_RADIUS};
   background: transparent;
   color: var(--snui-color-text-muted);
   font: inherit;
@@ -68,9 +82,9 @@ export const TABS_STYLES: StyleModule = {
 
 .snui-tabs--vertical .snui-tab {
   border-block-end: 0;
-  border-inline-end: 2px solid transparent;
+  border-inline-end: ${TAB_BAR};
   margin-block-end: 0;
-  margin-inline-end: -1px;
+  margin-inline-end: ${TAB_BAR_OVERLAP};
   border-radius: var(--snui-radius-sm) 0 0 var(--snui-radius-sm);
   text-align: start;
 }
@@ -104,7 +118,7 @@ ${DISABLED_DECLARATIONS}
 
 .snui-tabpanel {
   min-width: 0;
-  padding-block-start: var(--snui-space-3);
+  padding-block-start: ${TABPANEL_LEAD};
 }
 
 .snui-tabs--vertical {
@@ -131,20 +145,20 @@ ${NARROW_PANEL_QUERY} {
 
   .snui-tabs--vertical .snui-tablist {
     flex-direction: row;
-    border-block-end: 1px solid var(--snui-color-border-subtle);
+    border-block-end: ${TABLIST_RULE_LINE};
     border-inline-end: 0;
   }
 
   .snui-tabs--vertical .snui-tab {
-    border-block-end: 2px solid transparent;
+    border-block-end: ${TAB_BAR};
     border-inline-end: 0;
-    margin-block-end: -1px;
+    margin-block-end: ${TAB_BAR_OVERLAP};
     margin-inline-end: 0;
-    border-radius: var(--snui-radius-sm) var(--snui-radius-sm) 0 0;
+    border-radius: ${HORIZONTAL_TAB_RADIUS};
   }
 
   .snui-tabs--vertical .snui-tabpanel {
-    padding-block-start: var(--snui-space-3);
+    padding-block-start: ${TABPANEL_LEAD};
   }
 }
 
@@ -162,9 +176,7 @@ ${NARROW_PANEL_QUERY} {
    * highlight, as the menu item does.
    */
   ${UNSELECTED_TAB_HOVER} {
-    forced-color-adjust: none;
-    background: Highlight;
-    color: HighlightText;
+${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
   }
 
   /*

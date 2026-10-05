@@ -1,15 +1,38 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import {
+  fireEvent,
+  type RenderResult,
+  render,
+  screen,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import { Tab, TabList, TabPanel, Tabs } from "../../src/composites.js";
-import { Badge, PanelRoot } from "../../src/index.js";
-import { renderInPanel } from "../helpers.js";
+import {
+  Tab,
+  TabList,
+  TabPanel,
+  Tabs,
+  type TabsProps,
+} from "../../src/composites.js";
+import { Badge } from "../../src/index.js";
+import {
+  FOCUS_RING_WIDTH,
+  INSET_FOCUS_RING_OFFSET,
+} from "../../src/styles/fragments.js";
+import { TABS_STYLES } from "../../src/styles/tabs.js";
+import { MODULE_SCOPE_PRELUDE, ruleBody, stylesFrom } from "../css-helpers.js";
+import { controlledBy, panel, renderInPanel } from "../helpers.js";
 
-function renderTabs(
-  props: Partial<React.ComponentProps<typeof Tabs>> = {},
-): ReturnType<typeof renderInPanel> {
+/** The two-tab list the cases about panels and selection share. */
+const PAGES_TAB_LIST = (
+  <TabList aria-label="Pages">
+    <Tab value="a">First</Tab>
+    <Tab value="b">Second</Tab>
+  </TabList>
+);
+
+function renderTabs(props: Partial<TabsProps> = {}): RenderResult {
   return renderInPanel(
     <Tabs defaultValue="engine" {...props}>
       <TabList aria-label="Conversion categories">
@@ -117,16 +140,13 @@ describe("Tabs", () => {
   it("reverses horizontal arrows in right-to-left layouts", () => {
     render(
       <div dir="rtl">
-        <PanelRoot>
+        {panel(
           <Tabs defaultValue="a">
-            <TabList aria-label="Pages">
-              <Tab value="a">First</Tab>
-              <Tab value="b">Second</Tab>
-            </TabList>
+            {PAGES_TAB_LIST}
             <TabPanel value="a">A</TabPanel>
             <TabPanel value="b">B</TabPanel>
-          </Tabs>
-        </PanelRoot>
+          </Tabs>,
+        )}
       </div>,
     );
 
@@ -157,21 +177,16 @@ describe("Tabs", () => {
 
     function Owner(): React.JSX.Element {
       const [value, setValue] = useState("a");
-      return (
-        <PanelRoot>
-          <Tabs value={value} onValueChange={setValue}>
-            <TabList aria-label="Pages">
-              <Tab value="a">First</Tab>
-              <Tab value="b">Second</Tab>
-            </TabList>
-            <TabPanel value="a" mountStrategy="unmount">
-              First panel
-            </TabPanel>
-            <TabPanel value="b" mountStrategy="unmount">
-              Second panel
-            </TabPanel>
-          </Tabs>
-        </PanelRoot>
+      return panel(
+        <Tabs value={value} onValueChange={setValue}>
+          {PAGES_TAB_LIST}
+          <TabPanel value="a" mountStrategy="unmount">
+            First panel
+          </TabPanel>
+          <TabPanel value="b" mountStrategy="unmount">
+            Second panel
+          </TabPanel>
+        </Tabs>,
       );
     }
 
@@ -190,10 +205,7 @@ describe("Tabs", () => {
     const buildSecond = vi.fn(() => <p>Second panel</p>);
     renderInPanel(
       <Tabs defaultValue="a">
-        <TabList aria-label="Pages">
-          <Tab value="a">First</Tab>
-          <Tab value="b">Second</Tab>
-        </TabList>
+        {PAGES_TAB_LIST}
         <TabPanel value="a" mountStrategy="unmount">
           {buildFirst}
         </TabPanel>
@@ -224,10 +236,7 @@ describe("Tabs", () => {
     const buildSecond = vi.fn(() => <p>Second panel</p>);
     renderInPanel(
       <Tabs defaultValue="a">
-        <TabList aria-label="Pages">
-          <Tab value="a">First</Tab>
-          <Tab value="b">Second</Tab>
-        </TabList>
+        {PAGES_TAB_LIST}
         <TabPanel value="a">First panel</TabPanel>
         <TabPanel value="b">{buildSecond}</TabPanel>
       </Tabs>,
@@ -367,7 +376,7 @@ describe("Tabs", () => {
     const tabpanel = screen.getByRole("tabpanel", {
       name: "Position source 1",
     });
-    expect(document.getElementById(controlled)).toBe(tabpanel);
+    expect(controlledBy(tab)).toBe(tabpanel);
     expect(tabpanel).toHaveAttribute("aria-labelledby", tab.id);
   });
 
@@ -455,5 +464,44 @@ describe("Tabs selection ownership", () => {
     );
 
     expect(screen.getByRole("tabpanel")).not.toHaveAttribute("tabindex");
+  });
+});
+
+describe("tabs style module", () => {
+  it("scopes the module", () => {
+    expect(TABS_STYLES.styles.startsWith(MODULE_SCOPE_PRELUDE)).toBe(true);
+  });
+
+  it("draws the tablist rule with the subtle border", () => {
+    // The tablist rule is a divider, not the edge of anything a reader
+    // operates, so it takes the decorative token.
+    expect(ruleBody(TABS_STYLES.styles, ".snui-tablist")).toContain(
+      "border-block-end: 1px solid var(--snui-color-border-subtle);",
+    );
+    expect(
+      ruleBody(TABS_STYLES.styles, ".snui-tabs--vertical .snui-tablist"),
+    ).toContain(
+      "border-inline-end: 1px solid var(--snui-color-border-subtle);",
+    );
+    // The narrow panel lays a vertical tablist out as a row, and its rule
+    // moves to the block end with the same token.
+    const narrow = stylesFrom(TABS_STYLES.styles, "@container");
+    expect(ruleBody(narrow, "  .snui-tabs--vertical .snui-tablist")).toContain(
+      "border-block-end: 1px solid var(--snui-color-border-subtle);",
+    );
+    expect(TABS_STYLES.styles).not.toContain("var(--snui-color-border)");
+  });
+
+  it("rings a focused tab at the shared ring width under forced colors", () => {
+    // The system ring forced colors rebuilds a tab's focus with is a focus
+    // ring, so it takes the width a contrast request raises, inset like the
+    // package's other inset rings.
+    const forced = stylesFrom(
+      TABS_STYLES.styles,
+      "@media (forced-colors: active)",
+    );
+    const ring = ruleBody(forced, "  .snui-tab:focus-visible");
+    expect(ring).toContain(`outline: ${FOCUS_RING_WIDTH} solid CanvasText;`);
+    expect(ring).toContain(`outline-offset: ${INSET_FOCUS_RING_OFFSET};`);
   });
 });

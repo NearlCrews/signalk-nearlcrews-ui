@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import {
+  Activity,
   createRef,
   type Ref,
   type RefObject,
@@ -8,7 +9,6 @@ import {
 } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
-  type FocusReturn,
   type FocusReturnOptions,
   type OpenIntentLatch,
   useFocusReturnOnClose,
@@ -16,7 +16,6 @@ import {
 } from "../../src/hooks/use-focus-return.js";
 import { useFocusWithin } from "../../src/hooks/use-focus-within.js";
 import { useComposedRef, useNodeRef } from "../../src/hooks/use-node-ref.js";
-import { usePollFreshness } from "../../src/hooks/use-poll-freshness.js";
 import { useUnsavedChangesGuard } from "../../src/hooks/use-unsaved-changes-guard.js";
 import {
   createRequiredContext,
@@ -26,6 +25,7 @@ import {
   HeadingLevelProvider,
   useResolvedHeading,
 } from "../../src/utils/heading-level.js";
+import { attached } from "./lib/attached.js";
 import { withFrameDocument } from "./lib/frame-document.js";
 
 describe("useNodeRef", () => {
@@ -198,8 +198,6 @@ describe("useFocusWithin", () => {
 });
 
 describe("useFocusReturnOnClose", () => {
-  let focusReturn: FocusReturn | null = null;
-
   interface RegionProbeProps extends FocusReturnOptions {
     readonly open: boolean;
     readonly withTrigger?: boolean;
@@ -212,7 +210,7 @@ describe("useFocusReturnOnClose", () => {
   }: RegionProbeProps): React.JSX.Element {
     const containerRef = useRef<HTMLDivElement | null>(null);
     const triggerRef = useRef<HTMLButtonElement | null>(null);
-    focusReturn = useFocusReturnOnClose(containerRef, open, {
+    useFocusReturnOnClose(containerRef, open, {
       capturePreviousFocus,
       returnFocusRef: withTrigger ? triggerRef : undefined,
     });
@@ -240,11 +238,10 @@ describe("useFocusReturnOnClose", () => {
     act(() => {
       screen.getByTestId("close").focus();
     });
-    expect(focusReturn?.holdsFocus()).toBe(true);
+    expect(document.activeElement).toBe(screen.getByTestId("close"));
 
     view.rerender(<RegionProbe open={false} />);
     expect(document.activeElement).toBe(screen.getByTestId("trigger"));
-    expect(focusReturn?.holdsFocus()).toBe(false);
   });
 
   it("moves nothing when focus was somewhere else", () => {
@@ -297,19 +294,70 @@ describe("useFocusReturnOnClose", () => {
     expect(document.activeElement).toBe(screen.getByTestId("elsewhere"));
   });
 
-  it("reports a destination that is no longer in the document", () => {
-    render(<RegionProbe open withTrigger={false} />);
-    expect(focusReturn?.returnFocus()).toBe(false);
+  it("leaves a destination that is no longer in the document alone", () => {
+    const opener = attached("button");
+    const closed = (
+      <RegionProbe capturePreviousFocus open={false} withTrigger={false} />
+    );
+    const opened = (
+      <RegionProbe capturePreviousFocus open withTrigger={false} />
+    );
+    const view = render(closed);
+    const openFromOpener = (): void => {
+      act(() => {
+        opener.focus();
+      });
+      view.rerender(opened);
+      act(() => {
+        screen.getByTestId("close").focus();
+      });
+    };
+
+    // While the opener is still there, closing hands focus back to it, which
+    // is what makes the second close a test of the guard and nothing else.
+    openFromOpener();
+    view.rerender(closed);
+    expect(document.activeElement).toBe(opener);
+
+    openFromOpener();
+    opener.remove();
+    const focus = vi.spyOn(opener, "focus");
+    view.rerender(closed);
+    expect(focus).not.toHaveBeenCalled();
   });
 
-  it("moves focus on request even while the region does not hold it", () => {
-    render(<RegionProbe open />);
+  it("lets go of the focus it held when a close had nowhere to return it", () => {
+    const tree = (
+      mode: "hidden" | "visible",
+      open: boolean,
+      withTrigger: boolean,
+    ): React.JSX.Element => (
+      <>
+        <button type="button" data-testid="outside">
+          outside
+        </button>
+        <Activity mode={mode}>
+          <RegionProbe open={open} withTrigger={withTrigger} />
+        </Activity>
+      </>
+    );
+    const view = render(tree("visible", true, false));
     act(() => {
-      screen.getByTestId("elsewhere").focus();
+      screen.getByTestId("close").focus();
+    });
+    view.rerender(tree("visible", false, false));
+    const outside = screen.getByTestId("outside");
+    act(() => {
+      outside.focus();
     });
 
-    expect(focusReturn?.returnFocus()).toBe(true);
-    expect(document.activeElement).toBe(screen.getByTestId("trigger"));
+    // A restore that moves focus clears the flag through the tracking
+    // listener as well, so only a close with no destination shows whether the
+    // restore itself let go. Revealing the retained subtree re-runs the closed
+    // layout effect, now with a trigger to return to, and must move nothing.
+    view.rerender(tree("hidden", false, true));
+    view.rerender(tree("visible", false, true));
+    expect(document.activeElement).toBe(outside);
   });
 });
 
@@ -384,67 +432,6 @@ describe("createRequiredContext", () => {
   });
 });
 
-describe("usePollFreshness", () => {
-  function FreshnessProbe({
-    lastUpdated,
-    staleAfterMs,
-    tickMs,
-  }: {
-    readonly lastUpdated: number | null;
-    readonly staleAfterMs: number;
-    readonly tickMs?: number;
-  }): React.JSX.Element {
-    const { ageMs, stale } = usePollFreshness(lastUpdated, {
-      staleAfterMs,
-      tickMs,
-    });
-    return (
-      <span data-testid="freshness">
-        {`${stale ? "stale" : "current"} ${String(ageMs)}`}
-      </span>
-    );
-  }
-
-  it("reports the age of the last sample against the shared clock", () => {
-    const now = Date.UTC(2026, 0, 1, 12);
-    vi.useFakeTimers({ now });
-
-    render(
-      <FreshnessProbe
-        lastUpdated={now - 2_000}
-        staleAfterMs={5_000}
-        tickMs={1_000}
-      />,
-    );
-    expect(screen.getByTestId("freshness")).toHaveTextContent("current 2000");
-
-    act(() => {
-      vi.advanceTimersByTime(4_000);
-    });
-    expect(screen.getByTestId("freshness")).toHaveTextContent("stale 6000");
-  });
-
-  it("reports no age at all before the first sample", () => {
-    vi.useFakeTimers();
-    render(<FreshnessProbe lastUpdated={null} staleAfterMs={1_000} />);
-    expect(screen.getByTestId("freshness")).toHaveTextContent(
-      "current undefined",
-    );
-  });
-
-  it("runs no timer when the caller stops the clock", () => {
-    vi.useFakeTimers();
-    render(
-      <FreshnessProbe
-        lastUpdated={Date.now()}
-        staleAfterMs={1_000}
-        tickMs={0}
-      />,
-    );
-    expect(vi.getTimerCount()).toBe(0);
-  });
-});
-
 describe("useUnsavedChangesGuard", () => {
   function Guard({ dirty }: { readonly dirty: boolean }): null {
     useUnsavedChangesGuard(dirty);
@@ -470,6 +457,26 @@ describe("useUnsavedChangesGuard", () => {
     // The legacy half of the same guard: engines that ignore preventDefault
     // still read the assigned value, so the guard sets both.
     expect(stub.returnValue).toBe(true);
+  });
+
+  function dispatchBeforeUnload(): boolean {
+    const event = new Event("beforeunload", { cancelable: true });
+    fireEvent(window, event);
+    return event.defaultPrevented;
+  }
+
+  it("asks the browser to confirm unloading only while dirty", () => {
+    const { rerender, unmount } = render(<Guard dirty />);
+    expect(dispatchBeforeUnload()).toBe(true);
+
+    rerender(<Guard dirty={false} />);
+    expect(dispatchBeforeUnload()).toBe(false);
+
+    rerender(<Guard dirty />);
+    expect(dispatchBeforeUnload()).toBe(true);
+
+    unmount();
+    expect(dispatchBeforeUnload()).toBe(false);
   });
 });
 
@@ -511,32 +518,5 @@ describe("useResolvedHeading", () => {
     expect(
       screen.getByTestId("explicit").querySelector("h5"),
     ).toBeInTheDocument();
-  });
-});
-
-describe("useUnsavedChangesGuard", () => {
-  function Guard({ dirty }: { readonly dirty: boolean }): null {
-    useUnsavedChangesGuard(dirty);
-    return null;
-  }
-
-  function dispatchBeforeUnload(): boolean {
-    const event = new Event("beforeunload", { cancelable: true });
-    fireEvent(window, event);
-    return event.defaultPrevented;
-  }
-
-  it("asks the browser to confirm unloading only while dirty", () => {
-    const { rerender, unmount } = render(<Guard dirty />);
-    expect(dispatchBeforeUnload()).toBe(true);
-
-    rerender(<Guard dirty={false} />);
-    expect(dispatchBeforeUnload()).toBe(false);
-
-    rerender(<Guard dirty />);
-    expect(dispatchBeforeUnload()).toBe(true);
-
-    unmount();
-    expect(dispatchBeforeUnload()).toBe(false);
   });
 });

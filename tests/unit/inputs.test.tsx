@@ -12,6 +12,11 @@ import {
 } from "../../src/index.js";
 import { formOf, panel, renderInPanel } from "../helpers.js";
 
+/** The filled portion a range input painted, as the custom property holds it. */
+function progressOf(range: HTMLElement): string {
+  return range.style.getPropertyValue("--snui-range-progress");
+}
+
 describe("Monospace and row-count options", () => {
   it("renders numeric and select identifiers in the monospace stack", () => {
     renderInPanel(
@@ -54,6 +59,48 @@ describe("Monospace and row-count options", () => {
       "snui-textarea--rows",
     );
   });
+
+  it("adds the monospace class to TextInput and Textarea", () => {
+    renderInPanel(
+      <>
+        <TextInput aria-label="Path" monospace />
+        <TextInput aria-label="Name" />
+        <Textarea aria-label="Prompt" monospace />
+      </>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Path" })).toHaveClass(
+      "snui-input--monospace",
+    );
+    expect(screen.getByRole("textbox", { name: "Name" })).not.toHaveClass(
+      "snui-input--monospace",
+    );
+    expect(screen.getByRole("textbox", { name: "Prompt" })).toHaveClass(
+      "snui-input--monospace",
+    );
+  });
+
+  it("sizes a Textarea from minRows and lets an explicit rows attribute win", () => {
+    renderInPanel(
+      <>
+        <Textarea aria-label="Prompt" minRows={8} />
+        <Textarea aria-label="Notes" minRows={8} rows={3} />
+        <Textarea aria-label="Plain" />
+      </>,
+    );
+
+    expect(screen.getByRole("textbox", { name: "Prompt" })).toHaveAttribute(
+      "rows",
+      "8",
+    );
+    expect(screen.getByRole("textbox", { name: "Notes" })).toHaveAttribute(
+      "rows",
+      "3",
+    );
+    expect(screen.getByRole("textbox", { name: "Plain" })).not.toHaveAttribute(
+      "rows",
+    );
+  });
 });
 
 describe("Native input controls", () => {
@@ -71,10 +118,10 @@ describe("Native input controls", () => {
 
     const range = screen.getByRole("slider", { name: "Depth alarm" });
     expect(rangeRef.current).toBe(range);
-    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("25%");
+    expect(progressOf(range)).toBe("25%");
 
     fireEvent.input(range, { target: { value: "150" } });
-    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("75%");
+    expect(progressOf(range)).toBe("75%");
 
     rerender(
       panel(
@@ -88,7 +135,7 @@ describe("Native input controls", () => {
         />,
       ),
     );
-    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("80%");
+    expect(progressOf(range)).toBe("80%");
   });
 
   it("fills range progress from browser defaults and guards invalid bounds", () => {
@@ -105,10 +152,10 @@ describe("Native input controls", () => {
     );
 
     const volume = screen.getByRole("slider", { name: "Volume" });
-    expect(volume.style.getPropertyValue("--snui-range-progress")).toBe("50%");
+    expect(progressOf(volume)).toBe("50%");
 
     const broken = screen.getByRole("slider", { name: "Broken bounds" });
-    expect(broken.style.getPropertyValue("--snui-range-progress")).toBe("0%");
+    expect(progressOf(broken)).toBe("0%");
   });
 
   it("restores range progress when a controlled owner rejects input", async () => {
@@ -123,12 +170,10 @@ describe("Native input controls", () => {
     );
 
     const range = screen.getByRole("slider", { name: "Locked threshold" });
-    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("25%");
+    expect(progressOf(range)).toBe("25%");
 
     fireEvent.input(range, { target: { value: "150" } });
-    await waitFor(() =>
-      expect(range.style.getPropertyValue("--snui-range-progress")).toBe("25%"),
-    );
+    await waitFor(() => expect(progressOf(range)).toBe("25%"));
     expect(range).toHaveValue("50");
   });
 
@@ -184,71 +229,22 @@ describe("Native input controls", () => {
   });
 });
 
-describe("monospace and sizing modifiers", () => {
-  it("adds the monospace class to TextInput and Textarea", () => {
-    renderInPanel(
-      <>
-        <TextInput aria-label="Path" monospace />
-        <TextInput aria-label="Name" />
-        <Textarea aria-label="Prompt" monospace />
-      </>,
-    );
-
-    expect(screen.getByRole("textbox", { name: "Path" })).toHaveClass(
-      "snui-input--monospace",
-    );
-    expect(screen.getByRole("textbox", { name: "Name" })).not.toHaveClass(
-      "snui-input--monospace",
-    );
-    expect(screen.getByRole("textbox", { name: "Prompt" })).toHaveClass(
-      "snui-input--monospace",
-    );
-  });
-
-  it("sizes a Textarea from minRows and lets an explicit rows attribute win", () => {
-    renderInPanel(
-      <>
-        <Textarea aria-label="Prompt" minRows={8} />
-        <Textarea aria-label="Notes" minRows={8} rows={3} />
-        <Textarea aria-label="Plain" />
-      </>,
-    );
-
-    const prompt = screen.getByRole("textbox", { name: "Prompt" });
-    expect(prompt).toHaveAttribute("rows", "8");
-    expect(prompt).toHaveClass("snui-textarea--rows");
-    expect(screen.getByRole("textbox", { name: "Notes" })).toHaveAttribute(
-      "rows",
-      "3",
-    );
-    const plain = screen.getByRole("textbox", { name: "Plain" });
-    expect(plain).not.toHaveAttribute("rows");
-    expect(plain).not.toHaveClass("snui-textarea--rows");
-  });
-});
-
 describe("TextInput calendar types", () => {
-  it("accepts month and week input types", () => {
-    renderInPanel(
-      <>
-        <LabeledField label="Maintenance month">
-          <TextInput type="month" />
-        </LabeledField>
-        <LabeledField label="Maintenance week">
-          <TextInput type="week" />
-        </LabeledField>
-      </>,
-    );
+  it.each(["date", "time", "month", "week"] as const)(
+    "accepts the %s input type",
+    (type) => {
+      renderInPanel(
+        <LabeledField label="Maintenance window">
+          <TextInput type={type} />
+        </LabeledField>,
+      );
 
-    expect(screen.getByLabelText("Maintenance month")).toHaveAttribute(
-      "type",
-      "month",
-    );
-    expect(screen.getByLabelText("Maintenance week")).toHaveAttribute(
-      "type",
-      "week",
-    );
-  });
+      expect(screen.getByLabelText("Maintenance window")).toHaveAttribute(
+        "type",
+        type,
+      );
+    },
+  );
 });
 
 describe("Controlled text, numeric, and select form reset", () => {
@@ -422,15 +418,13 @@ describe("RangeInput form reset", () => {
     );
 
     const range = screen.getByRole("slider", { name: "Depth alarm" });
-    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("50%");
+    expect(progressOf(range)).toBe("50%");
 
     fireEvent.input(range, { target: { value: "80" } });
-    expect(range.style.getPropertyValue("--snui-range-progress")).toBe("80%");
+    expect(progressOf(range)).toBe("80%");
 
     formOf(range).reset();
-    await waitFor(() =>
-      expect(range.style.getPropertyValue("--snui-range-progress")).toBe("50%"),
-    );
+    await waitFor(() => expect(progressOf(range)).toBe("50%"));
     expect(range).toHaveValue("50");
   });
 });

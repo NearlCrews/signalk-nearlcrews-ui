@@ -11,7 +11,12 @@ import {
   TOKEN_STYLES,
 } from "../../src/styles/tokens.js";
 import { ROOT_SELECTOR } from "../../src/version.js";
-import { ALL_MODULE_STYLES, ruleBody } from "../css-helpers.js";
+import {
+  ALL_MODULE_STYLES,
+  classNamesIn,
+  ruleBody,
+  themeSelector,
+} from "../css-helpers.js";
 
 // jsdom rewrites import.meta.url to an http URL, so resolve from the
 // project root (the vitest working directory) instead.
@@ -74,12 +79,6 @@ function componentClassTokens(): {
   return { literals, prefixes };
 }
 
-function stylesheetClasses(css: string = ALL_MODULE_STYLES): Set<string> {
-  return new Set(
-    [...css.matchAll(/\.(snui-[a-z0-9_-]+)/g)].map((match) => match[1] ?? ""),
-  );
-}
-
 describe.each(STYLE_MODULES.map((module) => [module.id, module] as const))(
   "stylesheet validity: %s module",
   (_id, module) => {
@@ -99,9 +98,7 @@ describe.each(STYLE_MODULES.map((module) => [module.id, module] as const))(
         minify: false,
       });
       const output = Buffer.from(second.code).toString("utf8");
-      expect(stylesheetClasses(output)).toEqual(
-        stylesheetClasses(module.styles),
-      );
+      expect(classNamesIn(output)).toEqual(classNamesIn(module.styles));
     });
   },
 );
@@ -121,11 +118,7 @@ describe("root module", () => {
   });
 
   it("is the only module that declares tokens", () => {
-    const rootTokens = new Set(
-      [...PANEL_STYLES.matchAll(/(--snui-[a-z0-9-]+)\s*:/g)].map(
-        (match) => match[1],
-      ),
-    );
+    const rootTokens = definedTokens(PANEL_STYLES);
     for (const module of STYLE_MODULES.slice(1)) {
       for (const match of module.styles.matchAll(
         /(--snui-[a-z0-9-]+)\s*:\s*([^;]+);/g,
@@ -152,7 +145,7 @@ describe("class coverage", () => {
   let literals = new Set<string>();
   let prefixes = new Set<string>();
   beforeAll(() => {
-    defined = stylesheetClasses();
+    defined = classNamesIn(ALL_MODULE_STYLES);
     ({ literals, prefixes } = componentClassTokens());
   });
 
@@ -196,11 +189,7 @@ function definedTokens(body: string): Set<string> {
 }
 
 describe("theme token blocks", () => {
-  const THEME_SELECTORS = [
-    `${ROOT_SELECTOR}[data-snui-theme="light"]`,
-    `${ROOT_SELECTOR}[data-snui-theme="dark"]`,
-    `${ROOT_SELECTOR}[data-snui-theme="night"]`,
-  ] as const;
+  const THEME_SELECTORS = ["light", "dark", "night"].map(themeSelector);
 
   it("defines every public token in the base root block", () => {
     const base = definedTokens(ruleBody(TOKEN_STYLES, ROOT_SELECTOR));

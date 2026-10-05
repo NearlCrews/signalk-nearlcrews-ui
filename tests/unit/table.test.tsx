@@ -1,5 +1,4 @@
 import { screen } from "@testing-library/react";
-import { transform } from "lightningcss";
 import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,15 +8,9 @@ import {
   TableHeaderCell,
   TableScrollRegion,
 } from "../../src/composites.js";
-import {
-  FOCUS_RING_WIDTH,
-  INSET_FOCUS_RING_OFFSET,
-} from "../../src/styles/fragments.js";
 import { SIMPLE_TABLE_STYLES } from "../../src/styles/simple-table.js";
 import { TABLE_STYLES } from "../../src/styles/table.js";
-import { TABS_STYLES } from "../../src/styles/tabs.js";
-import { ROOT_SELECTOR } from "../../src/version.js";
-import { ruleBody } from "../css-helpers.js";
+import { MODULE_SCOPE_PRELUDE, ruleBody } from "../css-helpers.js";
 import { renderInPanel } from "../helpers.js";
 
 describe("Table", () => {
@@ -152,21 +145,12 @@ describe("TableScrollRegion", () => {
   });
 });
 
-describe("table and tabs style modules", () => {
+describe("table style modules", () => {
   it.each([
     ["data grid", TABLE_STYLES.styles],
     ["simple table", SIMPLE_TABLE_STYLES.styles],
-    ["tabs", TABS_STYLES.styles],
-  ])("scopes the %s module and parses it without warnings", (_name, css) => {
-    expect(
-      css.startsWith(`@scope (${ROOT_SELECTOR}) to ([data-snui-version])`),
-    ).toBe(true);
-    const result = transform({
-      filename: "module.css",
-      code: Buffer.from(css, "utf8"),
-      minify: false,
-    });
-    expect(result.warnings).toEqual([]);
+  ])("scopes the %s module", (_name, css) => {
+    expect(css.startsWith(MODULE_SCOPE_PRELUDE)).toBe(true);
   });
 
   it("paints zebra rows with the stripe token and numeric cells with tabular digits", () => {
@@ -201,43 +185,15 @@ describe("table and tabs style modules", () => {
     expect(SIMPLE_TABLE_STYLES.styles).not.toMatch(/nth-child\(even\)/);
   });
 
-  it("separates rows and tabs with the subtle border", () => {
-    // Row separators and the tablist rule are dividers, not the edge of
-    // anything a reader operates, so they take the decorative token.
+  it("separates rows with the subtle border", () => {
+    // Row separators are dividers, not the edge of anything a reader
+    // operates, so they take the decorative token.
     expect(
       ruleBody(SIMPLE_TABLE_STYLES.styles, ".snui-table th,\n.snui-table td"),
     ).toContain("border-block-end: 1px solid var(--snui-color-border-subtle);");
-    expect(ruleBody(TABS_STYLES.styles, ".snui-tablist")).toContain(
-      "border-block-end: 1px solid var(--snui-color-border-subtle);",
+    expect(SIMPLE_TABLE_STYLES.styles).not.toContain(
+      "var(--snui-color-border)",
     );
-    expect(
-      ruleBody(TABS_STYLES.styles, ".snui-tabs--vertical .snui-tablist"),
-    ).toContain(
-      "border-inline-end: 1px solid var(--snui-color-border-subtle);",
-    );
-    // The narrow panel lays a vertical tablist out as a row, and its rule
-    // moves to the block end with the same token.
-    const narrow = TABS_STYLES.styles.slice(
-      TABS_STYLES.styles.indexOf("@container"),
-    );
-    expect(ruleBody(narrow, "  .snui-tabs--vertical .snui-tablist")).toContain(
-      "border-block-end: 1px solid var(--snui-color-border-subtle);",
-    );
-    for (const styles of [SIMPLE_TABLE_STYLES.styles, TABS_STYLES.styles]) {
-      expect(styles).not.toContain("var(--snui-color-border)");
-    }
-  });
-
-  it("rings a focused tab at the shared ring width under forced colors", () => {
-    // The system ring forced colors rebuilds a tab's focus with is a focus
-    // ring, so it takes the width a contrast request raises, inset like the
-    // package's other inset rings.
-    const forced = TABS_STYLES.styles.slice(
-      TABS_STYLES.styles.indexOf("@media (forced-colors: active)"),
-    );
-    const ring = ruleBody(forced, "  .snui-tab:focus-visible");
-    expect(ring).toContain(`outline: ${FOCUS_RING_WIDTH} solid CanvasText;`);
-    expect(ring).toContain(`outline-offset: ${INSET_FOCUS_RING_OFFSET};`);
   });
 
   it("declares cell text alignment once, on the table", () => {

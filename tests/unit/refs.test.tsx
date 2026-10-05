@@ -1,26 +1,40 @@
 import { render } from "@testing-library/react";
 import { createRef, type ReactElement, type Ref } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { Cell, Column, DataGrid, Row } from "../../src/data-grid.js";
 import { SecretInput } from "../../src/forms.js";
 import {
+  Badge,
   Banner,
   Button,
+  Card,
   Checkbox,
+  Cluster,
   FieldGroup,
   InlineConfirm,
+  InputGroup,
+  InputGroupAddon,
+  InputGroupControl,
+  Metric,
+  MetricGrid,
   NumberInput,
   PanelRoot,
   RangeInput,
+  Section,
   SegmentedControl,
   Select,
+  Stack,
+  StatusIndicator,
   Textarea,
   TextInput,
 } from "../../src/index.js";
 import { panel } from "../helpers.js";
+import { boatGrid } from "./lib/data-grid-fixture.js";
 
 /**
- * Every component that exposes a ref, with the element type it must resolve to.
+ * The components whose ref forwarding is exercised here, with the element type
+ * each must resolve to. Other components pin their refs in their own specs. A
+ * case may tag its root with `data-testid="target"`, and the object-ref case
+ * then pins the element itself as well as its type.
  * `PanelRoot` installs styles, so it is rendered standalone; the rest render
  * inside a panel so scoped styles and theme context are available.
  */
@@ -116,20 +130,87 @@ const REF_CASES: readonly {
   {
     name: "DataGrid",
     tagName: "DIV",
+    render: (ref) => boatGrid({ ref }),
+  },
+  {
+    name: "Stack",
+    tagName: "DIV",
+    render: (ref) => <Stack ref={ref} data-testid="target" />,
+  },
+  {
+    name: "Stack as form",
+    tagName: "FORM",
     render: (ref) => (
-      <DataGrid
-        ref={ref}
-        aria-label="Providers"
-        items={[{ id: "alpha", name: "Alpha" }]}
-        renderRow={(item) => (
-          <Row>
-            <Cell>{item.name}</Cell>
-          </Row>
-        )}
-      >
-        <Column>Name</Column>
-      </DataGrid>
+      <Stack as="form" ref={ref} action="/save" data-testid="target" />
     ),
+  },
+  {
+    name: "Cluster",
+    tagName: "UL",
+    render: (ref) => <Cluster as="ul" ref={ref} data-testid="target" />,
+  },
+  {
+    name: "Card",
+    tagName: "SECTION",
+    render: (ref) => (
+      <Card as="section" ref={ref} data-testid="target">
+        Body
+      </Card>
+    ),
+  },
+  {
+    name: "MetricGrid",
+    tagName: "DIV",
+    render: (ref) => <MetricGrid ref={ref} data-testid="target" />,
+  },
+  {
+    name: "Metric",
+    tagName: "DIV",
+    render: (ref) => (
+      <Metric ref={ref} data-testid="target" label="Depth" value="12" />
+    ),
+  },
+  {
+    name: "Badge",
+    tagName: "SPAN",
+    render: (ref) => (
+      <Badge ref={ref} data-testid="target">
+        Beta
+      </Badge>
+    ),
+  },
+  {
+    name: "StatusIndicator",
+    tagName: "SPAN",
+    render: (ref) => (
+      <StatusIndicator ref={ref} data-testid="target">
+        Idle
+      </StatusIndicator>
+    ),
+  },
+  {
+    name: "Section",
+    tagName: "SECTION",
+    render: (ref) => (
+      <Section ref={ref} data-testid="target" title="Connection">
+        Body
+      </Section>
+    ),
+  },
+  {
+    name: "InputGroup",
+    tagName: "DIV",
+    render: (ref) => <InputGroup ref={ref} data-testid="target" />,
+  },
+  {
+    name: "InputGroupControl",
+    tagName: "DIV",
+    render: (ref) => <InputGroupControl ref={ref} data-testid="target" />,
+  },
+  {
+    name: "InputGroupAddon",
+    tagName: "SPAN",
+    render: (ref) => <InputGroupAddon ref={ref} data-testid="target" />,
   },
   {
     name: "PanelRoot",
@@ -179,10 +260,13 @@ describe("ref forwarding", () => {
   for (const testCase of REF_CASES) {
     it(`${testCase.name} attaches an object ref to its ${testCase.tagName} element`, () => {
       const ref = createRef<HTMLElement>();
-      renderCase(testCase, ref as Ref<never>);
+      const view = renderCase(testCase, ref as Ref<never>);
 
       expect(ref.current).not.toBeNull();
       expect(ref.current?.tagName).toBe(testCase.tagName);
+      // A case that tags its root with a test id pins the element itself, not
+      // only its type; an untagged case compares the ref with itself.
+      expect(ref.current).toBe(view.queryByTestId("target") ?? ref.current);
     });
 
     it(`${testCase.name} attaches and releases a callback ref`, () => {
@@ -199,20 +283,15 @@ describe("ref forwarding", () => {
     });
 
     it(`${testCase.name} runs a callback-ref cleanup on unmount`, () => {
-      let cleanupCalls = 0;
-      let attached: HTMLElement | null = null;
-      const view = renderCase(testCase, (node: HTMLElement | null) => {
-        attached = node;
-        return () => {
-          cleanupCalls += 1;
-        };
-      });
+      const { calls, cleanupCalls, ref } = trackingRef<HTMLElement>();
+      const view = renderCase(testCase, ref);
 
-      expect(attached).not.toBeNull();
-      expect(cleanupCalls).toBe(0);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).not.toBeNull();
+      expect(cleanupCalls()).toBe(0);
 
       view.unmount();
-      expect(cleanupCalls).toBe(1);
+      expect(cleanupCalls()).toBe(1);
     });
 
     it(`${testCase.name} moves the node when the callback ref is replaced`, () => {
@@ -325,32 +404,5 @@ describe("stateful input refs", () => {
     expect(cleanupCalls()).toBe(0);
     view.unmount();
     expect(cleanupCalls()).toBe(1);
-  });
-
-  it("resets Checkbox from the latest controlled props", async () => {
-    const tree = (checked: boolean, indeterminate: boolean): ReactElement =>
-      panel(
-        <form data-testid="settings-form">
-          <Checkbox
-            checked={checked}
-            indeterminate={indeterminate}
-            label="Enable provider"
-            readOnly
-          />
-        </form>,
-      );
-    const view = render(tree(false, false));
-    const checkbox = view.getByRole("checkbox", {
-      name: "Enable provider",
-    }) as HTMLInputElement;
-
-    view.rerender(tree(true, true));
-    checkbox.checked = false;
-    checkbox.indeterminate = false;
-    (view.getByTestId("settings-form") as HTMLFormElement).reset();
-
-    await Promise.resolve();
-    expect(checkbox).toBeChecked();
-    expect(checkbox).toBePartiallyChecked();
   });
 });

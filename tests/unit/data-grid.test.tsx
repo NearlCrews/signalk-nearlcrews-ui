@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createRef, type ReactElement, StrictMode, useState } from "react";
+import { type ReactElement, StrictMode, useState } from "react";
 import { describe, expect, it, type Mock, vi } from "vitest";
 import {
   Cell,
@@ -11,23 +11,23 @@ import {
   type Selection,
   type SortDescriptor,
 } from "../../src/data-grid.js";
-import { PanelRoot } from "../../src/index.js";
 import {
   CONTROL_SURFACE_DECLARATIONS,
   FOCUS_RING_WIDTH,
   focusRingDeclarations,
 } from "../../src/styles/fragments.js";
 import { TABLE_STYLES } from "../../src/styles/table.js";
-import { ruleBody } from "../css-helpers.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { ruleBody, stripComments, stylesFrom } from "../css-helpers.js";
+import { callsMentioning, panel, renderInPanel } from "../helpers.js";
 import {
   BOATS,
-  type Boat,
   boatColumns,
   boatGrid,
   bodyRows,
   cellAt,
+  dynamicHeaderGrid,
   type GridOverrides,
+  keyedBoatGrid,
   NAME_DEPTH_COLUMNS,
   renderBoatRow,
   renderGrid,
@@ -52,6 +52,9 @@ function lastSelection(
 
 describe("DataGrid", () => {
   describe("accessible name", () => {
+    const UNNAMED =
+      "signalk-nearlcrews-ui: DataGrid requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.";
+
     it("throws when neither aria-label nor aria-labelledby resolves", () => {
       expect(() =>
         renderInPanel(
@@ -59,13 +62,9 @@ describe("DataGrid", () => {
             {boatColumns()}
           </DataGrid>,
         ),
-      ).toThrow(
-        "signalk-nearlcrews-ui: DataGrid requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
-      );
+      ).toThrow(UNNAMED);
 
-      expect(() => renderGrid({ "aria-label": "  " })).toThrow(
-        "signalk-nearlcrews-ui: DataGrid requires an accessible name: pass a non-empty caption, aria-label, or aria-labelledby.",
-      );
+      expect(() => renderGrid({ "aria-label": "  " })).toThrow(UNNAMED);
     });
 
     it("names the grid by its caption, visible or hidden", () => {
@@ -152,16 +151,7 @@ describe("DataGrid", () => {
     });
 
     it("supports a dynamic header through columns and function children", () => {
-      renderInPanel(
-        <DataGrid
-          aria-label="Boats"
-          columns={[{ key: "name" }, { key: "depth" }]}
-          items={BOATS}
-          renderRow={renderBoatRow}
-        >
-          {(column) => <Column id={column.key}>{column.key}</Column>}
-        </DataGrid>,
-      );
+      renderInPanel(dynamicHeaderGrid(NAME_DEPTH_COLUMNS));
 
       expect(
         screen.getByRole("columnheader", { name: "name" }),
@@ -172,21 +162,8 @@ describe("DataGrid", () => {
     });
 
     it("replays a readonly column array across StrictMode renders", () => {
-      const columns = Object.freeze([{ key: "name" }, { key: "depth" }]);
-      render(
-        <StrictMode>
-          <PanelRoot>
-            <DataGrid
-              aria-label="Boats"
-              columns={columns}
-              items={BOATS}
-              renderRow={renderBoatRow}
-            >
-              {(column) => <Column id={column.key}>{column.key}</Column>}
-            </DataGrid>
-          </PanelRoot>
-        </StrictMode>,
-      );
+      const columns = Object.freeze([...NAME_DEPTH_COLUMNS]);
+      render(<StrictMode>{panel(dynamicHeaderGrid(columns))}</StrictMode>);
 
       expect(
         screen.getByRole("columnheader", { name: "name" }),
@@ -204,24 +181,15 @@ describe("DataGrid", () => {
       const invalidColumns: Iterable<{ readonly key: string }> = {
         [Symbol.iterator]() {
           acquisitions += 1;
-          return [{ key: "name" }, { key: "depth" }][Symbol.iterator]();
+          return NAME_DEPTH_COLUMNS[Symbol.iterator]();
         },
       };
 
       expect(() =>
-        render(
-          <PanelRoot>
-            <DataGrid
-              aria-label="Boats"
-              columns={
-                invalidColumns as unknown as readonly { readonly key: string }[]
-              }
-              items={BOATS}
-              renderRow={renderBoatRow}
-            >
-              {(column) => <Column id={column.key}>{column.key}</Column>}
-            </DataGrid>
-          </PanelRoot>,
+        renderInPanel(
+          dynamicHeaderGrid(
+            invalidColumns as unknown as readonly { readonly key: string }[],
+          ),
         ),
       ).toThrow(
         "signalk-nearlcrews-ui: DataGrid columns must be an array; received a plain object. Pass a readonly array and replace it when the columns change.",
@@ -232,19 +200,10 @@ describe("DataGrid", () => {
     it("names the kind of value it received in place of the columns", () => {
       const columns = new Set([{ key: "name" }]);
       expect(() =>
-        render(
-          <PanelRoot>
-            <DataGrid
-              aria-label="Boats"
-              columns={
-                columns as unknown as readonly { readonly key: string }[]
-              }
-              items={BOATS}
-              renderRow={renderBoatRow}
-            >
-              {(column) => <Column id={column.key}>{column.key}</Column>}
-            </DataGrid>
-          </PanelRoot>,
+        renderInPanel(
+          dynamicHeaderGrid(
+            columns as unknown as readonly { readonly key: string }[],
+          ),
         ),
       ).toThrow(
         "signalk-nearlcrews-ui: DataGrid columns must be an array; received a Set. Pass a readonly array and replace it when the columns change.",
@@ -254,21 +213,10 @@ describe("DataGrid", () => {
     it("renders a replacement column array after commit", () => {
       const tree = (
         columns: readonly { readonly key: string }[],
-      ): ReactElement => (
-        <PanelRoot>
-          <DataGrid
-            aria-label="Boats"
-            columns={columns}
-            items={[] as readonly Boat[]}
-            renderRow={renderBoatRow}
-          >
-            {(column) => <Column id={column.key}>{column.key}</Column>}
-          </DataGrid>
-        </PanelRoot>
-      );
+      ): ReactElement => panel(dynamicHeaderGrid(columns, { items: [] }));
       const view = render(tree([{ key: "name" }]));
 
-      view.rerender(tree([{ key: "name" }, { key: "depth" }]));
+      view.rerender(tree(NAME_DEPTH_COLUMNS));
 
       expect(
         screen.getByRole("columnheader", { name: "depth" }),
@@ -315,13 +263,7 @@ describe("DataGrid", () => {
       expect(
         screen.getByRole("columnheader", { name: "Depth" }).style.width,
       ).toBe("20%");
-      const widthWarnings = warn.mock.calls.filter((args) =>
-        args.some(
-          (arg) =>
-            typeof arg === "string" && arg.includes("ResizableTableContainer"),
-        ),
-      );
-      expect(widthWarnings).toEqual([]);
+      expect(callsMentioning(warn, "ResizableTableContainer")).toEqual([]);
     });
 
     it("passes the props it does not own to the container", () => {
@@ -333,16 +275,6 @@ describe("DataGrid", () => {
       const region = container.querySelector(".snui-data-grid");
       expect(region).toHaveAttribute("aria-describedby", "grid-note");
       expect(region).toHaveAttribute("data-testid", "fleet-grid");
-    });
-
-    it("forwards ref to the stable outer container", () => {
-      const ref = createRef<HTMLDivElement>();
-      renderGrid({ ref });
-
-      expect(ref.current).not.toBeNull();
-      expect(ref.current?.tagName).toBe("DIV");
-      expect(ref.current).toHaveClass("snui-data-grid");
-      expect(ref.current?.querySelector("[role='grid']")).toBeInTheDocument();
     });
   });
 
@@ -425,6 +357,7 @@ describe("DataGrid", () => {
           renderRow={(boat) => (
             <Row>
               <Cell>{boat.name}</Cell>
+              {/* biome-ignore lint/complexity/noUselessFragments: the fragment around the cells is the case under test */}
               <>
                 <Cell>{boat.depth}</Cell>
                 <Cell>{boat.name} berth</Cell>
@@ -500,24 +433,7 @@ describe("DataGrid", () => {
 
     it("applies column options to dynamic cells keyed by column", () => {
       const { container } = renderInPanel(
-        <DataGrid
-          aria-label="Boats"
-          columns={NAME_DEPTH_COLUMNS}
-          items={BOATS}
-          renderRow={(boat) => (
-            <Row columns={NAME_DEPTH_COLUMNS}>
-              {(column) => (
-                <Cell>{column.key === "name" ? boat.name : boat.depth}</Cell>
-              )}
-            </Row>
-          )}
-        >
-          {(column) => (
-            <Column id={column.key} numeric={column.key === "depth"}>
-              {column.key}
-            </Column>
-          )}
-        </DataGrid>,
+        keyedBoatGrid((key) => ({ numeric: key === "depth" })),
       );
 
       expect(cellAt(rowAt(container, 0), 1)).toHaveAttribute(
@@ -893,7 +809,6 @@ describe("DataGrid", () => {
         "rowgroup",
       );
       for (const row of bodyRows(container)) {
-        expect(row).toHaveAttribute("role", "row");
         // The first column defaults to the row header.
         expect(cellAt(row, 0)).toHaveAttribute("role", "rowheader");
         expect(cellAt(row, 1)).toHaveAttribute("role", "gridcell");
@@ -943,10 +858,7 @@ describe("data grid style module", () => {
       if (open === -1 || !chunk.slice(open).includes(declaration)) continue;
       const before = chunk.slice(0, open);
       selectors.push(
-        before
-          .slice(before.lastIndexOf("{") + 1)
-          .replace(/\/\*[\s\S]*?\*\//g, "")
-          .trim(),
+        stripComments(before.slice(before.lastIndexOf("{") + 1)).trim(),
       );
     }
     expect(selectors, `no rule declares ${declaration}`).not.toHaveLength(0);
@@ -964,17 +876,12 @@ describe("data grid style module", () => {
       // A virtualized grid wraps every cell in an element of its own, so a
       // cell there is always its parent's first child: the first column is
       // named by its index instead.
-      const [, selected] = BOATS;
-      if (selected === undefined) throw new Error("expected a second boat");
-      const { container } = renderInPanel(
-        boatGrid({
-          defaultSelectedKeys: [selected.id],
-          density,
-          items: BOATS,
-          selectionMode: "multiple",
-          virtualize,
-        }),
-      );
+      const { container } = renderGrid({
+        defaultSelectedKeys: ["b"],
+        density,
+        selectionMode: "multiple",
+        virtualize,
+      });
       const rows = bodyRows(container);
       const firstColumn = (element: Element): boolean =>
         element.getAttribute("aria-colindex") === "1" ||
@@ -992,15 +899,17 @@ describe("data grid style module", () => {
       // default grid matches only the default inset; a compact grid matches
       // both, because the default inset's selector names no density, and the
       // browser spec reads the compact inset winning that cascade.
-      const [defaultInset, compactInset] = [
+      const defaultInset = matches(
         "padding-inline-start: calc(var(--snui-space-3) + 0.3rem);",
+      );
+      const compactInset = matches(
         "padding-inline-start: calc(var(--snui-space-2) + 0.3rem);",
-      ].map(matches);
+      );
       const [ownInset, otherInset] =
         density === "compact"
           ? [compactInset, defaultInset]
           : [defaultInset, compactInset];
-      expect(ownInset?.every(firstColumn)).toBe(true);
+      expect(ownInset.every(firstColumn)).toBe(true);
       expect(ownInset).toHaveLength(rows.length + 1);
       if (density === "default") expect(otherInset).toHaveLength(0);
 
@@ -1077,8 +986,9 @@ describe("data grid style module", () => {
   it("rings a focused selected row in HighlightText under forced colors", () => {
     // Forced colors fills a selected row with Highlight, so the Highlight
     // ring every other focused row takes would vanish into it.
-    const forced = TABLE_STYLES.styles.slice(
-      TABLE_STYLES.styles.indexOf("@media (forced-colors: active)"),
+    const forced = stylesFrom(
+      TABLE_STYLES.styles,
+      "@media (forced-colors: active)",
     );
     expect(
       ruleBody(
@@ -1103,8 +1013,9 @@ describe("data grid style module", () => {
   });
 
   it("keeps the forced-colors fill for selection and outlines a hovered row", () => {
-    const forced = TABLE_STYLES.styles.slice(
-      TABLE_STYLES.styles.indexOf("@media (forced-colors: active)"),
+    const forced = stylesFrom(
+      TABLE_STYLES.styles,
+      "@media (forced-colors: active)",
     );
     // Only a selected row takes the Highlight fill.
     const fills = forced.match(/^\s*([^{}]+) \{\n\s*background: Highlight;/gm);

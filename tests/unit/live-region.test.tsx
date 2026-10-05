@@ -1,13 +1,16 @@
-import { act, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import { createRef, type ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LiveRegion } from "../../src/index.js";
 import { LIVE_REGION_BLANK_MS } from "../../src/utils/repeat-announcement.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { advanceTimers, panel, renderInPanel } from "../helpers.js";
 
 describe("LiveRegion first message", () => {
-  it("renders a message it mounted with at once by default", () => {
+  beforeEach(() => {
     vi.useFakeTimers();
+  });
+
+  it("renders a message it mounted with at once by default", () => {
     renderInPanel(<LiveRegion message="3 paths detected" />);
 
     expect(screen.getByRole("status")).toHaveTextContent("3 paths detected");
@@ -16,7 +19,6 @@ describe("LiveRegion first message", () => {
   });
 
   it("holds the first message for a beat when asked", () => {
-    vi.useFakeTimers();
     renderInPanel(<LiveRegion deferFirstMessage message="3 paths detected" />);
 
     const region = screen.getByRole("status");
@@ -24,21 +26,16 @@ describe("LiveRegion first message", () => {
     // update observable to a screen reader.
     expect(region).toBeEmptyDOMElement();
 
-    act(() => {
-      vi.advanceTimersByTime(LIVE_REGION_BLANK_MS - 1);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS - 1);
     expect(region).toBeEmptyDOMElement();
 
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    advanceTimers(1);
     expect(screen.getByRole("status")).toBe(region);
     expect(region).toHaveTextContent("3 paths detected");
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("keeps a silent region's text, which nothing is waiting to hear", () => {
-    vi.useFakeTimers();
     renderInPanel(<LiveRegion deferFirstMessage live="off" message="Muted" />);
 
     expect(screen.getByText("Muted")).toBeInTheDocument();
@@ -47,13 +44,16 @@ describe("LiveRegion first message", () => {
 });
 
 describe("LiveRegion settling", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
   /** A polite region that waits half a second for its text to settle. */
   function counting(message: string): ReactElement {
     return <LiveRegion settleMs={500} message={message} />;
   }
 
   it("exposes the text it mounts with at once", () => {
-    vi.useFakeTimers();
     renderInPanel(counting("12 matches"));
 
     expect(screen.getByRole("status")).toHaveTextContent("12 matches");
@@ -61,7 +61,6 @@ describe("LiveRegion settling", () => {
   });
 
   it("exposes a changing message once, after it stops changing", () => {
-    vi.useFakeTimers();
     const { rerender } = renderInPanel(counting("12 matches"));
     const region = screen.getByRole("status");
 
@@ -69,53 +68,39 @@ describe("LiveRegion settling", () => {
     for (const count of ["7 matches", "3 matches", "1 match"]) {
       rerender(panel(counting(count)));
       expect(region).toBeEmptyDOMElement();
-      act(() => {
-        vi.advanceTimersByTime(300);
-      });
+      advanceTimers(300);
     }
     expect(region).toBeEmptyDOMElement();
 
     // Each change restarted the wait, so it runs from the last key.
-    act(() => {
-      vi.advanceTimersByTime(199);
-    });
+    advanceTimers(199);
     expect(region).toBeEmptyDOMElement();
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    advanceTimers(1);
     expect(region).toHaveTextContent("1 match");
     expect(screen.getByRole("status")).toBe(region);
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("waits again when the words return to the last ones exposed", () => {
-    vi.useFakeTimers();
     const { rerender } = renderInPanel(counting("12 matches"));
     const region = screen.getByRole("status");
 
     rerender(panel(counting("3 matches")));
-    act(() => {
-      vi.advanceTimersByTime(300);
-    });
+    advanceTimers(300);
     // Back to the words the region last exposed, mid-typing: still a change,
     // so the region keeps waiting rather than refilling at once, which a
     // screen reader would hear as a fresh announcement.
     rerender(panel(counting("12 matches")));
     expect(region).toBeEmptyDOMElement();
 
-    act(() => {
-      vi.advanceTimersByTime(499);
-    });
+    advanceTimers(499);
     expect(region).toBeEmptyDOMElement();
-    act(() => {
-      vi.advanceTimersByTime(1);
-    });
+    advanceTimers(1);
     expect(region).toHaveTextContent("12 matches");
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("does not wait on a render that leaves the words unchanged", () => {
-    vi.useFakeTimers();
     const { rerender } = renderInPanel(counting("12 matches"));
 
     rerender(panel(counting("12 matches")));
@@ -124,7 +109,6 @@ describe("LiveRegion settling", () => {
   });
 
   it("exposes every change at once without a usable wait", () => {
-    vi.useFakeTimers();
     for (const settleMs of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
       const { rerender, unmount } = renderInPanel(
         <LiveRegion settleMs={settleMs} message="12 matches" />,
@@ -137,7 +121,6 @@ describe("LiveRegion settling", () => {
   });
 
   it("exposes the waiting text at once when the wait is removed", () => {
-    vi.useFakeTimers();
     const { rerender } = renderInPanel(counting("12 matches"));
 
     rerender(panel(counting("1 match")));
@@ -149,7 +132,6 @@ describe("LiveRegion settling", () => {
   });
 
   it("never waits in a region that announces nothing", () => {
-    vi.useFakeTimers();
     const { rerender } = renderInPanel(
       <LiveRegion live="off" settleMs={500} message="12 matches" />,
     );
@@ -173,8 +155,11 @@ describe("LiveRegion announcement mode", () => {
 });
 
 describe("LiveRegion repeat announcements under pressure", () => {
-  it("announces once at the end of a burst instead of staying blank", () => {
+  beforeEach(() => {
     vi.useFakeTimers();
+  });
+
+  it("announces once at the end of a burst instead of staying blank", () => {
     const { rerender } = renderInPanel(
       <LiveRegion message="Scanned 1 path" announceKey="scan-1" />,
     );
@@ -190,22 +175,17 @@ describe("LiveRegion repeat announcements under pressure", () => {
           />,
         ),
       );
-      act(() => {
-        vi.advanceTimersByTime(40);
-      });
+      advanceTimers(40);
     }
 
     // A source updating faster than the beat still finishes the beat it
     // started, and the words that arrive are the latest ones.
-    act(() => {
-      vi.advanceTimersByTime(LIVE_REGION_BLANK_MS);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS);
     expect(region).toHaveTextContent("Scanned 4 paths");
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("runs no beat for a region that announces nothing", () => {
-    vi.useFakeTimers();
     const { rerender } = renderInPanel(
       <LiveRegion live="off" message="Muted" announceKey={1} />,
     );
@@ -275,9 +255,7 @@ describe("LiveRegion repeat announcements", () => {
     );
     expect(region).toBeEmptyDOMElement();
 
-    act(() => {
-      vi.advanceTimersByTime(100);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS);
     expect(region).toHaveTextContent("All sources enabled");
     // One region throughout: a remount would be observed by nobody.
     expect(screen.getByRole("status")).toBe(region);
@@ -293,9 +271,7 @@ describe("LiveRegion repeat announcements", () => {
     rerender(
       panel(<LiveRegion message="Two paths detected" announceKey="scan-2" />),
     );
-    act(() => {
-      vi.advanceTimersByTime(60);
-    });
+    advanceTimers(60);
     rerender(
       panel(<LiveRegion message="Two paths detected" announceKey="scan-3" />),
     );
@@ -303,9 +279,7 @@ describe("LiveRegion repeat announcements", () => {
     // The beat is not restarted: it ends where the first key started it and
     // adopts whichever key is current then, so a source changing the key
     // faster than the beat is announced once instead of never.
-    act(() => {
-      vi.advanceTimersByTime(40);
-    });
+    advanceTimers(40);
     expect(region).toHaveTextContent("Two paths detected");
     expect(vi.getTimerCount()).toBe(0);
 
@@ -326,9 +300,7 @@ describe("LiveRegion repeat announcements", () => {
     expect(vi.getTimerCount()).toBe(0);
 
     rerender(panel(<LiveRegion message="Scan complete" announceKey={3} />));
-    act(() => {
-      vi.advanceTimersByTime(100);
-    });
+    advanceTimers(LIVE_REGION_BLANK_MS);
     expect(region).toHaveTextContent("Scan complete");
   });
 

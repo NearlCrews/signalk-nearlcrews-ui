@@ -1,22 +1,34 @@
 import {
+  ACTION_ROW_DECLARATIONS,
   bodyEdgeMarginRules,
   FORCED_COLORS_OUTLINE_DECLARATIONS,
+  MUTED_PROSE_DECLARATIONS,
   NARROW_PANEL_QUERY,
+  overlayFadeTransition,
+  RAISED_PAINT_DECLARATIONS,
   RAISED_SURFACE_TOKEN_DECLARATIONS,
   SAFE_AREA_PADDING_DECLARATIONS,
+  safeAreaGutter,
   stretchedActionRules,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
 /**
+ * Custom property holding the height of the visual viewport. `Dialog` writes
+ * it onto the dialog element, so an on-screen keyboard shrinks the dialog
+ * instead of pushing its actions under the keyboard.
+ *
+ * @internal
+ */
+export const VISUAL_VIEWPORT_HEIGHT_PROPERTY = "--snui-visual-viewport-height";
+
+/** The measured height, or `100dvh` for a dialog read before its first frame. */
+const VISUAL_VIEWPORT_HEIGHT = `var(${VISUAL_VIEWPORT_HEIGHT_PROPERTY}, 100dvh)`;
+
+/**
  * Modal dialog and scrim styles. Installed by `Dialog` and `AlertDialog`
  * through `useModuleStyles`, so a panel without a dialog never injects them.
- *
- * `--snui-visual-viewport-height` is written onto the dialog element by
- * `Dialog` itself, from the visual viewport, so an on-screen keyboard shrinks
- * the dialog instead of pushing its actions under the keyboard. It falls back
- * to `100dvh` for a dialog measured before its first frame.
  */
 export const DIALOG_STYLES: StyleModule = {
   id: "dialog",
@@ -61,9 +73,7 @@ ${SAFE_AREA_PADDING_DECLARATIONS}
   justify-content: center;
   opacity: 1;
   transform: none;
-  transition:
-    opacity var(--snui-transition-normal),
-    transform var(--snui-transition-normal);
+${overlayFadeTransition("normal")}
 }
 
 .snui-dialog-frame[data-entering],
@@ -78,18 +88,16 @@ ${RAISED_SURFACE_TOKEN_DECLARATIONS}
   width: 100%;
   max-width: 100%;
   max-height: calc(
-    var(--snui-visual-viewport-height, 100dvh) -
-    max(var(--snui-space-4), env(safe-area-inset-top, 0px)) -
-    max(var(--snui-space-4), env(safe-area-inset-bottom, 0px))
+    ${VISUAL_VIEWPORT_HEIGHT} -
+    ${safeAreaGutter("top")} -
+    ${safeAreaGutter("bottom")}
   );
   flex-direction: column;
   gap: var(--snui-space-3);
   padding: var(--snui-space-5);
   border: 1px solid var(--snui-color-border);
   border-radius: var(--snui-radius-lg);
-  background: var(--snui-color-surface-raised);
-  box-shadow: var(--snui-shadow-overlay);
-  color: var(--snui-color-text);
+${RAISED_PAINT_DECLARATIONS}
   /* The body scrolls, not the surface, so the title stays readable and the
      actions stay reachable on a short landscape viewport. */
   overflow: hidden;
@@ -109,10 +117,7 @@ ${RAISED_SURFACE_TOKEN_DECLARATIONS}
 }
 
 .snui-dialog__description {
-  min-width: 0;
-  color: var(--snui-color-text-muted);
-  overflow-wrap: anywhere;
-  text-wrap: pretty;
+${MUTED_PROSE_DECLARATIONS}
 }
 
 .snui-dialog__body {
@@ -130,13 +135,9 @@ ${RAISED_SURFACE_TOKEN_DECLARATIONS}
 ${bodyEdgeMarginRules("snui-dialog__body")}
 
 .snui-dialog__actions {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
-  flex-wrap: wrap;
+${ACTION_ROW_DECLARATIONS}
   align-items: center;
   justify-content: flex-end;
-  gap: var(--snui-space-2);
 }
 
 /* Below the narrow-panel breakpoint the dialog becomes a bottom sheet. */
@@ -158,7 +159,7 @@ ${NARROW_PANEL_QUERY} {
     max-height: min(
       85dvh,
       calc(
-        var(--snui-visual-viewport-height, 100dvh) -
+        ${VISUAL_VIEWPORT_HEIGHT} -
         env(safe-area-inset-bottom, 0px)
       )
     );

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { StrictMode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CollapsibleSection,
   PanelErrorBoundary,
@@ -15,10 +15,6 @@ import {
 } from "../../src/utils/announcer.js";
 import { panel, renderInPanel } from "../helpers.js";
 import { Bomb, failure } from "./lib/failing-content.js";
-
-afterEach(() => {
-  failure.armed = true;
-});
 
 describe("PanelErrorBoundary", () => {
   beforeEach(() => {

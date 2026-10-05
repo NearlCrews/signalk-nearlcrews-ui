@@ -135,13 +135,8 @@ export interface BlockedActivationProps<Target> {
 
 /**
  * The full refusal for a control that must stay where the user is standing.
- *
- * Every control that can be held unchangeable offers a way to do it without
- * leaving the tab order, because setting native `disabled` on the control the
- * user is standing on destroys their focus and drops them on the body. Staying
- * focusable means the platform no longer blocks activation, so the state and
- * both guards travel together: a component that spreads this cannot expose the
- * state without also refusing the press.
+ * The state and both guards travel together: a component that spreads this
+ * cannot expose the state without also refusing the press.
  *
  * A natively disabled control gets no `aria-disabled`, because it already
  * exposes its state and the pair would describe the same control twice.

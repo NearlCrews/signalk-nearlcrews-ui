@@ -33,8 +33,20 @@ describe("FieldGroup", () => {
 
 describe("Grouping primitive names", () => {
   it("rejects whitespace-only names for semantic grouping primitives", () => {
+    // Each message names both naming props where a component takes two, and
+    // the component the consumer rendered rather than the one inside it.
     expect(() => render(<FieldGroup legend="  ">Content</FieldGroup>)).toThrow(
       "signalk-nearlcrews-ui: FieldGroup requires a non-empty label or legend.",
+    );
+    expect(() =>
+      render(
+        <CheckboxGroup
+          label=" "
+          options={[{ label: "Wind", value: "wind" }]}
+        />,
+      ),
+    ).toThrow(
+      "signalk-nearlcrews-ui: CheckboxGroup requires a non-empty label or legend.",
     );
     expect(() => render(<Section title="  ">Content</Section>)).toThrow(
       "signalk-nearlcrews-ui: Section requires a non-empty title.",
@@ -76,10 +88,12 @@ describe("FieldGroup naming and description", () => {
     renderInPanel(
       <>
         <p id="alert-note">Alerts publish to the vessel bus.</p>
+        <p id="alert-scope">Each alert covers this vessel only.</p>
         <FieldGroup
           label="Notifications"
           description="Choose the alerts to publish."
           error="Select at least one alert."
+          aria-describedby="alert-scope"
           groupDescribedBy="alert-note"
         >
           <Checkbox label="Wind" />
@@ -87,28 +101,12 @@ describe("FieldGroup naming and description", () => {
       </>,
     );
 
+    // Either route the caller takes, aria-describedby and then
+    // groupDescribedBy, follows the group's own description and error.
     expect(
       screen.getByRole("group", { name: "Notifications" }),
     ).toHaveAccessibleDescription(
-      "Choose the alerts to publish. Error.Select at least one alert. Alerts publish to the vessel bus.",
-    );
-  });
-});
-
-describe("Group naming errors", () => {
-  it("names both naming props in the message, and the component that threw", () => {
-    expect(() => render(<FieldGroup legend="  ">Content</FieldGroup>)).toThrow(
-      "signalk-nearlcrews-ui: FieldGroup requires a non-empty label or legend.",
-    );
-    expect(() =>
-      render(
-        <CheckboxGroup
-          label=" "
-          options={[{ label: "Wind", value: "wind" }]}
-        />,
-      ),
-    ).toThrow(
-      "signalk-nearlcrews-ui: CheckboxGroup requires a non-empty label or legend.",
+      "Choose the alerts to publish. Error.Select at least one alert. Each alert covers this vessel only. Alerts publish to the vessel bus.",
     );
   });
 });

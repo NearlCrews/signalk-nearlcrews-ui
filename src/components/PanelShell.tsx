@@ -8,7 +8,6 @@ import {
 } from "../utils/heading.js";
 import { HeadingLevelProvider } from "../utils/heading-level.js";
 import { trimmedText } from "../utils/labels.js";
-import { definedProps } from "../utils/props.js";
 import { hasReactContent } from "../utils/react-node.js";
 import { reactBelowFloor, reactFloorMessage } from "../utils/react-version.js";
 import { type SpaceScale, Stack } from "./Layout.js";
@@ -107,7 +106,6 @@ function reloadHostPage(): void {
  */
 export function PanelShell({
   children,
-  className,
   defaultTheme,
   description,
   errorFallback,
@@ -155,13 +153,11 @@ export function PanelShell({
       unsupported ?? (
         <UnsupportedBrowserNotice
           {...htmlProps}
-          {...definedProps({
-            children: explanation || undefined,
-            title: noticeTitle || undefined,
-          })}
-          className={className}
           headingLevel={headingLevel}
-        />
+          title={noticeTitle || undefined}
+        >
+          {explanation || undefined}
+        </UnsupportedBrowserNotice>
       )
     );
   }
@@ -187,7 +183,6 @@ export function PanelShell({
     <PanelRoot
       {...htmlProps}
       ref={ref}
-      className={className}
       defaultTheme={defaultTheme}
       labels={labels}
       locale={locale}
@@ -203,7 +198,7 @@ export function PanelShell({
         <HeadingLevelProvider
           value={hasTitle ? nextHeadingLevel(headingLevel) : headingLevel}
         >
-          <Stack {...definedProps({ gap })}>
+          <Stack gap={gap}>
             {hasTitle || hasDescription ? (
               <div className="snui-panel-shell__header">
                 {hasTitle ? (

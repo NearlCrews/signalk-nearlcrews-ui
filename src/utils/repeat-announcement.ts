@@ -1,10 +1,12 @@
-import { useEffect, useEffectEvent, useReducer, useState } from "react";
+import { useEffect, useEffectEvent, useState } from "react";
 
 import {
   announcesUpdates,
   defersFirstMessage,
   type LiveRegionAttributes,
 } from "./announcement.js";
+import { useLatch } from "./latch.js";
+import { startTimer } from "./timer.js";
 
 /**
  * The blank beat a live region waits out, both before its first message and
@@ -44,9 +46,7 @@ export function useRepeatAnnouncement(
     setAnnouncedKey(announceKey);
   });
 
-  // A key that changes while there is nothing to re-announce is taken as read
-  // rather than saved up for a blank the next message would have to pay. The
-  // adjustment runs during render, guarded, so the key is already current in
+  // The key is adopted during render, guarded, so it is already current in
   // the commit that follows instead of one render behind it.
   if (!withholding && announceKey !== announcedKey) {
     setAnnouncedKey(announceKey);
@@ -58,11 +58,7 @@ export function useRepeatAnnouncement(
   // nothing at all.
   useEffect(() => {
     if (!withholding) return undefined;
-
-    const timer = setTimeout(adoptLatestKey, LIVE_REGION_BLANK_MS);
-    return () => {
-      clearTimeout(timer);
-    };
+    return startTimer(adoptLatestKey, LIVE_REGION_BLANK_MS);
   }, [withholding]);
 
   return withholding;
@@ -80,20 +76,13 @@ export function useRepeatAnnouncement(
  * that holds lets go after the beat whatever happens meanwhile.
  */
 export function useFirstMessageHold(hold: boolean): boolean {
-  // A reducer rather than useState: the lint rule against a synchronous
-  // setState inside an effect does not fire on a dispatch, and this is a
-  // one-way latch that opens once the region has existed for a beat.
-  const [released, release] = useReducer(() => true, !hold);
+  // Opens once the region has existed for a beat.
+  const [released, release] = useLatch(!hold);
 
   useEffect(() => {
     if (released) return undefined;
-    // The ambient timer is deliberate: the hold belongs to no node, so there
-    // is no owning window to read the timer from.
-    const timer = setTimeout(release, LIVE_REGION_BLANK_MS);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [released]);
+    return startTimer(release, LIVE_REGION_BLANK_MS);
+  }, [released, release]);
 
   return !released;
 }
@@ -144,12 +133,10 @@ export function useSettlingText(
   // The words are a dependency so each change restarts the timer.
   useEffect(() => {
     if (!waiting) return undefined;
-    const timer = setTimeout(() => {
+    // Waiting implies a wait that settles, so the delay is a number here.
+    return startTimer(() => {
       setWaiting(false);
-    }, settleMs);
-    return () => {
-      clearTimeout(timer);
-    };
+    }, settleMs ?? 0);
   }, [waiting, seenText, settleMs]);
 
   return settles && (waiting || seenText !== text);

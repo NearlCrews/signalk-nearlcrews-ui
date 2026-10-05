@@ -16,9 +16,8 @@ import {
 import { RADIO_STYLES } from "../styles/radio.js";
 import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
 import type { AnnouncementMode } from "../utils/announcement.js";
-import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
-import { resolveFieldRegions } from "../utils/field-error.js";
+import { fieldDescribedBy, resolveFieldRegions } from "../utils/field-error.js";
 import { definedProps } from "../utils/props.js";
 import { racDomProps } from "../utils/react-aria.js";
 import {
@@ -76,8 +75,9 @@ export function RadioGroup({
   value,
   ...props
 }: RadioGroupProps): React.JSX.Element {
-  // The group and its options share one module, and the install is
-  // reference-counted, so either one bundled alone still reaches its rules.
+  // The group and each option install the one module, reference counted, so
+  // an option inside a React Aria RadioGroup of the consumer's own still
+  // reaches its rules.
   useOptionalModuleStyles(RADIO_STYLES);
 
   requireContent(label, "RadioGroup requires a non-empty label.");
@@ -92,7 +92,9 @@ export function RadioGroup({
     errorLive,
   );
   const { hasDescription, hasError, referencedErrorId } = regions;
-  const describedBy = joinIdReferences(ariaDescribedBy, referencedErrorId);
+  // React Aria puts the description slot ahead of these ids, which
+  // completes the order every field reads in.
+  const describedBy = fieldDescribedBy({ referencedErrorId }, ariaDescribedBy);
   const domProps = racDomProps<RACRadioGroupProps>(props);
 
   return (

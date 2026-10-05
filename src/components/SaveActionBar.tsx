@@ -10,13 +10,15 @@ import {
 import type { AnnouncementMode } from "../utils/announcement.js";
 import {
   focusedElement,
-  focusIsOnBody,
+  focusIsNowhere,
+  isFocused,
   revealAndFocus,
 } from "../utils/focus.js";
 import { resolveBundledLabels, trimmedText } from "../utils/labels.js";
 import { SAVE_ACTION_BAR_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { isTimerDelay } from "../utils/shared-clock.js";
+import { startTimer } from "../utils/timer.js";
 import type { SemanticTone, StatusTone } from "../utils/tone.js";
 import { ActionBar, type ActionBarProps } from "./ActionBar.js";
 import { Button, type ButtonAsButtonProps } from "./Button.js";
@@ -354,22 +356,20 @@ function resolveStateWithLabels(
 
 /**
  * Milliseconds left of the window a save request opened, or null where no
- * window is running: no request, an unusable timestamp, or a consumer that
- * keeps the window itself with a duration of zero. A duration no timer can
- * wait out, which would close the window the moment it opened, reads as zero.
- * A timestamp ahead of this clock counts as now, so skew between the host and
+ * window is running: an unusable timestamp, or a consumer that keeps the
+ * window itself with a duration of zero. A duration no timer can wait out,
+ * which would close the window the moment it opened, reads as zero. A
+ * timestamp ahead of this clock counts as now, so skew between the host and
  * the panel lengthens no window.
  */
 function remainingWindowMs(
-  saveRequestedAt: number | null | undefined,
+  saveRequestedAt: number,
   durationMs: number,
-  nowMs: number,
 ): number | null {
-  if (saveRequestedAt === null || saveRequestedAt === undefined) return null;
   if (!Number.isFinite(saveRequestedAt) || !isTimerDelay(durationMs)) {
     return null;
   }
-  return Math.max(0, durationMs - Math.max(0, nowMs - saveRequestedAt));
+  return Math.max(0, durationMs - Math.max(0, Date.now() - saveRequestedAt));
 }
 
 /**
@@ -390,11 +390,7 @@ function useSavedMessageWindowClosed(
   // the stale confirmation is never rendered and never announced.
   const [closedRequestAt, setClosedRequestAt] = useState<number | null>(() => {
     if (saveRequestedAt === null || saveRequestedAt === undefined) return null;
-    const remainingMs = remainingWindowMs(
-      saveRequestedAt,
-      durationMs,
-      Date.now(),
-    );
+    const remainingMs = remainingWindowMs(saveRequestedAt, durationMs);
     return remainingMs === 0 ? saveRequestedAt : null;
   });
   const [wasDirty, setWasDirty] = useState(dirty);
@@ -414,18 +410,11 @@ function useSavedMessageWindowClosed(
     if (closed || saveRequestedAt === null || saveRequestedAt === undefined) {
       return undefined;
     }
-    const remainingMs = remainingWindowMs(
-      saveRequestedAt,
-      durationMs,
-      Date.now(),
-    );
+    const remainingMs = remainingWindowMs(saveRequestedAt, durationMs);
     if (remainingMs === null) return undefined;
-    const timer = setTimeout(() => {
+    return startTimer(() => {
       setClosedRequestAt(saveRequestedAt);
     }, remainingMs);
-    return () => {
-      clearTimeout(timer);
-    };
   }, [closed, durationMs, saveRequestedAt]);
 
   return closed;
@@ -516,17 +505,15 @@ export function SaveActionBar({
     );
     if (target?.isConnected === true) {
       revealAndFocus(target);
-      if (target.ownerDocument.activeElement === target) return;
+      if (isFocused(target)) return;
     }
     const status = statusRef.current;
     if (focusOnAction !== "status" || status === null) return;
     // A handler that moved focus on its own keeps the destination it chose;
     // the status takes focus only from the pressed button, or from nowhere.
-    const current = focusedElement(status.ownerDocument);
     if (
-      current !== null &&
-      current !== pressed &&
-      !focusIsOnBody(status.ownerDocument)
+      !focusIsNowhere(status.ownerDocument) &&
+      focusedElement(status.ownerDocument) !== pressed
     ) {
       return;
     }

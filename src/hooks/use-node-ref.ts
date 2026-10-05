@@ -13,8 +13,8 @@ import { composeRef } from "../utils/ref.js";
  * every listener on it, on every commit.
  *
  * `onAttach` therefore has to be stable too. Give it a `useCallback` or an
- * effect event, or read changing values through refs, as the controls that
- * resync themselves after a form reset do.
+ * effect event, or read changing values through refs, as the dialog's Escape
+ * listener does.
  */
 export function useNodeRef<T>(
   nodeRef: RefObject<T | null>,

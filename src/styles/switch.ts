@@ -144,7 +144,6 @@ ${CONTROL_LABEL_DECLARATIONS}
 ${FIELD_DESCRIPTION_DECLARATIONS}
   display: block;
   padding-inline-start: ${MESSAGE_INSET};
-  text-wrap: pretty;
 }
 
 .snui-switch__error {
@@ -160,19 +159,17 @@ ${FIELD_ERROR_DECLARATIONS}
     background: Canvas;
   }
 
+  /* The thumb sits inside the track, so it inherits the opt-out. */
   .snui-switch__thumb {
-    forced-color-adjust: none;
     background: ButtonText;
   }
 
   .snui-switch__button[data-selected] .snui-switch__track {
-    forced-color-adjust: none;
     border-color: Highlight;
     background: Highlight;
   }
 
   .snui-switch__button[data-selected] .snui-switch__thumb {
-    forced-color-adjust: none;
     background: HighlightText;
   }
 

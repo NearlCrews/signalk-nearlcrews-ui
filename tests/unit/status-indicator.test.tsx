@@ -1,10 +1,12 @@
-import { screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { StatusIndicator } from "../../src/index.js";
-import { renderInPanel } from "../helpers.js";
+import { LIVE_REGION_BLANK_MS } from "../../src/utils/repeat-announcement.js";
+import { advanceTimers, renderInPanel } from "../helpers.js";
 
 describe("StatusIndicator announcement modes", () => {
-  it("turns a status indicator into a polite live region on request", async () => {
+  it("turns a status indicator into a polite live region on request", () => {
+    vi.useFakeTimers();
     renderInPanel(
       <StatusIndicator tone="success" live="polite">
         Connected
@@ -15,7 +17,8 @@ describe("StatusIndicator announcement modes", () => {
     // region exists empty before a screen reader is asked to read it.
     const status = screen.getByRole("status");
     expect(status.textContent).toBe("");
-    await waitFor(() => expect(status).toHaveTextContent("Success. Connected"));
+    advanceTimers(LIVE_REGION_BLANK_MS);
+    expect(status).toHaveTextContent("Success. Connected");
     expect(status).not.toHaveAttribute("aria-live");
   });
 

@@ -6,6 +6,15 @@ import {
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
+import { COARSE_POINTER_QUERY } from "./tokens.js";
+
+/**
+ * Custom property holding the filled share of the track, which `RangeInput`
+ * writes from its value after every render, input, and form reset.
+ *
+ * @internal
+ */
+export const RANGE_PROGRESS_PROPERTY = "--snui-range-progress";
 
 /**
  * The WebKit track background: the filled portion up to the value, then the
@@ -20,11 +29,17 @@ function trackFill(
   return [
     `${indent}background: linear-gradient(`,
     `${indent}  to ${direction},`,
-    `${indent}  ${filled} 0 var(--snui-range-progress, 0%),`,
-    `${indent}  ${rest} var(--snui-range-progress, 0%)`,
+    `${indent}  ${filled} 0 var(${RANGE_PROGRESS_PROPERTY}, 0%),`,
+    `${indent}  ${rest} var(${RANGE_PROGRESS_PROPERTY}, 0%)`,
     `${indent});`,
   ].join("\n");
 }
+
+/** The track's shape, the same in both engines and in the Firefox fill. */
+const TRACK_SHAPE_DECLARATIONS = [
+  `  height: ${TRACK_THICKNESS};`,
+  "  border-radius: var(--snui-radius-pill);",
+].join("\n");
 
 /** The thumb's size, which follows the density contract in both engines. */
 const THUMB_SIZE_DECLARATIONS = [
@@ -74,9 +89,8 @@ export const RANGE_STYLES: StyleModule = {
 }
 
 .snui-range::-webkit-slider-runnable-track {
-  height: ${TRACK_THICKNESS};
+${TRACK_SHAPE_DECLARATIONS}
   border: 0;
-  border-radius: var(--snui-radius-pill);
 ${trackFill("right", TRACK_COLORS, "  ")}
 }
 
@@ -97,15 +111,13 @@ ${THUMB_FACE_DECLARATIONS}
 }
 
 .snui-range::-moz-range-track {
-  height: ${TRACK_THICKNESS};
+${TRACK_SHAPE_DECLARATIONS}
   border: 0;
-  border-radius: var(--snui-radius-pill);
   background: var(--snui-range-track-color);
 }
 
 .snui-range::-moz-range-progress {
-  height: ${TRACK_THICKNESS};
-  border-radius: var(--snui-radius-pill);
+${TRACK_SHAPE_DECLARATIONS}
   background: var(--snui-range-progress-color);
 }
 
@@ -141,7 +153,7 @@ ${DISABLED_DECLARATIONS}
  * already grows here, and a hairline track under a 2.75rem thumb reads as a
  * line rather than as the length the value sits on.
  */
-@media (any-pointer: coarse) {
+@media ${COARSE_POINTER_QUERY} {
   /*
    * One rule per engine: Chromium and Safari drop a whole selector list that
    * names a ::-moz- pseudo-element, which would take the WebKit track with it.
@@ -182,7 +194,6 @@ ${trackFill("right", FORCED_TRACK_COLORS, "    ")}
   }
 
   .snui-range:dir(rtl)::-webkit-slider-runnable-track {
-    forced-color-adjust: none;
 ${trackFill("left", FORCED_TRACK_COLORS, "    ")}
   }
 

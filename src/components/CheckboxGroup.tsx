@@ -1,13 +1,6 @@
-import {
-  type ReactNode,
-  useCallback,
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { type ReactNode, useId, useMemo } from "react";
 import { useControllableState } from "../hooks/use-controllable-state.js";
-import { useNodeRef } from "../hooks/use-node-ref.js";
+import { useResettableControl } from "../hooks/use-resettable-control.js";
 import {
   blockedWithoutReasonKey,
   blockedWithoutReasonMessage,
@@ -19,7 +12,6 @@ import {
 import { joinIdReferences } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { isDevelopment } from "../utils/environment.js";
-import { observeFormReset } from "../utils/form-reset.js";
 import { requireNonEmptyUniqueOptions } from "../utils/options.js";
 import {
   hasReactContent,
@@ -194,31 +186,13 @@ export function CheckboxGroup<Value extends string>({
     );
   const selected = useMemo(() => new Set(selectedValues), [selectedValues]);
 
-  // The reset listener reads the latest props through refs so the callback
-  // ref below keeps its identity: a selection change must not detach and
-  // reattach the listener on every render.
-  const valueRef = useRef(value);
-  const defaultValueRef = useRef(defaultValue);
-  useLayoutEffect(() => {
-    valueRef.current = value;
-    defaultValueRef.current = defaultValue;
-  }, [defaultValue, value]);
-
-  const fieldset = useRef<HTMLFieldSetElement | null>(null);
-  const restoreDefaultValue = useCallback(
-    (node: HTMLFieldSetElement) =>
-      observeFormReset(node, () => {
-        // Each box restores its own checkedness from the checked prop it was
-        // given, which is this group's current selection, so the group is the
-        // one that has to return to its default. A controlled selection
-        // belongs to the parent, which observes the same reset.
-        if (valueRef.current === undefined) {
-          setSelectedValues(defaultValueRef.current ?? []);
-        }
-      }),
-    [setSelectedValues],
-  );
-  const attachFieldset = useNodeRef(fieldset, ref, restoreDefaultValue);
+  const fieldsetRef = useResettableControl(ref, groupProps.form, () => {
+    // Each box restores its own checkedness from the checked prop it was
+    // given, which is this group's current selection, so the group is the
+    // one that has to return to its default. A controlled selection belongs
+    // to the parent, which observes the same reset.
+    if (value === undefined) setSelectedValues(defaultValue ?? []);
+  });
 
   const commit = (next: ReadonlySet<Value>): void => {
     // Option order keeps the reported array stable however the boxes were
@@ -262,7 +236,7 @@ export function CheckboxGroup<Value extends string>({
       hasReactContent(selectAllLabel) &&
       !hasReactContent(selectAllDisabledReason)
     ) {
-      const name = reactNodeText(selectAllLabel).trim();
+      const name = reactNodeText(selectAllLabel);
       warnOnce(
         blockedWithoutReasonKey("Checkbox", name),
         `CheckboxGroup select-all box ${JSON.stringify(name)} is blocked because no option can change, but says nothing about why. Pass selectAllDisabledReason.`,
@@ -274,7 +248,7 @@ export function CheckboxGroup<Value extends string>({
         option.disabled !== true &&
         !hasReactContent(option.disabledReason)
       ) {
-        const name = reactNodeText(option.label).trim();
+        const name = reactNodeText(option.label);
         warnOnce(
           blockedWithoutReasonKey("Checkbox", name),
           blockedWithoutReasonMessage(
@@ -304,12 +278,14 @@ export function CheckboxGroup<Value extends string>({
   return (
     <FieldGroup
       {...groupProps}
-      ref={attachFieldset}
+      ref={fieldsetRef}
       label={groupLabel}
       className={classNames("snui-checkbox-group", className)}
+      // The warning is the group's own text, so it joins the description and
+      // the error ahead of the ids the caller adds.
       aria-describedby={joinIdReferences(
-        ariaDescribedBy,
         warningActive ? warningId : undefined,
+        ariaDescribedBy,
       )}
       actions={
         selectAll === null && !hasReactContent(actions) ? undefined : (

@@ -1,8 +1,9 @@
 /**
- * Viewport measurement shared by the components that position themselves
- * against the visible part of a panel: the toast host and the viewport-docked
- * action bar. Both need the same visual-viewport-aware edges and the same set
- * of change signals, so the arithmetic and the listener wiring live here once.
+ * Viewport measurement shared by the components that position or size
+ * themselves against the visible part of a panel: the toast host, the
+ * viewport-docked action bar, and the dialog. They need the same
+ * visual-viewport-aware edges and the same set of change signals, so the
+ * arithmetic and the listener wiring live here once.
  */
 
 import { windowGlobal } from "./window-global.js";

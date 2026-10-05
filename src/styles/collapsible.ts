@@ -1,6 +1,8 @@
 import {
+  ACTION_ROW_DECLARATIONS,
   DISABLED_DECLARATIONS,
   FIRST_LINE_GLYPH_SLOT_DECLARATIONS,
+  FORCED_COLORS_HIGHLIGHT_DECLARATIONS,
   NARROW_PANEL_QUERY,
   PRESSED_FILL_DECLARATION,
   TONE_GLYPH_BOX_EM,
@@ -199,12 +201,8 @@ ${DISABLED_DECLARATIONS}
 }
 
 .snui-collapsible__actions {
-  display: flex;
-  min-width: 0;
-  max-width: 100%;
+${ACTION_ROW_DECLARATIONS}
   flex: 0 1 auto;
-  flex-wrap: wrap;
-  gap: var(--snui-space-2);
 }
 
 .snui-collapsible__actions > * {
@@ -289,9 +287,7 @@ ${NARROW_PANEL_QUERY} {
    */
   ${ENABLED_TOGGLE}:hover,
   ${ENABLED_TOGGLE}:active {
-    forced-color-adjust: none;
-    background: Highlight;
-    color: HighlightText;
+${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
   }
 }
 `);

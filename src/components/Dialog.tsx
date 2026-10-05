@@ -16,7 +16,10 @@ import {
   ModalOverlay,
 } from "react-aria-components";
 import { useNodeRef } from "../hooks/use-node-ref.js";
-import { DIALOG_STYLES } from "../styles/dialog.js";
+import {
+  DIALOG_STYLES,
+  VISUAL_VIEWPORT_HEIGHT_PROPERTY,
+} from "../styles/dialog.js";
 import { useModuleStyles } from "../styles/use-module-styles.js";
 import { joinIdReferences, resolveDescriptionId } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
@@ -29,7 +32,6 @@ import {
   overlayZIndex,
   useOverlayLayer,
 } from "../utils/overlay-layer.js";
-import { usePanelPortalContainer } from "../utils/portal.js";
 import { definedProps } from "../utils/props.js";
 import {
   hasReactContent,
@@ -140,7 +142,7 @@ function warnNoRouteOut(
   keyboardDismissable: boolean,
 ): void {
   // Named by its title, so two such dialogs in one panel are both reported.
-  const dialog = `${componentName} ${JSON.stringify(reactNodeText(title).trim())}`;
+  const dialog = `${componentName} ${JSON.stringify(reactNodeText(title))}`;
   if (keyboardDismissable) {
     warnOnce(
       `dialog-escape-only:${dialog}`,
@@ -170,7 +172,7 @@ function trackVisualViewportHeight(dialog: HTMLElement): () => void {
   const measure = (): void => {
     const { bottom, top } = readViewportEdges(ownerWindow);
     dialog.style.setProperty(
-      "--snui-visual-viewport-height",
+      VISUAL_VIEWPORT_HEIGHT_PROPERTY,
       `${String(roundedLayoutValue(bottom - top))}px`,
     );
   };
@@ -238,22 +240,19 @@ function DialogSurface({
   const componentName = role === "dialog" ? "Dialog" : "AlertDialog";
   requireContent(title, `${componentName} requires a non-empty title.`);
 
-  useModuleStyles(DIALOG_STYLES, componentName);
+  const panelRoot = useModuleStyles(DIALOG_STYLES, componentName);
   const generatedId = useId();
-  const panelRoot = usePanelPortalContainer(componentName);
   const parentOverlayLayer = useOverlayLayer();
   // A dialog always paints in the modal band, so the outermost one starts at
   // layer 1 even with no overlay above it.
   const dialogLayer = Math.max(1, parentOverlayLayer);
-  // React Aria reports every close through onOpenChange. The flag tells a
-  // close that came from an action's `close` apart from Escape, a scrim
-  // press, or the cancel button, which are the cancellations.
-  const closedByActionRef = useRef(false);
-  // The route the user took out, read once by the close it caused. Escape is
-  // recorded as the key travels up from the dialog, before react-aria closes
-  // from the overlay above it, and a leading action records itself; a scrim
-  // press is what remains.
-  const cancelReasonRef = useRef<DialogCancelReason>("scrim");
+  // React Aria reports every close through onOpenChange and says nothing of
+  // what caused it, so the route out is recorded here and read once by the
+  // close it caused. An action's `close` is the one route that is not a
+  // cancellation. Of the others, Escape is recorded as the key travels up
+  // from the dialog, before react-aria closes from the overlay above it, and
+  // a leading action records itself; a scrim press is what remains.
+  const closeRouteRef = useRef<"action" | DialogCancelReason>("scrim");
   const dialogRef = useRef<HTMLElement | null>(null);
 
   const hasDescription = hasReactContent(description);
@@ -297,7 +296,7 @@ function DialogSurface({
     // order reliable.
     const recordEscape = (event: KeyboardEvent): void => {
       if (!keyboardDismissableRef.current || event.key !== "Escape") return;
-      cancelReasonRef.current = "escape";
+      closeRouteRef.current = "escape";
       // The close this key causes reads the route before the dispatch ends.
       // A key the content kept for itself, or one that only ended a
       // composition, closes nothing, so the route is forgotten once the press
@@ -305,7 +304,7 @@ function DialogSurface({
       // microtask would run too early, between this listener and React's.
       view?.clearTimeout(forgetEscape);
       forgetEscape = view?.setTimeout(() => {
-        cancelReasonRef.current = "scrim";
+        if (closeRouteRef.current === "escape") closeRouteRef.current = "scrim";
       }, 0);
     };
     node.addEventListener("keydown", recordEscape);
@@ -325,10 +324,9 @@ function DialogSurface({
   );
 
   const handleOpenChange = (next: boolean): void => {
-    const reason = cancelReasonRef.current;
-    cancelReasonRef.current = "scrim";
-    if (!next && !closedByActionRef.current) onCancel?.(reason);
-    closedByActionRef.current = false;
+    const route = closeRouteRef.current;
+    closeRouteRef.current = "scrim";
+    if (!next && route !== "action") onCancel?.(route);
     onOpenChange?.(next);
   };
 
@@ -362,17 +360,19 @@ function DialogSurface({
           })}
         >
           {({ close }) => {
-            // The surface renders only while the dialog is open, so a flag
-            // left set by a close that reported nothing, an action closing an
-            // already dismissed dialog, cannot outlive this open and swallow
-            // the next cancellation.
-            closedByActionRef.current = false;
+            // The surface renders only while the dialog is open, so an
+            // action route left by a close that reported nothing, an action
+            // closing an already dismissed dialog, cannot outlive this open
+            // and swallow the next cancellation.
+            if (closeRouteRef.current === "action") {
+              closeRouteRef.current = "scrim";
+            }
             const closeFromAction = (): void => {
-              closedByActionRef.current = true;
+              closeRouteRef.current = "action";
               close();
             };
             const cancelFromAction = (): void => {
-              cancelReasonRef.current = "cancel";
+              closeRouteRef.current = "cancel";
               close();
             };
             const leading = leadingActions?.(cancelFromAction);
