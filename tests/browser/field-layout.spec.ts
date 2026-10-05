@@ -28,7 +28,7 @@ test("keeps a field group legend inside its border and in the actions row on a w
 }, testInfo) => {
   test.skip(
     testInfo.project.name === WEBKIT_PROJECT,
-    "WebKit computes float to none on every grid item, so the legend stays the rendered legend in the fieldset border, the 0.12.0 rendering.",
+    "WebKit computes float to none on every grid item (WebKit bug 220793), so the legend stays the rendered legend in the fieldset border, the 0.12.0 rendering.",
   );
   await page.goto("/");
   // A narrow panel moves the actions under the description on purpose.

@@ -156,9 +156,12 @@ ${SURFACE_DECLARATIONS}
  * border runs unbroken. The fieldset is still named by its first legend,
  * floated or not. The foundation reset keeps consumer legends unfloated.
  *
- * WebKit computes float to none on every grid item, so there the legend stays
- * the rendered legend in the border notch, which is the 0.12.0 rendering
- * rather than a regression.
+ * WebKit computes float to none on every grid item (WebKit bug 220793, open
+ * since 2021), so there the legend stays the rendered legend in the border
+ * notch, the 0.12.0 rendering. The fieldset stays: a div named through
+ * aria-labelledby would lose the native disabled state the group hands its
+ * controls, and reordering the children for a float layout would change the
+ * reading order in every engine.
  */
 .snui-field-group__legend {
   float: inline-start;

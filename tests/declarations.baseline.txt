@@ -1775,4 +1775,4 @@ export declare const SPACE_SCALE: readonly [
 export type SpaceScale = (typeof SPACE_SCALE)[number];
 
 === version.d.ts ===
-export declare const PACKAGE_VERSION = "0.12.0";
+export declare const PACKAGE_VERSION = "0.13.0";

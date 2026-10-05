@@ -1,5 +1,5 @@
 /** The package version used to isolate styles from other loaded versions. */
-export const PACKAGE_VERSION = "0.12.0";
+export const PACKAGE_VERSION = "0.13.0";
 
 /**
  * The root class is private and may change without notice.

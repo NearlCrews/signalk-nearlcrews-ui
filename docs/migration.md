@@ -305,7 +305,7 @@ Each release adds primitives that replace code panels wrote for themselves, and 
 | A `node:vm` script that renders the built remote                                       | `snui-check-consumer --runtime`, which renders module remotes too                                            |
 | A share scope and container loader written into the browser test fixture               | `signalk-nearlcrews-ui/host-harness`                                                                         |
 
-## Unreleased
+## Changes in 0.13.0
 
 This release renames or removes six props, moves focus and announcements to the timing the package's own rules call for, changes several defaults and strings, repaints sections, tone glyphs, borders, and Night, and makes `snui-check-consumer` check the Signal K host loading contract. Work through the required list first: each item is a compile error, a changed runtime contract, a changed test query, or a check that now fails. Then check the behavior below, refresh visual baselines, and apply the re-pin checklist above.
 
