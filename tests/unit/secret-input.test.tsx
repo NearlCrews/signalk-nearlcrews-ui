@@ -8,7 +8,11 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { type SyntheticEvent, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { SecretInput } from "../../src/forms.js";
-import { flushAnimationFrames, renderInPanel } from "../helpers.js";
+import {
+  flushAnimationFrames,
+  renderInPanel,
+  stubAnimationFrames,
+} from "../helpers.js";
 
 describe("SecretInput reveal focus", () => {
   /** Renders a filled token field and hands back its input. */
@@ -80,12 +84,16 @@ describe("SecretInput reveal focus", () => {
   it("restores the caret again in the frame after the type change", async () => {
     const user = userEvent.setup();
     const { input } = renderToken();
+    // Frames run on demand, so the reset below always lands before the
+    // restoring frame. A real frame can fire during the click on a busy
+    // runner, which would leave the reset last.
+    const { runAll } = stubAnimationFrames();
     await revealWithSelection(user, input);
 
     // Stand in for the engine's own final selection reset after the type
     // change, which is what the second restoration is there for.
     input.setSelectionRange(0, 0);
-    await flushAnimationFrames();
+    runAll();
 
     expect(input).toHaveFocus();
     expect(input.selectionStart).toBe(2);
