@@ -1,3 +1,4 @@
+import { existsSync, symlinkSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +10,7 @@ import {
   packageBinaryEntry,
   readPackageJson,
   repositoryPath,
+  withTemporaryDirectory,
 } from "../../scripts/lib/paths.mjs";
 import {
   removeTemporaryTrees,
@@ -30,8 +32,8 @@ beforeAll(() => {
 
 afterAll(removeTemporaryTrees);
 
-function found(files) {
-  return files.map((file) => relative(root, file).split(/[\\/]/).join("/"));
+function found(files, base = root) {
+  return files.map((file) => relative(base, file).split(/[\\/]/).join("/"));
 }
 
 describe("collectFiles", () => {
@@ -56,6 +58,40 @@ describe("collectFiles", () => {
 
     expect(found(files)).not.toContain("skipped/ignored.md");
   });
+
+  it("skips hidden entries when asked and lists them otherwise", async () => {
+    const hidden = temporaryTree("snui-hidden-", {
+      ".cache/inner.md": "inner",
+      ".hidden.md": "hidden",
+      "shown.md": "shown",
+    });
+    const matches = (name) => name.endsWith(".md");
+
+    expect(
+      found(await collectFiles(hidden, { matches, skipHidden: true }), hidden),
+    ).toEqual(["shown.md"]);
+    expect(
+      found(await collectFiles(hidden, { matches }), hidden).sort(),
+    ).toEqual([".cache/inner.md", ".hidden.md", "shown.md"]);
+  });
+
+  it.skipIf(process.platform === "win32")(
+    "neither follows nor lists a symbolic link",
+    async () => {
+      const linked = temporaryTree("snui-links-", { "real/file.md": "real" });
+      symlinkSync(join(linked, "real"), join(linked, "alias"), "dir");
+      symlinkSync(join(linked, "real/file.md"), join(linked, "alias.md"));
+
+      expect(
+        found(
+          await collectFiles(linked, {
+            matches: (name) => name.endsWith(".md"),
+          }),
+          linked,
+        ),
+      ).toEqual(["real/file.md"]);
+    },
+  );
 
   it("answers with nothing when no name matches", async () => {
     expect(
@@ -128,5 +164,34 @@ describe("packageBinaryEntry", () => {
     expect(() => packageBinaryEntry(manifest, "tool")).toThrow(
       `${manifest} does not declare bin.tool.`,
     );
+  });
+});
+
+describe("withTemporaryDirectory", () => {
+  it("hands the work a directory and removes it afterward", async () => {
+    let seen;
+    const result = await withTemporaryDirectory(
+      "snui-with-",
+      async (directory) => {
+        seen = directory;
+        expect(existsSync(directory)).toBe(true);
+        return "done";
+      },
+    );
+
+    expect(result).toBe("done");
+    expect(existsSync(seen)).toBe(false);
+  });
+
+  it("removes the directory when the work throws", async () => {
+    let seen;
+    await expect(
+      withTemporaryDirectory("snui-with-", async (directory) => {
+        seen = directory;
+        throw new Error("work failed");
+      }),
+    ).rejects.toThrow("work failed");
+
+    expect(existsSync(seen)).toBe(false);
   });
 });

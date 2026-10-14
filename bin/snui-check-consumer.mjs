@@ -8,7 +8,10 @@
  *                       [--webpack-config <webpack.config.cjs>]
  *                       [--container <global>] [--runtime-dependency]
  *                       [--stats <webpack-stats.json>] [--styles <sourceDir>]
- *                       [--runtime --expose <module> [runtime options]]
+ *                       [--runtime --expose <module> [--expect <text>]
+ *                       [--expect-unsupported <text>]
+ *                       [--no-compatibility-render] [--props <json>]]
+ *   snui-check-consumer --help | --version
  *
  * Asserts, in order: the consumer pins an exact version as a development
  * dependency (with --runtime-dependency, a runtime placement that pins the
@@ -49,7 +52,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { basename, dirname, join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import {
   assertKnownOptions,
@@ -69,6 +72,7 @@ import {
   assertSizeBaseline,
   assertVersionStamp,
   gzipBytesOf,
+  loadWebpackParseRange,
   PACKAGE_NAME,
   RUNTIME_DEPENDENCY_COST,
   runtimeDependencyFieldOf,
@@ -83,6 +87,7 @@ import {
   remoteFormatOf,
   toSafeModuleId,
 } from "./lib/host-loading.mjs";
+import { readJson } from "./lib/json-file.mjs";
 import { assertModuleGraph } from "./lib/module-graph.mjs";
 import { renderModulePanelRemote } from "./lib/module-runtime.mjs";
 import {
@@ -102,51 +107,76 @@ import {
 } from "./lib/panel-runtime.mjs";
 import { assertDoubledOverrides } from "./lib/style-overrides.mjs";
 
-const USAGE =
-  "Usage: snui-check-consumer --root <consumerDir> --remote <builtRemoteEntry> [--asset <name>] [--baseline <json>] [--webpack-config <path>] [--container <global>] [--runtime-dependency] [--stats <json>] [--styles <dir>] [--runtime --expose <module>]. --root resolves against the working directory, and every other path resolves against --root.";
+/**
+ * Every option the check takes, once: the usage text, the set a misspelled
+ * option is checked against, the options that take the argument after them,
+ * and the options that mean nothing without --runtime are all read from here.
+ * `value` names the argument an option takes, and `runtime` marks an option
+ * that only --runtime reads.
+ */
+const OPTION_TABLE = Object.freeze([
+  { name: "--root", value: "<consumerDir>" },
+  { name: "--remote", value: "<builtRemoteEntry>" },
+  { name: "--asset", value: "<name>" },
+  { name: "--baseline", value: "<json>" },
+  { name: "--webpack-config", value: "<path>" },
+  { name: "--container", value: "<global>" },
+  { name: "--runtime-dependency" },
+  { name: "--stats", value: "<json>" },
+  { name: "--styles", value: "<dir>" },
+  { name: "--runtime" },
+  { name: "--expose", value: "<module>", runtime: true },
+  { name: "--expect", value: "<text>", runtime: true },
+  { name: "--expect-unsupported", value: "<text>", runtime: true },
+  { name: "--no-compatibility-render", runtime: true },
+  { name: "--props", value: "<json>", runtime: true },
+]);
+
+/** The options the command answers on its own, without a consumer to check. */
+const INFORMATION_OPTIONS = Object.freeze(["--help", "--version"]);
+
+const REQUIRED_OPTIONS = Object.freeze(["--root", "--remote"]);
+
+const describeOption = ({ name, value }) =>
+  value === undefined ? name : `${name} ${value}`;
+
+const USAGE = `Usage: snui-check-consumer ${[
+  ...OPTION_TABLE.filter(
+    ({ name, runtime }) => !runtime && REQUIRED_OPTIONS.includes(name),
+  ).map(describeOption),
+  ...OPTION_TABLE.filter(
+    ({ name, runtime }) =>
+      !runtime && name !== "--runtime" && !REQUIRED_OPTIONS.includes(name),
+  ).map((option) => `[${describeOption(option)}]`),
+  `[--runtime ${OPTION_TABLE.filter(({ runtime }) => runtime)
+    .map((option, index) =>
+      index === 0 ? describeOption(option) : `[${describeOption(option)}]`,
+    )
+    .join(" ")}]`,
+].join(
+  " ",
+)} | --help | --version. --root resolves against the working directory, and every other path resolves against --root.`;
 
 /** Options that mean nothing without --runtime, so a typo cannot pass quietly. */
-const RUNTIME_OPTIONS = Object.freeze([
-  "--expect",
-  "--expect-unsupported",
-  "--expose",
-  "--no-compatibility-render",
-  "--props",
-]);
+const RUNTIME_OPTIONS = Object.freeze(
+  OPTION_TABLE.filter(({ runtime }) => runtime).map(({ name }) => name),
+);
 
 /** Every option the check takes, so a misspelled one fails rather than being skipped. */
 const OPTIONS = Object.freeze([
-  "--asset",
-  "--baseline",
-  "--container",
-  "--remote",
-  "--root",
-  "--runtime",
-  "--runtime-dependency",
-  "--stats",
-  "--styles",
-  "--webpack-config",
-  ...RUNTIME_OPTIONS,
+  ...OPTION_TABLE.map(({ name }) => name),
+  ...INFORMATION_OPTIONS,
 ]);
 
 /**
  * The options that take the argument after them. Any other argument that is
  * not an option fails, because nothing would read it.
  */
-const VALUE_OPTIONS = Object.freeze([
-  "--asset",
-  "--baseline",
-  "--container",
-  "--expect",
-  "--expect-unsupported",
-  "--expose",
-  "--props",
-  "--remote",
-  "--root",
-  "--stats",
-  "--styles",
-  "--webpack-config",
-]);
+const VALUE_OPTIONS = Object.freeze(
+  OPTION_TABLE.filter(({ value }) => value !== undefined).map(
+    ({ name }) => name,
+  ),
+);
 
 /** The JavaScript files of a remote, which the stamp and runtime scans read. */
 const SCRIPT_FILE = /\.[cm]?js$/;
@@ -157,8 +187,19 @@ const STYLESHEET_FILE = /\.css$/;
 /** Every file a remote that owns its output directory is made of. */
 const REMOTE_ASSET_FILE = /\.(?:[cm]?js|css)$/;
 
-function readJson(path) {
-  return JSON.parse(readFileSync(path, "utf8"));
+/**
+ * Reads one of the consumer's JSON files, naming the file and the way to fix
+ * it when it is missing instead of surfacing a bare ENOENT.
+ */
+async function readConsumerJson(path, remedy) {
+  try {
+    return await readJson(path);
+  } catch (cause) {
+    if (cause?.code === "ENOENT") {
+      throw new Error(`${path} does not exist. ${remedy}`, { cause });
+    }
+    throw new Error(`${path} could not be read: ${cause.message}`, { cause });
+  }
 }
 
 /** The props --props names, or undefined when it was not given. */
@@ -234,15 +275,11 @@ function hasWebpack(consumerRequire) {
  * broken install, which is worth saying rather than quietly degrading.
  */
 function readParseRange(consumerRequire) {
-  try {
-    return consumerRequire("webpack/lib/util/semver.js").parseRange;
-  } catch (cause) {
-    if (!hasWebpack(consumerRequire)) return undefined;
-    throw new Error(
-      `Webpack is installed beside the consumer, but webpack/lib/util/semver.js did not load: ${cause.message}. The check encodes the required versions the remote entry carries with Webpack's own encoder.`,
-      { cause },
-    );
-  }
+  if (!hasWebpack(consumerRequire)) return undefined;
+  return loadWebpackParseRange(
+    consumerRequire,
+    "Webpack is installed beside the consumer, so the check encodes the required versions the remote entry carries with Webpack's own encoder.",
+  );
 }
 
 /**
@@ -392,48 +429,93 @@ async function assertRuntime({
   return `panel rendered from ${formatCount(scripts.length, "bundle")} with configuration undefined and {}${configured === undefined ? "" : " and --props"}`;
 }
 
-async function main() {
-  const argv = process.argv.slice(2);
+/** This package's own manifest, which `--version` reads. */
+const OWN_MANIFEST_PATH = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+  "package.json",
+);
+
+/**
+ * The options of one run, validated: a misspelled option, a missing required
+ * one, or a runtime option without --runtime fails here, before any file is
+ * read.
+ */
+function readRunOptions(argv) {
   assertKnownOptions(argv, OPTIONS, {
     hint: `\n${USAGE}`,
     valued: VALUE_OPTIONS,
   });
-  const rootOption = readOption(argv, "--root", "a path");
-  const remoteOption = readOption(argv, "--remote", "a path");
-  if (rootOption === undefined || remoteOption === undefined) {
-    throw new Error(USAGE);
+  const missing = REQUIRED_OPTIONS.filter(
+    (option) => readOption(argv, option, "a path") === undefined,
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `${joinNames(missing)} ${missing.length === 1 ? "is" : "are"} required.\n${USAGE}`,
+    );
   }
   const runtime = readFlag(argv, "--runtime");
   if (!runtime) {
-    const stray = RUNTIME_OPTIONS.filter((option) => readFlag(argv, option));
+    const stray = RUNTIME_OPTIONS.filter((option) =>
+      readFlag(argv, option),
+    ).sort();
     if (stray.length > 0) {
-      throw new Error(`${joinNames(stray)} need --runtime.`);
+      throw new Error(
+        `${joinNames(stray)} ${stray.length === 1 ? "needs" : "need"} --runtime.`,
+      );
     }
   }
-  const root = resolve(rootOption);
-  const remoteEntry = resolve(root, remoteOption);
+  const root = resolve(readOption(argv, "--root", "a path"));
+  return {
+    allowRuntimeDependency: readFlag(argv, "--runtime-dependency"),
+    baselineOption: readOption(argv, "--baseline", "a path"),
+    remoteEntry: resolve(root, readOption(argv, "--remote", "a path")),
+    root,
+    runtime,
+    statsOption: readOption(argv, "--stats", "a path"),
+    stylesOption: readOption(argv, "--styles", "a directory"),
+    webpackConfigOption: readOption(argv, "--webpack-config", "a path"),
+  };
+}
+
+/**
+ * The consumer's manifest and the installed copy of this package. A consumer
+ * that has not run npm install, or that is not a package at all, gets a
+ * sentence saying so rather than Node's resolution stack.
+ */
+async function readConsumer(root) {
+  const consumerManifest = await readConsumerJson(
+    join(root, "package.json"),
+    `Point --root at the consumer plugin's directory, the one that holds its package.json.`,
+  );
+  const consumerRequire = createRequire(join(root, "package.json"));
+  let installedPath;
+  try {
+    installedPath = consumerRequire.resolve(`${PACKAGE_NAME}/package.json`);
+  } catch {
+    // No cause: the resolution error is a require stack that tells the
+    // plugin author nothing the sentence does not.
+    throw new Error(
+      `${PACKAGE_NAME} is not installed under ${root}. Run npm install in ${root}, then run the check again.`,
+    );
+  }
+  return {
+    consumerManifest,
+    consumerRequire,
+    installedManifest: await readJson(installedPath),
+  };
+}
+
+/**
+ * The remote's files. Without --asset the whole directory is the remote,
+ * which is what a panel build that owns its output directory produces. A
+ * plugin that serves other bundles from the same directory names the remote's
+ * own files instead. Each is read once, on first use: the scans take an
+ * asset's text and the size checks its bytes.
+ */
+function readRemoteAssets(argv, remoteEntry) {
   const remoteDirectory = dirname(remoteEntry);
   const entryName = basename(remoteEntry);
-  const baselineOption = readOption(argv, "--baseline", "a path");
-  const webpackConfigOption = readOption(argv, "--webpack-config", "a path");
-  const statsOption = readOption(argv, "--stats", "a path");
-  const stylesOption = readOption(argv, "--styles", "a directory");
-  const allowRuntimeDependency = readFlag(argv, "--runtime-dependency");
-
-  const consumerRequire = createRequire(join(root, "package.json"));
-  const consumerManifest = readJson(join(root, "package.json"));
-  const installedManifest = readJson(
-    consumerRequire.resolve(`${PACKAGE_NAME}/package.json`),
-  );
-  const version = assertExactPin(consumerManifest, installedManifest, {
-    allowRuntimeDependency,
-  });
-  assertConfiguratorKeyword(consumerManifest);
-  assertRemoteLocation(root, remoteEntry);
-
-  // Without --asset the whole directory is the remote, which is what a panel
-  // build that owns its output directory produces. A plugin that serves other
-  // bundles from the same directory names the remote's own files instead.
   const namedAssets = readValues(
     argv,
     "--asset",
@@ -445,8 +527,6 @@ async function main() {
       : readdirSync(remoteDirectory).filter((name) =>
           REMOTE_ASSET_FILE.test(name),
         );
-  // Read once each, on first use: the scans take an asset's text and the
-  // size checks its bytes.
   const assetBytes = new Map();
   const bytesOf = (name) => {
     if (!assetBytes.has(name)) {
@@ -458,6 +538,63 @@ async function main() {
     assetNames
       .filter((name) => pattern.test(name))
       .map((name) => ({ name, source: bytesOf(name).toString("utf8") }));
+  return { assetNames, bytesOf, entryName, readAssets };
+}
+
+/**
+ * The Webpack configuration to compare against the published share map: the
+ * one --webpack-config names, which must exist, or the first conventional file
+ * in the consumer root, or undefined when the consumer ships none.
+ */
+function findWebpackConfig(root, webpackConfigOption) {
+  if (webpackConfigOption === undefined) {
+    return ["webpack.config.cjs", "webpack.config.js", "webpack.config.mjs"]
+      .map((name) => join(root, name))
+      .find((path) => existsSync(path));
+  }
+  const path = resolve(root, webpackConfigOption);
+  if (!existsSync(path)) {
+    throw new Error(
+      `--webpack-config names ${path}, which does not exist. The path resolves against --root.`,
+    );
+  }
+  return path;
+}
+
+async function main() {
+  const argv = process.argv.slice(2);
+  if (readFlag(argv, "--help")) {
+    process.stdout.write(`${USAGE}\n`);
+    return;
+  }
+  if (readFlag(argv, "--version")) {
+    const { version } = await readJson(OWN_MANIFEST_PATH);
+    process.stdout.write(`${PACKAGE_NAME} ${version}\n`);
+    return;
+  }
+  const {
+    allowRuntimeDependency,
+    baselineOption,
+    remoteEntry,
+    root,
+    runtime,
+    statsOption,
+    stylesOption,
+    webpackConfigOption,
+  } = readRunOptions(argv);
+
+  const { consumerManifest, consumerRequire, installedManifest } =
+    await readConsumer(root);
+  const version = assertExactPin(consumerManifest, installedManifest, {
+    allowRuntimeDependency,
+  });
+  assertConfiguratorKeyword(consumerManifest);
+  assertRemoteLocation(root, remoteEntry);
+
+  const { assetNames, bytesOf, entryName, readAssets } = readRemoteAssets(
+    argv,
+    remoteEntry,
+  );
   const scripts = readAssets(SCRIPT_FILE);
   const entrySource = scripts.find(({ name }) => name === entryName)?.source;
   if (entrySource === undefined) {
@@ -504,12 +641,7 @@ async function main() {
     `host shares ${joinNames(Object.keys(shared))}`,
   ];
 
-  const webpackConfigPath =
-    webpackConfigOption === undefined
-      ? ["webpack.config.cjs", "webpack.config.js", "webpack.config.mjs"]
-          .map((name) => join(root, name))
-          .find((path) => existsSync(path))
-      : resolve(root, webpackConfigOption);
+  const webpackConfigPath = findWebpackConfig(root, webpackConfigOption);
   if (webpackConfigPath !== undefined) {
     const config = await loadWebpackConfig(webpackConfigPath);
     assertConfiguredShares(findSharedOption(config), shared);
@@ -536,12 +668,17 @@ async function main() {
   }
 
   if (statsOption !== undefined) {
-    const modules = assertModuleGraph(readJson(resolve(root, statsOption)));
+    const modules = assertModuleGraph(
+      await readConsumerJson(
+        resolve(root, statsOption),
+        "--stats names the stats file Webpack wrote with --json; the path resolves against --root.",
+      ),
+    );
     clauses.push(`module graph of ${formatCount(modules, "module")}`);
   }
 
   if (stylesOption !== undefined) {
-    const cssModules = assertDoubledOverrides(
+    const cssModules = await assertDoubledOverrides(
       resolve(root, stylesOption),
       root,
     );
@@ -556,7 +693,10 @@ async function main() {
   if (baselineOption === undefined) {
     clauses.push(entrySize);
   } else {
-    const baseline = readJson(resolve(root, baselineOption));
+    const baseline = await readConsumerJson(
+      resolve(root, baselineOption),
+      "--baseline names the size baseline file; the path resolves against --root.",
+    );
     const gzipBytes = gzipBytesOf(assetNames.map(bytesOf));
     clauses.push(
       assertSizeBaseline(gzipBytes, baseline),

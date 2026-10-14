@@ -24,5 +24,6 @@ export {
   Text,
   TextInput,
   useUnsavedChangesGuard,
+  VisuallyHidden,
 } from "signalk-nearlcrews-ui";
 export { SaveActionBar } from "signalk-nearlcrews-ui/composites";

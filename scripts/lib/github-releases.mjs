@@ -5,9 +5,18 @@
  * installing dependencies.
  */
 
+/**
+ * How long a request may take before it is abandoned, so a stalled connection
+ * fails the check instead of holding a job to its timeout.
+ */
+export const REQUEST_TIMEOUT_MS = 30_000;
+
 /** Fetches a URL and fails with its status unless the answer is OK. */
 export async function fetchOk(url, init) {
-  const response = await fetch(url, init);
+  const response = await fetch(url, {
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    ...init,
+  });
   if (!response.ok) {
     throw new Error(
       `GET ${url} answered ${String(response.status)} ${response.statusText}.`,

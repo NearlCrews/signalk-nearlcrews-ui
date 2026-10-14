@@ -12,6 +12,8 @@ import {
 } from "@playwright/test";
 
 import { CSP_FIXTURE_PATH } from "../../fixtures/browser/browser-server.js";
+import type { ThemeLabel } from "../../scripts/lib/themes.mjs";
+import { THEME_IDS, themeLabel } from "../../scripts/lib/themes.mjs";
 
 interface AxeRuleException {
   /** The axe rule id left out of this one run. */
@@ -68,11 +70,11 @@ export async function expectProjectPointer(
   ).toBe(testInfo.project.name === MOBILE_PROJECT);
 }
 
-/** The explicit themes, by their accessible names in the theme selector. */
-export const THEMES = ["Light", "Dark", "Night"] as const;
-
 /** A theme option's accessible name in the panel's theme selector. */
-export type ThemeName = (typeof THEMES)[number];
+export type ThemeName = ThemeLabel;
+
+/** The explicit themes, by their accessible names in the theme selector. */
+export const THEMES: readonly ThemeName[] = THEME_IDS.map(themeLabel);
 
 /** PanelRoot's element, by the attribute every root carries. */
 const PANEL_ROOT_SELECTOR = "[data-snui-version]";

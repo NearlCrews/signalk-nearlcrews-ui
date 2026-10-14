@@ -6,6 +6,7 @@ import {
   CODEQL_WORKFLOW_PATH,
   fetchAllPages,
   hasMorePages,
+  hasPendingReleaseWorkflow,
   parsePage,
   REQUIRED_RELEASE_CHECKS,
   resolveDistTag,
@@ -236,6 +237,34 @@ describe("release check parser", () => {
   });
 });
 
+describe("pending release workflows", () => {
+  it("reports a required workflow that has not completed on the release commit", () => {
+    const { workflowRuns } = successfulFixture();
+    expect(hasPendingReleaseWorkflow(workflowRuns, SHA)).toBe(false);
+
+    const running = workflowRun(300, CI_WORKFLOW_PATH, {
+      conclusion: null,
+      status: "in_progress",
+    });
+    expect(hasPendingReleaseWorkflow([...workflowRuns, running], SHA)).toBe(
+      true,
+    );
+  });
+
+  it("ignores runs of other commits and of workflows no release check names", () => {
+    const otherCommit = workflowRun(300, CI_WORKFLOW_PATH, {
+      head_sha: OTHER_SHA,
+      status: "queued",
+    });
+    const otherWorkflow = workflowRun(301, ".github/workflows/other.yml", {
+      status: "queued",
+    });
+    expect(hasPendingReleaseWorkflow([otherCommit, otherWorkflow], SHA)).toBe(
+      false,
+    );
+  });
+});
+
 describe("paged GitHub collections", () => {
   /** What every call asks for; each case adds its own pages and limits. */
   const request = {
@@ -270,6 +299,19 @@ describe("paged GitHub collections", () => {
         perPage: 2,
       }),
     ).resolves.toEqual([{ id: 1 }, { id: 2 }, { id: 3 }]);
+  });
+
+  it("bounds every page request with a timeout signal", async () => {
+    const signals = [];
+    await fetchAllPages({
+      ...request,
+      fetchPage: (url, init) => {
+        signals.push(init.signal);
+        return pagedFetch([{ total_count: 0, check_runs: [] }])(url);
+      },
+    });
+
+    expect(signals[0]).toBeInstanceOf(AbortSignal);
   });
 
   it("reports a failed request and refuses to page forever", async () => {

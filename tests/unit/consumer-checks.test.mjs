@@ -18,6 +18,7 @@ import {
   findVersionStamps,
   gzipBytesOf,
   HOST_HARNESS_MARKER,
+  loadWebpackParseRange,
   REACT_RUNTIME_MARKERS,
 } from "../../bin/lib/consumer-checks.mjs";
 import { HOST_HARNESS_MARKER as HARNESS_SOURCE_MARKER } from "../../src/host-harness/marker.js";
@@ -102,7 +103,7 @@ describe("exact pin", () => {
         allow,
       ),
     ).toThrow(
-      "signalk-nearlcrews-ui in package.json dependencies must be pinned to an exact version such as 0.9.0, got ^0.9.0.",
+      "signalk-nearlcrews-ui in package.json dependencies must be pinned to an exact version such as x.y.z, got ^0.9.0.",
     );
     expect(() =>
       assertExactPin(
@@ -124,7 +125,7 @@ describe("exact pin", () => {
         { devDependencies: { "signalk-nearlcrews-ui": "^0.9.0" } },
         installed,
       ),
-    ).toThrow("must be pinned to an exact version such as 0.9.0, got ^0.9.0");
+    ).toThrow("must be pinned to an exact version such as x.y.z, got ^0.9.0");
     expect(() => assertExactPin({ devDependencies: {} }, installed)).toThrow(
       "package.json does not declare signalk-nearlcrews-ui in devDependencies.",
     );
@@ -344,7 +345,50 @@ describe("size baseline", () => {
       assertSizeBaseline(1100, { gzipBytes: 1000, maximumIncreasePercent: 5 }),
     ).toThrow("over the 5% limit, with no approved ceiling.");
     expect(() => assertSizeBaseline(1, { gzipBytes: "1000" })).toThrow(
-      "needs integer gzipBytes and a numeric maximumIncreasePercent",
+      "needs a positive integer gzipBytes",
+    );
+  });
+
+  it.each([
+    ["zero gzipBytes", { gzipBytes: 0, maximumIncreasePercent: 5 }],
+    ["negative gzipBytes", { gzipBytes: -10, maximumIncreasePercent: 5 }],
+    ["a negative allowance", { gzipBytes: 1000, maximumIncreasePercent: -1 }],
+    ["a missing allowance", { gzipBytes: 1000 }],
+  ])("rejects %s before it divides by the baseline", (_case, rejected) => {
+    expect(() => assertSizeBaseline(100, rejected)).toThrow(
+      "The size baseline needs",
+    );
+  });
+
+  it("accepts a zero allowance, which pins the baseline exactly", () => {
+    expect(
+      assertSizeBaseline(1000, { gzipBytes: 1000, maximumIncreasePercent: 0 }),
+    ).toBe("1000 gzip bytes, within 0% of the 1000-byte baseline");
+  });
+});
+
+describe("loading Webpack's range encoder", () => {
+  it("returns the encoder the loader provides", () => {
+    const parseRange = () => [];
+    const load = (specifier) => {
+      expect(specifier).toBe("webpack/lib/util/semver.js");
+      return { parseRange };
+    };
+
+    expect(loadWebpackParseRange(load, "Needed to encode ranges.")).toBe(
+      parseRange,
+    );
+  });
+
+  it("names the internal, the cause, and the purpose when it does not load", () => {
+    const load = () => {
+      throw new Error("Cannot find module");
+    };
+
+    expect(() =>
+      loadWebpackParseRange(load, "Needed to encode ranges."),
+    ).toThrow(
+      "webpack/lib/util/semver.js could not be loaded: Cannot find module. Needed to encode ranges.",
     );
   });
 });

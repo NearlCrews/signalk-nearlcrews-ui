@@ -94,6 +94,13 @@ const CLOSING = new Set([")", "]", "}"]);
  * The index just past a string or comment starting at `index`, or undefined
  * when none starts there. Template strings are skipped with their `${}`
  * substitutions, which may hold strings of their own.
+ *
+ * Regular expression literals are not recognized, unlike the lexer in
+ * bin/lib/style-overrides.mjs, which has to read arbitrary panel source. This
+ * one reads only the few Signal K functions LOADER_FACTS names, none of which
+ * holds a regex with a quote or bracket inside. A watched function that gains
+ * one fails the baseline check loudly, because the snippet no longer ends
+ * where it should.
  */
 function skipLiteral(source, index) {
   const character = source[index];
@@ -237,11 +244,34 @@ export async function readLoaderSources({ fetchText, source, tag }) {
   );
 }
 
-/** The names of the facts whose hash differs from the recorded one. */
+/**
+ * Fails unless a parsed baseline carries a tag and a hash for each fact, so a
+ * truncated file reads as malformed rather than as every function moving.
+ */
+export function assertBaselineShape(baseline) {
+  if (
+    baseline === null ||
+    typeof baseline !== "object" ||
+    typeof baseline.tag !== "string" ||
+    baseline.hashes === null ||
+    typeof baseline.hashes !== "object" ||
+    Array.isArray(baseline.hashes)
+  ) {
+    throw new Error(
+      "The host loader baseline has no tag or hashes. Run `npm run host-contract:loader:update`.",
+    );
+  }
+}
+
+/**
+ * The names of the facts whose hash differs from the recorded one, including
+ * a fact only one side knows, so a fact dropped from LOADER_FACTS leaves the
+ * baseline stale visibly.
+ */
 export function compareLoaderHashes(recorded, current) {
-  return Object.keys(current).filter(
-    (name) => recorded[name] !== current[name],
-  );
+  return [
+    ...new Set([...Object.keys(recorded), ...Object.keys(current)]),
+  ].filter((name) => recorded[name] !== current[name]);
 }
 
 /**

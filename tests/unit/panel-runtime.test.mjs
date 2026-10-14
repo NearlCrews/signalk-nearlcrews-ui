@@ -458,6 +458,10 @@ describe("snui-check-consumer --runtime", () => {
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("--expect and --expose need --runtime.");
+
+    const single = checkConsumer(root, "--props", "{}");
+    expect(single.status).not.toBe(0);
+    expect(single.stderr).toContain("--props needs --runtime.");
     // Without them the same build passes with no React installed beside it.
     expect(checkConsumer(root).status).toBe(0);
   });

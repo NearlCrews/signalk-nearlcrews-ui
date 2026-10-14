@@ -116,3 +116,17 @@ export function assertPublicCssExport(exportsField, expectedTarget) {
     );
   }
 }
+
+/**
+ * Whether a module path from the Webpack stats is this repository's own built
+ * `file` under `distDirectory`. A substring match would let any dependency
+ * file ending in dist/index.js satisfy the index.js entry, so the path has to
+ * be the resolved file or, when the stats carry only the readable name, a
+ * relative path that reaches the dist directory directly.
+ */
+export function isPackageDistFile(path, file, distDirectory) {
+  return (
+    path === `${distDirectory.replaceAll("\\", "/")}/${file}` ||
+    path.replace(/^(?:\.\.?\/)+/, "") === `dist/${file}`
+  );
+}

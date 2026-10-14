@@ -6,7 +6,9 @@
  * network, so it runs from the weekly host contract workflow rather than from
  * validate. `--tag <tag>` reads another release, `--source <dir>` reads a local
  * checkout instead, and `--update` records what it read as the new baseline
- * once a reviewer has rechecked the facts a moved hash names.
+ * once a reviewer has rechecked the facts a moved hash names. `--baseline
+ * <path>` reads and writes another baseline file. `--update` needs a release
+ * tag, so it cannot combine with `--source`.
  */
 import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
@@ -18,6 +20,7 @@ import {
 } from "../bin/lib/cli-arguments.mjs";
 import { fetchOk } from "./lib/github-releases.mjs";
 import {
+  assertBaselineShape,
   compareLoaderHashes,
   LOADER_FACTS,
   latestSignalKReleaseTag,
@@ -40,6 +43,11 @@ const tagOption = readOption(argv, "--tag", "a tag");
 const shouldUpdate = readFlag(argv, "--update");
 if (sourceOption !== undefined && tagOption !== undefined) {
   throw new Error("Choose either --source or --tag, not both.");
+}
+if (shouldUpdate && sourceOption !== undefined) {
+  throw new Error(
+    "--update records a release tag in the baseline, so it cannot read a --source checkout. Use --tag or the latest release.",
+  );
 }
 
 const token = process.env.GITHUB_TOKEN;
@@ -69,7 +77,8 @@ if (shouldUpdate) {
       { cause },
     );
   }
-  const moved = compareLoaderHashes(baseline.hashes ?? {}, hashes);
+  assertBaselineShape(baseline);
+  const moved = compareLoaderHashes(baseline.hashes, hashes);
   if (moved.length > 0) {
     const details = bulletList(
       LOADER_FACTS.filter(({ name }) => moved.includes(name)).map(

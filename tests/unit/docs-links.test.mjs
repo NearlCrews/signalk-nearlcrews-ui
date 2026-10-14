@@ -12,6 +12,12 @@ describe("documentation link slugs", () => {
     expect(githubSlug("API, refs, and defaults")).toBe("api-refs-and-defaults");
   });
 
+  it("keeps underscores that are part of the heading text, as GitHub does", () => {
+    expect(githubSlug("`my_prop` option")).toBe("my_prop-option");
+    expect(githubSlug("snake_case_name")).toBe("snake_case_name");
+    expect(githubSlug("An _emphasized_ word")).toBe("an-emphasized-word");
+  });
+
   it("removes complete inline HTML tags while retaining their text", () => {
     expect(githubSlug("<span>Release <strong>checks</strong></span>")).toBe(
       "release-checks",
@@ -105,6 +111,39 @@ describe("documentation link destinations", () => {
       { destination: "#entry-point-sizes", image: false, line: 5 },
       { destination: "docs/guide.md", image: false, line: 6 },
     ]);
+  });
+
+  it("reads both the image and the link of an image inside a link", () => {
+    expect(
+      localDestinations(
+        [
+          "[![badge](docs/screenshots/badge.svg)](docs/guide.md) and [![remote](https://example.invalid/a.svg)](CHANGELOG.md)",
+          "[plain](docs/other.md)",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      { destination: "docs/screenshots/badge.svg", image: true, line: 1 },
+      { destination: "docs/guide.md", image: false, line: 1 },
+      { destination: "CHANGELOG.md", image: false, line: 1 },
+      { destination: "docs/other.md", image: false, line: 2 },
+    ]);
+  });
+
+  it("skips links and headings inside HTML comments", () => {
+    const markdown = [
+      "# Real",
+      "<!-- [hidden](docs/never.md) -->",
+      "<!--",
+      "## Hidden heading",
+      "[also hidden](docs/never.md)",
+      "-->",
+      "[kept](docs/guide.md) <!-- [inline](docs/never.md) -->",
+    ].join("\n");
+
+    expect(localDestinations(markdown)).toEqual([
+      { destination: "docs/guide.md", image: false, line: 7 },
+    ]);
+    expect([...markdownAnchors(markdown)]).toEqual(["real"]);
   });
 
   it("skips absolute URLs, protocol-relative URLs, inline code, and fenced examples", () => {

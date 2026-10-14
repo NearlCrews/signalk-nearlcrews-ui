@@ -87,6 +87,18 @@ describe("assertKnownOptions", () => {
     ).toThrow("--basline is not an option this check takes.");
   });
 
+  it("tells an option written --name=value to pass the value separately", () => {
+    expect(() =>
+      assertKnownOptions(["--root=./plugin"], known, { valued }),
+    ).toThrow(
+      "--root=./plugin is not an option this check takes. Write the value as a separate argument, such as --root <value>, not --root=./plugin.",
+    );
+    // A name the check does not take at all gets no such advice.
+    expect(() => assertKnownOptions(["--nope=1"], known)).not.toThrow(
+      "Write the value",
+    );
+  });
+
   it("names every unknown option once, and adds the hint it was given", () => {
     expect(() =>
       assertKnownOptions(

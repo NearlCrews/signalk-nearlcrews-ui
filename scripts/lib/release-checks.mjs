@@ -1,4 +1,4 @@
-import { githubApiHeaders } from "./github-releases.mjs";
+import { githubApiHeaders, REQUEST_TIMEOUT_MS } from "./github-releases.mjs";
 import { bulletList } from "./text.mjs";
 import { compareStableVersions, parseStableVersion } from "./version.mjs";
 
@@ -116,6 +116,27 @@ function stateOf({ conclusion, status }) {
 function describeCheck(check) {
   if (check === undefined) return "missing";
   return `${stateOf(check)} from ${check.app.slug}`;
+}
+
+/**
+ * Whether a required workflow still has a run on the release commit that has
+ * not completed, so the caller can wait for it instead of failing on a state
+ * that is about to settle.
+ */
+export function hasPendingReleaseWorkflow(
+  workflowRuns,
+  expectedSha,
+  requiredChecks = REQUIRED_RELEASE_CHECKS,
+) {
+  const workflowPaths = new Set(
+    requiredChecks.map(({ workflowPath }) => workflowPath),
+  );
+  return workflowRuns.some(
+    (run) =>
+      run.head_sha === expectedSha &&
+      workflowPaths.has(run.path) &&
+      run.status !== "completed",
+  );
 }
 
 export function assertSuccessfulReleaseChecks(
@@ -287,6 +308,7 @@ export async function fetchAllPages({
     target.searchParams.set("page", String(page));
 
     const response = await fetchPage(target, {
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
       headers: {
         ...githubApiHeaders(token),
         "User-Agent": "signalk-nearlcrews-ui-release-check",

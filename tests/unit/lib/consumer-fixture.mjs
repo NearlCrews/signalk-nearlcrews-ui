@@ -114,7 +114,7 @@ export function remoteAssets(overrides = {}) {
  * reference: the real sheet declares every public token and nothing else.
  */
 const TOKENS_CSS = `.snui-tokens {
-  --snui-color-border: #7c8797;
+  --snui-color-border: #758090;
   --snui-color-text-muted: #596273;
   --snui-space-2: 0.5rem;
 }

@@ -100,8 +100,17 @@ export function assertKnownOptions(
   // only stray because the option is.
   if (unknown.size > 0) {
     const subject = unknown.size === 1 ? "is not an option" : "are not options";
+    // An option written --name=value is a known option in a form that is not
+    // taken, which reads as a typo unless the message says what to change.
+    const joined = [...unknown].filter((argument) =>
+      known.includes(argument.split("=", 1)[0]),
+    );
+    const form =
+      joined.length === 0
+        ? ""
+        : ` Write the value as a separate argument, such as ${joined[0].split("=", 1)[0]} <value>, not ${joined[0]}.`;
     throw new Error(
-      `${joinNames([...unknown])} ${subject} this check takes.${hint}`,
+      `${joinNames([...unknown])} ${subject} this check takes.${form}${hint}`,
     );
   }
   if (stray.size > 0) {

@@ -63,4 +63,17 @@ describe("GitHub release lookups", () => {
       "GET https://api.github.com/repos/owner/repo/releases/latest answered 404 Not Found.",
     );
   });
+
+  it("gives every request a timeout signal unless the caller brings one", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchOk("https://example.test/a");
+    const own = new AbortController().signal;
+    await fetchOk("https://example.test/b", { signal: own });
+
+    expect(fetchMock.mock.calls[0][1].signal).toBeInstanceOf(AbortSignal);
+    expect(fetchMock.mock.calls[0][1].signal).not.toBe(own);
+    expect(fetchMock.mock.calls[1][1].signal).toBe(own);
+  });
 });

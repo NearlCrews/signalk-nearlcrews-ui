@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
@@ -188,6 +188,9 @@ describe("hashing and comparing", () => {
       ["b"],
     );
     expect(compareLoaderHashes({ a: "1" }, { a: "1", c: "4" })).toEqual(["c"]);
+    expect(compareLoaderHashes({ a: "1", gone: "5" }, { a: "1" })).toEqual([
+      "gone",
+    ]);
   });
 });
 
@@ -213,25 +216,23 @@ describe("finding the latest release", () => {
 });
 
 describe("check-host-loader", () => {
-  it("records a baseline, passes against it, and fails when a fact moves", () => {
+  it("passes against a recorded baseline and fails when a fact moves", async () => {
     const source = checkout();
     const baseline = join(source, "baseline.json");
 
-    const update = runScript(
-      "--source",
-      source,
-      "--baseline",
+    writeFileSync(
       baseline,
-      "--update",
+      JSON.stringify({
+        hashes: await readLoaderSources({ source }),
+        tag: "v2.33.0",
+      }),
     );
-    expect(update.status, update.stderr).toBe(0);
-    const recorded = JSON.parse(readFileSync(baseline, "utf8"));
-    expect(recorded.tag).toBe("local checkout");
-    expect(Object.keys(recorded.hashes).sort()).toEqual(FACT_NAMES);
 
     const same = runScript("--source", source, "--baseline", baseline);
     expect(same.status, same.stderr).toBe(0);
-    expect(same.stdout).toContain("unchanged");
+    expect(same.stdout).toContain(
+      "unchanged since the baseline recorded at v2.33.0",
+    );
 
     const moved = checkout({
       ...SOURCES,
@@ -242,6 +243,24 @@ describe("check-host-loader", () => {
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("toSafeModuleId");
     expect(result.stderr).toContain("npm run host-contract:loader:update");
+  });
+
+  it("refuses to record a local checkout as the baseline", () => {
+    const result = runScript("--source", checkout(), "--update");
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("cannot read a --source checkout");
+  });
+
+  it("reads a baseline without a tag or hashes as malformed", () => {
+    const source = checkout();
+    const baseline = join(source, "baseline.json");
+    writeFileSync(baseline, JSON.stringify({ tag: "v2.33.0" }));
+
+    const result = runScript("--source", source, "--baseline", baseline);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("has no tag or hashes");
   });
 
   it("refuses an option it does not take", () => {

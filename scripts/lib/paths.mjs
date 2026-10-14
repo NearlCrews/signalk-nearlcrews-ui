@@ -5,10 +5,14 @@
  * directory, so `npm run` from a subdirectory and a direct `node scripts/...`
  * invocation read the same files.
  */
-import { readdir, readFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { collectFiles } from "../../bin/lib/file-walk.mjs";
+import { readJson } from "../../bin/lib/json-file.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -25,30 +29,7 @@ export function repositoryPath(...segments) {
   return join(repositoryRoot, ...segments);
 }
 
-/**
- * Every file under `directory` whose name `matches`, depth first.
- *
- * `skipDirectories` names the directory entries the walk never descends into,
- * by bare name at any depth. Written once here because more than one check
- * walks the tree for one kind of file, and a second copy is a second place to
- * teach about a directory that must be skipped. Sibling directories are read
- * together, so the walk costs the depth of the tree rather than its size.
- */
-export async function collectFiles(directory, options) {
-  const { matches, skipDirectories } = options;
-  const entries = await readdir(directory, { withFileTypes: true });
-  const found = await Promise.all(
-    entries.map(async (entry) => {
-      const entryPath = join(directory, entry.name);
-      if (entry.isDirectory()) {
-        if (skipDirectories?.has(entry.name)) return [];
-        return collectFiles(entryPath, options);
-      }
-      return entry.isFile() && matches(entry.name) ? [entryPath] : [];
-    }),
-  );
-  return found.flat();
-}
+export { collectFiles, readJson };
 
 /**
  * Directories no Markdown gate reads: tool state, build output, reports, and
@@ -82,8 +63,17 @@ export async function collectMarkdownFiles(directory) {
   return files;
 }
 
-export async function readJson(path) {
-  return JSON.parse(await readFile(path, "utf8"));
+/**
+ * Runs `work` with a fresh temporary directory named from `prefix` and removes
+ * it afterward, whether `work` returns or throws.
+ */
+export async function withTemporaryDirectory(prefix, work) {
+  const directory = await mkdtemp(join(tmpdir(), prefix));
+  try {
+    return await work(directory);
+  } finally {
+    await rm(directory, { force: true, recursive: true });
+  }
 }
 
 export function readPackageJson() {

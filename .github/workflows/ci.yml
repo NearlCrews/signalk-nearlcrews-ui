@@ -159,7 +159,11 @@ jobs:
     # proven on the two platforms where a POSIX assumption shows. Windows
     # blocks a release; macOS reports without blocking, because it is not a
     # required check for main, so a macOS-only break is visible here rather
-    # than found alone on a laptop. Branch protection names the rendered job,
+    # than found alone on a laptop. Only the Node 24 floor runs here; the Node
+    # 22 floor is proven on Linux by the Node matrix job. The tar and symlink
+    # behavior this job guards belongs to the platform rather than to the Node
+    # major, and a Node 22 lane per platform would double the slowest runners
+    # and rename the required checks. Branch protection names the rendered job,
     # so changing a label means updating the required checks in the same pull
     # request.
     name: ${{ matrix.label }} package validation

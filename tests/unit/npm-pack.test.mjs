@@ -51,7 +51,7 @@ describe("npm executable resolution", () => {
     vi.stubEnv("npm_execpath", value);
 
     expect(() => runNpmPack([])).toThrow(
-      "Package validation must run through npm so npm_execpath is available.",
+      "Start it with `npm run <script>` rather than `node`.",
     );
   });
 

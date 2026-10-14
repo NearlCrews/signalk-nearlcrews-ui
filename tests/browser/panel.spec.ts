@@ -922,7 +922,12 @@ test("does not steal focus when confirmation busy state changes", async ({
   await toggle.click();
 
   await expect(toggle).toBeFocused();
-  await expect(confirmation).toHaveAttribute("aria-busy", "true");
+  // Busy marks the Confirm action, not the region: a busy region would ask a
+  // screen reader to hold back the whole confirmation, its question included.
+  await expect(
+    confirmation.getByRole("button", { name: "Reset" }),
+  ).toHaveAttribute("aria-busy", "true");
+  await expect(confirmation).not.toHaveAttribute("aria-busy");
 });
 
 test("retains focus when an internal confirmation action becomes busy", async ({
@@ -937,14 +942,20 @@ test("retains focus when an internal confirmation action becomes busy", async ({
   // Busy blocks Confirm through aria-disabled, so it stays in the tab order
   // and focus is never destroyed and chased.
   await expect(confirm).toBeFocused();
-  await expect(confirmation).toHaveAttribute("aria-busy", "true");
+  await expect(confirm).toHaveAttribute("aria-busy", "true");
+  await expect(confirmation).not.toHaveAttribute("aria-busy");
 });
 
 test("focuses an initially busy confirmation container", async ({ page }) => {
   await openPanel(page, "?busy=1");
   const confirmation = await openResetConfirmation(page);
   await expect(confirmation).toBeFocused();
-  await expect(confirmation).toHaveAttribute("aria-busy", "true");
+  // Busy marks the Confirm action, not the region: a busy region would ask a
+  // screen reader to hold back the whole confirmation, its question included.
+  await expect(
+    confirmation.getByRole("button", { name: "Reset" }),
+  ).toHaveAttribute("aria-busy", "true");
+  await expect(confirmation).not.toHaveAttribute("aria-busy");
 
   // Busy never closes the route out: Cancel keeps its enabled presentation
   // and Escape still dismisses the region.

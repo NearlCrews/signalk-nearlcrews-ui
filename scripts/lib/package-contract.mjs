@@ -1,6 +1,7 @@
 import { PACKAGE_NAME } from "../../bin/lib/consumer-checks.mjs";
 import { escapeRegExp } from "../../bin/lib/regexp.mjs";
 import { localDestinations } from "./docs-links.mjs";
+import { THEME_IDS } from "./themes.mjs";
 
 const PACKAGE_DESCRIPTION =
   "Accessible, theme-aware React primitives for Signal K administration panels.";
@@ -11,6 +12,13 @@ const PACKAGE_DESCRIPTION =
  * Signal K server itself declares, so it matches the server's `>=22`. The
  * precise development floors live in devEngines, which npm applies only to
  * this repository's own contributors.
+ *
+ * The range is deliberately not raised to the 22.12 that `require` of an ES
+ * module needs. Panels use this package through a browser bundle, so only
+ * Node-side tooling that `require`s an entry is affected: on Node 22.0 to
+ * 22.11 npm reports no engines mismatch and that `require` fails. The README,
+ * the API reference, and the migration guide state the 22.12 floor for the
+ * CommonJS path, and a stricter `engines` would be a consumer-facing change.
  */
 const ENGINES_NODE_RANGE = ">=22";
 const DEV_NODE_RANGE = "^22.22.2 || ^24.15.0 || ^26.0.0";
@@ -32,7 +40,7 @@ const EXPECTED_KEYWORDS = Object.freeze([
  * script writes one image per theme, the README pins each, and the tarball
  * must carry each, so all three read this list.
  */
-export const SHOWCASE_THEMES = Object.freeze(["light", "dark", "night"]);
+export const SHOWCASE_THEMES = THEME_IDS;
 
 /** The committed showcase image for `theme`, from the repository root. */
 export function showcaseScreenshotPath(theme) {

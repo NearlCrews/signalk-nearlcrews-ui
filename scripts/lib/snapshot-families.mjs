@@ -32,7 +32,10 @@ export function snapshotDirectory(spec) {
  * A screenshot name: any quoted `.png` literal in a snapshot spec. Names are
  * read as literals so a spec that builds them at run time fails loudly here
  * rather than leaving its images unchecked; a spec that loops over themes
- * keeps its names in a literal table.
+ * keeps its names in a literal table. That is why the pattern cannot be
+ * narrowed to the arguments of `matchBaseline`: those arguments are table
+ * lookups, and the table is where the literal lives. A `.png` literal that is
+ * not a screenshot fails closed, as a baseline no family has.
  */
 const SNAPSHOT_NAME = /["'`]([\w.-]+\.png)["'`]/g;
 
@@ -55,6 +58,23 @@ const PROJECT_BY_SNAPSHOT = new Map([
   ["panel-mobile-coarse-light.png", "mobile-chromium"],
   ["panel-native-controls-webkit.png", "webkit"],
 ]);
+
+/** The Playwright project that takes every screenshot not named in the map above. */
+const DEFAULT_SNAPSHOT_PROJECT = "chromium";
+
+/**
+ * The platform segment of a hosted family's file names. Playwright fills
+ * `{platform}` from the runner, and every hosted family is a Linux one; the
+ * workflow contract test holds playwright.config.ts to this spelling.
+ */
+export const SNAPSHOT_PLATFORM = "linux";
+
+/** Every Playwright project that takes at least one screenshot. */
+export function snapshotProjects() {
+  return [
+    ...new Set([DEFAULT_SNAPSHOT_PROJECT, ...PROJECT_BY_SNAPSHOT.values()]),
+  ].sort();
+}
 
 export function hostedSnapshotVariants(ciWorkflowSource) {
   const variants = readScalarValues(ciWorkflowSource, "snapshot_variant");
@@ -90,14 +110,14 @@ export function collectSnapshotNames(specSource) {
 }
 
 export function snapshotProject(snapshot) {
-  return PROJECT_BY_SNAPSHOT.get(snapshot) ?? "chromium";
+  return PROJECT_BY_SNAPSHOT.get(snapshot) ?? DEFAULT_SNAPSHOT_PROJECT;
 }
 
 /** File names one complete family holds, in the Playwright naming scheme. */
 export function expectedSnapshotFiles(specSource, variant) {
   return collectSnapshotNames(specSource).map((snapshot) => {
     const stem = snapshot.replace(/\.png$/, "");
-    return `${stem}-${snapshotProject(snapshot)}-linux-${variant}.png`;
+    return `${stem}-${snapshotProject(snapshot)}-${SNAPSHOT_PLATFORM}-${variant}.png`;
   });
 }
 
@@ -114,7 +134,7 @@ export function missingSnapshotFiles(specSource, variant, presentFiles) {
  */
 export function orphanSnapshotFiles(specSource, variant, presentFiles) {
   const expected = new Set(expectedSnapshotFiles(specSource, variant));
-  const suffix = `-linux-${variant}.png`;
+  const suffix = `-${SNAPSHOT_PLATFORM}-${variant}.png`;
   return presentFiles
     .filter((file) => file.endsWith(suffix) && !expected.has(file))
     .sort();

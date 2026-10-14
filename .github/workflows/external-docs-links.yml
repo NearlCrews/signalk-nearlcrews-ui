@@ -25,7 +25,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: external-docs-links-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -59,10 +59,16 @@ jobs:
         # pull requests only; the weekly run still checks them after release.
         run: |
           version="$(node -p "require('./package.json').version")"
-          excludes=()
+          # These hosts answer an automated client with 403 whatever the link
+          # is, so they are left out by name; accepting 403 everywhere would
+          # also hide a link that was blocked or removed.
+          excludes=(
+            --exclude "^https://www\\.npmjs\\.com/"
+            --exclude "^https://buymeacoffee\\.com/"
+          )
           if [ "$EVENT_NAME" = "pull_request" ]; then
             escaped="${version//./\\.}"
-            excludes=(
+            excludes+=(
               --exclude "compare/v${escaped}\\.\\.\\.HEAD"
               --exclude "compare/v[0-9.]+\\.\\.\\.v${escaped}"
               --exclude "unpkg\\.com/signalk-nearlcrews-ui@${escaped}/"
@@ -74,5 +80,5 @@ jobs:
             --max-retries 2 \
             --retry-wait-time 2 \
             --timeout 20 \
-            --accept "100..=103,200..=299,403,429" \
+            --accept "100..=103,200..=299,429" \
             "./**/*.md"
