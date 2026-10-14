@@ -1,5 +1,7 @@
 import { versionedAnimationName } from "../version.js";
 import {
+  OVERLAY_SLIDE_LONG,
+  OVERLAY_SLIDE_SHORT,
   overlayFadeTransition,
   RAISED_PAINT_DECLARATIONS,
   RAISED_SURFACE_TOKEN_DECLARATIONS,
@@ -10,6 +12,7 @@ import {
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 import {
+  forcedColorsToneBarRule,
   OVERLAY_TONE_ACCENT_BAR_DECLARATIONS,
   toneAccentBarRules,
   toneDescendantColorRules,
@@ -18,6 +21,12 @@ import {
 
 /** The keyframe name the toast card animates in with. */
 const TOAST_ENTER_ANIMATION = versionedAnimationName("toast-enter");
+
+/*
+ * How far the tone column drops so the shaped dot sits on the title's first
+ * line rather than at the top of its line box.
+ */
+const TONE_DOT_NUDGE = "0.1875rem";
 
 /**
  * The custom property each measured host length is written to, by the name
@@ -51,7 +60,7 @@ export const TOAST_STYLES: StyleModule = {
 @keyframes ${TOAST_ENTER_ANIMATION} {
   from {
     opacity: 0;
-    transform: translateY(0.5rem);
+    transform: translateY(${OVERLAY_SLIDE_LONG});
   }
 }
 
@@ -129,7 +138,7 @@ ${overlayFadeTransition("fast")}
 
 .snui-toast[data-exiting] {
   opacity: 0;
-  transform: translateY(0.25rem);
+  transform: translateY(${OVERLAY_SLIDE_SHORT});
 }
 
 ${toneAccentBarRules("snui-toast")}
@@ -139,7 +148,7 @@ ${toneAccentBarRules("snui-toast")}
   display: inline-flex;
   flex: none;
   align-items: center;
-  padding-block-start: 0.1875rem;
+  padding-block-start: ${TONE_DOT_NUDGE};
   line-height: 1;
 }
 
@@ -184,13 +193,16 @@ ${toneDotShapeRules("snui-toast", "snui-toast__tone-dot")}
 
 @media (forced-colors: active) {
   /*
-   * The tone border survives as a system color, and the shaped dot is
-   * reconstructed with CanvasText, so tone still does not depend on hue.
+   * The tone bar is rebuilt below in a system color of its own, and the
+   * shaped dot is reconstructed with CanvasText, so tone still does not
+   * depend on hue.
    */
   .snui-toast__tone-dot {
     background: CanvasText;
     forced-color-adjust: none;
   }
+
+${forcedColorsToneBarRule("snui-toast")}
 }
 `)}`,
 };

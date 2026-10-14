@@ -11,11 +11,10 @@ import { createEmitter } from "../utils/emitter.js";
 import { packageError } from "../utils/errors.js";
 import {
   isThemeChoice,
+  THEME_CHANGE_EVENT,
   THEME_STORAGE_KEY,
   type ThemeChoice,
 } from "./contract.js";
-
-const THEME_CHANGE_EVENT = "signalk-nearlcrews-ui-theme-change";
 
 type StoredTheme = ThemeChoice | null | undefined;
 
@@ -73,11 +72,12 @@ let currentTheme: ThemeChoice = "auto";
 let seededTheme: ThemeChoice | undefined;
 
 /**
- * The theme a panel shows when shared storage holds none: the seed a consumer
- * gave through `defaultTheme`, else Auto, which follows a host theme marker.
+ * The theme a panel shows when shared storage holds none: the seed a live
+ * panel gave through `defaultTheme`, else the seed of the panel asking, else
+ * Auto, which follows a host theme marker.
  */
-function fallbackTheme(): ThemeChoice {
-  return seededTheme ?? "auto";
+function fallbackTheme(ownSeed?: ThemeChoice): ThemeChoice {
+  return seededTheme ?? ownSeed ?? "auto";
 }
 
 /**
@@ -87,7 +87,9 @@ function fallbackTheme(): ThemeChoice {
  * the preference is one document-wide value: two panels seeding different
  * themes would otherwise trade the theme back and forth as each one mounts. A
  * stored preference always wins over a seed, and seeding writes nothing, so
- * the operator's own choice is never manufactured for them.
+ * the operator's own choice is never manufactured for them. Only a subscribe
+ * seeds, which React runs for a committed panel alone, so a render React
+ * throws away leaves no seed behind for the next panel to inherit.
  */
 function seedTheme(theme: ThemeChoice | undefined): void {
   seededTheme ??= theme;
@@ -148,19 +150,18 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-function getSnapshot(): ThemeChoice {
-  // With no subscriber the store hears no events, so a first render reads the
-  // shared value directly instead of trusting a snapshot from an earlier mount.
-  // Unreadable or unrecognized storage starts at the fallback here, exactly as
-  // a fresh panel always has; only a live panel keeps its theme through those.
+/**
+ * The theme a panel seeded with `ownSeed` reads. With no subscriber the store
+ * hears no events, so a first render reads the shared value directly instead
+ * of trusting a snapshot from an earlier mount. Unreadable or unrecognized
+ * storage starts at the fallback here, exactly as a fresh panel always has;
+ * only a live panel keeps its theme through those.
+ */
+function snapshotFor(ownSeed: ThemeChoice | undefined): ThemeChoice {
   if (themeListeners.size() === 0) {
-    currentTheme = readSharedTheme() ?? fallbackTheme();
+    currentTheme = readSharedTheme() ?? fallbackTheme(ownSeed);
   }
   return currentTheme;
-}
-
-function getServerSnapshot(): ThemeChoice {
-  return fallbackTheme();
 }
 
 function setTheme(nextTheme: ThemeChoice): void {
@@ -201,26 +202,30 @@ export function ThemeProvider({
   children,
   defaultTheme,
 }: ThemeProviderProps): React.JSX.Element {
-  // Latched before the first snapshot is read, so the panel paints the seeded
-  // theme rather than flashing the fallback and correcting itself.
-  seedTheme(defaultTheme);
-  // Unsubscribing gives the seed back, and React subscribes again without
-  // rendering, under StrictMode and whenever a retained CollapsibleSection
-  // reveals the panel, so each subscription restores the seed first. It is the
-  // seed the panel mounted with, held in a subscribe function that never
-  // changes: a new identity would resubscribe on a changed prop and move a
-  // panel that is already showing a theme.
-  const [subscribeSeeded] = useState(() => (listener: () => void) => {
-    seedTheme(defaultTheme);
-    return subscribe(listener);
-  });
+  // The first render reads the panel's own seed through the snapshot, so the
+  // panel paints the seeded theme rather than flashing the fallback, without
+  // writing the shared seed before React has committed anything. The seed is
+  // recorded when React subscribes, and unsubscribing gives it back; React
+  // subscribes again without rendering, under StrictMode and whenever a
+  // retained CollapsibleSection reveals the panel, so each subscription
+  // restores it first. It is the seed the panel mounted with, held in store
+  // functions that never change: a new identity would resubscribe on a changed
+  // prop and move a panel that is already showing a theme.
+  const [store] = useState(() => ({
+    getServerSnapshot: (): ThemeChoice => fallbackTheme(defaultTheme),
+    getSnapshot: (): ThemeChoice => snapshotFor(defaultTheme),
+    subscribe: (listener: () => void): (() => void) => {
+      seedTheme(defaultTheme);
+      return subscribe(listener);
+    },
+  }));
   // An unresolved preference resolves to the seed, else "auto", which follows
   // an explicit host theme and otherwise uses the library's light fallback.
   // Operating-system preferences are reserved for the explicit "system" choice.
   const theme = useSyncExternalStore(
-    subscribeSeeded,
-    getSnapshot,
-    getServerSnapshot,
+    store.subscribe,
+    store.getSnapshot,
+    store.getServerSnapshot,
   );
   const value = useMemo(() => ({ theme, setTheme }), [theme]);
 

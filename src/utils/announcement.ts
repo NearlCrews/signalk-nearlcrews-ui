@@ -1,3 +1,5 @@
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
+
 export type AnnouncementMode = "off" | "polite" | "assertive";
 
 /**
@@ -153,7 +155,7 @@ export interface MessageLogAttributes {
 export function messageLogAttributes(mode: SpokenMode): MessageLogAttributes {
   return {
     "aria-atomic": "false",
-    className: "snui-visually-hidden",
+    className: VISUALLY_HIDDEN_CLASS,
     role: ANNOUNCEMENT_ROLES[mode],
   };
 }

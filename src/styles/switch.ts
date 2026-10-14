@@ -4,7 +4,9 @@ import {
   FIELD_DESCRIPTION_DECLARATIONS,
   FIELD_ERROR_DECLARATIONS,
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
+  FORCED_COLORS_INVALID_DECLARATIONS,
   focusRingDeclarations,
+  INVALID_OUTLINE_DECLARATIONS,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
@@ -72,8 +74,17 @@ export const SWITCH_STYLES: StyleModule = {
     background-color var(--snui-transition-fast);
 }
 
-.snui-switch__button[data-hovered]:not([data-disabled]) .snui-switch__track {
+.snui-switch__button[data-hovered]:not([data-disabled], [data-readonly], [data-invalid]) .snui-switch__track {
   border-color: var(--snui-color-accent-fill);
+}
+
+/*
+ * A read-only switch answers a press with nothing, so it drops the hover
+ * accent and says so to the pointer, as a read-only segmented control does.
+ * Its position stays at full strength: it is still the reading.
+ */
+.snui-switch__button[data-readonly] {
+  cursor: not-allowed;
 }
 
 .snui-switch__button[data-selected] .snui-switch__track {
@@ -116,6 +127,19 @@ export const SWITCH_STYLES: StyleModule = {
 ${focusRingDeclarations("outset", true)}
 }
 
+/*
+ * An invalid switch takes the danger border and the dashed shape every
+ * invalid value control carries. A selected one keeps its accent fill, so the
+ * position still reads, and the border and the dashes mark the refusal.
+ */
+.snui-switch__button[data-invalid] .snui-switch__track {
+  border-color: var(--snui-color-danger);
+}
+
+.snui-switch__button[data-invalid]:not([data-focus-visible]) .snui-switch__track {
+${INVALID_OUTLINE_DECLARATIONS}
+}
+
 .snui-switch__button[data-disabled] {
 ${DISABLED_DECLARATIONS}
 }
@@ -153,7 +177,22 @@ ${FIELD_ERROR_DECLARATIONS}
 }
 
 @media (forced-colors: active) {
-  .snui-switch__track {
+  /*
+   * The invalid outline the root sheet reconstructs for every field, which
+   * stands aside while the focus ring owns the outline.
+   */
+  .snui-switch__button[data-invalid]:not([data-focus-visible]) .snui-switch__track {
+${FORCED_COLORS_INVALID_DECLARATIONS}
+  }
+
+  /*
+   * The track opts out of forced colors, so the themed danger border has to
+   * be restated in the system palette. The rule weighs as much as the
+   * selected one and comes first, so a selected invalid track keeps its
+   * Highlight border and the dashed outline carries the refusal.
+   */
+  .snui-switch__track,
+  .snui-switch__button[data-invalid] .snui-switch__track {
     forced-color-adjust: none;
     border-color: ButtonText;
     background: Canvas;
@@ -201,7 +240,7 @@ ${FIELD_ERROR_DECLARATIONS}
 ${FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS}
   }
 
-  .snui-switch__button[data-hovered]:not([data-disabled]) .snui-switch__track {
+  .snui-switch__button[data-hovered]:not([data-disabled], [data-readonly], [data-invalid]) .snui-switch__track {
     border-color: Highlight;
   }
 }

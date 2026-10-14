@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  layoutMatches,
   observePanelViewport,
   readViewportEdges,
   roundedLayoutValue,
@@ -52,6 +53,25 @@ describe("roundedLayoutValue", () => {
     expect(roundedLayoutValue(12.3456)).toBe(12.35);
     expect(roundedLayoutValue(12.344)).toBe(12.34);
     expect(roundedLayoutValue(-0.004)).toBe(-0);
+  });
+});
+
+describe("layoutMatches", () => {
+  it("agrees only when every member agrees", () => {
+    expect(layoutMatches({ left: 4, top: 8 }, { left: 4, top: 8 })).toBe(true);
+    expect(layoutMatches({ left: 4, top: 8 }, { left: 4, top: 9 })).toBe(false);
+  });
+
+  it("treats a member only one side carries as a mismatch", () => {
+    // A measurement that gained a member must be written, whichever side the
+    // member is on.
+    const before: { left: number; docked?: boolean } = { left: 4 };
+    const after: { left: number; docked?: boolean } = {
+      docked: true,
+      left: 4,
+    };
+    expect(layoutMatches(before, after)).toBe(false);
+    expect(layoutMatches(after, before)).toBe(false);
   });
 });
 

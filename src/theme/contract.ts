@@ -6,6 +6,20 @@
 export const THEME_STORAGE_KEY = "signalk-nearlcrews-ui.theme.v1";
 
 /**
+ * The window event a copy of the library dispatches in its own document after
+ * it stores a theme, with the choice as `detail`, because the storage event
+ * never fires in the document that wrote the value. It belongs to the same
+ * cross-copy contract as the storage key, and every published copy dispatches
+ * and listens under exactly this name, so the name is frozen as it is:
+ * renaming it, even to add a version suffix, would cut a new copy off from
+ * every older one on the page. A detail of another shape would take a new
+ * name beside this one.
+ *
+ * @internal
+ */
+export const THEME_CHANGE_EVENT = "signalk-nearlcrews-ui-theme-change";
+
+/**
  * The themes a panel can be set to, in the order the selector offers them.
  *
  * - `"auto"` follows a host theme marker on an ancestor, and uses the Light

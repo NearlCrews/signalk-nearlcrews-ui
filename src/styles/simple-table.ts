@@ -1,5 +1,6 @@
 import {
   TABLE_CAPTION_DECLARATIONS,
+  TABLE_CELL_MIN_WIDTH,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
@@ -63,7 +64,7 @@ ${visuallyHiddenDeclarations()}
  */
 .snui-table-scroll .snui-table th,
 .snui-table-scroll .snui-table td {
-  min-width: var(--snui-table-cell-min, 6rem);
+  min-width: var(--snui-table-cell-min, ${TABLE_CELL_MIN_WIDTH});
 }
 
 .snui-table th {

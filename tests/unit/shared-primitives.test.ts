@@ -45,6 +45,7 @@ import {
   BUTTON_ACTIVATION_KEYS,
   blockedActivationProps,
   CHECKBOX_ACTIVATION_KEYS,
+  reportBlockedReason,
   resolveAriaDisabled,
 } from "../../src/utils/activation.js";
 import {
@@ -81,7 +82,10 @@ import {
   revealAndFocus,
   revealElement,
 } from "../../src/utils/focus.js";
-import { observeFormReset } from "../../src/utils/form-reset.js";
+import {
+  afterMicrotaskIfConnected,
+  observeFormReset,
+} from "../../src/utils/form-reset.js";
 import {
   formatRelativeAge,
   RELATIVE_AGE_EN,
@@ -89,15 +93,21 @@ import {
 } from "../../src/utils/format-relative-age.js";
 import { createFormatterCache } from "../../src/utils/intl.js";
 import {
-  DEFAULT_DISMISS_LABEL,
-  DEFAULT_HIDE_LABEL,
-  DEFAULT_LOADING_LABEL,
-  DEFAULT_SHOW_LABEL,
   hasText,
+  resolveBundledContent,
+  resolveBundledLabels,
   resolveLabel,
   trimmedText,
 } from "../../src/utils/labels.js";
 import { requireNonEmptyUniqueOptions } from "../../src/utils/options.js";
+import { overlayZIndex } from "../../src/utils/overlay-layer.js";
+import {
+  DEFAULT_DISMISS_LABEL,
+  DEFAULT_HIDE_LABEL,
+  DEFAULT_LOADING_LABEL,
+  DEFAULT_SHOW_LABEL,
+  PANEL_LABEL_DEFAULTS,
+} from "../../src/utils/panel-label-defaults.js";
 import { definedProps } from "../../src/utils/props.js";
 import {
   REACHABILITY_STATUS,
@@ -115,7 +125,7 @@ import {
   reactBelowFloor,
   reactFloorMessage,
 } from "../../src/utils/react-version.js";
-import { nextRovingIndex } from "../../src/utils/roving.js";
+import { nextRovingIndex, rovingKeyAxis } from "../../src/utils/roving.js";
 import {
   resolveSelectAllState,
   selectAllTarget,
@@ -125,13 +135,14 @@ import {
   MAX_TIMER_DELAY_MS,
   subscribeToClock,
 } from "../../src/utils/shared-clock.js";
-import { formatCount, joinList } from "../../src/utils/text.js";
+import { asSentence, formatCount, joinList } from "../../src/utils/text.js";
 import {
   isSemanticTone,
   TONE_GLYPHS,
   TONE_LABELS,
 } from "../../src/utils/tone.js";
 import { SPACE_SCALE } from "../../src/utils/variants.js";
+import { blurBeforeWheel } from "../../src/utils/wheel-guard.js";
 import { windowGlobal } from "../../src/utils/window-global.js";
 import { moduleStyles, ruleBody, SEMANTIC_TONES } from "../css-helpers.js";
 import { stubReducedMotion } from "../helpers.js";
@@ -280,6 +291,26 @@ describe("requireNonEmptyUniqueOptions", () => {
     ).toThrow(
       'signalk-nearlcrews-ui: CheckboxGroup option values must be unique; received duplicate value "port".',
     );
+  });
+});
+
+describe("asSentence", () => {
+  it("adds a stop only to text that does not close a sentence", () => {
+    expect(asSentence("Pump stopped")).toBe("Pump stopped.");
+    expect(asSentence("Caution!")).toBe("Caution!");
+    expect(asSentence("Still running?")).toBe("Still running?");
+  });
+
+  it("reads a stop inside a closing quote or bracket as the sentence's own", () => {
+    expect(asSentence('Reported "Pump failed."')).toBe(
+      'Reported "Pump failed."',
+    );
+    expect(asSentence("Reported \u201CPump failed.\u201D")).toBe(
+      "Reported \u201CPump failed.\u201D",
+    );
+    expect(asSentence("(Retrying now.)")).toBe("(Retrying now.)");
+    // A closer with no stop inside still takes one.
+    expect(asSentence("Reported (twice)")).toBe("Reported (twice).");
   });
 });
 
@@ -540,9 +571,69 @@ describe("blockedActivationProps", () => {
     expect(props["aria-disabled"]).toBeUndefined();
   });
 
-  it("blocks Enter and both spellings of Space on a button", () => {
-    expect([...BUTTON_ACTIVATION_KEYS]).toEqual(["Enter", " ", "Spacebar"]);
-    expect([...CHECKBOX_ACTIVATION_KEYS]).toEqual([" ", "Spacebar"]);
+  it("blocks Enter and Space on a button, and Space on a checkbox", () => {
+    // Every engine at the support floor reports Space as " ".
+    expect([...BUTTON_ACTIVATION_KEYS]).toEqual(["Enter", " "]);
+    expect([...CHECKBOX_ACTIVATION_KEYS]).toEqual([" "]);
+  });
+});
+
+describe("reportBlockedReason", () => {
+  const check = {
+    blocked: false,
+    component: "Button",
+    describedBy: undefined,
+    hasReason: false,
+    nativeDisabled: false,
+    noun: "button",
+  } as const;
+
+  it("asks once for a reason when a control is held with nothing to explain it", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const held = { ...check, blocked: true, name: "Save draft once" };
+
+    reportBlockedReason(held);
+    reportBlockedReason(held);
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]?.[0]).toContain(
+      'Button "Save draft once" is blocked with ariaDisabled but says nothing about why.',
+    );
+  });
+
+  it("stays quiet for a held control a reason or a description explains", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    reportBlockedReason({
+      ...check,
+      blocked: true,
+      hasReason: true,
+      name: "Save explained",
+    });
+    reportBlockedReason({
+      ...check,
+      blocked: true,
+      describedBy: "save-help",
+      name: "Save described",
+    });
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it("warns that a reason beside native disabled is never reached", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    reportBlockedReason({
+      ...check,
+      hasReason: true,
+      name: "Save unreachable",
+      nativeDisabled: true,
+    });
+
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]?.[0]).toContain(
+      "has a disabledReason beside native disabled",
+    );
   });
 });
 
@@ -668,6 +759,24 @@ describe("label text", () => {
     expect(DEFAULT_HIDE_LABEL).toBe("Hide");
   });
 
+  it("keeps every default in the one table the bundle publishes", () => {
+    expect(PANEL_LABEL_DEFAULTS.button.loading).toBe(DEFAULT_LOADING_LABEL);
+    expect(PANEL_LABEL_DEFAULTS.banner.dismiss).toBe(DEFAULT_DISMISS_LABEL);
+    expect(PANEL_LABEL_DEFAULTS.secretInput).toEqual({
+      hide: DEFAULT_HIDE_LABEL,
+      show: DEFAULT_SHOW_LABEL,
+    });
+    // The React-free formatter reads its fallback from the same table.
+    expect(formatRelativeAge(Number.NaN)).toBe(
+      PANEL_LABEL_DEFAULTS.relativeAge.fallback,
+    );
+  });
+
+  it("lists the label groups in alphabetical order", () => {
+    const groups = Object.keys(PANEL_LABEL_DEFAULTS);
+    expect(groups).toEqual([...groups].sort());
+  });
+
   it("reads blank text as absent", () => {
     expect(hasText(undefined)).toBe(false);
     expect(hasText("   ")).toBe(false);
@@ -687,6 +796,31 @@ describe("resolveLabel", () => {
     );
     expect(resolveLabel("   ", DEFAULT_LOADING_LABEL)).toBe(
       DEFAULT_LOADING_LABEL,
+    );
+  });
+});
+
+describe("resolveBundledContent", () => {
+  it("takes rendered content first, then the bundle, then the default", () => {
+    const override = createElement("strong", null, "Close now");
+    expect(resolveBundledContent(override, "Fermer", "Dismiss")).toBe(override);
+    expect(resolveBundledContent(null, " Fermer ", "Dismiss")).toBe("Fermer");
+    expect(resolveBundledContent("", "  ", "Dismiss")).toBe("Dismiss");
+  });
+});
+
+describe("resolveBundledLabels", () => {
+  it("resolves every default key, the override over the bundle over the default", () => {
+    const defaults = { cancel: "Cancel", confirm: "Confirm", title: "Sure?" };
+    expect(
+      resolveBundledLabels(
+        defaults,
+        { confirm: " Delete ", title: "  " },
+        { cancel: "Annuler", title: "Vraiment ?" },
+      ),
+    ).toEqual({ cancel: "Annuler", confirm: "Delete", title: "Vraiment ?" });
+    expect(resolveBundledLabels(defaults, undefined, undefined)).toEqual(
+      defaults,
     );
   });
 });
@@ -883,6 +1017,19 @@ describe("nextRovingIndex", () => {
     expect(
       nextRovingIndex({ ...group, count: 0, currentIndex: -1, key: "Home" }),
     ).toBeNull();
+  });
+});
+
+describe("rovingKeyAxis", () => {
+  it("names the axis of each arrow and nothing for any other key", () => {
+    expect(rovingKeyAxis("ArrowLeft")).toBe("horizontal");
+    expect(rovingKeyAxis("ArrowRight")).toBe("horizontal");
+    expect(rovingKeyAxis("ArrowUp")).toBe("vertical");
+    expect(rovingKeyAxis("ArrowDown")).toBe("vertical");
+    expect(rovingKeyAxis("Home")).toBeUndefined();
+    // A table key, not an inherited member, is the only answer.
+    expect(rovingKeyAxis("constructor")).toBeUndefined();
+    expect(rovingKeyAxis("toString")).toBeUndefined();
   });
 });
 
@@ -1150,6 +1297,76 @@ describe("createEmitter", () => {
     expect(second).toHaveBeenCalledOnce();
     expect(emitter.size()).toBe(1);
   });
+
+  it("skips a listener another one removed before it was reached", () => {
+    const emitter = createEmitter();
+    const later = vi.fn();
+    emitter.subscribe(() => {
+      stopLater();
+    });
+    const stopLater = emitter.subscribe(later);
+
+    emitter.emit();
+
+    expect(later).not.toHaveBeenCalled();
+  });
+
+  it("notifies a listener that resubscribes itself once per emit", () => {
+    const emitter = createEmitter();
+    let calls = 0;
+    const listener = (): void => {
+      calls += 1;
+      stop();
+      stop = emitter.subscribe(listener);
+    };
+    let stop = emitter.subscribe(listener);
+    const added = vi.fn();
+    emitter.subscribe(() => {
+      emitter.subscribe(added);
+    });
+
+    emitter.emit();
+
+    expect(calls).toBe(1);
+    // A listener added during an emit hears the next one, not this one.
+    expect(added).not.toHaveBeenCalled();
+  });
+
+  it("notifies every listener when one throws, then rethrows", () => {
+    const emitter = createEmitter();
+    const failure = new Error("listener failed");
+    const after = vi.fn();
+    emitter.subscribe(() => {
+      throw failure;
+    });
+    emitter.subscribe(after);
+
+    expect(() => {
+      emitter.emit();
+    }).toThrow(failure);
+    expect(after).toHaveBeenCalledOnce();
+  });
+
+  it("rethrows every failure together when several listeners throw", () => {
+    const emitter = createEmitter();
+    const first = new Error("first");
+    const second = new Error("second");
+    emitter.subscribe(() => {
+      throw first;
+    });
+    emitter.subscribe(() => {
+      throw second;
+    });
+
+    let thrown: unknown;
+    try {
+      emitter.emit();
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).errors).toEqual([first, second]);
+  });
 });
 
 describe("isTimerDelay", () => {
@@ -1181,6 +1398,65 @@ describe("subscribeToClock", () => {
     expect(onTick).toHaveBeenCalledOnce();
     expect(vi.getTimerCount()).toBe(0);
     stop();
+  });
+});
+
+describe("overlayZIndex", () => {
+  it("puts layer zero in the overlay band and stacks nested layers in the modal band", () => {
+    expect(overlayZIndex(0)).toBe("var(--snui-z-overlay)");
+    expect(overlayZIndex(-1)).toBe("var(--snui-z-overlay)");
+    expect(overlayZIndex(1)).toBe("calc(var(--snui-z-modal) + 1)");
+    expect(overlayZIndex(3)).toBe("calc(var(--snui-z-modal) + 3)");
+  });
+});
+
+describe("blurBeforeWheel", () => {
+  it("blurs a focused input before a wheel can spin it", () => {
+    const input = attached("input");
+    input.type = "number";
+    input.focus();
+    expect(document.activeElement).toBe(input);
+
+    blurBeforeWheel({ currentTarget: input } as unknown as Parameters<
+      typeof blurBeforeWheel
+    >[0]);
+
+    expect(document.activeElement).not.toBe(input);
+  });
+
+  it("leaves an input that does not hold focus alone", () => {
+    const input = attached("input");
+    const blur = vi.spyOn(input, "blur");
+
+    blurBeforeWheel({ currentTarget: input } as unknown as Parameters<
+      typeof blurBeforeWheel
+    >[0]);
+
+    expect(blur).not.toHaveBeenCalled();
+  });
+});
+
+describe("afterMicrotaskIfConnected", () => {
+  it("runs on the next microtask for a node still in the document", async () => {
+    const node = attached("input");
+    const run = vi.fn();
+
+    afterMicrotaskIfConnected(node, run);
+    expect(run).not.toHaveBeenCalled();
+    await Promise.resolve();
+
+    expect(run).toHaveBeenCalledWith(node);
+  });
+
+  it("skips a node that left the document before the microtask", async () => {
+    const node = attached("input");
+    const run = vi.fn();
+
+    afterMicrotaskIfConnected(node, run);
+    node.remove();
+    await Promise.resolve();
+
+    expect(run).not.toHaveBeenCalled();
   });
 });
 

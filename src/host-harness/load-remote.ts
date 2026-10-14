@@ -40,6 +40,14 @@ export interface LoadPanelRemoteOptions {
 const SCRIPT_LOAD_TIMEOUT_MS = 10_000;
 
 /**
+ * Scripts the harness has seen finish, loaded or failed. A script fires its
+ * load or error event once, so a later load of the same remote, such as a
+ * second frame for a package whose entry defines no container, would
+ * otherwise wait out the whole timeout for an event that already happened.
+ */
+const SETTLED_SCRIPTS = new WeakSet<Element>();
+
+/**
  * The global the Admin reads a classic container from: the package name with
  * `-`, `@`, and `/` replaced by underscores, as the loader's `toSafeModuleId`
  * builds it.
@@ -63,21 +71,29 @@ export function remoteUnavailableMessage(packageName: string): string {
  * Waits for a classic script to run. The server writes the tag into the Admin
  * page; a test page has no server, so the harness writes it when none is
  * there. Like the Admin, it waits for load, error, or a timeout, and the
- * caller reads the global afterwards.
+ * caller reads the global afterwards. A script the harness has already seen
+ * finish is not waited on again. One the page wrote before the harness ran is
+ * still waited on, because nothing on the element says whether it has run.
  */
 function loadClassicScript(url: string): Promise<void> {
   return new Promise((resolve) => {
     let script = [...document.querySelectorAll("script[src]")].find(
       (candidate) => candidate.getAttribute("src") === url,
     );
+    if (script !== undefined && SETTLED_SCRIPTS.has(script)) {
+      resolve();
+      return;
+    }
     if (script === undefined) {
       script = document.createElement("script");
       script.setAttribute("src", url);
       script.setAttribute(HOST_HARNESS_MARKER, "");
       document.head.append(script);
     }
+    const watched = script;
     const timer = window.setTimeout(resolve, SCRIPT_LOAD_TIMEOUT_MS);
     const done = (): void => {
+      SETTLED_SCRIPTS.add(watched);
       window.clearTimeout(timer);
       resolve();
     };

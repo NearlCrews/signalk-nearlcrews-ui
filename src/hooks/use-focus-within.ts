@@ -14,6 +14,12 @@ import { isElementNode } from "../utils/focus.js";
  *
  * The flag is not cleared when tracking stops, because the close that stops it
  * is exactly the moment a caller reads it. Whoever acts on it clears it.
+ *
+ * The node is read once, when tracking starts, so it has to be mounted by the
+ * commit that turns `active` on: a node attached in a later commit is not
+ * tracked until `active` or `nodeRef` changes. Every caller renders the region
+ * in the same commit that opens it, which is what lets the hook take a plain
+ * ref rather than re-subscribing on every commit to look for a new node.
  */
 export function useFocusWithin<T extends Element>(
   nodeRef: RefObject<T | null>,

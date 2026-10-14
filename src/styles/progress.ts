@@ -19,6 +19,13 @@ const PROGRESS_INDETERMINATE_ANIMATION =
 const PROGRESS_INDETERMINATE_ANIMATION_RTL =
   versionedAnimationName("progress-slide-rtl");
 
+/*
+ * One pass of the indeterminate slide, timed apart from `--snui-motion-spin`:
+ * the spinner turns in place, while the fill crosses the whole track, so the
+ * two motions keep paces of their own.
+ */
+const PROGRESS_SLIDE_DURATION = "1.4s";
+
 /**
  * Progress bar styles. Installed by `Progress` through
  * `useOptionalModuleStyles`, so a panel without one never injects them. The
@@ -103,12 +110,19 @@ ${toneDescendantColorRules("snui-progress", ".snui-progress__fill", "background"
   inset-block: 0;
   inset-inline-start: 0;
   inline-size: 40%;
-  animation: ${PROGRESS_INDETERMINATE_ANIMATION} 1.4s ease-in-out infinite;
+  animation: ${PROGRESS_INDETERMINATE_ANIMATION} ${PROGRESS_SLIDE_DURATION} ease-in-out infinite;
 }
 
-.snui-progress--indeterminate:dir(rtl) .snui-progress__fill {
-  /* Longhand: the stylesheet keyframe audit scans animation shorthands. */
-  animation-name: ${PROGRESS_INDETERMINATE_ANIMATION_RTL};
+/*
+ * Chromium and Edge 118 and 119 match no :dir() selector, so there a
+ * right-to-left bar slides left to right; the guard states that loss rather
+ * than leaving the engine to drop the rule unseen.
+ */
+@supports selector(:dir(rtl)) {
+  .snui-progress--indeterminate:dir(rtl) .snui-progress__fill {
+    /* Longhand: the stylesheet keyframe audit scans animation shorthands. */
+    animation-name: ${PROGRESS_INDETERMINATE_ANIMATION_RTL};
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

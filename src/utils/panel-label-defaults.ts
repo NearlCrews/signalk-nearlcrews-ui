@@ -5,18 +5,42 @@
  * the words the package ships instead of retyping them.
  *
  * Each group is its own constant, so a component imports the one group it
- * renders and a bundler drops the rest: every initializer here is pure.
+ * renders and a bundler drops the rest: every initializer here is pure. The
+ * module imports no React, so the React-free `/format` entry reads its
+ * relative age fallback from here too.
  */
 
 import { DEFAULT_RELATIVE_AGE_FALLBACK } from "./format-relative-age.js";
-import {
-  DEFAULT_DISMISS_LABEL,
-  DEFAULT_HIDE_LABEL,
-  DEFAULT_LOADING_LABEL,
-  DEFAULT_SHOW_LABEL,
-} from "./labels.js";
 import type { PanelLabels } from "./panel-labels.js";
 import { TONE_LABELS } from "./tone.js";
+
+/**
+ * Default busy description a loading button adds beside its unchanged name.
+ *
+ * @internal
+ */
+export const DEFAULT_LOADING_LABEL = "Working";
+
+/**
+ * Default accessible name for a dismiss button.
+ *
+ * @internal
+ */
+export const DEFAULT_DISMISS_LABEL = "Dismiss";
+
+/**
+ * Default accessible name for the action that reveals a concealed value.
+ *
+ * @internal
+ */
+export const DEFAULT_SHOW_LABEL = "Show";
+
+/**
+ * Default accessible name for the action that conceals a revealed value.
+ *
+ * @internal
+ */
+export const DEFAULT_HIDE_LABEL = "Hide";
 
 /** A label group with every entry filled in, one level of nesting deep. */
 type FilledLabelGroup<Group> = {
@@ -237,7 +261,7 @@ export const PANEL_LABEL_DEFAULTS: PanelLabelDefaults =
       show: DEFAULT_SHOW_LABEL,
     }),
     themeToggle: THEME_TOGGLE_LABEL_DEFAULTS,
-    tone: TONE_LABELS,
     toastRegion: TOAST_REGION_LABEL_DEFAULTS,
+    tone: TONE_LABELS,
     unsupportedBrowser: UNSUPPORTED_BROWSER_LABEL_DEFAULTS,
   });

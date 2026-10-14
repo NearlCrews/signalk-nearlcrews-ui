@@ -1,23 +1,12 @@
 /**
- * Shared defaults for the accessible names of built-in actions, so every
- * component ships the same label with the same blank-falls-back behavior.
+ * How a label resolves, so every component applies the same order and the
+ * same blank-falls-back behavior. The English defaults themselves live in
+ * panel-label-defaults.ts.
  */
 
 import type { ReactNode } from "react";
 
 import { hasReactContent } from "./react-node.js";
-
-/** Default busy description a loading button adds beside its unchanged name. */
-export const DEFAULT_LOADING_LABEL = "Working";
-
-/** Default accessible name for a dismiss button. */
-export const DEFAULT_DISMISS_LABEL = "Dismiss";
-
-/** Default accessible name for the action that reveals a concealed value. */
-export const DEFAULT_SHOW_LABEL = "Show";
-
-/** Default accessible name for the action that conceals a revealed value. */
-export const DEFAULT_HIDE_LABEL = "Hide";
 
 /**
  * A caller-supplied string with its surrounding space removed, and the empty

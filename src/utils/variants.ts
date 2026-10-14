@@ -1,9 +1,8 @@
 /**
  * Shared variant vocabularies used across components.
  *
- * `Density` replaces the per-component `"comfortable" | "compact"` and
- * `"default" | "compact"` unions so one panel-wide preference maps onto every
- * component without translation.
+ * `Density` is the one density vocabulary every component takes, so one
+ * panel-wide preference maps onto every component without translation.
  */
 export type Density = "default" | "compact";
 

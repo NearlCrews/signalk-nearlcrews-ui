@@ -1,6 +1,7 @@
 import {
   DISABLED_DECLARATIONS,
   FORCED_COLORS_INVALID_DECLARATIONS,
+  INVALID_OUTLINE_DECLARATIONS,
   TRACK_THICKNESS,
   TRACK_THICKNESS_COARSE,
 } from "./fragments.js";
@@ -84,7 +85,6 @@ export const RANGE_STYLES: StyleModule = {
   min-height: var(--snui-control-min-height);
   margin: 0;
   background: transparent;
-  accent-color: var(--snui-color-accent-fill);
   cursor: pointer;
 }
 
@@ -94,8 +94,17 @@ ${TRACK_SHAPE_DECLARATIONS}
 ${trackFill("right", TRACK_COLORS, "  ")}
 }
 
-.snui-range:dir(rtl)::-webkit-slider-runnable-track {
-${trackFill("left", TRACK_COLORS, "  ")}
+/*
+ * A gradient direction is physical, so a right-to-left slider fills from the
+ * right. Chromium and Edge 118 and 119 match no :dir() selector, so there an
+ * RTL slider keeps filling from the left while its thumb moves from the
+ * right; the guard states that loss rather than leaving the engine to drop
+ * the rule unseen.
+ */
+@supports selector(:dir(rtl)) {
+  .snui-range:dir(rtl)::-webkit-slider-runnable-track {
+${trackFill("left", TRACK_COLORS, "    ")}
+  }
 }
 
 /*
@@ -133,6 +142,11 @@ ${THUMB_FACE_DECLARATIONS}
  */
 .snui-range[aria-invalid="true"] {
   --snui-range-progress-color: var(--snui-color-danger);
+}
+
+/* The same shape every invalid value control carries beside the color. */
+.snui-range[aria-invalid="true"]:not(:focus-visible) {
+${INVALID_OUTLINE_DECLARATIONS}
 }
 
 .snui-range:disabled {
@@ -193,8 +207,10 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
 ${trackFill("right", FORCED_TRACK_COLORS, "    ")}
   }
 
-  .snui-range:dir(rtl)::-webkit-slider-runnable-track {
-${trackFill("left", FORCED_TRACK_COLORS, "    ")}
+  @supports selector(:dir(rtl)) {
+    .snui-range:dir(rtl)::-webkit-slider-runnable-track {
+${trackFill("left", FORCED_TRACK_COLORS, "      ")}
+    }
   }
 
   .snui-range::-webkit-slider-thumb {
@@ -227,8 +243,10 @@ ${FORCED_COLORS_THUMB_DECLARATIONS}
 ${trackFill("right", FORCED_DISABLED_TRACK_COLORS, "    ")}
   }
 
-  .snui-range:disabled:dir(rtl)::-webkit-slider-runnable-track {
-${trackFill("left", FORCED_DISABLED_TRACK_COLORS, "    ")}
+  @supports selector(:dir(rtl)) {
+    .snui-range:disabled:dir(rtl)::-webkit-slider-runnable-track {
+${trackFill("left", FORCED_DISABLED_TRACK_COLORS, "      ")}
+    }
   }
 
   .snui-range:disabled::-webkit-slider-thumb {

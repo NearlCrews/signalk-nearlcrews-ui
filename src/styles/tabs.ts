@@ -1,4 +1,5 @@
 import {
+  BLOCKED_SELECTOR,
   DISABLED_DECLARATIONS,
   FOCUS_RING_WIDTH,
   FORCED_COLORS_HIGHLIGHT_DECLARATIONS,
@@ -9,11 +10,12 @@ import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
 /**
- * An enabled, unselected tab under the pointer, which the hover and
- * forced-colors rules both paint.
+ * A live, unselected tab under the pointer, which the hover and forced-colors
+ * rules both paint. A tab held through aria-disabled stays focusable but
+ * answers no press, so it is left out with a disabled one; the one `:not()`
+ * weighs what `:not(:disabled)` did.
  */
-const UNSELECTED_TAB_HOVER =
-  '.snui-tab:not(:disabled):not([aria-selected="true"]):hover';
+const UNSELECTED_TAB_HOVER = `.snui-tab:not(${BLOCKED_SELECTOR}):not([aria-selected="true"]):hover`;
 
 /*
  * The values the two orientations share, named once because a narrow panel
@@ -102,7 +104,7 @@ export const TABS_STYLES: StyleModule = {
   }
 }
 
-.snui-tab:disabled {
+.snui-tab${BLOCKED_SELECTOR} {
 ${DISABLED_DECLARATIONS}
 }
 
@@ -171,15 +173,6 @@ ${NARROW_PANEL_QUERY} {
   }
 
   /*
-   * Forced colors flattens the hover fill, which leaves the hovered tab
-   * painted exactly like its neighbors. Reconstruct it with a system
-   * highlight, as the menu item does.
-   */
-  ${UNSELECTED_TAB_HOVER} {
-${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
-  }
-
-  /*
    * The system ring forced colors rebuilds a tab's focus with is still a
    * focus ring, so it takes the shared width a contrast request raises,
    * inset like the package's other inset rings.
@@ -187,6 +180,18 @@ ${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
   .snui-tab:focus-visible {
     outline: ${FOCUS_RING_WIDTH} solid CanvasText;
     outline-offset: ${INSET_FOCUS_RING_OFFSET};
+  }
+}
+
+/*
+ * Forced colors flattens the hover fill, which leaves the hovered tab painted
+ * exactly like its neighbors. Reconstruct it with a system highlight, as the
+ * menu item does, for a pointer that can hover, as the themed fill does, so a
+ * tap does not leave the highlight latched.
+ */
+@media (forced-colors: active) and (hover: hover) {
+  ${UNSELECTED_TAB_HOVER} {
+${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
   }
 }
 `),

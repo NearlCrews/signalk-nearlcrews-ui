@@ -18,17 +18,13 @@ interface DraftResetControls {
   readonly trackInvalid: (reportValid: () => void) => () => void;
 }
 
-function trackNothing(): () => void {
-  return forgetNothing;
-}
-
 function forgetNothing(): void {
   // Nothing was tracked outside a scope, so there is nothing to forget.
 }
 
 const controlsContext = createValueContext<DraftResetControls>({
   reset: undefined,
-  trackInvalid: trackNothing,
+  trackInvalid: () => forgetNothing,
 });
 const epochContext = createValueContext(0);
 
@@ -66,7 +62,10 @@ export function DraftResetScope({
   // Fields register here from their own validity reports rather than from a
   // mount effect, because a hidden retained section tears its effects down
   // while its drafts survive, and its invalid fields still have to hear the
-  // reset.
+  // reset. A cleanup cannot tell that from a field leaving the tree, so an
+  // entry for a field that left while invalid stays until the next reset,
+  // which reports it valid and drops it: one closure per such field, held no
+  // longer than the panel's next Discard or the scope itself.
   const invalidFields = useRef(new Set<() => void>());
 
   const trackInvalid = useCallback((reportValid: () => void) => {

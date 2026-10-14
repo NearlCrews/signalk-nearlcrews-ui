@@ -8,6 +8,7 @@ import {
   FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS,
   FORCED_COLORS_INVALID_DECLARATIONS,
   focusRingDeclarations,
+  INVALID_OUTLINE_DECLARATIONS,
   SELECTION_GLYPH_DECLARATIONS,
 } from "./fragments.js";
 import type { StyleModule } from "./install.js";
@@ -77,7 +78,7 @@ ${SELECTION_GLYPH_DECLARATIONS}
   border-radius: 50%;
 }
 
-.snui-radio__button[data-hovered]:not([data-disabled]) .snui-radio__control {
+.snui-radio__button[data-hovered]:not([data-disabled], [data-readonly], [data-invalid]) .snui-radio__control {
   border-color: var(--snui-color-accent-fill);
 }
 
@@ -105,6 +106,20 @@ ${focusRingDeclarations("outset", true)}
 
 .snui-radio__button[data-invalid] .snui-radio__control {
   border-color: var(--snui-color-danger);
+}
+
+/* The same shape every invalid value control carries beside the color. */
+.snui-radio__button[data-invalid]:not([data-focus-visible]) .snui-radio__control {
+${INVALID_OUTLINE_DECLARATIONS}
+}
+
+/*
+ * A read-only group answers a press with nothing, so its options drop the
+ * hover accent and say so to the pointer, as a read-only segmented control
+ * does. Its value stays at full strength: it is still the reading.
+ */
+.snui-radio__button[data-readonly] {
+  cursor: not-allowed;
 }
 
 .snui-radio__button[data-disabled] {
@@ -147,7 +162,14 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
     color: GrayText;
   }
 
-  .snui-radio__control {
+  /*
+   * The dial opts out of forced colors, so the themed danger border has to be
+   * restated in the system palette. The rule weighs as much as the selected
+   * one and comes first, so a selected invalid dial keeps its Highlight
+   * border and the dashed outline carries the refusal.
+   */
+  .snui-radio__control,
+  .snui-radio__button[data-invalid] .snui-radio__control {
     forced-color-adjust: none;
     border-color: ButtonText;
     background: Canvas;
@@ -186,7 +208,7 @@ ${FORCED_COLORS_INVALID_DECLARATIONS}
 ${FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS}
   }
 
-  .snui-radio__button[data-hovered]:not([data-disabled]) .snui-radio__control {
+  .snui-radio__button[data-hovered]:not([data-disabled], [data-readonly], [data-invalid]) .snui-radio__control {
     border-color: Highlight;
   }
 }

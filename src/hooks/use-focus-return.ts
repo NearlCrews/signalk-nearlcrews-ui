@@ -60,10 +60,14 @@ export function useFocusReturnOnClose<T extends Element>(
     capturePrevious();
   }, [capturePreviousFocus, open]);
 
+  // The captured element is let go on every close, held or not, so a region
+  // that closes while focus is elsewhere does not keep a node the page may
+  // since have removed until it opens again.
   const restoreWhenHeld = useEffectEvent((): void => {
-    if (!holdsFocusRef.current) return;
-    const destination = returnFocusRef?.current ?? previousFocusRef.current;
+    const previous = previousFocusRef.current;
     previousFocusRef.current = null;
+    if (!holdsFocusRef.current) return;
+    const destination = returnFocusRef?.current ?? previous;
     holdsFocusRef.current = false;
     if (destination?.isConnected === true) destination.focus();
   });

@@ -17,6 +17,11 @@ export interface ReachabilityStatus {
  * has not reached the endpoint yet is reporting its own progress, and painting
  * that as a warning tells an operator something is wrong with the vessel's
  * equipment when nothing yet is.
+ *
+ * The wording is English and stays outside the `PanelLabels` bundle: this is a
+ * React-free helper on the `/format` entry that renders nothing and reads no
+ * panel, so a panel that localizes shows its own words beside the tone, which
+ * is what `label` being a default rather than the answer allows.
  */
 export const REACHABILITY_STATUS = {
   reachable: { label: "Reachable", tone: "success" },

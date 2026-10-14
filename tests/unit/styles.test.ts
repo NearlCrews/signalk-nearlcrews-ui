@@ -1,16 +1,26 @@
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import { describe, expect, it } from "vitest";
+import { COLLAPSIBLE_STYLES } from "../../src/styles/collapsible.js";
+import { COMPONENT_STYLES } from "../../src/styles/components.js";
+import { FEEDBACK_STYLES } from "../../src/styles/feedback.js";
 import { FOUNDATION_STYLES } from "../../src/styles/foundation.js";
 import {
   FOCUS_RING_WIDTH,
   focusRingDeclarations,
   INSET_FOCUS_RING_OFFSET,
+  NARROW_PANEL_QUERY,
 } from "../../src/styles/fragments.js";
+import { LAYOUT_STYLES } from "../../src/styles/layout.js";
 import { STYLE_MODULES } from "../../src/styles/modules.js";
 import { PANEL_STYLES } from "../../src/styles/root-sheet.js";
 import {
   CONTAINER_BREAKPOINT_NARROW,
+  FOCUS_RING_OFFSET,
   NIGHT_TOKENS,
   PANEL_CONTAINER_NAME,
+  PUBLIC_TOKEN_NAMES,
   TOKEN_STYLES,
 } from "../../src/styles/tokens.js";
 import {
@@ -19,7 +29,14 @@ import {
   SPINNER_ANIMATION_NAME,
 } from "../../src/version.js";
 import { hexChannels, NIGHT_CHANNEL_CAP } from "../color-channels.js";
-import { blockAt, themeSelector } from "../css-helpers.js";
+import {
+  blockAt,
+  classNamesIn,
+  moduleStyles,
+  SEMANTIC_TONES,
+  stylesFrom,
+  themeSelector,
+} from "../css-helpers.js";
 
 /** The package version the way a keyframe name carries it. */
 const VERSION_MARKER = PACKAGE_VERSION.replaceAll(".", "-");
@@ -386,6 +403,36 @@ describe("focus rings", () => {
     );
   });
 
+  it("fills the gap an outset ring leaves with a band exactly as wide", () => {
+    expect(TOKEN_STYLES).toContain(
+      `0 0 0 ${FOCUS_RING_OFFSET} var(--snui-color-focus-ring-band)`,
+    );
+    expect(focusRingDeclarations("outset", true)).toContain(
+      `outline-offset: ${FOCUS_RING_OFFSET};`,
+    );
+  });
+
+  it("clears the shared halo wherever a ring is drawn without one", () => {
+    // The root :focus-visible rule paints the halo on every focused element,
+    // and around an inset ring on a row or a menu item it would spill over
+    // the neighbors.
+    expect(blockAt(FOUNDATION_STYLES, ":focus-visible {")).toContain(
+      "box-shadow: var(--snui-focus-ring);",
+    );
+    expect(focusRingDeclarations("inset", false)).toContain(
+      "box-shadow: none;",
+    );
+    expect(
+      blockAt(moduleStyles("menu"), ".snui-menu__item[data-focus-visible] {"),
+    ).toContain("box-shadow: none;");
+    expect(
+      blockAt(
+        moduleStyles("table"),
+        '.snui-data-grid__body [role="row"][data-focus-visible] {',
+      ),
+    ).toContain("box-shadow: none;");
+  });
+
   it("draws the date and time picker rings at the shared width in every theme", () => {
     // Chromium draws a focused picker's ring itself, 2 pixels wide and inset
     // by as much, and no author :focus-visible reaches the part. So a rule
@@ -698,6 +745,112 @@ describe("flush cards", () => {
         `.snui-card--flush inherits the ${property} the default card sets`,
       ).toContain(`${property}: 0`);
     }
+  });
+
+  it("keeps a flush card at zero padding in a narrow panel", () => {
+    // The narrow card step weighs what the flush modifier weighs and comes
+    // later, so every narrow rule that pads a card has to leave flush out.
+    const narrow = blockAt(LAYOUT_STYLES, NARROW_PANEL_QUERY);
+    const padded = [...narrow.matchAll(/([^{}]+)\{([^{}]*)\}/g)].filter(
+      ([, selector = "", body = ""]) =>
+        selector.includes(".snui-card") && /\bpadding:/.test(body),
+    );
+    expect(padded.length).toBeGreaterThan(0);
+    for (const [, selector = ""] of padded) {
+      expect(selector.trim()).toContain(":not(:where(.snui-card--flush))");
+    }
+  });
+});
+
+describe("leading", () => {
+  it("writes every fractional line height from a token or a named constant", () => {
+    // The constants live in fragments.ts and the reading rhythm in the token
+    // sheet; a bare number anywhere else is a third copy waiting to drift.
+    const directory = join(process.cwd(), "src", "styles");
+    const files = readdirSync(directory).filter(
+      (file) =>
+        file.endsWith(".ts") && file !== "fragments.ts" && file !== "tokens.ts",
+    );
+    expect(files.length).toBeGreaterThan(0);
+    for (const file of files) {
+      const source = readFileSync(join(directory, file), "utf8");
+      expect(source, file).not.toMatch(/line-height:\s*\d*\.\d/);
+    }
+  });
+});
+
+describe("root token reads", () => {
+  it("reads every root token without a fallback, since the root sheet always defines it", () => {
+    for (const { id, styles } of STYLE_MODULES) {
+      for (const token of PUBLIC_TOKEN_NAMES) {
+        expect(styles, `${id} gives ${token} a fallback`).not.toContain(
+          `var(${token},`,
+        );
+      }
+    }
+  });
+});
+
+describe("tone bars under forced colors", () => {
+  it("rebuilds the leading bar of every toned surface in a system color", () => {
+    const surfaces = [
+      [LAYOUT_STYLES, "snui-card"],
+      [COLLAPSIBLE_STYLES, "snui-collapsible"],
+      [moduleStyles("toast"), "snui-toast"],
+    ] as const;
+    for (const [styles, block] of surfaces) {
+      const forced = stylesFrom(styles, "@media (forced-colors: active)");
+      const bar = blockAt(forced, `.${block}--${SEMANTIC_TONES[0]},`);
+      expect(bar, block).toContain("border-inline-start-color: ButtonText;");
+      for (const tone of SEMANTIC_TONES) {
+        expect(forced, `${block} ${tone}`).toContain(`.${block}--${tone}`);
+      }
+    }
+    // The banner always carries a tone, so it rebuilds the bar on the block.
+    expect(
+      blockAt(
+        stylesFrom(FEEDBACK_STYLES, "@media (forced-colors: active)"),
+        ".snui-banner {",
+      ),
+    ).toContain("border-inline-start-color: ButtonText;");
+  });
+});
+
+describe("reduced transparency request", () => {
+  const REDUCED_TRANSPARENCY = "@media (prefers-reduced-transparency: reduce)";
+
+  it("paints the sticky action bar opaque", () => {
+    const bar = blockAt(
+      blockAt(COMPONENT_STYLES, REDUCED_TRANSPARENCY),
+      ".snui-action-bar {",
+    );
+    expect(bar).toContain("background: var(--snui-color-surface);");
+    expect(bar).toContain("-webkit-backdrop-filter: none;");
+    expect(bar).toContain("backdrop-filter: none;");
+  });
+
+  it("takes the blur off the dialog scrim", () => {
+    const scrim = blockAt(
+      blockAt(moduleStyles("dialog"), REDUCED_TRANSPARENCY),
+      ".snui-scrim--blur {",
+    );
+    expect(scrim).toContain("-webkit-backdrop-filter: none;");
+    expect(scrim).toContain("backdrop-filter: none;");
+  });
+});
+
+describe("section shells", () => {
+  it("styles each shell's classes in that shell's own module", () => {
+    // The collapsible module follows the components module in the root
+    // sheet, so a Section rule written there would win on order alone.
+    const borrowed = [...classNamesIn(COLLAPSIBLE_STYLES)].filter((name) =>
+      name.startsWith("snui-section"),
+    );
+    expect(borrowed).toEqual([]);
+    expect(COMPONENT_STYLES).toContain(".snui-section__leading {");
+    expect(blockAt(COMPONENT_STYLES, ".snui-section__title--top {")).toContain(
+      "font-size: var(--snui-font-size-lg);",
+    );
   });
 });
 

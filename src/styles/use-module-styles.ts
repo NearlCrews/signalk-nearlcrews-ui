@@ -1,15 +1,24 @@
-import { useLayoutEffect, useReducer } from "react";
+import { useLayoutEffect, useReducer, useRef } from "react";
 import { packageError } from "../utils/errors.js";
 import {
   useOptionalPanelRootResolver,
   usePanelPortalContainer,
 } from "../utils/portal.js";
+import { warnOnce } from "../utils/warn-once.js";
 import { PACKAGE_VERSION } from "../version.js";
 import {
   installedRootStyleNonces,
   installStyleModule,
   type StyleModule,
 } from "./install.js";
+
+/**
+ * How many renders in a row an in-flow control asks for a root that has not
+ * resolved before it gives up. The root resolves one commit late at most, and
+ * StrictMode replays the effect once more, so a third miss means it never
+ * will, and asking again would only loop until React stops the render.
+ */
+const UNRESOLVED_ROOT_ASKS = 3;
 
 /**
  * Installs a style module beside the owning `PanelRoot`'s sheet: same
@@ -56,17 +65,29 @@ export function useModuleStyles(
  * renders once. Only when the root's ref has not attached yet, on the panel's
  * first commit or when a retained subtree is shown again, does the effect find
  * nothing and render the control once more to ask again, still before paint.
+ * A root that still has not resolved after a few asks never will, so the
+ * control stops asking, renders unstyled, and says so once in development.
  */
 export function useOptionalModuleStyles(module: StyleModule): void {
   const resolvePanelRoot = useOptionalPanelRootResolver();
   const [attempt, askAgain] = useReducer((count: number) => count + 1, 0);
+  const unresolvedAsks = useRef(0);
   useLayoutEffect(() => {
     if (resolvePanelRoot === null) return undefined;
     const panelRoot = resolvePanelRoot();
     if (panelRoot === null) {
-      askAgain();
+      if (unresolvedAsks.current < UNRESOLVED_ROOT_ASKS) {
+        unresolvedAsks.current += 1;
+        askAgain();
+      } else {
+        warnOnce(
+          `module-styles:unresolved-root:${module.id}`,
+          `The ${module.id} styles were not installed: the PanelRoot around this control never resolved its element. Render the control inside a mounted PanelRoot.`,
+        );
+      }
       return undefined;
     }
+    unresolvedAsks.current = 0;
     return installModuleStylesForRoot(panelRoot.ownerDocument, module);
   }, [module, resolvePanelRoot, attempt]);
 }

@@ -106,7 +106,7 @@ export function usePanelPortalContainer(
   const { getContainer } = useUNSAFE_PortalContext();
   const ready = usePortalContainerReady();
 
-  if (getContainer == null) {
+  if (getContainer === null || getContainer === undefined) {
     throw portalContainerError(
       componentName,
       "No portal container is installed",

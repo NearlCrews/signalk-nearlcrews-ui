@@ -1,4 +1,5 @@
 import { isValidElement, type ReactNode } from "react";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 import { hasText, trimmedText } from "./labels.js";
 import { hasReactContent, reactNodeText } from "./react-node.js";
 
@@ -77,7 +78,7 @@ export function renderUnit(unit: UnitContent): ReactNode {
   return (
     <>
       <span aria-hidden="true">{unit.symbol}</span>
-      <span className="snui-visually-hidden">{` ${name}`}</span>
+      <span className={VISUALLY_HIDDEN_CLASS}>{` ${name}`}</span>
     </>
   );
 }

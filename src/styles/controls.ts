@@ -14,14 +14,16 @@ import {
   FORCED_COLORS_HIGHLIGHT_DECLARATIONS,
   FORCED_COLORS_INVALID_DECLARATIONS,
   GROUP_LEGEND_DECLARATIONS,
+  INVALID_OUTLINE_DECLARATIONS,
   NARROW_PANEL_QUERY,
   NON_LINK_DESCENDANTS,
   PRESSED_FILL_DECLARATION,
   SELECTION_GLYPH_DECLARATIONS,
   SELECTION_GLYPH_SIZE,
+  TIGHT_LEADING,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { COARSE_POINTER_QUERY } from "./tokens.js";
+import { COARSE_POINTER_QUERY, FOCUS_RING_OFFSET } from "./tokens.js";
 
 /**
  * Inset of the segmented group around its options. The option's own corner
@@ -65,6 +67,33 @@ const DISABLED_FILL_DECLARATIONS = `  background: var(--snui-color-text-disabled
  */
 const CHECKBOX_MESSAGE_INSET = `calc(${SELECTION_GLYPH_SIZE} + var(--snui-space-3))`;
 
+/*
+ * The checkbox box's corner. Smaller than the smallest radius token, which
+ * would round a 20 pixel box toward the radio's circle, and the two glyphs
+ * have to stay apart by shape.
+ */
+const CHECKBOX_RADIUS = "0.25rem";
+
+/*
+ * The check mark, drawn as the two borders of a rotated box: its width and
+ * height before rotation, the stroke, and the lift that centers the rotated
+ * mark optically in the box.
+ */
+const CHECK_MARK_WIDTH = "0.65rem";
+const CHECK_MARK_HEIGHT = "0.36rem";
+const CHECK_MARK_STROKE = "0.15rem";
+const CHECK_MARK_LIFT = "-0.08rem";
+
+/*
+ * The select arrow, drawn as two gradient triangles that meet in a chevron:
+ * the room the text keeps clear for it, each triangle's size, and how far in
+ * from the end edge each one sits.
+ */
+const SELECT_ARROW_ROOM = "2.5rem";
+const SELECT_ARROW_SIZE = "0.35rem";
+const SELECT_ARROW_INSET_OUTER = "0.7rem";
+const SELECT_ARROW_INSET_INNER = "1rem";
+
 export const CONTROL_STYLES = `
 @keyframes ${SPINNER_ANIMATION_NAME} {
   to { transform: rotate(1turn); }
@@ -89,7 +118,7 @@ ${scopeStyles(`
    */
   font-size: var(--snui-font-size);
   font-weight: var(--snui-font-weight-semibold);
-  line-height: 1.2;
+  line-height: ${TIGHT_LEADING};
   text-align: center;
   text-decoration: none;
   overflow-wrap: anywhere;
@@ -119,9 +148,11 @@ ${scopeStyles(`
 }
 
 /*
- * Every raw :hover rule sits behind (hover: hover). On a touch screen the
- * hover state latches after a tap until the next tap elsewhere, so a stuck
- * hover fill would read as a stuck state.
+ * Every raw :hover rule that changes a control's look sits behind
+ * (hover: hover). On a touch screen the hover state latches after a tap until
+ * the next tap elsewhere, so a stuck hover fill would read as a stuck state.
+ * The forced-colors block below lists a hovered control beside its resting
+ * one only to hold the same system colors through the hover.
  */
 @media (hover: hover) {
   .snui-button--primary${NOT_BLOCKED}:hover {
@@ -144,7 +175,8 @@ ${scopeStyles(`
 }
 
 .snui-button--secondary${NOT_BLOCKED}:active,
-.snui-button--ghost${NOT_BLOCKED}:active {
+.snui-button--ghost${NOT_BLOCKED}:active,
+.snui-button--text${NOT_BLOCKED}:active {
 ${PRESSED_FILL_DECLARATION}
 }
 
@@ -231,6 +263,17 @@ ${PRESSED_FILL_DECLARATION}
 }
 
 /*
+ * A list line answers the pointer the way a menu item does, with the hover
+ * fill alone: the accent border the bordered variants take would frame a
+ * line of text as a separate control.
+ */
+@media (hover: hover) {
+  .snui-button--text${NOT_BLOCKED}:hover {
+    background: var(--snui-color-interactive-hover);
+  }
+}
+
+/*
  * A button whose blocked reason is drawn: the button and a muted line under
  * it travel as one item, so a row of actions keeps each reason beside its own
  * button.
@@ -288,8 +331,7 @@ ${FIELD_DESCRIPTION_DECLARATIONS}
  * focused, because the focus ring owns the outline there.
  */
 .snui-input[aria-invalid="true"]:not(:focus-visible) {
-  outline: 1px dashed var(--snui-color-danger);
-  outline-offset: 1px;
+${INVALID_OUTLINE_DECLARATIONS}
 }
 
 .snui-input--monospace {
@@ -309,21 +351,30 @@ ${FIELD_DESCRIPTION_DECLARATIONS}
 
 .snui-select {
   appearance: none;
-  padding-inline-end: 2.5rem;
+  padding-inline-end: ${SELECT_ARROW_ROOM};
   background-image:
     linear-gradient(45deg, transparent 50%, currentColor 50%),
     linear-gradient(135deg, currentColor 50%, transparent 50%);
   background-position:
-    calc(100% - 1rem) 50%,
-    calc(100% - 0.7rem) 50%;
+    calc(100% - ${SELECT_ARROW_INSET_INNER}) 50%,
+    calc(100% - ${SELECT_ARROW_INSET_OUTER}) 50%;
   background-repeat: no-repeat;
-  background-size: 0.35rem 0.35rem;
+  background-size: ${SELECT_ARROW_SIZE} ${SELECT_ARROW_SIZE};
 }
 
-.snui-select:dir(rtl) {
-  background-position:
-    0.7rem 50%,
-    1rem 50%;
+/*
+ * Background positions are physical, so a right-to-left select moves its
+ * arrow into the room the logical padding keeps. Chromium and Edge 118 and
+ * 119 match no :dir() selector, so there the arrow stays on the right while
+ * the room moves left; the guard states that loss rather than leaving the
+ * engine to drop the rule unseen.
+ */
+@supports selector(:dir(rtl)) {
+  .snui-select:dir(rtl) {
+    background-position:
+      ${SELECT_ARROW_INSET_OUTER} 50%,
+      ${SELECT_ARROW_INSET_INNER} 50%;
+  }
 }
 
 /*
@@ -341,8 +392,7 @@ ${CONTROL_ROW_DECLARATIONS}
 .snui-checkbox__input {
   appearance: none;
 ${SELECTION_GLYPH_DECLARATIONS}
-  border-radius: 0.25rem;
-  accent-color: var(--snui-color-accent-fill);
+  border-radius: ${CHECKBOX_RADIUS};
   cursor: pointer;
 }
 
@@ -365,14 +415,14 @@ ${SELECTION_GLYPH_DECLARATIONS}
 }
 
 .snui-checkbox__input::before {
-  width: 0.65rem;
-  height: 0.36rem;
+  width: ${CHECK_MARK_WIDTH};
+  height: ${CHECK_MARK_HEIGHT};
   border-color: var(--snui-color-on-accent);
   border-style: solid;
-  border-width: 0 0 0.15rem 0.15rem;
+  border-width: 0 0 ${CHECK_MARK_STROKE} ${CHECK_MARK_STROKE};
   content: "";
   opacity: 0;
-  transform: translateY(-0.08rem) rotate(-45deg);
+  transform: translateY(${CHECK_MARK_LIFT}) rotate(-45deg);
 }
 
 .snui-checkbox__input:checked,
@@ -387,7 +437,7 @@ ${SELECTION_GLYPH_DECLARATIONS}
 
 .snui-checkbox__input:indeterminate::before {
   height: 0;
-  border-width: 0 0 0.15rem;
+  border-width: 0 0 ${CHECK_MARK_STROKE};
   opacity: 1;
   transform: none;
 }
@@ -414,6 +464,11 @@ ${FIELD_ERROR_DECLARATIONS}
 
 .snui-checkbox__input[aria-invalid="true"] {
   border-color: var(--snui-color-danger);
+}
+
+/* The same shape every invalid value control carries beside the color. */
+.snui-checkbox__input[aria-invalid="true"]:not(:focus-visible) {
+${INVALID_OUTLINE_DECLARATIONS}
 }
 
 .snui-segmented {
@@ -613,16 +668,18 @@ ${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
   }
 
   /*
-   * Danger, ghost, and secondary are each written out in system colors, so a
-   * button inside a surface that opted out of forced-color adjustment (the
-   * inline confirmation, a banner body) still paints in them rather than
-   * inheriting the opt-out with the author theme. Danger and ghost share the
-   * canvas fill; secondary below keeps the button face.
+   * Danger, ghost, text, and secondary are each written out in system
+   * colors, so a button inside a surface that opted out of forced-color
+   * adjustment (the inline confirmation, a banner body) still paints in them
+   * rather than inheriting the opt-out with the author theme. Danger, ghost,
+   * and text share the canvas fill; secondary below keeps the button face.
    */
   .snui-button--danger,
   .snui-button--danger${NOT_BLOCKED}:hover,
   .snui-button--ghost,
-  .snui-button--ghost${NOT_BLOCKED}:hover {
+  .snui-button--ghost${NOT_BLOCKED}:hover,
+  .snui-button--text,
+  .snui-button--text${NOT_BLOCKED}:hover {
     forced-color-adjust: none;
     border-color: ButtonText;
     background: Canvas;
@@ -692,6 +749,7 @@ ${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
   .snui-button--primary:focus-visible,
   .snui-button--secondary:focus-visible,
   .snui-button--ghost:focus-visible,
+  .snui-button--text:focus-visible,
   .snui-segmented__option[aria-checked="true"]:focus-visible {
 ${FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS}
   }
@@ -703,7 +761,7 @@ ${FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS}
    */
   .snui-button--danger:focus-visible {
     outline: calc(${FOCUS_RING_WIDTH} + 1px) solid CanvasText;
-    outline-offset: 3px;
+    outline-offset: calc(${FOCUS_RING_OFFSET} + 1px);
     box-shadow: none;
   }
 

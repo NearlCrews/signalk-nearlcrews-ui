@@ -43,7 +43,7 @@ export const FORM_STYLES = scopeStyles(`
  * group already publishes its widths.
  */
 .snui-field--inline {
-  grid-template-columns: minmax(var(--snui-field-inline-label-min, 9rem), 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(var(--snui-field-inline-label-min), 1fr) minmax(0, 2fr);
   column-gap: var(--snui-space-4);
 }
 
@@ -131,7 +131,9 @@ export const FORM_STYLES = scopeStyles(`
 
 /*
  * Regular weight beside the semibold label: in Night the muted color sits
- * almost on the text color, so weight is what keeps the marker apart.
+ * almost on the text color, so weight is what keeps the marker apart. The
+ * keyword rather than a token, because regular is the weight body text takes
+ * by default and the package themes only the weights it adds above it.
  */
 .snui-optional-mark {
   color: var(--snui-color-text-muted);

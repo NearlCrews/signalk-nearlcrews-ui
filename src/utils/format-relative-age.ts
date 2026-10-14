@@ -29,7 +29,7 @@ export interface FormatRelativeAgeOptions {
   readonly style?: Intl.RelativeTimeFormatStyle | undefined;
 }
 
-/** The compact rendering ("5m ago") that was the default before 0.9.0. */
+/** The compact rendering ("5m ago"), for a slot too narrow for words. */
 export const RELATIVE_AGE_NARROW = {
   numeric: "always",
   style: "narrow",
@@ -45,9 +45,9 @@ export const RELATIVE_AGE_EN = {
 } as const satisfies FormatRelativeAgeOptions;
 
 /**
- * The words for an age that cannot be stated. Written here rather than read
- * from the panel label defaults, because this module also serves the
- * React-free `/format` entry.
+ * The words for an age that cannot be stated. Written here, and read by the
+ * panel label defaults, because this module also serves the React-free
+ * `/format` entry, which must not reach the label modules.
  *
  * @internal
  */

@@ -27,7 +27,7 @@ function toneModifier(
  * `modifierPrefix` matches {@link toneAccentBarRules}, so a block can name its
  * decorative variant.
  */
-export function toneSelectorList(block: string, modifierPrefix = ""): string {
+function toneSelectorList(block: string, modifierPrefix = ""): string {
   return SEMANTIC_TONES.map((tone) =>
     toneModifier(block, tone, modifierPrefix),
   ).join(",\n");
@@ -114,6 +114,28 @@ ${TONE_ACCENT_BAR_DECLARATIONS}
 }
 
 ${toneAccentBarRules(block, modifierPrefix)}`;
+}
+
+/**
+ * The leading tone bar under forced colors, for use inside a forced-colors
+ * media block. Forced colors repaints the bar in the same system color as the
+ * rest of the border, which flattens the severity signal, so the bar takes
+ * ButtonText instead, which every system palette that tells the two apart
+ * draws differently from CanvasText. Each prefix names a modifier family, as
+ * in {@link toneAccentBarRules}, so a block with a decorative variant covers
+ * both in one rule.
+ */
+export function forcedColorsToneBarRule(
+  block: string,
+  ...modifierPrefixes: readonly string[]
+): string {
+  const prefixes = modifierPrefixes.length === 0 ? [""] : modifierPrefixes;
+  const selectors = prefixes
+    .map((prefix) => toneSelectorList(block, prefix))
+    .join(",\n");
+  return `${selectors} {
+    border-inline-start-color: ButtonText;
+  }`;
 }
 
 /**
