@@ -54,28 +54,35 @@ export function* markdownLines(markdown) {
   }
 }
 
-const HTML_COMMENT = /<!--.*?-->/g;
-
 /**
  * Yields `{ number, text }` for each line outside a fenced code block, with
  * HTML comments removed: a link or heading inside one renders as nothing, so
  * it is neither checked as a link nor counted as an anchor. A comment that
- * spans lines hides every line it covers.
+ * spans lines hides every line it covers. The scan walks each line by index
+ * rather than with a pattern, so an unterminated or nested opener can never
+ * leave a fragment of a comment behind.
  */
 export function* prose(markdown) {
   let insideComment = false;
   for (const { kind, number, text } of markdownLines(markdown)) {
     if (kind !== "prose") continue;
-    let visible = text.replace(HTML_COMMENT, "");
-    if (insideComment) {
-      const end = visible.indexOf("-->");
-      if (end === -1) continue;
-      visible = visible.slice(end + 3);
-      insideComment = false;
-    }
-    const start = visible.indexOf("<!--");
-    if (start !== -1) {
-      visible = visible.slice(0, start);
+    let visible = "";
+    let index = 0;
+    while (index < text.length) {
+      if (insideComment) {
+        const end = text.indexOf("-->", index);
+        if (end === -1) break;
+        index = end + 3;
+        insideComment = false;
+        continue;
+      }
+      const start = text.indexOf("<!--", index);
+      if (start === -1) {
+        visible += text.slice(index);
+        break;
+      }
+      visible += text.slice(index, start);
+      index = start + 4;
       insideComment = true;
     }
     yield { number, text: visible };

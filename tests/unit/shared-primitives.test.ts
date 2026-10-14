@@ -312,6 +312,16 @@ describe("asSentence", () => {
     // A closer with no stop inside still takes one.
     expect(asSentence("Reported (twice)")).toBe("Reported (twice).");
   });
+
+  it("reads text ending in many closers in linear time", () => {
+    const quotes = '"'.repeat(200_000);
+    const started = performance.now();
+    expect(asSentence(`Pump failed.${quotes}`)).toBe(`Pump failed.${quotes}`);
+    expect(asSentence(`x${quotes}`)).toBe(`x${quotes}.`);
+    expect(asSentence(quotes)).toBe(`${quotes}.`);
+    expect(asSentence("")).toBe(".");
+    expect(performance.now() - started).toBeLessThan(1000);
+  });
 });
 
 describe("formatCount", () => {

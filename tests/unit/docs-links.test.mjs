@@ -6,6 +6,7 @@ import {
   markdownAnchors,
   splitDestination,
 } from "../../scripts/lib/docs-links.mjs";
+import { prose } from "../../scripts/lib/markdown.mjs";
 
 describe("documentation link slugs", () => {
   it("matches ordinary GitHub-style heading normalization", () => {
@@ -185,5 +186,37 @@ describe("documentation link targets", () => {
     // whole check instead of reporting the one link.
     expect(splitDestination("docs/100%.md")).toBeUndefined();
     expect(splitDestination("docs/guide.md#caf%E9")).toBeUndefined();
+  });
+});
+
+describe("prose outside HTML comments", () => {
+  const visible = (markdown) => [...prose(markdown)].map(({ text }) => text);
+
+  it("hides a comment on one line and keeps the text around it", () => {
+    expect(visible("before <!-- [a](x.md) --> after")).toEqual([
+      "before  after",
+    ]);
+  });
+
+  it("hides every line a comment spans, then resumes after it closes", () => {
+    expect(visible("one <!-- start\n[a](x.md)\nend --> two\nthree")).toEqual([
+      "one ",
+      "",
+      " two",
+      "three",
+    ]);
+  });
+
+  it("leaves no fragment of an opener nested inside a comment", () => {
+    expect(visible("a <!-- <!-- b --> c")).toEqual(["a  c"]);
+    expect(visible("a <!<!---- b --> c")).toEqual(["a <! c"]);
+  });
+
+  it("treats an unterminated comment as hiding the rest of the file", () => {
+    expect(visible("a <!-- open\nhidden\nstill hidden")).toEqual([
+      "a ",
+      "",
+      "",
+    ]);
   });
 });
