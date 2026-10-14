@@ -180,6 +180,9 @@ test("widens every component focus ring on request", async ({
   await expect(item).toHaveCount(1);
   await expectSolidOutline(item, "3px");
   await page.keyboard.press("Escape");
+  // The closing menu stays mounted through its exit transition, and a menu
+  // reopened before it unmounts focuses no item, so wait for it to go.
+  await expect(page.getByRole("menu")).toHaveCount(0);
 
   // Without the request the rings keep their resting width.
   await page.emulateMedia({ contrast: "no-preference" });
