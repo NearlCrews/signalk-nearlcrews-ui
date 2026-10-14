@@ -35,6 +35,7 @@ import {
   requireContent,
 } from "../utils/react-node.js";
 import type { StatusTone } from "../utils/tone.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 import {
   Button,
   type ButtonAsButtonProps,
@@ -337,7 +338,7 @@ export function MenuItem({
         // leading qualifier would announce the tone before the action. The
         // leading space keeps the two apart in engines that concatenate the
         // name without one.
-        <span className="snui-visually-hidden"> {menuItemToneLabel}.</span>
+        <span className={VISUALLY_HIDDEN_CLASS}> {menuItemToneLabel}.</span>
       ) : null}
     </RACMenuItem>
   );

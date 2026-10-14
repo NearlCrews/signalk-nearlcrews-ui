@@ -33,17 +33,17 @@ import { classNames } from "../utils/class-names.js";
 import {
   createDocumentRegistry,
   type DocumentRegistryRecord,
-  once,
 } from "../utils/document-registry.js";
 import { createEmitter } from "../utils/emitter.js";
+import { packageError } from "../utils/errors.js";
 import { focusPanelRoot, isElementNode, isFocused } from "../utils/focus.js";
+import { resolveBundledLabel, resolveLabel } from "../utils/labels.js";
+import { prefersReducedMotion } from "../utils/motion.js";
+import { once } from "../utils/once.js";
 import {
   DEFAULT_DISMISS_LABEL,
-  resolveBundledLabel,
-  resolveLabel,
-} from "../utils/labels.js";
-import { prefersReducedMotion } from "../utils/motion.js";
-import { TOAST_REGION_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
+  TOAST_REGION_LABEL_DEFAULTS,
+} from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
 import { LIVE_REGION_BLANK_MS } from "../utils/repeat-announcement.js";
@@ -70,14 +70,14 @@ const DEFAULT_TOAST_DURATION_MS = 5_000;
 const STICKY_TONES: ReadonlySet<SemanticTone> = new Set(["danger", "warning"]);
 
 /**
- * Maximum queued toasts. Sticky toasts (duration zero) never time out, so
- * without a cap a chatty caller grows the queue, the mounted DOM, and the
+ * Default cap on queued toasts. Sticky toasts (duration zero) never time out,
+ * so without a cap a chatty caller grows the queue, the mounted DOM, and the
  * subscriber notification cost without bound. Beyond the cap, eviction takes
  * the oldest toast that is neither focused nor more consequential than the
  * arrival, and refuses the arrival itself when the queue holds nothing it may
  * drop.
  */
-const MAX_QUEUED_TOASTS = 5;
+const DEFAULT_MAX_QUEUED_TOASTS = 5;
 
 const TOAST_EXIT_FALLBACK_BUFFER_MS = 10;
 /** The token the card's exit transition runs on. */
@@ -87,20 +87,47 @@ const TOAST_EXIT_TRANSITION_TOKEN: FoundationTokenName =
 const CSS_TIME_PATTERN = /([\d.]+)\s*(ms|s)\b/;
 const TOAST_TITLE_MESSAGE = "Toast requires a non-empty title.";
 
-const TOAST_CARD_SELECTOR = ".snui-toast";
+/*
+ * The classes the elements below render with, which the selectors that find
+ * those elements again are built from, so a rename cannot leave a query
+ * looking for a class nothing carries.
+ */
+const TOAST_CARD_CLASS = "snui-toast";
+const TOAST_DISMISS_CLASS = "snui-toast__dismiss";
+const TOAST_REGION_CLASS = "snui-toast-region";
+const TOAST_TITLE_CLASS = "snui-toast__title";
+const TOAST_DESCRIPTION_CLASS = "snui-toast__description";
+
+const TOAST_CARD_SELECTOR = `.${TOAST_CARD_CLASS}`;
 /** A card that is not already leaving; exiting cards are never focus targets. */
 const LIVE_TOAST_CARD_SELECTOR = `${TOAST_CARD_SELECTOR}:not([data-exiting])`;
-const TOAST_DISMISS_SELECTOR = ".snui-toast__dismiss";
+const TOAST_DISMISS_SELECTOR = `.${TOAST_DISMISS_CLASS}`;
 /** The dismiss button of a card that is not already leaving. */
 const LIVE_TOAST_DISMISS_SELECTOR = `${LIVE_TOAST_CARD_SELECTOR} ${TOAST_DISMISS_SELECTOR}`;
 /** A notifications landmark in the host, which only a showing region places. */
-const TOAST_REGION_SELECTOR = ":scope > .snui-toast-region";
-const TOAST_TITLE_SELECTOR = ".snui-toast__title";
-const TOAST_DESCRIPTION_SELECTOR = ".snui-toast__description";
+const TOAST_REGION_SELECTOR = `:scope > .${TOAST_REGION_CLASS}`;
+const TOAST_TITLE_SELECTOR = `.${TOAST_TITLE_CLASS}`;
+const TOAST_DESCRIPTION_SELECTOR = `.${TOAST_DESCRIPTION_CLASS}`;
 /** What assistive technology skips inside a card's text. */
 const HIDDEN_FROM_READERS_SELECTOR = '[aria-hidden="true"], [hidden]';
 
+/**
+ * The dismiss button's glyph, the multiplication X (U+2715) rather than the
+ * danger tone glyph: reusing that one would paint a danger toast's mark twice,
+ * and the second would read as part of the tone. It is hidden from assistive
+ * technology, because the button is named by its label and a reader would
+ * otherwise speak the symbol's name after it.
+ */
+const DISMISS_GLYPH = "✕";
+
+/** Browser timer handle returned by window.setTimeout. */
+type TimerId = number;
+
+/** Toasts focused right now, counted per key across every region. */
 const FOCUSED_TOAST_COUNTS = new Map<string, number>();
+
+/** The number in the most recently issued toast key. */
+let nextToastKey = 0;
 
 function retainFocusedToast(key: string): void {
   FOCUSED_TOAST_COUNTS.set(key, (FOCUSED_TOAST_COUNTS.get(key) ?? 0) + 1);
@@ -114,9 +141,6 @@ function releaseFocusedToast(key: string): void {
   }
   FOCUSED_TOAST_COUNTS.set(key, count - 1);
 }
-
-/** Browser timer handle returned by window.setTimeout. */
-type TimerId = number;
 
 function resolveToastTone(content: ToastContent): SemanticTone {
   return content.tone ?? "info";
@@ -539,6 +563,13 @@ export interface ToastEviction<T extends ToastContent = ToastContent> {
 /** Options for {@link createToastQueue}. */
 export interface ToastQueueOptions<T extends ToastContent = ToastContent> {
   /**
+   * The most toasts the queue holds at once, a positive whole number. Defaults
+   * to five. A toast is a passing notice, so raise it only where bursts are
+   * normal; a condition that persists belongs in a `Banner`. Anything else
+   * throws when the queue is created.
+   */
+  readonly maxQueued?: number | undefined;
+  /**
    * Called when the queue drops a toast to stay inside its bound, so a caller
    * reporting safety-relevant failures can re-raise, log, or count the one
    * that went instead of losing it silently. Dismissals and clears are
@@ -551,8 +582,9 @@ export interface ToastQueue<T extends ToastContent = ToastContent> {
   /**
    * Adds a toast and returns its key. Throws synchronously when the title has
    * no content, so a blank runtime message fails at the call site instead of
-   * inside the region's render. The queue holds at most five toasts; when
-   * full, it evicts the oldest toast that is neither focused nor more
+   * inside the region's render. The queue holds at most `maxQueued` toasts,
+   * five by default; when full, it evicts the oldest toast that is neither
+   * focused nor more
    * consequential than the arrival. A sticky warning or danger is never
    * removed for a lesser notice: when the queue holds nothing it may drop, the
    * arrival is refused instead. Either way the toast that went is reported to
@@ -574,23 +606,25 @@ function getServerToasts(): readonly QueuedToast<never>[] {
   return EMPTY_TOASTS;
 }
 
-let nextToastKey = 0;
-
 /**
  * How hard a queued toast is to evict. A caller that turned auto-dismiss off
  * meant the message to stay, so an explicitly sticky toast outranks a timed
  * one; a sticky warning or danger outranks both, because it reports a failure
  * that may not have been read yet.
  */
-const TOAST_PRIORITY_TIMED = 0;
-const TOAST_PRIORITY_STICKY = 1;
-const TOAST_PRIORITY_CRITICAL = 2;
+const TOAST_PRIORITY = {
+  timed: 0,
+  sticky: 1,
+  critical: 2,
+} as const;
 
-function toastRetentionPriority(content: ToastContent): number {
-  if (resolveToastDuration(content) !== 0) return TOAST_PRIORITY_TIMED;
+type ToastPriority = (typeof TOAST_PRIORITY)[keyof typeof TOAST_PRIORITY];
+
+function toastRetentionPriority(content: ToastContent): ToastPriority {
+  if (resolveToastDuration(content) !== 0) return TOAST_PRIORITY.timed;
   return STICKY_TONES.has(resolveToastTone(content))
-    ? TOAST_PRIORITY_CRITICAL
-    : TOAST_PRIORITY_STICKY;
+    ? TOAST_PRIORITY.critical
+    : TOAST_PRIORITY.sticky;
 }
 
 /**
@@ -600,7 +634,7 @@ function toastRetentionPriority(content: ToastContent): number {
  */
 function chooseToastToEvict<T extends ToastContent>(
   queued: readonly QueuedToast<T>[],
-  incomingPriority: number,
+  incomingPriority: ToastPriority,
 ): number {
   let candidateIndex = -1;
   let candidatePriority = Number.POSITIVE_INFINITY;
@@ -630,6 +664,15 @@ function chooseToastToEvict<T extends ToastContent>(
 export function createToastQueue<T extends ToastContent = ToastContent>(
   options: ToastQueueOptions<T> = {},
 ): ToastQueue<T> {
+  const { maxQueued = DEFAULT_MAX_QUEUED_TOASTS } = options;
+  // Refused here rather than read as the default, because a cap of zero or a
+  // fraction is a mistake the caller should see, and an unbounded one is the
+  // growth the cap exists to prevent.
+  if (!Number.isSafeInteger(maxQueued) || maxQueued < 1) {
+    throw packageError(
+      `createToastQueue maxQueued must be a positive whole number, received ${String(maxQueued)}.`,
+    );
+  }
   let snapshot: readonly QueuedToast<T>[] = [];
   const { emit, subscribe } = createEmitter();
 
@@ -641,7 +684,7 @@ export function createToastQueue<T extends ToastContent = ToastContent>(
       const queued: QueuedToast<T> = { content, key };
       const next = [...snapshot, queued];
       let dropped: QueuedToast<T> | undefined;
-      if (next.length > MAX_QUEUED_TOASTS) {
+      if (next.length > maxQueued) {
         // Chosen among the toasts already queued, which keep their indices
         // in `next`; the arrival is last.
         const index = chooseToastToEvict(
@@ -731,6 +774,7 @@ function ToastCardImpl<T extends ToastContent>({
   const startedAtRef = useRef(0);
   const hoverPausedRef = useRef(false);
   const focusPausedRef = useRef(false);
+  const hiddenPausedRef = useRef(false);
   const exitStartedRef = useRef(false);
 
   const finishExit = useCallback((): void => {
@@ -784,23 +828,46 @@ function ToastCardImpl<T extends ToastContent>({
     );
   }, [duration, beginExit]);
 
+  // The countdown runs only while nothing holds it: a pointer resting on the
+  // card, focus inside it, or a hidden document.
+  const resumeUnlessHeld = useCallback((): void => {
+    if (
+      hoverPausedRef.current ||
+      focusPausedRef.current ||
+      hiddenPausedRef.current
+    ) {
+      stopCountdown();
+    } else {
+      startCountdown();
+    }
+  }, [startCountdown, stopCountdown]);
+
   const setPaused = (source: "hover" | "focus", paused: boolean): void => {
     if (source === "hover") hoverPausedRef.current = paused;
     else focusPausedRef.current = paused;
-    if (hoverPausedRef.current || focusPausedRef.current) stopCountdown();
-    else startCountdown();
+    resumeUnlessHeld();
   };
 
   useEffect(() => {
-    startCountdown();
+    // A toast that times out behind another tab or a locked helm tablet is
+    // never seen at all, so the countdown waits while the document is hidden
+    // and resumes with the time it had left once the operator is back.
+    const ownerDocument = cardRef.current?.ownerDocument;
+    const followVisibility = (): void => {
+      hiddenPausedRef.current = ownerDocument?.hidden === true;
+      resumeUnlessHeld();
+    };
+    followVisibility();
+    ownerDocument?.addEventListener("visibilitychange", followVisibility);
     return () => {
+      ownerDocument?.removeEventListener("visibilitychange", followVisibility);
       if (focusPausedRef.current) {
         focusPausedRef.current = false;
         releaseFocusedToast(key);
       }
       stopCountdown();
     };
-  }, [key, startCountdown, stopCountdown]);
+  }, [key, resumeUnlessHeld, stopCountdown]);
 
   return (
     // Pointer and focus handlers only pause the auto-dismiss countdown; the
@@ -808,7 +875,7 @@ function ToastCardImpl<T extends ToastContent>({
     // biome-ignore lint/a11y/noStaticElementInteractions: hover and focus pause auto-dismiss, they do not make the card interactive
     <div
       ref={setCardRef}
-      className={classNames("snui-toast", `snui-toast--${tone}`)}
+      className={classNames(TOAST_CARD_CLASS, `${TOAST_CARD_CLASS}--${tone}`)}
       data-snui-toast-key={key}
       data-exiting={exiting || undefined}
       onTransitionEnd={(event) => {
@@ -846,7 +913,7 @@ function ToastCardImpl<T extends ToastContent>({
         when focus enters it.
       */}
       <div className="snui-toast__text">
-        <div className="snui-toast__title" id={titleId}>
+        <div className={TOAST_TITLE_CLASS} id={titleId}>
           <ToneMark
             tone={tone}
             toneLabel={content.toneLabel}
@@ -855,14 +922,14 @@ function ToastCardImpl<T extends ToastContent>({
           {content.title}
         </div>
         {hasReactContent(content.description) ? (
-          <div className="snui-toast__description">{content.description}</div>
+          <div className={TOAST_DESCRIPTION_CLASS}>{content.description}</div>
         ) : null}
       </div>
       <Button
         variant="ghost"
         size="compact"
         iconOnly
-        className="snui-toast__dismiss"
+        className={TOAST_DISMISS_CLASS}
         aria-label={dismissLabel}
         // Every card names its button "Dismiss", so the description is what
         // tells a screen reader user which notification this one closes.
@@ -871,12 +938,7 @@ function ToastCardImpl<T extends ToastContent>({
           beginExit();
         }}
       >
-        {/*
-          A multiplication X rather than the danger tone glyph, which is the
-          same character: a danger toast would otherwise paint the mark twice
-          and the second one would read as part of the tone.
-        */}
-        <span aria-hidden="true">✕</span>
+        <span aria-hidden="true">{DISMISS_GLYPH}</span>
       </Button>
     </div>
   );
@@ -1093,7 +1155,7 @@ export function ToastRegion<T extends ToastContent = ToastContent>({
     <section
       {...props}
       ref={setRegionRef}
-      className={classNames("snui-toast-region", className)}
+      className={classNames(TOAST_REGION_CLASS, className)}
       aria-label={effectiveLabel}
       onFocus={(event) => {
         const card = event.target.closest<HTMLElement>(TOAST_CARD_SELECTOR);

@@ -1,5 +1,5 @@
 import { screen, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   Badge,
   Banner,
@@ -13,6 +13,7 @@ import {
   StatusIndicator,
 } from "../../src/index.js";
 import { LAYOUT_STYLES } from "../../src/styles/layout.js";
+import { LIVE_REGION_BLANK_MS } from "../../src/utils/repeat-announcement.js";
 import {
   hasUnitContent,
   isNamedUnit,
@@ -20,7 +21,12 @@ import {
 } from "../../src/utils/unit.js";
 import { SPACE_SCALE } from "../../src/utils/variants.js";
 import { ruleBody } from "../css-helpers.js";
-import { expectNoAxeViolations, renderInPanel } from "../helpers.js";
+import {
+  advanceTimers,
+  expectNoAxeViolations,
+  panel,
+  renderInPanel,
+} from "../helpers.js";
 import { announcementOf } from "./lib/announcements.js";
 
 /** The card element itself, which carries the block class. */
@@ -644,6 +650,41 @@ describe("layout primitives on semantic elements", () => {
       "role",
       "group",
     );
+  });
+
+  it("announces an unchanged metric reading again when its key changes", () => {
+    vi.useFakeTimers();
+    const { rerender } = renderInPanel(
+      <Metric
+        label="Depth"
+        value="12.4"
+        unit="m"
+        live="polite"
+        deferFirstMessage={false}
+        announceKey={1}
+      />,
+    );
+    const region = screen.getByRole("status");
+    expect(region).toHaveTextContent("12.4 m");
+
+    // The same figure again would leave the region unchanged and silent, so
+    // the value is withheld for a beat and then restored.
+    rerender(
+      panel(
+        <Metric
+          label="Depth"
+          value="12.4"
+          unit="m"
+          live="polite"
+          deferFirstMessage={false}
+          announceKey={2}
+        />,
+      ),
+    );
+    expect(region).toBeEmptyDOMElement();
+    advanceTimers(LIVE_REGION_BLANK_MS);
+    expect(region).toHaveTextContent("12.4 m");
+    expect(screen.getByRole("status")).toBe(region);
   });
 
   it("keeps metric values inert without a live mode", () => {

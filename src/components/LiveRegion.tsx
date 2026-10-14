@@ -14,6 +14,7 @@ import {
   useSettlingText,
   waitsToSettle,
 } from "../utils/repeat-announcement.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 
 export type LiveRegionElement = "div" | "span" | "p";
 
@@ -106,7 +107,7 @@ export function LiveRegion({
     as,
     {
       ...props,
-      className: classNames("snui-visually-hidden", className),
+      className: classNames(VISUALLY_HIDDEN_CLASS, className),
       role: region.role,
       "aria-live": region["aria-live"],
     },

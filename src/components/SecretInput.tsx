@@ -1,15 +1,16 @@
-import { type ReactNode, useLayoutEffect, useRef } from "react";
+import { type ReactNode, useLayoutEffect, useRef, useState } from "react";
 import { useControllableState } from "../hooks/use-controllable-state.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
 import { useIdToken } from "../utils/aria.js";
 import { markForwardsFieldControlProps } from "../utils/field-forwarding.js";
 import { isFocused } from "../utils/focus.js";
+import { resolveBundledLabel } from "../utils/labels.js";
 import {
   DEFAULT_HIDE_LABEL,
   DEFAULT_SHOW_LABEL,
-  resolveBundledLabel,
-} from "../utils/labels.js";
+} from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 import { Button } from "./Button.js";
 import { TextInput, type TextInputProps } from "./Inputs.js";
 import {
@@ -20,11 +21,17 @@ import {
 
 export interface SecretInputProps extends Omit<TextInputProps, "type"> {
   readonly defaultRevealed?: boolean | undefined;
-  /** Accessible and visible label for the conceal action. */
+  /**
+   * Visible label for the conceal action. The button's accessible name goes on
+   * to repeat the field's own name, so several secrets are told apart.
+   */
   readonly hideLabel?: string | undefined;
   readonly onRevealedChange?: ((revealed: boolean) => void) | undefined;
   readonly revealed?: boolean | undefined;
-  /** Accessible and visible label for the reveal action. */
+  /**
+   * Visible label for the reveal action. The button's accessible name goes on
+   * to repeat the field's own name, so several secrets are told apart.
+   */
   readonly showLabel?: string | undefined;
   /** Content rendered after the input and before the visibility control. */
   readonly trailingContent?: ReactNode | undefined;
@@ -36,6 +43,39 @@ interface SelectionSnapshot {
   readonly end: number | null;
   readonly focused: boolean;
   readonly start: number | null;
+}
+
+/** Text a reader hears from a node, skipping any subtree hidden from them. */
+function spokenText(node: Node): string {
+  if (node.nodeType === 3) return node.textContent ?? "";
+  if (node.nodeType !== 1) return "";
+  if ((node as Element).getAttribute("aria-hidden") === "true") return "";
+  let text = "";
+  for (const child of node.childNodes) text += spokenText(child);
+  return text;
+}
+
+/**
+ * The words that name the field, read from the elements that label it: the
+ * ones its `aria-labelledby` names, else its `aria-label`, else its `<label>`
+ * elements. The reveal button repeats them so it is told apart from the one
+ * beside every other secret.
+ */
+function fieldNameOf(input: HTMLInputElement): string {
+  const labelledBy = input.getAttribute("aria-labelledby")?.trim() ?? "";
+  const ariaLabel = input.getAttribute("aria-label")?.trim() ?? "";
+  const sources: Node[] = [];
+  if (labelledBy !== "") {
+    for (const id of labelledBy.split(/\s+/)) {
+      const source = input.ownerDocument.getElementById(id);
+      if (source !== null) sources.push(source);
+    }
+  } else if (ariaLabel !== "") {
+    return ariaLabel;
+  } else {
+    sources.push(...(input.labels ?? []));
+  }
+  return sources.map(spokenText).join(" ").replace(/\s+/g, " ").trim();
 }
 
 /** Where the field's caret or selection sits, and whether it holds focus. */
@@ -126,6 +166,19 @@ export const SecretInput = /* @__PURE__ */ markForwardsFieldControlProps(
     );
     const attachInput = useNodeRef(inputRef, ref);
 
+    // A form with several secrets would otherwise list a row of buttons that
+    // all say Show, so the button repeats the field's name after its visible
+    // word. The props carry every way a field is labeled, its `aria-label`,
+    // its `aria-labelledby`, and the new props a LabeledField passes when its
+    // label changes, and they arrive as a new object on each render, so the
+    // name is read again after each one; an unchanged name bails out of
+    // rendering again.
+    const [fieldName, setFieldName] = useState("");
+    useLayoutEffect(() => {
+      const input = inputRef.current;
+      if (input !== null) setFieldName(fieldNameOf(input));
+    }, [props]);
+
     return (
       <InputGroup>
         <InputGroupControl controlWidth={controlWidth}>
@@ -144,10 +197,8 @@ export const SecretInput = /* @__PURE__ */ markForwardsFieldControlProps(
         {trailingContent}
         <Button
           size="compact"
-          // Points assistive technology at the field this toggle governs. It is
-          // a relationship rather than a name: the button is still announced as
-          // the action alone, so a form with several secrets announces a row of
-          // buttons that all say Show.
+          // Points assistive technology at the field this toggle governs, a
+          // relationship beside the name the hidden suffix gives it.
           aria-controls={inputId}
           disabled={disabled}
           onPointerDown={(event) => {
@@ -171,6 +222,15 @@ export const SecretInput = /* @__PURE__ */ markForwardsFieldControlProps(
           }}
         >
           {effectiveRevealed ? effectiveHideLabel : effectiveShowLabel}
+          {fieldName === "" ? null : (
+            // The space sits outside the hidden span, so every name
+            // computation keeps the two words apart; a trailing space at the
+            // end of the visible line collapses away.
+            <>
+              {" "}
+              <span className={VISUALLY_HIDDEN_CLASS}>{fieldName}</span>
+            </>
+          )}
         </Button>
       </InputGroup>
     );

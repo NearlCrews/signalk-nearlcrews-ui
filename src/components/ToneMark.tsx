@@ -8,6 +8,7 @@ import {
   TONE_GLYPHS,
   TONE_LABELS,
 } from "../utils/tone.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 
 export interface ToneMarkProps {
   /** Class for the decorative glyph element, normally the block's own glyph class. */
@@ -29,7 +30,7 @@ export function ToneMark({
   className,
   tone,
   toneLabel,
-}: ToneMarkProps): React.JSX.Element | null {
+}: ToneMarkProps): React.JSX.Element {
   return (
     <>
       <ToneGlyph className={className} tone={tone} />
@@ -58,7 +59,7 @@ export function ToneSpeech({
 
   // The mark is read straight into whatever text follows it, so the label
   // closes its own sentence.
-  return <span className="snui-visually-hidden">{asSentence(label)} </span>;
+  return <span className={VISUALLY_HIDDEN_CLASS}>{asSentence(label)} </span>;
 }
 
 /**

@@ -12,6 +12,7 @@ import {
 } from "../utils/repeat-announcement.js";
 import type { StatusTone } from "../utils/tone.js";
 import type { Density } from "../utils/variants.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 import { ToneEchoRegion } from "./ToneEchoRegion.js";
 import { ToneGlyph, ToneMark } from "./ToneMark.js";
 
@@ -164,7 +165,7 @@ export function StatusIndicator({
           <ToneMark tone={tone} toneLabel={toneLabel} />
           <span
             className={
-              size === "compact" ? "snui-visually-hidden" : "snui-status__text"
+              size === "compact" ? VISUALLY_HIDDEN_CLASS : "snui-status__text"
             }
           >
             {children}

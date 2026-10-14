@@ -81,40 +81,50 @@ const DEFAULT_VIRTUALIZE_THRESHOLD = 100;
 type ColumnMinStyle = CSSProperties &
   Record<typeof DATA_GRID_COLUMN_MIN_PROPERTY, string>;
 
+/**
+ * Initial size estimates the Virtualizer lays rows out with before it measures
+ * them.
+ */
+interface VirtualLayoutOptions {
+  readonly estimatedHeadingHeight: number;
+  readonly estimatedRowHeight: number;
+}
+
+/** The estimates for each density, once the first virtualized grid asks. */
+let layoutOptionsByDensity:
+  | Readonly<Record<Density, VirtualLayoutOptions>>
+  | undefined;
+
 /*
  * Which set of estimates the layout starts from. The pointer is a property of
  * the device rather than of a panel, and the value is only the height rows are
- * laid out at before the virtualizer measures them, so it is read once here
- * rather than per grid. Estimating a touch row on a laptop leaves every row
- * reporting a correction the first time it is measured, which walks the scroll
- * height during a fast scroll. jsdom implements no matchMedia, which reads as
- * the fine pointer a development machine has.
+ * laid out at before the virtualizer measures them, so it is read once per page
+ * rather than per grid. It is read when a virtualized grid first renders rather
+ * than when the module loads, so importing the entry queries nothing. The
+ * objects are kept per density, because a fresh one would invalidate the
+ * layout on every render of the grid. Estimating a touch row on a laptop leaves
+ * every row reporting a correction the first time it is measured, which walks
+ * the scroll height during a fast scroll. jsdom implements no matchMedia, which
+ * reads as the fine pointer a development machine has.
  */
-const ROW_HEIGHTS = mediaMatches(globalThis, COARSE_POINTER_QUERY)
-  ? DATA_GRID_ROW_HEIGHTS_COARSE
-  : DATA_GRID_ROW_HEIGHTS_FINE;
-
-/**
- * Initial size estimates the Virtualizer lays rows out with before it measures
- * them. Frozen per density, because a fresh object would invalidate the
- * layout on every render of the grid.
- */
-const LAYOUT_OPTIONS: Record<
-  Density,
-  {
-    readonly estimatedHeadingHeight: number;
-    readonly estimatedRowHeight: number;
+function layoutOptionsFor(density: Density): VirtualLayoutOptions {
+  if (layoutOptionsByDensity === undefined) {
+    const heights = mediaMatches(globalThis, COARSE_POINTER_QUERY)
+      ? DATA_GRID_ROW_HEIGHTS_COARSE
+      : DATA_GRID_ROW_HEIGHTS_FINE;
+    layoutOptionsByDensity = {
+      compact: {
+        estimatedHeadingHeight: heights.compact,
+        estimatedRowHeight: heights.compact,
+      },
+      default: {
+        estimatedHeadingHeight: heights.default,
+        estimatedRowHeight: heights.default,
+      },
+    };
   }
-> = {
-  compact: {
-    estimatedHeadingHeight: ROW_HEIGHTS.compact,
-    estimatedRowHeight: ROW_HEIGHTS.compact,
-  },
-  default: {
-    estimatedHeadingHeight: ROW_HEIGHTS.default,
-    estimatedRowHeight: ROW_HEIGHTS.default,
-  },
-};
+  return layoutOptionsByDensity[density];
+}
 
 export interface DataGridColumnProps
   extends ColumnProps,
@@ -227,7 +237,7 @@ interface DataGridBaseProps<TRow>
    */
   readonly emptyState?: ReactNode | undefined;
   /** Title of the default EmptyState. */
-  readonly emptyTitle?: string | undefined;
+  readonly emptyTitle?: ReactNode | undefined;
   /**
    * Row data. Items should expose a stable `id` or `key` for selection.
    * Without one, virtualized rows key by index, so sorting or filtering a
@@ -641,6 +651,75 @@ function resolveStaticHeader<TColumn>(
   };
 }
 
+/**
+ * Whether two header trees say the same thing: the same element types, keys,
+ * and props, with children compared the same way all the way down. A static
+ * header is new JSX on every render of its parent, so comparing what the
+ * elements carry, rather than the elements, is what lets a resolved header
+ * outlive that render. Anything this cannot see into, such as an iterable
+ * that is not an array, reads as a change, which only costs a resolve.
+ */
+function sameHeaderNodes(previous: ReactNode, next: ReactNode): boolean {
+  if (Object.is(previous, next)) return true;
+  if (Array.isArray(previous) && Array.isArray(next)) {
+    return (
+      previous.length === next.length &&
+      previous.every((node: ReactNode, index) =>
+        sameHeaderNodes(node, next[index] as ReactNode),
+      )
+    );
+  }
+  return (
+    isValidElement<Record<string, unknown>>(previous) &&
+    isValidElement<Record<string, unknown>>(next) &&
+    previous.type === next.type &&
+    previous.key === next.key &&
+    sameHeaderProps(previous.props, next.props)
+  );
+}
+
+function sameHeaderProps(
+  previous: Readonly<Record<string, unknown>>,
+  next: Readonly<Record<string, unknown>>,
+): boolean {
+  const names = Object.keys(previous);
+  if (names.length !== Object.keys(next).length) return false;
+  return names.every((name) =>
+    name === "children"
+      ? sameHeaderNodes(
+          previous.children as ReactNode,
+          next.children as ReactNode,
+        )
+      : Object.hasOwn(next, name) && Object.is(previous[name], next[name]),
+  );
+}
+
+interface StaticHeaderMemo<TColumn> {
+  /** The children the header below was resolved from. */
+  readonly children: ReactNode;
+  readonly header: ResolvedHeader<TColumn>;
+}
+
+/**
+ * The resolved static header, kept until the columns say something new. A
+ * memo keyed on the children would miss on every render of the parent, which
+ * writes the same Column elements afresh, and resolve the header, clone its
+ * columns, and serialize its signature each time. The kept value is state
+ * rather than a ref, so it follows a render React discards.
+ */
+function useStaticHeader<TColumn>(
+  children: ReactNode,
+): ResolvedHeader<TColumn> {
+  const [memo, setMemo] = useState<StaticHeaderMemo<TColumn>>(() => ({
+    children,
+    header: resolveStaticHeader(children),
+  }));
+  if (sameHeaderNodes(memo.children, children)) return memo.header;
+  const next = { children, header: resolveStaticHeader<TColumn>(children) };
+  setMemo(next);
+  return next.header;
+}
+
 function resolveDynamicHeader<TColumn>(
   children: (column: TColumn) => ReactElement,
   columns: readonly TColumn[],
@@ -732,13 +811,17 @@ export function DataGrid<TRow, TColumn = unknown>({
     (virtualize === "auto" && items.length > virtualizeThreshold);
   validateDynamicColumns(columns);
 
-  const header = useMemo<ResolvedHeader<TColumn>>(
+  const dynamicHeader = useMemo<ResolvedHeader<TColumn> | null>(
     () =>
       typeof children === "function"
         ? resolveDynamicHeader(children, columns ?? [])
-        : resolveStaticHeader(children),
+        : null,
     [children, columns],
   );
+  const staticHeader = useStaticHeader<TColumn>(
+    typeof children === "function" ? null : children,
+  );
+  const header = dynamicHeader ?? staticHeader;
 
   // React Aria caches each rendered row against the wrapper object it came
   // from, so rebuilding the wrappers on every render would rebuild the whole
@@ -940,7 +1023,7 @@ export function DataGrid<TRow, TColumn = unknown>({
       {virtualized ? (
         <Virtualizer
           layout={TableLayout}
-          layoutOptions={LAYOUT_OPTIONS[density]}
+          layoutOptions={layoutOptionsFor(density)}
           shouldObserveItemSize
         >
           {table}

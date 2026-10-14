@@ -56,10 +56,10 @@ export function UnsupportedBrowserNotice({
         ariaLabelledBy,
         hasTitle ? titleId : undefined,
       )}
-      // Both spellings of the marker a consumer preflight asserts against.
-      // The prefixed one is the package's own hook and the unprefixed one is
-      // kept until the next major, because the shipped check command and the
-      // consumer tests written against it still read it.
+      // Both are public hooks a host or a browser test selects the notice by,
+      // as the API reference lists them. The unprefixed one is also the
+      // marker the shipped check command reads, so it is not an alias on its
+      // way out.
       data-snui-unsupported=""
       data-browser-compatibility-message=""
     >

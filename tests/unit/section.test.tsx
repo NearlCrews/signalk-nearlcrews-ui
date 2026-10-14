@@ -650,11 +650,13 @@ describe("title sizes by depth", () => {
   it("sizes by depth in the stylesheet, not by the heading tag", () => {
     expect(COMPONENT_STYLES).not.toContain("h2.snui-section__title");
     expect(COLLAPSIBLE_STYLES).not.toContain("heading--level-");
+    // Each shell sizes its own top title, in its own module, from the one
+    // step both share.
+    expect(ruleBody(COMPONENT_STYLES, ".snui-section__title--top")).toContain(
+      "font-size: var(--snui-font-size-lg);",
+    );
     expect(
-      ruleBody(
-        COLLAPSIBLE_STYLES,
-        ".snui-section__title--top,\n.snui-collapsible__heading--top",
-      ),
+      ruleBody(COLLAPSIBLE_STYLES, ".snui-collapsible__heading--top"),
     ).toContain("font-size: var(--snui-font-size-lg);");
   });
 });

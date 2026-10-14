@@ -6,7 +6,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { createRef } from "react";
+import { createRef, type ReactNode } from "react";
 import { UNSAFE_PortalProvider } from "react-aria/PortalProvider";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Button, PanelRoot, type PanelRootProps } from "../../src/index.js";
@@ -34,6 +34,7 @@ import {
   panelRootOf,
   ROOT_SHEET,
   renderInPanel,
+  stubDocumentHidden,
   stubReducedMotion,
 } from "../helpers.js";
 
@@ -234,6 +235,50 @@ describe("createToastQueue", () => {
     unsubscribe();
     queue.enqueue({ title: "One" });
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  it("holds as many toasts as maxQueued allows", () => {
+    const evicted: (readonly [string, ReactNode])[] = [];
+    const queue = createToastQueue({
+      maxQueued: 2,
+      onEvict: ({ reason, toast: dropped }) => {
+        evicted.push([reason, dropped.content.title]);
+      },
+    });
+    queue.enqueue({ title: "One", duration: 0 });
+    queue.enqueue({ title: "Two", duration: 0 });
+    queue.enqueue({ title: "Three", duration: 0 });
+
+    expect(queue.getSnapshot().map((queued) => queued.content.title)).toEqual([
+      "Two",
+      "Three",
+    ]);
+    expect(evicted).toEqual([["overflow", "One"]]);
+  });
+
+  it("keeps an unread failure over a routine arrival at any cap", () => {
+    const evicted: (readonly [string, ReactNode])[] = [];
+    const queue = createToastQueue({
+      maxQueued: 1,
+      onEvict: ({ reason, toast: dropped }) => {
+        evicted.push([reason, dropped.content.title]);
+      },
+    });
+    queue.enqueue({ title: "Bilge pump failed", tone: "danger" });
+    queue.enqueue({ title: "Saved" });
+
+    expect(queue.getSnapshot().map((queued) => queued.content.title)).toEqual([
+      "Bilge pump failed",
+    ]);
+    expect(evicted).toEqual([["rejected", "Saved"]]);
+  });
+
+  it("refuses a cap that is not a positive whole number", () => {
+    for (const maxQueued of [0, -1, 2.5, Number.NaN, Infinity]) {
+      expect(() => createToastQueue({ maxQueued })).toThrow(
+        `signalk-nearlcrews-ui: createToastQueue maxQueued must be a positive whole number, received ${String(maxQueued)}.`,
+      );
+    }
   });
 
   it("isolates queues from each other", () => {
@@ -443,6 +488,43 @@ describe("ToastRegion", () => {
     advanceTimers(699);
     expect(toastCard()).toBeInTheDocument();
     advanceTimers(1);
+    expect(toastCard()).toHaveAttribute("data-exiting", "true");
+  });
+
+  it("pauses auto-dismiss while the document is hidden and resumes with the remaining time", () => {
+    const setHidden = stubDocumentHidden();
+    const { queue } = mountRegion();
+    enqueue(queue, { title: "Synced", duration: 1000 });
+
+    advanceTimers(400);
+    setHidden(true);
+    advanceTimers(60_000);
+    expect(toastCard()).not.toHaveAttribute("data-exiting");
+
+    setHidden(false);
+    advanceTimers(599);
+    expect(toastCard()).not.toHaveAttribute("data-exiting");
+    advanceTimers(1);
+    expect(toastCard()).toHaveAttribute("data-exiting", "true");
+  });
+
+  it("holds a toast raised behind a hidden document until it is shown", () => {
+    const setHidden = stubDocumentHidden();
+    const { queue } = mountRegion();
+    setHidden(true);
+    enqueue(queue, { title: "Synced", duration: 1000 });
+
+    advanceTimers(60_000);
+    expect(toastCard()).not.toHaveAttribute("data-exiting");
+
+    // Hover does not restart a countdown the hidden document still holds.
+    fireEvent.pointerOver(toastCard());
+    fireEvent.pointerOut(toastCard());
+    advanceTimers(60_000);
+    expect(toastCard()).not.toHaveAttribute("data-exiting");
+
+    setHidden(false);
+    advanceTimers(1000);
     expect(toastCard()).toHaveAttribute("data-exiting", "true");
   });
 

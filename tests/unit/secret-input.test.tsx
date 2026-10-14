@@ -8,6 +8,7 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { type SyntheticEvent, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { SecretInput } from "../../src/forms.js";
+import { LabeledField } from "../../src/index.js";
 import {
   flushAnimationFrames,
   renderInPanel,
@@ -33,13 +34,13 @@ describe("SecretInput reveal focus", () => {
   ): Promise<void> {
     input.focus();
     input.setSelectionRange(2, 5);
-    await user.click(screen.getByRole("button", { name: "Show" }));
+    await user.click(screen.getByRole("button", { name: "Show API token" }));
   }
 
   it("leaves focus on the toggle when a keyboard press follows an abandoned pointer press", async () => {
     const user = userEvent.setup();
     const { input } = renderToken();
-    const toggle = screen.getByRole("button", { name: "Show" });
+    const toggle = screen.getByRole("button", { name: "Show API token" });
     input.focus();
     input.setSelectionRange(1, 4);
 
@@ -72,7 +73,7 @@ describe("SecretInput reveal focus", () => {
   it("leaves focus on the toggle for a keyboard press with no pointer history", async () => {
     const user = userEvent.setup();
     const { input } = renderToken();
-    const toggle = screen.getByRole("button", { name: "Show" });
+    const toggle = screen.getByRole("button", { name: "Show API token" });
     input.focus();
     await user.tab();
     await user.keyboard(" ");
@@ -125,7 +126,9 @@ describe("SecretInput arrangement", () => {
     );
 
     expect(screen.getByLabelText("API token")).toHaveAttribute("type", "text");
-    expect(screen.getByRole("button", { name: "Hide" })).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Hide API token" }),
+    ).toBeVisible();
   });
 
   it("renders trailing content between the field and the toggle", () => {
@@ -139,10 +142,9 @@ describe("SecretInput arrangement", () => {
     const group = container.querySelector(".snui-input-group");
     expect([...(group?.children ?? [])][1]).toBe(screen.getByTestId("rotated"));
     // The toggle keeps its tie to the field it governs.
-    expect(screen.getByRole("button", { name: "Show" })).toHaveAttribute(
-      "aria-controls",
-      screen.getByLabelText("API token").id,
-    );
+    expect(
+      screen.getByRole("button", { name: "Show API token" }),
+    ).toHaveAttribute("aria-controls", screen.getByLabelText("API token").id);
   });
 
   it("rejects an id that cannot be an ARIA reference", () => {
@@ -168,10 +170,10 @@ describe("SecretInput reveal state", () => {
 
     const input = screen.getByLabelText("API key");
     expect(input).toHaveAttribute("type", "password");
-    await user.click(screen.getByRole("button", { name: "Show" }));
+    await user.click(screen.getByRole("button", { name: "Show API key" }));
     expect(input).toHaveAttribute("type", "text");
     expect(onSubmit).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Hide" }));
+    await user.click(screen.getByRole("button", { name: "Hide API key" }));
     expect(input).toHaveAttribute("type", "password");
   });
 
@@ -193,7 +195,7 @@ describe("SecretInput reveal state", () => {
     const input = screen.getByLabelText<HTMLInputElement>("Token");
     input.focus();
     input.setSelectionRange(1, 4);
-    await user.click(screen.getByRole("button", { name: "Show" }));
+    await user.click(screen.getByRole("button", { name: "Show Token" }));
 
     expect(input).toHaveFocus();
     expect(input.selectionStart).toBe(1);
@@ -211,11 +213,11 @@ describe("SecretInput reveal state", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Afficher" }));
+    fireEvent.click(screen.getByRole("button", { name: "Afficher Secret" }));
     expect(onRevealedChange).toHaveBeenCalledWith(true);
-    expect(screen.getByRole("button", { name: "Masquer" })).not.toHaveAttribute(
-      "aria-pressed",
-    );
+    expect(
+      screen.getByRole("button", { name: "Masquer Secret" }),
+    ).not.toHaveAttribute("aria-pressed");
   });
 
   it("does not reveal a disabled secret", async () => {
@@ -229,7 +231,7 @@ describe("SecretInput reveal state", () => {
     );
 
     const input = screen.getByLabelText<HTMLInputElement>("Disabled token");
-    const toggle = screen.getByRole("button", { name: "Show" });
+    const toggle = screen.getByRole("button", { name: "Show Disabled token" });
     expect(input).toBeDisabled();
     expect(toggle).toBeDisabled();
     await user.click(toggle);
@@ -238,7 +240,7 @@ describe("SecretInput reveal state", () => {
 });
 
 describe("SecretInput attributes", () => {
-  it("ties the reveal button to the input through aria-controls", () => {
+  it("ties the reveal button to the input and names it after the field", () => {
     renderInPanel(
       <>
         <SecretInput aria-label="API token" />
@@ -250,11 +252,36 @@ describe("SecretInput attributes", () => {
     const webhook = screen.getByLabelText("Webhook secret");
     expect(token.id).not.toBe("");
     expect(webhook).toHaveAttribute("id", "webhook-secret");
-    const [showToken, showWebhook] = screen.getAllByRole("button", {
-      name: "Show",
+    // Two secrets are two buttons a reader can tell apart, each starting
+    // with the word on screen so speech input still reaches it.
+    const showToken = screen.getByRole("button", { name: "Show API token" });
+    const showWebhook = screen.getByRole("button", {
+      name: "Show Webhook secret",
     });
+    expect(showToken).toHaveTextContent(/^Show/);
     expect(showToken).toHaveAttribute("aria-controls", token.id);
     expect(showWebhook).toHaveAttribute("aria-controls", "webhook-secret");
+  });
+
+  it("names the reveal button from a field label without its hidden marks", () => {
+    renderInPanel(
+      <>
+        <LabeledField label="Server password" required>
+          <SecretInput />
+        </LabeledField>
+        <p id="token-heading">Fleet token</p>
+        <SecretInput aria-labelledby="token-heading" />
+      </>,
+    );
+
+    // The required asterisk is hidden from readers, so it stays out of the
+    // name the button repeats.
+    expect(
+      screen.getByRole("button", { name: "Show Server password" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Show Fleet token" }),
+    ).toBeVisible();
   });
 
   it("keeps browser capture off in both states unless overridden", async () => {
@@ -271,7 +298,7 @@ describe("SecretInput attributes", () => {
     expect(input).toHaveAttribute("type", "password");
     expectDefaults();
 
-    await user.click(screen.getByRole("button", { name: "Show" }));
+    await user.click(screen.getByRole("button", { name: "Show API token" }));
     expect(input).toHaveAttribute("type", "text");
     expectDefaults();
   });

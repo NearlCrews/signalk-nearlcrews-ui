@@ -808,6 +808,31 @@ describe("NumberField editing", () => {
     ).toContainElement(input);
   });
 
+  it("reads an aria-describedby from inputProps after its own text", () => {
+    renderInPanel(
+      <>
+        <p id="sounder-note">Calibrated at the dock.</p>
+        <p id="section-note">Applies to every sounder.</p>
+        <NumberField
+          label="Depth offset"
+          description="Below the transducer"
+          unit="m"
+          value={1.5}
+          inputProps={{ "aria-describedby": "sounder-note" }}
+          controlDescribedBy="section-note"
+        />
+      </>,
+    );
+
+    // The caller's id joins the merged list where an id on a plain child
+    // would, rather than being overwritten by it.
+    expect(
+      screen.getByRole("spinbutton", { name: "Depth offset" }),
+    ).toHaveAccessibleDescription(
+      "Below the transducer Calibrated at the dock. Applies to every sounder. m",
+    );
+  });
+
   it("forwards the root ref, the input ref, and input attributes", () => {
     const rootRef = createRef<HTMLDivElement>();
     const inputRef = createRef<HTMLInputElement>();

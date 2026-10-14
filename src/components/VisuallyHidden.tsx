@@ -5,6 +5,7 @@ import {
   createPolymorphicElement,
   type PolymorphicProps,
 } from "../utils/polymorphic.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 
 export type VisuallyHiddenElement = "span" | "div" | "p" | "label" | "legend";
 
@@ -37,6 +38,6 @@ export function VisuallyHidden({
 }: VisuallyHiddenProps): React.JSX.Element {
   return createPolymorphicElement(as, {
     ...props,
-    className: classNames("snui-visually-hidden", className),
+    className: classNames(VISUALLY_HIDDEN_CLASS, className),
   });
 }

@@ -55,7 +55,8 @@ export type DialogWidth = "standard" | "wide";
 /**
  * How the user declined. `"cancel"` is the AlertDialog cancel button or
  * another leading action, `"escape"` is the Escape key, and `"scrim"` is a
- * press outside the dialog.
+ * press outside the dialog or its screen reader equivalent, the visually
+ * hidden Dismiss button a dismissable dialog carries.
  */
 export type DialogCancelReason = "cancel" | "escape" | "scrim";
 
@@ -251,7 +252,10 @@ function DialogSurface({
   // close it caused. An action's `close` is the one route that is not a
   // cancellation. Of the others, Escape is recorded as the key travels up
   // from the dialog, before react-aria closes from the overlay above it, and
-  // a leading action records itself; a scrim press is what remains.
+  // a leading action records itself; a scrim press is what remains. So is
+  // React Aria's visually hidden Dismiss button, which a dismissable dialog
+  // alone carries: it is the screen reader's way to the same exit, and
+  // reporting it as the scrim keeps one reason per exit.
   const closeRouteRef = useRef<"action" | DialogCancelReason>("scrim");
   const dialogRef = useRef<HTMLElement | null>(null);
 
@@ -453,7 +457,11 @@ export function AlertDialog({
       {...props}
       dismissable={dismissable}
       leadingActions={(cancel) => (
-        <Button variant={cancelVariant} onClick={cancel}>
+        // The way out takes focus on open, as the alert dialog pattern asks,
+        // so Enter pressed out of habit declines rather than carrying out the
+        // action the dialog warns about.
+        // eslint-disable-next-line jsx-a11y-x/no-autofocus -- focus moves into a dialog the user just opened, not onto a page as it loads.
+        <Button variant={cancelVariant} onClick={cancel} autoFocus>
           {cancelLabel}
         </Button>
       )}

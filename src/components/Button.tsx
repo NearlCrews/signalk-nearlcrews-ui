@@ -16,11 +16,8 @@ import {
 import { joinIdReferences, requireAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { isDevelopment } from "../utils/environment.js";
-import {
-  DEFAULT_LOADING_LABEL,
-  resolveBundledLabel,
-  trimmedText,
-} from "../utils/labels.js";
+import { resolveBundledLabel, trimmedText } from "../utils/labels.js";
+import { DEFAULT_LOADING_LABEL } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import {
   hasReactContent,
@@ -146,10 +143,17 @@ type SharedButtonPropKey =
   | "children"
   | "className";
 
+/** A reason drawn beside the button rather than only described. */
+interface DrawnReason {
+  readonly fullWidth: boolean;
+  readonly id: string;
+  readonly reason: ReactNode;
+  /** Whether the reason shows now, which it does only while the block holds. */
+  readonly shows: boolean;
+}
+
 interface ButtonState<Props extends ButtonProps> {
   readonly blocksActivation: boolean;
-  /** Wraps the element with its drawn reason, when the reason is drawn. */
-  readonly frame: (element: React.JSX.Element) => React.JSX.Element;
   readonly dom: {
     readonly "aria-busy": AriaAttributes["aria-busy"];
     readonly "aria-describedby": string | undefined;
@@ -158,8 +162,35 @@ interface ButtonState<Props extends ButtonProps> {
     readonly children: ReactNode;
     readonly className: string;
   };
+  /** The reason the button draws, or null when it draws none. */
+  readonly drawnReason: DrawnReason | null;
   /** Everything the element form still has to place itself. */
   readonly rest: Omit<Props, SharedButtonPropKey>;
+}
+
+/** Wraps a button with the reason it draws, when it draws one. */
+function withDrawnReason(
+  element: React.JSX.Element,
+  drawn: DrawnReason | null,
+): React.JSX.Element {
+  if (drawn === null) return element;
+  return (
+    // The wrapper stays for as long as the reason is drawn, so the button is
+    // not remounted, and focus not lost, as it blocks.
+    <span
+      className={classNames(
+        "snui-button-reason",
+        drawn.fullWidth && "snui-button-reason--full-width",
+      )}
+    >
+      {element}
+      {drawn.shows ? (
+        <span id={drawn.id} className="snui-button-reason__text">
+          {drawn.reason}
+        </span>
+      ) : null}
+    </span>
+  );
 }
 
 /** Text compared for label in name: case, punctuation, and spacing aside. */
@@ -221,8 +252,13 @@ function reportButtonMistakes({
   }
 }
 
+/**
+ * The state both element forms share. `nativeDisabled` is passed by the one
+ * form that has a native disabled state.
+ */
 function useButtonState<Props extends ButtonProps>(
   props: Props,
+  nativeDisabled = false,
 ): ButtonState<Props> {
   const {
     "aria-busy": ariaBusy,
@@ -258,9 +294,8 @@ function useButtonState<Props extends ButtonProps>(
   const baseId = useId();
   const loadingId = `${baseId}-loading`;
   const reasonId = `${baseId}-reason`;
-  // Only the button form has a native disabled state. It takes the button out
-  // of the tab order, where the reason would reach no one, so it is dropped.
-  const nativeDisabled = (props as { disabled?: boolean }).disabled === true;
+  // Native disabled takes the button out of the tab order, where the reason
+  // would reach no one, so it is dropped.
   const showsReason =
     isAriaDisabled && !nativeDisabled && hasReactContent(disabledReason);
   const drawsReason = disabledReasonVisibility === "visible";
@@ -279,26 +314,6 @@ function useButtonState<Props extends ButtonProps>(
 
   return {
     blocksActivation,
-    frame: (element) =>
-      drawsReason ? (
-        // The wrapper stays for as long as the reason is drawn, so the
-        // button is not remounted, and focus not lost, as it blocks.
-        <span
-          className={classNames(
-            "snui-button-reason",
-            fullWidth && "snui-button-reason--full-width",
-          )}
-        >
-          {element}
-          {showsReason ? (
-            <span id={reasonId} className="snui-button-reason__text">
-              {disabledReason}
-            </span>
-          ) : null}
-        </span>
-      ) : (
-        element
-      ),
     // Presentation and naming are identical for both elements, so the two
     // forms spread one object rather than restating every attribute.
     dom: {
@@ -349,6 +364,9 @@ function useButtonState<Props extends ButtonProps>(
         className,
       ),
     },
+    drawnReason: drawsReason
+      ? { fullWidth, id: reasonId, reason: disabledReason, shows: showsReason }
+      : null,
     rest,
   };
 }
@@ -383,9 +401,12 @@ function safeAnchorHref(href: string): string | undefined {
 }
 
 function NativeButton(props: ButtonAsButtonProps): React.JSX.Element {
-  const { blocksActivation, dom, frame, rest } = useButtonState(props);
+  const { blocksActivation, dom, drawnReason, rest } = useButtonState(
+    props,
+    props.disabled === true,
+  );
   const {
-    as: Component = "button",
+    as,
     disabled,
     onClick,
     onKeyDown,
@@ -394,8 +415,8 @@ function NativeButton(props: ButtonAsButtonProps): React.JSX.Element {
     ...buttonProps
   } = rest;
 
-  return frame(
-    <Component
+  return withDrawnReason(
+    <button
       {...buttonProps}
       {...dom}
       // The blocked state and both activation guards travel together, and a
@@ -410,13 +431,14 @@ function NativeButton(props: ButtonAsButtonProps): React.JSX.Element {
       type={type}
       disabled={disabled}
     />,
+    drawnReason,
   );
 }
 
 function AnchorButton(props: ButtonAsAnchorProps): React.JSX.Element {
   const state = useButtonState(props);
   const {
-    as: Component,
+    as,
     href,
     onClick,
     onKeyDown,
@@ -432,8 +454,9 @@ function AnchorButton(props: ButtonAsAnchorProps): React.JSX.Element {
   const safeHref = useMemo(() => safeAnchorHref(href), [href]);
   const blocksActivation = state.blocksActivation || safeHref === undefined;
 
-  return state.frame(
-    <Component
+  return withDrawnReason(
+    // eslint-disable-next-line jsx-a11y-x/anchor-has-content -- the content arrives as children in the shared dom props.
+    <a
       {...anchorProps}
       {...state.dom}
       ref={ref}
@@ -456,6 +479,7 @@ function AnchorButton(props: ButtonAsAnchorProps): React.JSX.Element {
         onKeyDown,
       })}
     />,
+    state.drawnReason,
   );
 }
 

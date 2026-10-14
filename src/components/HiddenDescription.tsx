@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 
 /**
  * A description reached only through `aria-describedby`, such as a busy label
@@ -21,7 +22,7 @@ export function HiddenDescription({
   readonly id: string;
 }): React.JSX.Element {
   return (
-    <span id={id} className="snui-visually-hidden" aria-hidden="true">
+    <span id={id} className={VISUALLY_HIDDEN_CLASS} aria-hidden="true">
       {children}
     </span>
   );

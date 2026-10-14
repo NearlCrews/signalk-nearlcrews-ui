@@ -20,6 +20,8 @@ import {
 import { PanelPortalProvider } from "../utils/portal.js";
 import { PACKAGE_VERSION, ROOT_CLASS } from "../version.js";
 
+export type PanelWidth = "standard" | "wide" | "full";
+
 export interface PanelRootProps
   extends HTMLAttributes<HTMLDivElement>,
     RefAttributes<HTMLDivElement> {
@@ -49,8 +51,6 @@ export interface PanelRootProps
   /** Width the panel occupies inside its host card. Default `"full"`. */
   readonly width?: PanelWidth | undefined;
 }
-
-export type PanelWidth = "standard" | "wide" | "full";
 
 function PanelSurface({
   children,

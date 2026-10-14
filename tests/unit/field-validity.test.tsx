@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { type ReactElement, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
+  documentOrder,
   type FieldValidity,
   type FieldValidityHandlers,
   useFieldValidity,
@@ -512,6 +513,28 @@ describe("useFieldValidity", () => {
     await user.type(screen.getByRole("spinbutton", { name: "Early" }), "4");
     await user.click(find);
     expect(found).toBe(screen.getByRole("spinbutton", { name: "Late" }));
+  });
+});
+
+describe("documentOrder", () => {
+  it("sorts nodes by where they sit, and ties a node with itself", () => {
+    const parent = document.createElement("div");
+    const first = document.createElement("input");
+    const second = document.createElement("input");
+    parent.append(first, second);
+
+    expect(documentOrder(first, second)).toBe(-1);
+    expect(documentOrder(second, first)).toBe(1);
+    expect(documentOrder(first, first)).toBe(0);
+  });
+
+  it("ties two nodes from different trees, whichever way round", () => {
+    const one = document.createElement("input");
+    const other = document.createElement("input");
+    // The platform's order for disconnected nodes need not agree both ways
+    // round, which would leave a sort with no consistent answer.
+    expect(documentOrder(one, other)).toBe(0);
+    expect(documentOrder(other, one)).toBe(0);
   });
 });
 

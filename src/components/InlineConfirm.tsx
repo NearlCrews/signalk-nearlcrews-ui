@@ -216,7 +216,9 @@ export function InlineConfirm({
       className={classNames("snui-inline-confirm", className)}
       aria-labelledby={landmarkLabel(landmark, ariaLabelledBy, titleId)}
       aria-describedby={joinIdReferences(ariaDescribedBy, messageId)}
-      aria-busy={busy || undefined}
+      // Busy is stated on Confirm alone. On the region it would let a screen
+      // reader hold back everything inside, Confirm's busy description and
+      // the Cancel that stays live included.
       tabIndex={-1}
       onKeyDown={handleKeyDown}
     >

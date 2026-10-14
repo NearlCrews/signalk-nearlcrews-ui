@@ -1,18 +1,21 @@
 import {
   Component,
+  createRef,
   type ErrorInfo,
   type ReactNode,
+  type RefObject,
   useEffect,
   useEffectEvent,
   useRef,
 } from "react";
 
 import { usePanelAnnouncer } from "../utils/announcer.js";
-import { focusIsNowhere } from "../utils/focus.js";
+import { focusIsNowhere, focusPanelRoot } from "../utils/focus.js";
 import { useContentHeading } from "../utils/heading-level.js";
 import { resolveBundledContent } from "../utils/labels.js";
 import { PANEL_ERROR_LABEL_DEFAULTS } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
+import { useOptionalPanelRootResolver } from "../utils/portal.js";
 import { reactNodeText } from "../utils/react-node.js";
 import { joinSentences } from "../utils/text.js";
 import { Banner } from "./Banner.js";
@@ -59,6 +62,14 @@ export interface PanelErrorBoundaryProps {
   readonly reloadDescription?: ReactNode | undefined;
   /** Label of the reload action, default "Reload page". */
   readonly reloadLabel?: ReactNode | undefined;
+  /**
+   * Values that clear a caught error when any of them changes, compared with
+   * `Object.is`, such as the id of the record the panel shows. A failure
+   * caused by one record should not stay on screen once the operator moves to
+   * the next. A change in the same render that throws resets nothing, because
+   * that change may be what failed.
+   */
+  readonly resetKeys?: readonly unknown[] | undefined;
   /** Label of the retry action, default "Try again". */
   readonly retryLabel?: ReactNode | undefined;
   /** Title of the default fallback, default "This panel stopped working". */
@@ -80,12 +91,29 @@ type PanelErrorFallbackProps = Pick<
   | "title"
 > & {
   readonly onRetry: () => void;
+  /**
+   * Receives the panel root the fallback sits in, so the boundary still knows
+   * where to put focus after recovery has taken the fallback away.
+   */
+  readonly panelRootRef: RefObject<HTMLElement | null>;
 };
+
+/** Whether any reset key differs from the one in the same position before. */
+function resetKeysChanged(
+  previous: readonly unknown[] = [],
+  next: readonly unknown[] = [],
+): boolean {
+  return (
+    previous.length !== next.length ||
+    previous.some((key, index) => !Object.is(key, next[index]))
+  );
+}
 
 function PanelErrorFallback({
   description: suppliedDescription,
   onReload,
   onRetry,
+  panelRootRef,
   reloadDescription: suppliedReloadDescription,
   reloadLabel: suppliedReloadLabel,
   retryLabel: suppliedRetryLabel,
@@ -129,6 +157,11 @@ function PanelErrorFallback({
   const announce = usePanelAnnouncer();
   const { level: headingLevel } = useContentHeading();
   const fallbackElement = useRef<HTMLDivElement | null>(null);
+  const resolvePanelRoot = useOptionalPanelRootResolver();
+
+  useEffect(() => {
+    panelRootRef.current = resolvePanelRoot?.() ?? null;
+  }, [panelRootRef, resolvePanelRoot]);
 
   const reportFailure = useEffectEvent((): void => {
     const node = fallbackElement.current;
@@ -171,6 +204,11 @@ function PanelErrorFallback({
   return (
     <Banner
       ref={fallbackElement}
+      // Focus lands on the fallback itself, so it needs a role and a name to
+      // be read on arrival. A group takes its name from the title and, as a
+      // focus target, its description from the body, which says what each
+      // action costs.
+      role="group"
       tabIndex={-1}
       tone="danger"
       title={title}
@@ -205,15 +243,32 @@ export class PanelErrorBoundary extends Component<
   PanelErrorBoundaryProps,
   PanelErrorBoundaryState
 > {
+  override state: PanelErrorBoundaryState = { error: undefined, failed: false };
+
   static getDerivedStateFromError(error: unknown): PanelErrorBoundaryState {
     return { error, failed: true };
   }
 
-  override state: PanelErrorBoundaryState = { error: undefined, failed: false };
+  /** The panel root the default fallback last sat in. */
+  private readonly fallbackPanelRoot = createRef<HTMLElement>();
 
   private readonly reset = (): void => {
     this.setState({ error: undefined, failed: false });
   };
+
+  override componentDidUpdate(
+    previousProps: PanelErrorBoundaryProps,
+    previousState: PanelErrorBoundaryState,
+  ): void {
+    if (!previousState.failed) return;
+    if (this.state.failed) {
+      if (resetKeysChanged(previousProps.resetKeys, this.props.resetKeys)) {
+        this.reset();
+      }
+      return;
+    }
+    this.restoreFocus();
+  }
 
   override componentDidCatch(error: unknown, info: ErrorInfo): void {
     // The package's own record of the failure, kept whether or not the
@@ -226,6 +281,21 @@ export class PanelErrorBoundary extends Component<
       info.componentStack,
     );
     this.props.onError?.(error, info);
+  }
+
+  /**
+   * Recovery takes the default fallback away, and with it the Try again
+   * button the reader pressed, which strands them on the host page's body a
+   * whole Admin page from the panel. The panel root catches them instead.
+   * This runs after the recovered content's layout effects and before its
+   * passive ones, so content that focuses a control of its own on mount still
+   * wins either way.
+   */
+  private restoreFocus(): void {
+    const panelRoot = this.fallbackPanelRoot.current;
+    this.fallbackPanelRoot.current = null;
+    if (panelRoot?.isConnected !== true) return;
+    if (focusIsNowhere(panelRoot.ownerDocument)) focusPanelRoot(panelRoot);
   }
 
   override render(): ReactNode {
@@ -254,6 +324,7 @@ export class PanelErrorBoundary extends Component<
         description={description}
         onReload={onReload}
         onRetry={this.reset}
+        panelRootRef={this.fallbackPanelRoot}
         reloadDescription={reloadDescription}
         reloadLabel={reloadLabel}
         retryLabel={retryLabel}

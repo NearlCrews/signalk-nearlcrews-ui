@@ -10,16 +10,26 @@ import {
 import { useControllableState } from "../hooks/use-controllable-state.js";
 import { useFocusReturnOnClose } from "../hooks/use-focus-return.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
+import {
+  blockedActivationProps,
+  reportBlockedReason,
+} from "../utils/activation.js";
 import { landmarkLabel, useIdToken } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
+import { isDevelopment } from "../utils/environment.js";
 import type { HeadingLevel } from "../utils/heading.js";
 import {
   SectionOutlineProvider,
   useResolvedHeading,
   useWithinPackageLandmark,
 } from "../utils/heading-level.js";
-import { hasReactContent, requireContent } from "../utils/react-node.js";
+import {
+  hasReactContent,
+  reactNodeText,
+  requireContent,
+} from "../utils/react-node.js";
 import { isSemanticTone, type StatusTone } from "../utils/tone.js";
+import { HiddenDescription } from "./HiddenDescription.js";
 import { ToneMark } from "./ToneMark.js";
 
 export type CollapsibleMountStrategy = "lazy-retain" | "retain" | "unmount";
@@ -31,8 +41,23 @@ export interface CollapsibleSectionProps
   extends Omit<HTMLAttributes<HTMLElement>, "onToggle" | "title">,
     RefAttributes<HTMLElement> {
   readonly actions?: ReactNode | undefined;
+  /**
+   * Blocks the toggle while it stays focusable: pressing it neither opens nor
+   * closes the section. Reach for it where the section cannot change right
+   * now, such as while its content saves; `disabled` takes the toggle out of
+   * the tab order instead, which destroys focus if the reader is standing on
+   * it.
+   */
+  readonly ariaDisabled?: boolean | undefined;
   readonly defaultOpen?: boolean | undefined;
   readonly disabled?: boolean | undefined;
+  /**
+   * Why the toggle refuses while `ariaDisabled` holds, read as its
+   * description and dropped once the toggle is live, the way
+   * `Button.disabledReason` is. Development says so once for a blocked toggle
+   * without one.
+   */
+  readonly disabledReason?: ReactNode | undefined;
   /**
    * Level of the section heading. It defaults to the level below the title of
    * an enclosing `PanelShell`, `Dialog`, or `AlertDialog`, and to 2 outside
@@ -104,10 +129,12 @@ export interface CollapsibleSectionProps
 export function CollapsibleSection({
   actions,
   "aria-labelledby": ariaLabelledBy,
+  ariaDisabled = false,
   children,
   className,
   defaultOpen = false,
   disabled = false,
+  disabledReason,
   headingLevel,
   idPrefix,
   landmark,
@@ -132,6 +159,23 @@ export function CollapsibleSection({
   const contentId = `${baseId}-content`;
   const titleId = `${baseId}-title`;
   const toggleId = `${baseId}-toggle`;
+  const reasonId = `${baseId}-reason`;
+  const hasReason = hasReactContent(disabledReason);
+  // Native disabled takes the toggle out of the tab order, where its reason
+  // would reach no one, so it is dropped there.
+  const showsReason = ariaDisabled && !disabled && hasReason;
+  if (isDevelopment()) {
+    reportBlockedReason({
+      blocked: ariaDisabled && !disabled,
+      component: "CollapsibleSection",
+      describedBy: undefined,
+      fix: "Pass disabledReason.",
+      hasReason,
+      name: reactNodeText(title),
+      nativeDisabled: disabled,
+      noun: "toggle",
+    });
+  }
   const [effectiveOpen, commitOpen] = useControllableState(
     open,
     defaultOpen,
@@ -172,7 +216,10 @@ export function CollapsibleSection({
     hasReactContent(summary) &&
     (summaryVisibility === "always" || !effectiveOpen) ? (
       <div
-        className={`snui-collapsible__summary snui-collapsible__summary--${summaryPlacement}`}
+        className={classNames(
+          "snui-collapsible__summary",
+          `snui-collapsible__summary--${summaryPlacement}`,
+        )}
       >
         {summary}
       </div>
@@ -215,10 +262,20 @@ export function CollapsibleSection({
               id={toggleId}
               className="snui-collapsible__toggle"
               aria-controls={contentId}
+              aria-describedby={showsReason ? reasonId : undefined}
               aria-expanded={effectiveOpen}
               disabled={disabled}
-              onClick={toggle}
+              {...blockedActivationProps<HTMLButtonElement>({
+                blocked: ariaDisabled,
+                disabled,
+                onClick: toggle,
+              })}
             >
+              {showsReason ? (
+                <HiddenDescription id={reasonId}>
+                  {disabledReason}
+                </HiddenDescription>
+              ) : null}
               <span className="snui-collapsible__chevron" aria-hidden="true">
                 ›
               </span>

@@ -1,4 +1,4 @@
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { createRef, useEffect, useRef, useState } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -173,6 +173,59 @@ describe("collapsible focus handoff", () => {
     await user.click(toggle);
     expect(onOpenChange).not.toHaveBeenCalled();
     expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("blocks a focused toggle through ariaDisabled without taking its focus", async () => {
+    const user = userEvent.setup();
+    const onOpenChange = vi.fn();
+    const section = (blocked: boolean): React.JSX.Element =>
+      panel(
+        <CollapsibleSection
+          title="Advanced settings"
+          ariaDisabled={blocked}
+          disabledReason="Available once the save finishes"
+          onOpenChange={onOpenChange}
+        >
+          Content
+        </CollapsibleSection>,
+      );
+    const { rerender } = render(section(false));
+    const toggle = screen.getByRole("button", { name: "Advanced settings" });
+    toggle.focus();
+
+    // The block arrives while the reader stands on the toggle, as a save
+    // started from inside the section would bring it.
+    rerender(section(true));
+    expect(toggle).toHaveFocus();
+    expect(toggle).toBeEnabled();
+    expect(toggle).toHaveAttribute("aria-disabled", "true");
+    expect(toggle).toHaveAccessibleDescription(
+      "Available once the save finishes",
+    );
+
+    await user.click(toggle);
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    expect(onOpenChange).not.toHaveBeenCalled();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    rerender(section(false));
+    expect(toggle).not.toHaveAttribute("aria-describedby");
+    await user.keyboard("{Enter}");
+    expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(true);
+  });
+
+  it("warns once about a blocked toggle that says nothing about why", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <CollapsibleSection title="Engine room" ariaDisabled>
+        Content
+      </CollapsibleSection>,
+    );
+
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('CollapsibleSection "Engine room" is blocked'),
+    );
   });
 });
 

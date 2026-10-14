@@ -97,6 +97,32 @@ describe("RadioGroup", () => {
     expect(new FormData(form).get("mode")).toBe("motor");
   });
 
+  it("joins a form outside its subtree and requires a choice, as Switch does", () => {
+    renderInPanel(
+      <>
+        <form id="vessel-settings" />
+        <RadioGroup label="Mode" name="mode" form="vessel-settings" required>
+          <Radio value="sail">Sail</Radio>
+          <Radio value="motor">Motor</Radio>
+        </RadioGroup>
+      </>,
+    );
+
+    const form = document.getElementById("vessel-settings");
+    if (!(form instanceof HTMLFormElement)) throw new Error("No form.");
+    expect(screen.getByRole("radiogroup", { name: "Mode" })).toHaveAttribute(
+      "aria-required",
+      "true",
+    );
+    for (const radio of screen.getAllByRole<HTMLInputElement>("radio")) {
+      expect(radio).toBeRequired();
+      expect(radio).toHaveAttribute("form", "vessel-settings");
+      expect(radio.form).toBe(form);
+    }
+    // Nothing is chosen yet, so the native check holds the submission.
+    expect(form.checkValidity()).toBe(false);
+  });
+
   it("restores defaultValue after a native form reset", async () => {
     const user = userEvent.setup();
     renderInPanel(

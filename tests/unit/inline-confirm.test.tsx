@@ -381,15 +381,17 @@ describe("InlineConfirm focus, busy state, and naming", () => {
       name: "Confirm action",
     });
     expect(confirmation).toHaveFocus();
-    expect(confirmation).toHaveAttribute("aria-busy", "true");
+    // The busy state belongs to Confirm alone: on the region a screen reader
+    // may hold back everything inside it until the work ends.
+    expect(confirmation).not.toHaveAttribute("aria-busy");
     const cancel = screen.getByRole("button", { name: "Cancel" });
     // Busy blocks the decision, never the route out of it.
     expect(cancel).not.toHaveAttribute("aria-disabled");
+    expect(cancel).not.toHaveAttribute("aria-busy");
     expect(cancel).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Confirm" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    const confirm = screen.getByRole("button", { name: "Confirm" });
+    expect(confirm).toHaveAttribute("aria-disabled", "true");
+    expect(confirm).toHaveAttribute("aria-busy", "true");
   });
 
   it("does not steal focus when busy changes after focus leaves", async () => {

@@ -16,6 +16,15 @@ export const ROOT_CLASS = "snui-root";
 export const ROOT_SELECTOR = `.${ROOT_CLASS}[data-snui-version="${PACKAGE_VERSION}"]`;
 
 /**
+ * The class that removes content from view while keeping it in the
+ * accessibility tree. One constant keeps every component in step with the
+ * foundation stylesheet rule that defines it.
+ *
+ * @internal
+ */
+export const VISUALLY_HIDDEN_CLASS = "snui-visually-hidden";
+
+/**
  * A versioned global name prevents keyframe collisions between package copies.
  *
  * @internal

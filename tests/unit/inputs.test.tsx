@@ -474,6 +474,28 @@ describe("RangeInput unit", () => {
     expect(range).not.toHaveAttribute("aria-valuetext");
   });
 
+  it("reads the value text's number in the panel's locale", () => {
+    renderInPanel(
+      <RangeInput
+        aria-label="Depth alarm"
+        min={0}
+        max={2000}
+        step={0.125}
+        value={1234.125}
+        onChange={() => undefined}
+        unit={{ symbol: "m", name: "metres" }}
+      />,
+      { locale: "de-DE" },
+    );
+
+    // The digits follow the locale the panel formats in, and a fine step
+    // keeps every digit it holds.
+    expect(screen.getByRole("slider", { name: "Depth alarm" })).toHaveAttribute(
+      "aria-valuetext",
+      "1.234,125 metres",
+    );
+  });
+
   it("follows an uncontrolled value through input and form reset", async () => {
     renderInPanel(
       <form>

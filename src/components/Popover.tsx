@@ -15,6 +15,7 @@ import { useModuleStyles } from "../styles/use-module-styles.js";
 import { classNames } from "../utils/class-names.js";
 import { packageError } from "../utils/errors.js";
 import { SectionOutlineReset } from "../utils/heading-level.js";
+import { hasText } from "../utils/labels.js";
 import { definedProps } from "../utils/props.js";
 import {
   type OverlayOpenState,
@@ -27,13 +28,17 @@ export interface PopoverProps
   extends RefAttributes<HTMLDivElement>,
     OverlayOpenState {
   /**
-   * Names the popover surface, which carries `role="dialog"`. react-aria
-   * forwards this and `aria-labelledby` to the surface and drops every other
-   * ARIA attribute, so a description is referenced from content inside the
-   * popover rather than passed here.
+   * Names the popover surface, which carries `role="dialog"`. Without this or
+   * `aria-labelledby` the surface takes its trigger's name. react-aria
+   * forwards the two to the surface and drops every other ARIA attribute, so
+   * a description is referenced from content inside the popover rather than
+   * passed here.
    */
   readonly "aria-label"?: AriaAttributes["aria-label"] | undefined;
-  /** Names the popover surface from a heading elsewhere in the panel. */
+  /**
+   * Names the popover surface from a heading elsewhere in the panel. It wins
+   * over `aria-label` when both are given.
+   */
   readonly "aria-labelledby"?: AriaAttributes["aria-labelledby"] | undefined;
   readonly children: ReactNode;
   readonly className?: string | undefined;
@@ -86,6 +91,10 @@ const INTERACTIVE_ROLES = new Set([
   "treeitem",
 ]);
 
+/**
+ * Elements interactive by their tag alone. An input, a link, and a summary
+ * count only in some states, so they are judged one by one below.
+ */
 const INTERACTIVE_ELEMENTS = new Set(["button", "select", "textarea"]);
 
 function isSemanticInteractiveElement(element: HTMLElement): boolean {
@@ -176,7 +185,14 @@ export function Popover({
       <OverlayPopover
         ref={ref}
         aria-label={ariaLabel}
-        aria-labelledby={ariaLabelledBy}
+        // DialogTrigger labels the surface by its trigger through context,
+        // and a merge keeps that reference over an undefined prop. A
+        // reference outranks `aria-label` in the name, so a consumer's label
+        // would never be heard. An empty list holds no reference, which lets
+        // the label name the surface.
+        aria-labelledby={
+          ariaLabelledBy ?? (hasText(ariaLabel) ? "" : undefined)
+        }
         className={classNames("snui-popover", className)}
         id={id}
         placement={placement}
