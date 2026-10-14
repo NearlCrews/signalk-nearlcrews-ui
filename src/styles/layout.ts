@@ -1,18 +1,21 @@
 import { SPACE_SCALE } from "../utils/variants.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 import {
   GLYPH_BASELINE_NUDGE,
+  METRIC_VALUE_LEADING,
   NARROW_PANEL_QUERY,
   PROSE_MEASURE_DECLARATION,
   SURFACE_DECLARATIONS,
+  TIGHT_LEADING,
   TONE_GLYPH_GAP_EM,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
 import {
+  forcedColorsToneBarRule,
   toneAccentBar,
   toneBlockColorRules,
   toneDescendantColorRules,
-  toneSelectorList,
 } from "./tone-rules.js";
 
 /*
@@ -23,6 +26,12 @@ const BADGE_MIN_HEIGHT = "1.75rem";
 const BADGE_PADDING_BLOCK = "0.125rem";
 
 /*
+ * The monospace size as a share of the text around it. The code rule below
+ * says why it is relative rather than a step of the type scale.
+ */
+const CODE_FONT_SIZE = "0.9375em";
+
+/*
  * A stack item that takes up room. Hidden items and the package's out-of-flow
  * shells are left out: the visually hidden class, and the announcing banner
  * and status that wait empty, which leave the flow by their own rules rather
@@ -31,8 +40,7 @@ const BADGE_PADDING_BLOCK = "0.125rem";
  * :not() takes the weight of its heaviest argument, and the exclusions should
  * add matches rather than make the divider rule harder to override.
  */
-const SHOWN_ITEM =
-  ":not([hidden], .snui-visually-hidden):not(:where(.snui-banner:empty, .snui-status:empty, .snui-status:has(> .snui-status__region:only-child)))";
+const SHOWN_ITEM = `:not([hidden], .${VISUALLY_HIDDEN_CLASS}):not(:where(.snui-banner:empty, .snui-status:empty, .snui-status:has(> .snui-status__region:only-child)))`;
 
 // The prop type and the rules come from one scale, so a new step reaches both.
 const GAP_RULES = SPACE_SCALE.map((space) => {
@@ -233,7 +241,7 @@ ${LIST_RESET_DECLARATIONS}
   font-size: var(--snui-font-size-lg);
   font-variant-numeric: tabular-nums;
   font-weight: var(--snui-font-weight-bold);
-  line-height: 1.25;
+  line-height: ${METRIC_VALUE_LEADING};
   overflow-wrap: anywhere;
 }
 
@@ -292,7 +300,7 @@ ${toneDescendantColorRules("snui-metric", ".snui-metric__value")}
   font-size: var(--snui-font-size-xs);
   font-variant-numeric: tabular-nums;
   font-weight: var(--snui-font-weight-bold);
-  line-height: 1.2;
+  line-height: ${TIGHT_LEADING};
   overflow-wrap: anywhere;
 }
 
@@ -329,7 +337,7 @@ ${toneBlockColorRules("snui-text")}
   background: transparent;
   color: inherit;
   font-family: var(--snui-font-family-mono);
-  font-size: 0.9375em;
+  font-size: ${CODE_FONT_SIZE};
 }
 
 .snui-code--inline {
@@ -365,9 +373,12 @@ ${NARROW_PANEL_QUERY} {
   /*
    * The card tightens with the surfaces around it. A card left at the wider
    * step inside a narrowed Section pads more than the surface holding it, and
-   * both spend width the panel no longer has.
+   * both spend width the panel no longer has. A flush card draws no chrome
+   * and keeps its zero padding at every width; the exclusion sits in :where()
+   * so the rule keeps the one-class weight a consumer's override is written
+   * against.
    */
-  .snui-card {
+  .snui-card:not(:where(.snui-card--flush)) {
     padding: var(--snui-space-3);
   }
 }
@@ -383,9 +394,6 @@ ${NARROW_PANEL_QUERY} {
     color: CanvasText;
   }
 
-${toneSelectorList("snui-card")},
-${toneSelectorList("snui-card", "accent-")} {
-    border-inline-start-color: ButtonText;
-  }
+${forcedColorsToneBarRule("snui-card", "", "accent-")}
 }
 `);

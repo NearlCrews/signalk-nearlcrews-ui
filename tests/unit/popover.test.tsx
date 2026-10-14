@@ -174,6 +174,32 @@ describe("Popover surface", () => {
     expect(popoverWidth()).toBe("18rem");
   });
 
+  it("names the surface by its aria-label, and by its trigger without one", async () => {
+    const user = userEvent.setup();
+    renderInPanel(
+      <>
+        <Popover
+          aria-label="Chart details"
+          trigger={<Button>Show details</Button>}
+        >
+          <p>Popover body</p>
+        </Popover>
+        {infoPopover()}
+      </>,
+    );
+
+    // DialogTrigger labels the surface by its trigger through context, which
+    // outranks an aria-label unless the popover clears it.
+    await user.click(screen.getByRole("button", { name: "Show details" }));
+    expect(
+      screen.getByRole("dialog", { name: "Chart details" }),
+    ).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await openInfo(user);
+    expect(screen.getByRole("dialog", { name: "Info" })).toBeInTheDocument();
+  });
+
   it("passes a token width through the CSS variable unchanged", async () => {
     const user = userEvent.setup();
     renderPopover({ width: "var(--snui-content-width-standard)" });

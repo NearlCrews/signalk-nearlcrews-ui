@@ -1,5 +1,5 @@
 /** The package version used to isolate styles from other loaded versions. */
-export const PACKAGE_VERSION = "0.13.0";
+export const PACKAGE_VERSION = "0.14.0";
 
 /**
  * The root class is private and may change without notice.
@@ -14,6 +14,15 @@ export const ROOT_CLASS = "snui-root";
  * @internal
  */
 export const ROOT_SELECTOR = `.${ROOT_CLASS}[data-snui-version="${PACKAGE_VERSION}"]`;
+
+/**
+ * The class that removes content from view while keeping it in the
+ * accessibility tree. One constant keeps every component in step with the
+ * foundation stylesheet rule that defines it.
+ *
+ * @internal
+ */
+export const VISUALLY_HIDDEN_CLASS = "snui-visually-hidden";
 
 /**
  * A versioned global name prevents keyframe collisions between package copies.

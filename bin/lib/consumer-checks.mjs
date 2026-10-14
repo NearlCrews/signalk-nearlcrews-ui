@@ -68,7 +68,7 @@ const MARKUP_VERSION_STAMP = new RegExp(
 function assertExactVersion(version, source) {
   if (typeof version !== "string" || !EXACT_VERSION.test(version)) {
     throw new Error(
-      `${PACKAGE_NAME} in ${source} must be pinned to an exact version such as 0.9.0, got ${String(version)}. A prerelease such as 0.11.0-rc.1 is exact too; a range is not. The package ships breaking changes in minor releases, so a range would let an unreviewed upgrade reach the panel.`,
+      `${PACKAGE_NAME} in ${source} must be pinned to an exact version such as x.y.z, got ${String(version)}. A prerelease such as x.y.z-rc.1 is exact too; a range is not. The package ships breaking changes in minor releases, so a range would let an unreviewed upgrade reach the panel.`,
     );
   }
 }
@@ -288,6 +288,23 @@ function firstMarkerIn(source, markers) {
 }
 
 /**
+ * Loads Webpack's range encoder through `load`, a require function that
+ * resolves from the Webpack that built the remote. Webpack does not export
+ * lib/util/semver.js, so a move of that internal is named here, with what
+ * needed it, rather than surfacing as a bare module-not-found.
+ */
+export function loadWebpackParseRange(load, purpose) {
+  try {
+    return load("webpack/lib/util/semver.js").parseRange;
+  } catch (cause) {
+    throw new Error(
+      `webpack/lib/util/semver.js could not be loaded: ${cause.message}. ${purpose}`,
+      { cause },
+    );
+  }
+}
+
+/**
  * Encodes a semver range the way Webpack writes it into a remote entry. Uses
  * Webpack's own encoder when the consumer has Webpack installed; otherwise it
  * understands the caret ranges this package publishes.
@@ -422,10 +439,12 @@ function growthPercent(gzipBytes, baseline) {
 export function assertSizeBaseline(gzipBytes, baseline) {
   if (
     !Number.isInteger(baseline?.gzipBytes) ||
-    !Number.isFinite(baseline.maximumIncreasePercent)
+    baseline.gzipBytes <= 0 ||
+    !Number.isFinite(baseline.maximumIncreasePercent) ||
+    baseline.maximumIncreasePercent < 0
   ) {
     throw new Error(
-      "The size baseline needs integer gzipBytes and a numeric maximumIncreasePercent.",
+      "The size baseline needs a positive integer gzipBytes and a maximumIncreasePercent of zero or more.",
     );
   }
   const limit = Math.floor(

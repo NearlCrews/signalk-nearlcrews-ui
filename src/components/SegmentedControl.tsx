@@ -29,6 +29,7 @@ import {
 } from "../utils/react-node.js";
 import { nextRovingIndex, rovingKeyAxis } from "../utils/roving.js";
 import type { Orientation, Visibility } from "../utils/variants.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 import { FieldError } from "./FieldError.js";
 import { HiddenDescription } from "./HiddenDescription.js";
 
@@ -54,18 +55,18 @@ function focusMoveModifier(): "ctrlKey" | "metaKey" {
   return /Mac/i.test(navigator.userAgent) ? "metaKey" : "ctrlKey";
 }
 
-const OPTION_SELECTOR = '[role="radio"]';
-
 /**
  * Moves focus to the option at a position in the group the pressed option
  * belongs to. Reading the buttons from the DOM keeps their order authoritative
- * without registering each one, and the positions match the option list
- * because the group renders one button per option in that order.
+ * without registering each one, and the group's children are exactly the
+ * option buttons, one per option in list order, so a position needs no
+ * selector to find its button.
  */
 function focusOption(pressed: HTMLButtonElement, index: number): void {
-  const group = pressed.parentElement;
-  if (group === null) return;
-  group.querySelectorAll<HTMLButtonElement>(OPTION_SELECTOR)[index]?.focus();
+  const option = pressed.parentElement?.children[index] as
+    | HTMLElement
+    | undefined;
+  option?.focus();
 }
 
 export interface SegmentedControlOption<Value extends string> {
@@ -245,7 +246,9 @@ export function SegmentedControl<Value extends string>({
   // collapsed CollapsibleSection for example, restores the input's default in
   // the DOM without reaching the listener above, and React does not rewrite a
   // value prop it believes is unchanged. Resyncing here keeps the submitted
-  // value equal to the selection the control displays.
+  // value equal to the selection the control displays. Nothing React tracks
+  // changes when such a reset lands, so this runs after every commit; it costs
+  // one property read and a comparison, and writes only when they differ.
   useLayoutEffect(() => {
     const node = hiddenInputRef.current;
     const selected = effectiveValue ?? "";
@@ -305,7 +308,7 @@ export function SegmentedControl<Value extends string>({
         className={
           labelVisibility === "visible"
             ? "snui-segmented__legend"
-            : "snui-visually-hidden"
+            : VISUALLY_HIDDEN_CLASS
         }
       >
         {label}
@@ -384,7 +387,6 @@ export function SegmentedControl<Value extends string>({
           disabled={disabled}
           name={name}
           value={effectiveValue ?? ""}
-          readOnly
         />
       )}
     </div>

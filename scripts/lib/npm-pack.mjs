@@ -10,7 +10,7 @@ export function runNpm(arguments_) {
   const npmExecPath = process.env.npm_execpath;
   if (typeof npmExecPath !== "string" || npmExecPath.length === 0) {
     throw new Error(
-      "Package validation must run through npm so npm_execpath is available.",
+      "This script runs npm through npm_execpath, which only npm sets. Start it with `npm run <script>` rather than `node`.",
     );
   }
 

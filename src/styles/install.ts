@@ -1,5 +1,6 @@
-import { createDocumentRegistry, once } from "../utils/document-registry.js";
+import { createDocumentRegistry } from "../utils/document-registry.js";
 import { ERROR_PREFIX, packageError } from "../utils/errors.js";
+import { once } from "../utils/once.js";
 import { windowGlobal } from "../utils/window-global.js";
 
 /**
@@ -40,8 +41,9 @@ export class UnsupportedBrowserError extends Error {
  */
 export const ROOT_STYLE_MODULE_ID = "root";
 
-// The record shape changed with module ids, so the key moved to v2: a 0.8.x
-// copy in the same document keeps its own v1 map and neither reads the other.
+// The key is versioned by the record shape, which carries a module id. A copy
+// that stores the shape without one keeps its own v1 map in the same
+// document, and neither reads the other.
 const styleRegistry = createDocumentRegistry<string, InstalledStyle>(
   "signalk-nearlcrews-ui.style-registry.v2",
 );

@@ -7,8 +7,17 @@
  */
 import { headingText, prose, withoutInlineCode } from "./markdown.mjs";
 
-const INLINE_LINK =
-  /(!?)\[[^\]]*\]\(\s*<?([^\s)>]+)>?(?:\s+["'][^"']*["'])?\s*\)/g;
+const DESTINATION = String.raw`\(\s*<?([^\s)>]+)>?(?:\s+["'][^"']*["'])?\s*\)`;
+
+const INLINE_LINK = new RegExp(String.raw`(!?)\[[^\]]*\]${DESTINATION}`, "g");
+
+// A badge-style image inside a link, [![alt](image)](href). The generic
+// pattern would end the link text at the image's own bracket and never see the
+// outer destination, so this shape is read first and removed from the line.
+const LINKED_IMAGE = new RegExp(
+  String.raw`\[!\[[^\]]*\]${DESTINATION}\]${DESTINATION}`,
+  "g",
+);
 
 const REFERENCE_DEFINITION = /^\s*\[[^\]]+\]:\s*<?([^\s>]+)>?/g;
 
@@ -32,12 +41,17 @@ function stripHtmlTags(text) {
 }
 
 export function githubSlug(text) {
-  return stripHtmlTags(text)
-    .trim()
-    .toLowerCase()
-    .replace(/[`*_~]/g, "")
-    .replace(/[^\p{L}\p{N}\s-]/gu, "")
-    .replace(/\s+/g, "-");
+  return (
+    stripHtmlTags(text)
+      .trim()
+      .toLowerCase()
+      // Emphasis markers disappear from the rendered heading GitHub slugs, but
+      // an underscore inside a word is text and stays in the anchor.
+      .replace(/(^|[\s(])_+([^_]+?)_+(?=$|[\s).,:;!?])/g, "$1$2")
+      .replace(/[`*~]/g, "")
+      .replace(/[^\p{L}\p{N}\s_-]/gu, "")
+      .replace(/\s+/g, "-")
+  );
 }
 
 /** Every anchor a heading in the document creates, deduplicated as GitHub does. */
@@ -95,7 +109,17 @@ export function localDestinations(markdown) {
   const destinations = [];
 
   for (const { number, text } of prose(markdown)) {
-    const line = withoutInlineCode(text);
+    let line = withoutInlineCode(text);
+
+    for (const [, image, href] of line.matchAll(LINKED_IMAGE)) {
+      if (isLocal(image)) {
+        destinations.push({ destination: image, image: true, line: number });
+      }
+      if (isLocal(href)) {
+        destinations.push({ destination: href, image: false, line: number });
+      }
+    }
+    line = line.replace(LINKED_IMAGE, "");
 
     for (const [, bang, destination] of line.matchAll(INLINE_LINK)) {
       if (!isLocal(destination)) continue;

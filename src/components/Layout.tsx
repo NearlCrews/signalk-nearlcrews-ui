@@ -8,6 +8,7 @@ import {
 
 import {
   type AnnouncementMode,
+  announcesUpdates,
   liveRegionProps,
 } from "../utils/announcement.js";
 import { hasAccessibleName, joinIdReferences } from "../utils/aria.js";
@@ -18,7 +19,10 @@ import {
   type PolymorphicProps,
 } from "../utils/polymorphic.js";
 import { hasReactContent, requireContent } from "../utils/react-node.js";
-import { useAnnouncingTiming } from "../utils/repeat-announcement.js";
+import {
+  useAnnouncingTiming,
+  useRepeatAnnouncement,
+} from "../utils/repeat-announcement.js";
 import {
   isSemanticTone,
   type SemanticTone,
@@ -250,7 +254,7 @@ interface CardOwnProps {
   readonly header?: ReactNode | undefined;
   /**
    * Names the card and groups what it holds, for a repeated row a reader
-   * should be able to tell from its neighbours. Plain text, because it becomes
+   * should be able to tell from its neighbors. Plain text, because it becomes
    * the accessible name. The native `aria-label` and `aria-labelledby` name
    * and group the card the same way, the latter by something already on
    * screen. Only a div card becomes a group: a card rendered as `nav` or
@@ -383,11 +387,22 @@ export interface MetricProps
   extends Omit<HTMLAttributes<HTMLDivElement>, "children">,
     RefAttributes<HTMLDivElement> {
   /**
+   * Change it to announce the current reading again, the same figure twice in
+   * a row included: a screen reader compares a live region against the text
+   * it last read, so an unchanged reading says nothing on its own. The metric
+   * withholds its value for a tenth of a second and restores it, which is
+   * visible as a brief blank, so pass a key only where a repeat matters. A
+   * settling metric repeats through its hidden region and never blanks.
+   * Meaningful only on an announcing metric.
+   */
+  readonly announceKey?: string | number | undefined;
+  /**
    * Holds a reading the metric mounts with for one beat, so its value region
-   * exists before the reading arrives and a screen reader observes it.
-   * Defaults to true on a polite metric and false on an assertive one. Set it
-   * to false where the reading at mount is not news, such as a figure present
-   * when the panel loads. Meaningful only on an announcing metric.
+   * exists before the reading arrives and a screen reader observes it. The
+   * value shows blank for that beat. Defaults to true on a polite metric and
+   * false on an assertive one. Set it to false where the reading at mount is
+   * not news, such as a figure present when the panel loads. Meaningful only
+   * on an announcing metric.
    */
   readonly deferFirstMessage?: boolean | undefined;
   readonly detail?: ReactNode | undefined;
@@ -421,6 +436,7 @@ export interface MetricProps
 }
 
 export function Metric({
+  announceKey,
   "aria-labelledby": ariaLabelledBy,
   className,
   deferFirstMessage,
@@ -457,6 +473,12 @@ export function Metric({
     hasContent: hasValue,
     settleMs,
   });
+  // A repeat empties the same region for a beat, so the reader hears a change
+  // where the figure alone would have looked identical.
+  const withholding = useRepeatAnnouncement(
+    announceKey,
+    !echoes && announcesUpdates(attributes) && hasValue,
+  );
 
   return (
     // biome-ignore lint/a11y/useSemanticElements: Metrics may render outside MetricGrid, and fieldset would imply form controls.
@@ -488,6 +510,7 @@ export function Metric({
           ) : null}
           <ToneEchoRegion
             className="snui-metric__region"
+            announceKey={announceKey}
             defers={defers}
             live={live}
             settleMs={settleMs}
@@ -508,7 +531,7 @@ export function Metric({
           role={attributes.role}
           aria-live={attributes["aria-live"]}
         >
-          {hasValue && !holding ? (
+          {hasValue && !holding && !withholding ? (
             <>
               <ToneMark
                 className="snui-metric__tone-glyph"

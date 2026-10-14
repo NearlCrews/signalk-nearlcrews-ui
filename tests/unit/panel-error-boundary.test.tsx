@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CollapsibleSection,
@@ -13,7 +13,7 @@ import {
   type PanelAnnounce,
   PanelAnnouncerProvider,
 } from "../../src/utils/announcer.js";
-import { panel, renderInPanel } from "../helpers.js";
+import { panel, panelRootOf, renderInPanel } from "../helpers.js";
 import { Bomb, failure } from "./lib/failing-content.js";
 
 describe("PanelErrorBoundary", () => {
@@ -41,6 +41,105 @@ describe("PanelErrorBoundary", () => {
     await user.click(screen.getByRole("button", { name: "Try again" }));
     expect(screen.getByText("Recovered content")).toBeVisible();
     expect(container.querySelector(".snui-banner--danger")).toBeNull();
+  });
+
+  it("keeps the reader in the panel when Try again recovers", async () => {
+    const user = userEvent.setup();
+    const { container } = renderInPanel(
+      <PanelErrorBoundary>
+        <Bomb />
+      </PanelErrorBoundary>,
+    );
+    screen.getByRole("button", { name: "Try again" }).focus();
+
+    failure.armed = false;
+    await user.keyboard("{Enter}");
+
+    // The recovered content took the place of the button the reader pressed,
+    // so the panel root catches them rather than the host page's body.
+    expect(screen.getByText("Recovered content")).toBeVisible();
+    const panelRoot = panelRootOf(container);
+    expect(panelRoot).toHaveFocus();
+    panelRoot.blur();
+    expect(panelRoot).not.toHaveAttribute("tabindex");
+  });
+
+  it("leaves focus to recovered content that takes it", async () => {
+    const user = userEvent.setup();
+    function Recovered(): React.JSX.Element {
+      const field = useRef<HTMLInputElement | null>(null);
+      useEffect(() => {
+        field.current?.focus();
+      }, []);
+      return <input ref={field} aria-label="Depth offset" />;
+    }
+    function Content(): React.JSX.Element {
+      return failure.armed ? <Bomb /> : <Recovered />;
+    }
+    renderInPanel(
+      <PanelErrorBoundary>
+        <Content />
+      </PanelErrorBoundary>,
+    );
+
+    failure.armed = false;
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(screen.getByRole("textbox", { name: "Depth offset" })).toHaveFocus();
+  });
+
+  it("names the fallback it moves focus onto and describes its actions", () => {
+    renderInPanel(
+      <PanelErrorBoundary onReload={() => undefined}>
+        <Bomb />
+      </PanelErrorBoundary>,
+    );
+
+    // Focus lands on the fallback itself, so it carries a role and a name to
+    // be read on arrival, and the warning about unsaved changes is read with
+    // them rather than only after the reader goes looking for it.
+    const fallback = screen.getByRole("group", {
+      name: "This panel stopped working",
+    });
+    expect(fallback).toHaveFocus();
+    expect(fallback).toHaveAccessibleDescription(
+      "Try again reopens this panel without reloading the page. Reloading the page discards unsaved changes in every panel.",
+    );
+  });
+
+  it("clears a caught error when a reset key changes", () => {
+    const tree = (record: string): React.JSX.Element =>
+      panel(
+        <PanelErrorBoundary resetKeys={[record]}>
+          <Bomb />
+        </PanelErrorBoundary>,
+      );
+    const { container, rerender } = render(tree("engine"));
+    expect(container.querySelector(".snui-banner--danger")).toHaveFocus();
+
+    failure.armed = false;
+    rerender(tree("engine"));
+    expect(screen.queryByText("Recovered content")).toBeNull();
+
+    rerender(tree("battery"));
+    expect(screen.getByText("Recovered content")).toBeVisible();
+    expect(panelRootOf(container)).toHaveFocus();
+  });
+
+  it("keeps an error caught in the render that changed a reset key", () => {
+    const tree = (record: string): React.JSX.Element =>
+      panel(
+        <PanelErrorBoundary resetKeys={[record]}>
+          <Bomb />
+        </PanelErrorBoundary>,
+      );
+    failure.armed = false;
+    const { container, rerender } = render(tree("engine"));
+
+    // The new key may be what failed, so it cannot also be what clears it.
+    failure.armed = true;
+    rerender(tree("battery"));
+    expect(container.querySelector(".snui-banner--danger")).toBeVisible();
   });
 
   it("offers the secondary reload action only when a handler is given", async () => {

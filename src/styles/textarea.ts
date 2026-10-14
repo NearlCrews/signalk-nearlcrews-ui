@@ -1,10 +1,21 @@
 import type { StyleModule } from "./install.js";
 import { scopeStyles } from "./scope.js";
 
+/*
+ * Room for about three lines of body text, so an empty field reads as one
+ * that takes a paragraph rather than a single line.
+ */
+const TEXTAREA_MIN_HEIGHT = "6rem";
+
 /**
  * Multi-line text field styles. Installed by `Textarea` through
  * `useOptionalModuleStyles`, so a panel without one never injects them. The
  * shared `.snui-input` rules the field also carries stay in the root sheet.
+ *
+ * The coarse-pointer type floor and the forced-colors invalid outline are not
+ * restated here. The control always carries snui-input as well, so the root
+ * sheet's rules for that class already reach it, and a second copy could only
+ * drift from the one every other field follows.
  */
 export const TEXTAREA_STYLES: StyleModule = {
   id: "textarea",
@@ -15,7 +26,7 @@ export const TEXTAREA_STYLES: StyleModule = {
  * below the last, so the field restores it.
  */
 .snui-textarea {
-  min-height: 6rem;
+  min-height: ${TEXTAREA_MIN_HEIGHT};
   padding-block: var(--snui-space-2);
   resize: vertical;
 }
@@ -28,12 +39,5 @@ export const TEXTAREA_STYLES: StyleModule = {
   min-height: auto;
   field-sizing: content;
 }
-
-/*
- * The coarse-pointer type floor and the forced-colors invalid outline are not
- * restated here. The control always carries snui-input as well, so the root
- * sheet's rules for that class already reach it, and a second copy could only
- * drift from the one every other field follows.
- */
 `),
 };

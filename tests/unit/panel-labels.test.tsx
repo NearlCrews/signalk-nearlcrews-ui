@@ -414,7 +414,7 @@ describe("panel label bundle", () => {
 
     expect(screen.getByText("Bezig")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sluiten" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "Tonen" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Tonen API key" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Opslaan" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Verwerpen" })).toBeVisible();
     expect(
@@ -449,7 +449,7 @@ describe("panel label bundle", () => {
     );
 
     expect(screen.getByText("Working")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Show" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Show API key" })).toBeVisible();
   });
 
   it("titles an empty grid and a confirmation from the bundle", () => {

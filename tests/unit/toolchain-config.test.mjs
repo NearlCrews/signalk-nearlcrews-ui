@@ -10,17 +10,20 @@ import { matchesGlob } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { readPackageJson, repositoryPath } from "../../scripts/lib/paths.mjs";
+import {
+  readJson,
+  readPackageJson,
+  repositoryPath,
+} from "../../scripts/lib/paths.mjs";
 import { CI_WORKFLOW_PATH } from "../../scripts/lib/release-checks.mjs";
 import vitestConfig from "../../vitest.config.js";
+import { WORKFLOWS } from "./lib/workflows.mjs";
 
 function readText(...parts) {
   return readFileSync(repositoryPath(...parts), "utf8");
 }
 
-function readRepositoryJson(...parts) {
-  return JSON.parse(readText(...parts));
-}
+const readRepositoryJson = (...parts) => readJson(repositoryPath(...parts));
 
 const ciWorkflow = readText(CI_WORKFLOW_PATH);
 const packageJson = await readPackageJson();
@@ -36,45 +39,60 @@ describe("CI cancellation", () => {
   });
 });
 
+describe("workflow concurrency", () => {
+  // The publish workflow is one queue for the whole repository, so its group
+  // is a fixed name and it never cancels.
+  const GLOBAL_QUEUES = new Set(["npm-publish.yml"]);
+
+  it("names every group after the workflow, never by a literal", () => {
+    for (const { name, source } of WORKFLOWS) {
+      if (GLOBAL_QUEUES.has(name)) continue;
+      expect(source, `${name} has no concurrency group`).toMatch(
+        /^concurrency:\n {2}group: \$\{\{ github\.workflow \}\}-/m,
+      );
+    }
+  });
+});
+
 describe("editor schema pins", () => {
   // Each schema is read from the installed package, so an editor validates
   // against the tool that runs and a dependency update edits no second file.
-  it("points the knip schema at the installed knip", () => {
-    expect(readRepositoryJson("knip.json").$schema).toBe(
+  it("points the knip schema at the installed knip", async () => {
+    expect((await readRepositoryJson("knip.json")).$schema).toBe(
       "./node_modules/knip/schema.json",
     );
-    expect(() =>
+    await expect(
       readRepositoryJson("node_modules", "knip", "schema.json"),
-    ).not.toThrow();
+    ).resolves.toBeDefined();
   });
 
-  it("points the Biome schema at the installed Biome", () => {
-    const installed = readRepositoryJson(
+  it("points the Biome schema at the installed Biome", async () => {
+    const { version: installed } = await readRepositoryJson(
       "node_modules",
       "@biomejs",
       "biome",
       "package.json",
-    ).version;
+    );
     expect(packageJson.devDependencies["@biomejs/biome"]).toBe(installed);
-    expect(readRepositoryJson("biome.json").$schema).toBe(
+    expect((await readRepositoryJson("biome.json")).$schema).toBe(
       "./node_modules/@biomejs/biome/configuration_schema.json",
     );
-    expect(() =>
+    await expect(
       readRepositoryJson(
         "node_modules",
         "@biomejs",
         "biome",
         "configuration_schema.json",
       ),
-    ).not.toThrow();
+    ).resolves.toBeDefined();
   });
 });
 
 describe("documentation gates", () => {
-  it("lints Markdown with the rules an editor reads", () => {
+  it("lints Markdown with the rules an editor reads", async () => {
     // The runner and an editor extension both read .markdownlint.json, so a
     // rule changed there changes what both report.
-    expect(readRepositoryJson(".markdownlint.json").default).toBe(true);
+    expect((await readRepositoryJson(".markdownlint.json")).default).toBe(true);
     expect(packageJson.scripts["lint:docs"]).toBe(
       "node scripts/check-markdown.mjs",
     );

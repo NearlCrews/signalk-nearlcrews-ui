@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -15,6 +14,7 @@ import {
   singleClassSelectorsOf,
 } from "../../bin/lib/style-overrides.mjs";
 import { repositoryPath } from "../../scripts/lib/paths.mjs";
+import { runNodeEval } from "./lib/run-node.mjs";
 import { removeTemporaryTrees, temporaryTree } from "./lib/temporary-tree.mjs";
 
 const STYLE_OVERRIDES = pathToFileURL(
@@ -38,15 +38,10 @@ function placeInChild(source) {
       placements: placements.map(({ component, key, line }) => component + ":" + key + "@" + line),
     }));
   `;
-  const result = spawnSync(
-    process.execPath,
-    ["--input-type=module", "--eval", script],
-    {
-      encoding: "utf8",
-      env: { ...process.env, SNUI_SOURCE: source },
-      timeout: 10_000,
-    },
-  );
+  const result = runNodeEval(script, {
+    env: { ...process.env, SNUI_SOURCE: source },
+    timeout: 10_000,
+  });
   if (result.error?.code === "ETIMEDOUT" || result.signal !== null) {
     throw new Error("The parse did not finish within 10 s.");
   }
@@ -840,14 +835,14 @@ export function Row() {
 }
 `;
 
-  it("names every single class that lands on a package component", () => {
+  it("names every single class that lands on a package component", async () => {
     const root = panelTree({
       "src/MergeProviderList.module.css":
         ".row{display:flex}.checkbox{flex:1 1 auto}.badge.badge{margin:0}.provider-note{margin-block-start:0}",
       "src/MergeProviderList.tsx": PANEL,
     });
 
-    const { cssModules, findings } = findSingleClassOverrides(
+    const { cssModules, findings } = await findSingleClassOverrides(
       join(root, "src"),
       root,
     );
@@ -857,12 +852,14 @@ export function Row() {
       "src/MergeProviderList.module.css: .checkbox lands on the package Checkbox (src/MergeProviderList.tsx:7) through a single class selector, which loses to a scoped package rule setting the same property. Declare it as .checkbox.checkbox.",
       "src/MergeProviderList.module.css: .provider-note lands on the package Text (src/MergeProviderList.tsx:10) through a single class selector, which loses to a scoped package rule setting the same property. Declare it as .provider-note.provider-note.",
     ]);
-    expect(() => assertDoubledOverrides(join(root, "src"), root)).toThrow(
+    await expect(
+      assertDoubledOverrides(join(root, "src"), root),
+    ).rejects.toThrow(
       "A panel class overrides a package component without doubling:\nsrc/MergeProviderList.module.css: .checkbox",
     );
   });
 
-  it("passes doubled overrides and reads a module outside the directory", () => {
+  it("passes doubled overrides and reads a module outside the directory", async () => {
     const root = panelTree({
       "shared/rows.module.css": ".note.note{margin:0}",
       "src/Panel.module.css": ".checkbox.checkbox{flex:1}",
@@ -874,10 +871,12 @@ import rows from "../shared/rows.module.css";
 `,
     });
 
-    expect(assertDoubledOverrides(join(root, "src"), root)).toBe(1);
+    await expect(assertDoubledOverrides(join(root, "src"), root)).resolves.toBe(
+      1,
+    );
   });
 
-  it("finds a single class in a module outside the directory", () => {
+  it("finds a single class in a module outside the directory", async () => {
     const root = panelTree({
       "shared/rows.module.css": ".note{margin:0}",
       "src/Panel.tsx": `import { Text } from "signalk-nearlcrews-ui";
@@ -886,7 +885,7 @@ import rows from "../shared/rows.module.css";
 `,
     });
 
-    expect(findSingleClassOverrides(join(root, "src"), root)).toEqual({
+    expect(await findSingleClassOverrides(join(root, "src"), root)).toEqual({
       cssModules: 0,
       findings: [
         "shared/rows.module.css: .note lands on the package Text (src/Panel.tsx:3) through a single class selector, which loses to a scoped package rule setting the same property. Declare it as .note.note.",
@@ -894,7 +893,7 @@ import rows from "../shared/rows.module.css";
     });
   });
 
-  it("reports a CSS module it cannot read rather than skipping it", () => {
+  it("reports a CSS module it cannot read rather than skipping it", async () => {
     const root = panelTree({
       "src/Panel.module.css": ".row{display:flex}",
       "src/Panel.tsx": `import { Checkbox } from "signalk-nearlcrews-ui";
@@ -907,17 +906,19 @@ import styles from "./Panel.module.css";
 `,
     });
 
-    expect(findSingleClassOverrides(join(root, "src"), root).findings).toEqual([
+    expect(
+      (await findSingleClassOverrides(join(root, "src"), root)).findings,
+    ).toEqual([
       "src/Panel.tsx:5: .box lands on the package Checkbox through @/styles/alias.module.css, which the check cannot read: only the bundler resolves an alias or package path. Import CSS modules by a path relative to the component, so the check can tell whether the class is doubled.",
       "src/Panel.tsx:6: .gone lands on the package Checkbox through ./Missing.module.css, which the check cannot read: no such file. Import CSS modules by a path relative to the component, so the check can tell whether the class is doubled.",
     ]);
   });
 
-  it("fails a tree with no CSS module", () => {
+  it("fails a tree with no CSS module", async () => {
     const root = panelTree({ "src/Panel.tsx": PANEL });
 
-    expect(() => assertDoubledOverrides(join(root, "src"), root)).toThrow(
-      "--styles found no *.module.css under src",
-    );
+    await expect(
+      assertDoubledOverrides(join(root, "src"), root),
+    ).rejects.toThrow("--styles found no *.module.css under src");
   });
 });

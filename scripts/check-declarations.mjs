@@ -23,7 +23,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";
-
 import {
   DECLARATION_FILE,
   distPath,

@@ -7,4 +7,6 @@ node_modules/
 package-lock.json
 playwright-report/
 test-results/
+# Biome formats these (lint:biome checks them). The format scripts only match
+# Markdown and YAML, so this line is for an editor running Prettier on a file.
 **/*.{cjs,css,gql,graphql,html,js,jsx,json,jsonc,mjs,ts,tsx}

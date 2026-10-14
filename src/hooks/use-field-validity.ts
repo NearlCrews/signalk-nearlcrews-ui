@@ -97,12 +97,21 @@ function focusTarget(node: unknown): HTMLElement | null {
   );
 }
 
-/** Orders two nodes by where they sit in the document. */
-function documentOrder(first: Node, second: Node): number {
-  return first.compareDocumentPosition(second) &
-    Node.DOCUMENT_POSITION_FOLLOWING
-    ? -1
-    : 1;
+/**
+ * Orders two nodes by where they sit in the document, as a sort comparator.
+ * The same node ties, and so do two nodes in different trees: the platform's
+ * order for those is implementation specific and need not agree both ways
+ * round, so the stable sort keeps them in the order they were registered.
+ *
+ * @internal Exported for its unit test.
+ */
+export function documentOrder(first: Node, second: Node): number {
+  if (first === second) return 0;
+  const position = first.compareDocumentPosition(second);
+  if (position & Node.DOCUMENT_POSITION_DISCONNECTED) return 0;
+  if (position & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+  if (position & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+  return 0;
 }
 
 /**
@@ -144,6 +153,9 @@ export function useFieldValidity(): FieldValidity {
     useState<ReadonlySet<string>>(NO_INVALID_FIELDS);
   const registered = useRef(new Map<string, FieldValidityHandlers>());
   const records = useRef(new Map<string, FieldRecord>());
+  // Whether a field has detached since the last sweep found none hidden, so a
+  // commit with every field on screen walks nothing.
+  const sweepPending = useRef(false);
 
   const setInvalid = useCallback((field: string, invalid: boolean): void => {
     setInvalidFields((current) => {
@@ -156,24 +168,34 @@ export function useFieldValidity(): FieldValidity {
   }, []);
 
   /*
-   * Forgets one name, or every name, whose field has left the page. Four
-   * routes call it, one per way a field can leave: the ref cleanup, for a
-   * field leaving while on screen; the sweep after each commit of the owner,
-   * for a field removed while a retaining section hid it, where React runs
-   * no second cleanup; a registration of the same name, for a hidden field
-   * that left without its owner committing; and a registration of a new
-   * name, for a field registered outside the owner's render, such as by a
-   * child handed the validity, whose removal commits no owner render.
+   * Forgets one name, or every name, whose field has left the page, and
+   * reports whether a hidden field is still waiting to be shown or removed.
+   * Four routes call it, one per way a field can leave: the ref cleanup, for
+   * a field leaving while on screen; the sweep after a commit of the owner,
+   * for a field removed while a retaining section hid it, where React runs no
+   * second cleanup; a registration of the same name, for a hidden field that
+   * left without its owner committing; and a registration of a new name, for
+   * a field registered outside the owner's render, such as by a child handed
+   * the validity, whose removal commits no owner render. The two registration
+   * routes run during a render, and stay safe there: they only drop records
+   * of fields already gone from the document, so a render React throws away
+   * or repeats drops the same records and nothing a reader sees changes.
    */
-  const forgetStale = useCallback((field?: string): void => {
+  const forgetStale = useCallback((field?: string): boolean => {
+    let hiddenRemain = false;
     // Deleting the key just visited is defined for a Map, so the sweep walks
     // the live keys rather than a copy made after every commit.
     const names = field === undefined ? records.current.keys() : [field];
     for (const name of names) {
-      if (!isStaleRecord(records.current.get(name))) continue;
+      const record = records.current.get(name);
+      if (!isStaleRecord(record)) {
+        if (record?.attached === false) hiddenRemain = true;
+        continue;
+      }
       records.current.delete(name);
       registered.current.delete(name);
     }
+    return hiddenRemain;
   }, []);
 
   const register = useCallback(
@@ -207,6 +229,7 @@ export function useFieldValidity(): FieldValidity {
           if (!record.valid) setInvalid(field, true);
           return () => {
             record.attached = false;
+            sweepPending.current = true;
             setInvalid(field, false);
             // The same cleanup runs when a retaining section hides the field,
             // whose node stays in the document, and when the field leaves the
@@ -224,10 +247,12 @@ export function useFieldValidity(): FieldValidity {
     [forgetStale, setInvalid],
   );
 
-  // After every commit of the owner a node removed in it has left the
-  // document, while a hidden one has not, so the sweep keeps hidden fields.
+  // After a commit of the owner a node removed in it has left the document,
+  // while a hidden one has not, so the sweep keeps hidden fields. It runs only
+  // while a detached field may still be waiting, and goes quiet once none is.
   useLayoutEffect(() => {
-    forgetStale();
+    if (!sweepPending.current) return;
+    sweepPending.current = forgetStale();
   });
 
   const firstInvalid = useCallback((): HTMLElement | null => {

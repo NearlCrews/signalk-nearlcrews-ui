@@ -41,7 +41,17 @@ interface SharedClock {
 
 const clocks = new Map<number, SharedClock>();
 
-/** The document whose visibility the clocks follow, absent outside a browser. */
+/**
+ * The document whose visibility the clocks follow, absent outside a browser.
+ *
+ * It is the document this module loaded in, not each reader's own. A clock is
+ * shared by every reader of its cadence and none of them names a document, so
+ * a panel rendered into a second window follows the first window's
+ * visibility: hiding the first window pauses the ages in a second one that is
+ * still on screen until the first is shown again, though a reader that
+ * subscribes meanwhile still reads the clock once. Following each reader's
+ * document would need every reader of the clock to pass one.
+ */
 function clockDocument(): Document | undefined {
   return typeof document === "undefined" ? undefined : document;
 }

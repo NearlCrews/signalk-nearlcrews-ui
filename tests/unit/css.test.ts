@@ -10,7 +10,12 @@ import {
   PUBLIC_TOKEN_NAMES,
   TOKEN_STYLES,
 } from "../../src/styles/tokens.js";
-import { ROOT_SELECTOR } from "../../src/version.js";
+import { SPACE_SCALE } from "../../src/utils/variants.js";
+import {
+  ROOT_CLASS,
+  ROOT_SELECTOR,
+  VISUALLY_HIDDEN_CLASS,
+} from "../../src/version.js";
 import {
   ALL_MODULE_STYLES,
   classNamesIn,
@@ -19,8 +24,28 @@ import {
 } from "../css-helpers.js";
 
 // jsdom rewrites import.meta.url to an http URL, so resolve from the
-// project root (the vitest working directory) instead.
-const COMPONENTS_DIR = join(process.cwd(), "src", "components");
+// project root (the vitest working directory) instead. The components apply
+// most classes, and the utilities render a few of their own.
+const CLASS_SOURCE_DIRS = ["components", "utils"].map((directory) =>
+  join(process.cwd(), "src", directory),
+);
+
+/**
+ * Class names the sources apply through a shared constant rather than a
+ * literal, by the constant's name, so a reference to the constant counts as
+ * a reference to the class.
+ */
+const SHARED_CLASS_CONSTANTS: ReadonlyMap<string, string> = new Map([
+  ["ROOT_CLASS", ROOT_CLASS],
+  ["VISUALLY_HIDDEN_CLASS", VISUALLY_HIDDEN_CLASS],
+]);
+
+/** A module constant holding a class name, with its name and value captured. */
+const CLASS_CONSTANT_PATTERN =
+  /\bconst\s+([A-Z][A-Z0-9_]*)\s*=\s*"(snui-[a-z0-9_-]+)"/g;
+
+/** A quoted word, the shape every variant value a prop accepts is spelled in. */
+const QUOTED_WORD_PATTERN = /"([a-z0-9][a-z0-9-]*)"/g;
 
 /**
  * Class tokens referenced by component TSX. The lookbehind keeps custom
@@ -39,36 +64,48 @@ const UNSTYLED_HOOK_CLASSES: ReadonlySet<string> = new Set([
   // Structural grouping inside the section header, sized by the header's own
   // child rules.
   "snui-section__heading-group",
-  // Inherits size, weight, and color from the surrounding snui-toast__tone rule.
-  "snui-toast__tone-glyph",
   // Focus hook the toast region uses to find the dismiss control; the button
   // itself is styled by the shared snui-button rules.
   "snui-toast__dismiss",
 ]);
 
-/** Classes the stylesheet defines without a literal TSX reference. */
-const STYLESHEET_ONLY_CLASSES: ReadonlySet<string> = new Set([
-  // Applied through the ROOT_CLASS constant, so the literal never appears in
-  // component source.
-  "snui-root",
-]);
-
 function componentClassTokens(): {
   literals: Set<string>;
   prefixes: Set<string>;
+  words: Set<string>;
 } {
   const literals = new Set<string>();
   const prefixes = new Set<string>();
-  const files = readdirSync(COMPONENTS_DIR).filter((file) =>
-    file.endsWith(".tsx"),
+  const words = new Set<string>();
+  const files = CLASS_SOURCE_DIRS.flatMap((directory) =>
+    readdirSync(directory)
+      .filter((file) => /\.tsx?$/.test(file))
+      .map((file) => join(directory, file)),
   );
   expect(files.length).toBeGreaterThan(0);
   for (const file of files) {
-    const source = readFileSync(`${COMPONENTS_DIR}/${file}`, "utf8");
-    for (const line of source.split("\n")) {
+    const source = readFileSync(file, "utf8");
+    // A class a module names once as a constant and builds its modifiers
+    // from: its references read as the literal it holds.
+    const constants = new Map(SHARED_CLASS_CONSTANTS);
+    for (const [, name = "", value = ""] of source.matchAll(
+      CLASS_CONSTANT_PATTERN,
+    )) {
+      constants.set(name, value);
+    }
+    for (const [, word = ""] of source.matchAll(QUOTED_WORD_PATTERN)) {
+      words.add(word);
+    }
+    for (const sourceLine of source.split("\n")) {
       // Toast element keys use an `snui-toast-${n}` template; keys are not
       // classes, so key-building lines stay out of the scan.
-      if (/\bkey\s*=/.test(line)) continue;
+      if (/\bkey\s*=/.test(sourceLine)) continue;
+      let line = sourceLine;
+      for (const [name, value] of constants) {
+        if (!new RegExp(`\\b${name}\\b`).test(line)) continue;
+        literals.add(value);
+        line = line.replaceAll(`\${${name}}`, value);
+      }
       for (const match of line.matchAll(CLASS_TOKEN_PATTERN)) {
         const token = match[0];
         if (token.endsWith("-")) prefixes.add(token);
@@ -76,7 +113,7 @@ function componentClassTokens(): {
       }
     }
   }
-  return { literals, prefixes };
+  return { literals, prefixes, words };
 }
 
 describe.each(STYLE_MODULES.map((module) => [module.id, module] as const))(
@@ -144,9 +181,10 @@ describe("class coverage", () => {
   let defined = new Set<string>();
   let literals = new Set<string>();
   let prefixes = new Set<string>();
+  let words = new Set<string>();
   beforeAll(() => {
     defined = classNamesIn(ALL_MODULE_STYLES);
-    ({ literals, prefixes } = componentClassTokens());
+    ({ literals, prefixes, words } = componentClassTokens());
   });
 
   it("styles every class the components reference", () => {
@@ -167,11 +205,20 @@ describe("class coverage", () => {
   });
 
   it("keeps every stylesheet class referenced by the components", () => {
+    // A class built from a template prefix counts only when the rest of its
+    // name is a value the sources spell, so a variant whose value no prop
+    // offers any more is caught rather than kept alive by its prefix. The gap
+    // steps are numbers from the shared space scale.
+    const offered = (suffix: string): boolean =>
+      words.has(suffix) ||
+      (SPACE_SCALE as readonly number[]).includes(Number(suffix));
     for (const name of [...defined].sort()) {
-      if (STYLESHEET_ONLY_CLASSES.has(name)) continue;
       const referenced =
         literals.has(name) ||
-        [...prefixes].some((prefix) => name.startsWith(prefix));
+        [...prefixes].some(
+          (prefix) =>
+            name.startsWith(prefix) && offered(name.slice(prefix.length)),
+        );
       expect(
         referenced,
         `the stylesheet styles .${name} but no component references it`,

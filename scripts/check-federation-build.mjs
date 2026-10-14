@@ -18,6 +18,7 @@ import {
   assertNoHostHarness,
   assertNoReactRuntime,
   assertVersionStamp,
+  loadWebpackParseRange,
 } from "../bin/lib/consumer-checks.mjs";
 import {
   assertEntryCarriesNoLibrary,
@@ -42,11 +43,17 @@ import {
   renderPanelRemote,
 } from "../bin/lib/panel-runtime.mjs";
 import {
+  isPackageDistFile,
   panelJavaScriptEntries,
   TOOLING_ENTRIES,
 } from "./lib/bundle-contract.mjs";
 import { createFederationShared } from "./lib/federation-share.mjs";
-import { readJson, readPackageJson, repositoryPath } from "./lib/paths.mjs";
+import {
+  distDirectory,
+  readJson,
+  readPackageJson,
+  repositoryPath,
+} from "./lib/paths.mjs";
 
 const require = createRequire(import.meta.url);
 const {
@@ -64,19 +71,12 @@ const packageEntryFiles = [...panelJavaScriptEntries(packageExports).keys()]
   .map((entry) => `${entry}.js`)
   .sort();
 
-// webpack does not export lib/util/semver.js, and this check requires it
-// anyway so the fixture assertions encode ranges exactly as the webpack that
-// built them does. Naming that when the internal moves beats a bare
-// module-not-found from the top of the script.
-let parseRange;
-try {
-  ({ parseRange } = require("webpack/lib/util/semver.js"));
-} catch (cause) {
-  throw new Error(
-    "webpack/lib/util/semver.js could not be loaded; the federation check needs webpack's own range encoder.",
-    { cause },
-  );
-}
+// The fixture assertions encode ranges exactly as the webpack that built them
+// does.
+const parseRange = loadWebpackParseRange(
+  require,
+  "The federation check needs webpack's own range encoder.",
+);
 
 // The fixtures build against the generated entry, so the entry has to exist
 // and carry the map rendered from this package.json before the remotes are
@@ -201,14 +201,22 @@ for (const { files, format, stats } of fixtures) {
   // Webpack gives it, so the one list answers every lookup below.
   const modulePaths = collectModulePaths(stats);
   for (const entryPoint of packageEntryFiles) {
-    if (!modulePaths.some((path) => path.includes(`dist/${entryPoint}`))) {
+    if (
+      !modulePaths.some((path) =>
+        isPackageDistFile(path, entryPoint, distDirectory),
+      )
+    ) {
       throw new Error(
         `${format} fixture did not consume the ${entryPoint} package entry point.`,
       );
     }
   }
   for (const tooling of TOOLING_ENTRIES) {
-    if (modulePaths.some((path) => path.includes(`dist/${tooling}`))) {
+    if (
+      modulePaths.some((path) =>
+        isPackageDistFile(path, tooling, distDirectory),
+      )
+    ) {
       throw new Error(
         `${format} fixture bundles the ${tooling} test tooling entry point, which no panel may contain.`,
       );

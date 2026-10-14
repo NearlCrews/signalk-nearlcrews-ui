@@ -124,8 +124,6 @@ export interface PanelLabels {
         readonly label?: string | undefined;
       }
     | undefined;
-  /** Accessible names announced for each semantic tone. */
-  readonly tone?: Partial<Readonly<Record<SemanticTone, string>>> | undefined;
   /** Landmark name and dismissal action of the toast region. */
   readonly toastRegion?:
     | {
@@ -133,6 +131,8 @@ export interface PanelLabels {
         readonly label?: string | undefined;
       }
     | undefined;
+  /** Accessible names announced for each semantic tone. */
+  readonly tone?: Partial<Readonly<Record<SemanticTone, string>>> | undefined;
   /**
    * Heading and explanation of the compatibility notice `PanelShell` shows on
    * a browser without native CSS scope. The notice renders instead of the

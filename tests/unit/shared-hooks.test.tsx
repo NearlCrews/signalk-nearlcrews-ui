@@ -180,6 +180,29 @@ describe("useFocusWithin", () => {
     expect(holdsFocus?.current).toBe(false);
   });
 
+  it("samples focus inside a shadow root, where focusin names the host", () => {
+    // The document listener sees the shadow host as the target, which the
+    // node does not contain, so only the composed path can place focus.
+    const host = attached("div");
+    const container = document.createElement("div");
+    host.attachShadow({ mode: "open" }).append(container);
+    const view = render(<FocusWithinProbe />, { container });
+    try {
+      act(() => {
+        within(container).getByTestId("inside").focus();
+      });
+      expect(holdsFocus?.current).toBe(true);
+
+      const outside = attached("button");
+      act(() => {
+        outside.focus();
+      });
+      expect(holdsFocus?.current).toBe(false);
+    } finally {
+      view.unmount();
+    }
+  });
+
   it("samples focus in a second window, whose elements are not this window's", () => {
     withFrameDocument((frameDocument) => {
       const container = frameDocument.createElement("div");
@@ -324,6 +347,42 @@ describe("useFocusReturnOnClose", () => {
     const focus = vi.spyOn(opener, "focus");
     view.rerender(closed);
     expect(focus).not.toHaveBeenCalled();
+  });
+
+  it("forgets the element it captured when the region closes without focus", () => {
+    const opener = attached("button");
+    const view = render(
+      <RegionProbe capturePreviousFocus open={false} withTrigger={false} />,
+    );
+    act(() => {
+      opener.focus();
+    });
+    view.rerender(
+      <RegionProbe capturePreviousFocus open withTrigger={false} />,
+    );
+    act(() => {
+      screen.getByTestId("elsewhere").focus();
+    });
+    // Closed while focus sat elsewhere: nothing moves, and the opener it
+    // captured is let go rather than held for a later close.
+    view.rerender(
+      <RegionProbe capturePreviousFocus open={false} withTrigger={false} />,
+    );
+
+    view.rerender(
+      <RegionProbe capturePreviousFocus={false} open withTrigger={false} />,
+    );
+    act(() => {
+      screen.getByTestId("close").focus();
+    });
+    view.rerender(
+      <RegionProbe
+        capturePreviousFocus={false}
+        open={false}
+        withTrigger={false}
+      />,
+    );
+    expect(document.activeElement).not.toBe(opener);
   });
 
   it("lets go of the focus it held when a close had nowhere to return it", () => {

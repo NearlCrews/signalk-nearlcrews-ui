@@ -1,4 +1,10 @@
+/**
+ * Measures every public entry point bundled alone and holds its gzip size to
+ * the budget recorded in docs/api-reference.md. Run it after a build: it reads
+ * dist. `--table` prints the table a release refreshes.
+ */
 import { readFile } from "node:fs/promises";
+
 import { build } from "esbuild";
 
 import { assertKnownOptions, readFlag } from "../bin/lib/cli-arguments.mjs";

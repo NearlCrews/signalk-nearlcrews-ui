@@ -7,6 +7,11 @@
  * block early. One scanner tracks the fence that opened the block, so a fence
  * of the other kind, a shorter one, or one with an info string stays part of
  * the block it sits in.
+ *
+ * Indented code blocks are not recognized: a four-space indent is also how a
+ * list item continues, and telling the two apart needs a full parser. This
+ * repository's Markdown fences its examples, and the link check would flag an
+ * indented example link loudly rather than miss one.
  */
 
 /** A fence line: its indentation, its run of backticks or tildes, and the rest. */
@@ -49,10 +54,38 @@ export function* markdownLines(markdown) {
   }
 }
 
-/** Yields `{ number, text }` for each line outside a fenced code block. */
+/**
+ * Yields `{ number, text }` for each line outside a fenced code block, with
+ * HTML comments removed: a link or heading inside one renders as nothing, so
+ * it is neither checked as a link nor counted as an anchor. A comment that
+ * spans lines hides every line it covers. The scan walks each line by index
+ * rather than with a pattern, so an unterminated or nested opener can never
+ * leave a fragment of a comment behind.
+ */
 export function* prose(markdown) {
+  let insideComment = false;
   for (const { kind, number, text } of markdownLines(markdown)) {
-    if (kind === "prose") yield { number, text };
+    if (kind !== "prose") continue;
+    let visible = "";
+    let index = 0;
+    while (index < text.length) {
+      if (insideComment) {
+        const end = text.indexOf("-->", index);
+        if (end === -1) break;
+        index = end + 3;
+        insideComment = false;
+        continue;
+      }
+      const start = text.indexOf("<!--", index);
+      if (start === -1) {
+        visible += text.slice(index);
+        break;
+      }
+      visible += text.slice(index, start);
+      index = start + 4;
+      insideComment = true;
+    }
+    yield { number, text: visible };
   }
 }
 

@@ -17,11 +17,12 @@
  * ships without a parser dependency because the command ships in the package
  * tarball.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, relative, resolve } from "node:path";
 
 import { PACKAGE_NAME } from "./consumer-checks.mjs";
 import { readCss, singleClassOf } from "./css-source.mjs";
+import { collectFiles } from "./file-walk.mjs";
 import { escapeRegExp } from "./regexp.mjs";
 
 /** Source files a panel's components live in. */
@@ -30,17 +31,8 @@ const COMPONENT_FILE = /\.[cm]?[jt]sx?$/;
 /** The CSS modules the check reads rules from. */
 const CSS_MODULE_FILE = /\.module\.css$/;
 
-/** Every file under `directory`, skipping dependencies and dot entries. */
-function filesUnder(directory) {
-  const found = [];
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || entry.name.startsWith(".")) continue;
-    const path = join(directory, entry.name);
-    if (entry.isDirectory()) found.push(...filesUnder(path));
-    else found.push(path);
-  }
-  return found;
-}
+/** Directories no panel source lives in. */
+const SKIPPED_DIRECTORIES = new Set(["node_modules"]);
 
 /**
  * Keywords after which a `/` opens a regular expression rather than dividing.
@@ -552,8 +544,12 @@ export function singleClassSelectorsOf(source) {
  * Checks every component file and CSS module under `directory`. Returns the
  * findings as sentences and the number of CSS modules read.
  */
-export function findSingleClassOverrides(directory, root = directory) {
-  const files = filesUnder(directory);
+export async function findSingleClassOverrides(directory, root = directory) {
+  const files = await collectFiles(directory, {
+    matches: () => true,
+    skipDirectories: SKIPPED_DIRECTORIES,
+    skipHidden: true,
+  });
   const singleClasses = new Map();
   // A component may import a module from outside the directory, so modules
   // are read as their importers name them rather than only from the listing.
@@ -608,8 +604,11 @@ export function findSingleClassOverrides(directory, root = directory) {
  * Asserts no CSS module class lands on a package component through a single
  * class selector. Returns the number of CSS modules read, for the summary.
  */
-export function assertDoubledOverrides(directory, root = directory) {
-  const { cssModules, findings } = findSingleClassOverrides(directory, root);
+export async function assertDoubledOverrides(directory, root = directory) {
+  const { cssModules, findings } = await findSingleClassOverrides(
+    directory,
+    root,
+  );
   if (cssModules === 0) {
     throw new Error(
       `--styles found no *.module.css under ${relative(root, directory) || "."}, so there is nothing to check. Point it at the directory that holds the panel's components and their CSS modules.`,

@@ -6,10 +6,17 @@ import {
   markdownAnchors,
   splitDestination,
 } from "../../scripts/lib/docs-links.mjs";
+import { prose } from "../../scripts/lib/markdown.mjs";
 
 describe("documentation link slugs", () => {
   it("matches ordinary GitHub-style heading normalization", () => {
     expect(githubSlug("API, refs, and defaults")).toBe("api-refs-and-defaults");
+  });
+
+  it("keeps underscores that are part of the heading text, as GitHub does", () => {
+    expect(githubSlug("`my_prop` option")).toBe("my_prop-option");
+    expect(githubSlug("snake_case_name")).toBe("snake_case_name");
+    expect(githubSlug("An _emphasized_ word")).toBe("an-emphasized-word");
   });
 
   it("removes complete inline HTML tags while retaining their text", () => {
@@ -107,6 +114,39 @@ describe("documentation link destinations", () => {
     ]);
   });
 
+  it("reads both the image and the link of an image inside a link", () => {
+    expect(
+      localDestinations(
+        [
+          "[![badge](docs/screenshots/badge.svg)](docs/guide.md) and [![remote](https://example.invalid/a.svg)](CHANGELOG.md)",
+          "[plain](docs/other.md)",
+        ].join("\n"),
+      ),
+    ).toEqual([
+      { destination: "docs/screenshots/badge.svg", image: true, line: 1 },
+      { destination: "docs/guide.md", image: false, line: 1 },
+      { destination: "CHANGELOG.md", image: false, line: 1 },
+      { destination: "docs/other.md", image: false, line: 2 },
+    ]);
+  });
+
+  it("skips links and headings inside HTML comments", () => {
+    const markdown = [
+      "# Real",
+      "<!-- [hidden](docs/never.md) -->",
+      "<!--",
+      "## Hidden heading",
+      "[also hidden](docs/never.md)",
+      "-->",
+      "[kept](docs/guide.md) <!-- [inline](docs/never.md) -->",
+    ].join("\n");
+
+    expect(localDestinations(markdown)).toEqual([
+      { destination: "docs/guide.md", image: false, line: 7 },
+    ]);
+    expect([...markdownAnchors(markdown)]).toEqual(["real"]);
+  });
+
   it("skips absolute URLs, protocol-relative URLs, inline code, and fenced examples", () => {
     expect(
       localDestinations(
@@ -146,5 +186,37 @@ describe("documentation link targets", () => {
     // whole check instead of reporting the one link.
     expect(splitDestination("docs/100%.md")).toBeUndefined();
     expect(splitDestination("docs/guide.md#caf%E9")).toBeUndefined();
+  });
+});
+
+describe("prose outside HTML comments", () => {
+  const visible = (markdown) => [...prose(markdown)].map(({ text }) => text);
+
+  it("hides a comment on one line and keeps the text around it", () => {
+    expect(visible("before <!-- [a](x.md) --> after")).toEqual([
+      "before  after",
+    ]);
+  });
+
+  it("hides every line a comment spans, then resumes after it closes", () => {
+    expect(visible("one <!-- start\n[a](x.md)\nend --> two\nthree")).toEqual([
+      "one ",
+      "",
+      " two",
+      "three",
+    ]);
+  });
+
+  it("leaves no fragment of an opener nested inside a comment", () => {
+    expect(visible("a <!-- <!-- b --> c")).toEqual(["a  c"]);
+    expect(visible("a <!<!---- b --> c")).toEqual(["a <! c"]);
+  });
+
+  it("treats an unterminated comment as hiding the rest of the file", () => {
+    expect(visible("a <!-- open\nhidden\nstill hidden")).toEqual([
+      "a ",
+      "",
+      "",
+    ]);
   });
 });

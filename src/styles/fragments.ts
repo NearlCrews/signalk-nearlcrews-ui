@@ -15,7 +15,11 @@
  * same, but the lint rule against inferrable types removes one.
  */
 
-import { CONTAINER_BREAKPOINT_NARROW, PANEL_CONTAINER_NAME } from "./tokens.js";
+import {
+  CONTAINER_BREAKPOINT_NARROW,
+  FOCUS_RING_OFFSET,
+  PANEL_CONTAINER_NAME,
+} from "./tokens.js";
 
 const VISUALLY_HIDDEN_PROPERTIES: readonly (readonly [string, string])[] = [
   ["position", "absolute"],
@@ -42,6 +46,29 @@ export function visuallyHiddenDeclarations(important = false): string {
     ([property, value]) => `  ${property}: ${value}${suffix};`,
   ).join("\n");
 }
+
+/*
+ * The line heights the package sets below the body's own. Constants rather
+ * than tokens: each belongs to a shape the package draws, not to the reading
+ * rhythm a consumer themes through `--snui-line-height`.
+ */
+
+/**
+ * One line of short text that has to sit snugly in its box: a button label, a
+ * badge, and the two display heading steps, where the body leading reads
+ * loose at 20 and 24 pixels.
+ */
+export const TIGHT_LEADING = "1.2";
+
+/** A heading at the body size or one step above it, which may wrap. */
+export const TITLE_LEADING = "1.3";
+
+/**
+ * A metric reading: a step looser than a label, because the value is the
+ * line an operator reads from across the cabin and a large figure set at 1.2
+ * crowds the label above it.
+ */
+export const METRIC_VALUE_LEADING = "1.25";
 
 /** Shared presentation for every field error message. */
 export const FIELD_ERROR_DECLARATIONS = `  min-width: 0;
@@ -119,18 +146,35 @@ function safeAreaPaddingDeclarations(): string {
 export const SAFE_AREA_PADDING_DECLARATIONS =
   /* @__PURE__ */ safeAreaPaddingDeclarations();
 
+/**
+ * How far an overlay slides while it fades: the short distance an anchored
+ * overlay and a leaving toast travel, and the longer one a dialog and an
+ * arriving toast rise from, which have no anchor to grow out of.
+ */
+export const OVERLAY_SLIDE_SHORT = "0.25rem";
+export const OVERLAY_SLIDE_LONG = "0.5rem";
+
 /** The entering and exiting state of an anchored overlay. */
-export const OVERLAY_TRANSITION_DECLARATIONS = `  opacity: 0;
-  transform: translateY(-0.25rem);` as string;
+export const OVERLAY_TRANSITION_DECLARATIONS = /* @__PURE__ */ [
+  "  opacity: 0;",
+  `  transform: translateY(-${OVERLAY_SLIDE_SHORT});`,
+].join("\n");
+
+/**
+ * The width of the boundary forced colors redraws around an overlay, inside
+ * its edge so it never adds to the overlay's footprint.
+ */
+const FORCED_COLORS_OUTLINE_WIDTH = "2px";
 
 /**
  * Forced colors flattens the overlay's border and shadow, so the surface
  * boundary is redrawn with a system color. Indented for use inside a
  * forced-colors media block.
  */
-export const FORCED_COLORS_OUTLINE_DECLARATIONS =
-  `    outline: 2px solid CanvasText;
-    outline-offset: -2px;` as string;
+export const FORCED_COLORS_OUTLINE_DECLARATIONS = /* @__PURE__ */ [
+  `    outline: ${FORCED_COLORS_OUTLINE_WIDTH} solid CanvasText;`,
+  `    outline-offset: -${FORCED_COLORS_OUTLINE_WIDTH};`,
+].join("\n");
 
 /**
  * The system highlight pair a control takes under forced colors where the
@@ -163,7 +207,7 @@ export const INSET_FOCUS_RING_OFFSET = `calc(-1 * ${FOCUS_RING_WIDTH})`;
 /**
  * Where a focus ring sits. An inset ring, for rows and menu items, lies just
  * inside the edge, so its offset follows the ring width; an outset ring, for
- * controls, stands 2 pixels clear.
+ * controls, stands `FOCUS_RING_OFFSET` clear.
  */
 export type FocusRingPlacement = "inset" | "outset";
 
@@ -172,7 +216,9 @@ export type FocusRingPlacement = "inset" | "outset";
  * Outset rings with the two-tone shadow suit controls, where
  * `--snui-focus-ring` fills the offset gap with `--snui-color-focus-ring-band`,
  * the fill behind the control, so the ring keeps its own boundary next to a
- * danger or accent edge.
+ * danger or accent edge. Without the shadow the rule clears it: the shared
+ * `:focus-visible` rule paints it on every focused element, and on a row or a
+ * menu item with an inset ring that halo would spill over its neighbors.
  */
 export function focusRingDeclarations(
   placement: FocusRingPlacement,
@@ -180,8 +226,8 @@ export function focusRingDeclarations(
 ): string {
   return [
     `  outline: ${FOCUS_RING_WIDTH} solid var(--snui-color-focus);`,
-    `  outline-offset: ${placement === "inset" ? INSET_FOCUS_RING_OFFSET : "2px"};`,
-    ...(shadow ? ["  box-shadow: var(--snui-focus-ring);"] : []),
+    `  outline-offset: ${placement === "inset" ? INSET_FOCUS_RING_OFFSET : FOCUS_RING_OFFSET};`,
+    `  box-shadow: ${shadow ? "var(--snui-focus-ring)" : "none"};`,
   ].join("\n");
 }
 
@@ -189,10 +235,10 @@ export function focusRingDeclarations(
  * Disabled presentation shared by every control. Text takes the disabled
  * token, which the contrast tests measure, instead of an opacity that dims an
  * unmeasurable amount. Opacity stays for icon-only children, and a filled
- * control restates its own disabled fill beside this block.
+ * control restates its own disabled fill beside this block. The opacity is
+ * restated at 1 because Chromium dims a disabled select to 0.7 in its own
+ * stylesheet, and the color token already carries the state.
  */
-// Chromium dims a disabled select to 0.7 opacity in its own stylesheet; the
-// color token carries the disabled state, so the control stays fully opaque.
 export const DISABLED_DECLARATIONS = `  cursor: not-allowed;
   color: var(--snui-color-text-disabled);
   opacity: 1;` as string;
@@ -282,6 +328,14 @@ export const CONTROL_SURFACE_DECLARATIONS = /* @__PURE__ */ surfaceDeclarations(
 );
 
 /**
+ * The width floor a table cell keeps inside a scrolling table, so a wide table
+ * scrolls instead of squeezing every column to one word per line. Table and
+ * DataGrid each publish it under their own custom property, with this as the
+ * default.
+ */
+export const TABLE_CELL_MIN_WIDTH = "6rem";
+
+/**
  * The text a table caption takes, shared by Table and DataGrid so a panel
  * moving between them keeps its caption.
  */
@@ -345,6 +399,24 @@ export const FIRST_LINE_GLYPH_SLOT_DECLARATIONS = `  display: flex;
   align-items: center;
   block-size: 1lh;` as string;
 
+/**
+ * The leading slot both section shells put before their heading: a Section's
+ * glyph and a collapsible section's enable checkbox sit there the same way.
+ */
+export const SECTION_LEADING_DECLARATIONS = `  display: flex;
+  flex: none;
+  align-items: center;
+  min-width: 0;` as string;
+
+/**
+ * The title size of a top section in both shells. Titles are sized by depth
+ * below the shell's own title rather than by heading level, so a top section
+ * takes this step whichever level it was handed, and every deeper one keeps
+ * the body size.
+ */
+export const TOP_SECTION_TITLE_DECLARATION =
+  "  font-size: var(--snui-font-size-lg);";
+
 /** The required and optional markers a field or checkbox label may hold. */
 export const FIELD_MARKERS = ":is(.snui-optional-mark, .snui-required-mark)";
 
@@ -363,8 +435,27 @@ export const NON_LINK_DESCENDANTS = ":not(:any-link, :any-link *)";
  */
 export const FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS = /* @__PURE__ */ [
   `    outline: ${FOCUS_RING_WIDTH} solid CanvasText;`,
-  "    outline-offset: 2px;",
+  `    outline-offset: ${FOCUS_RING_OFFSET};`,
   "    box-shadow: none;",
+].join("\n");
+
+/**
+ * How far the dashed invalid outline stands from the control: just clear of
+ * the border it repeats the meaning of, and inside the focus ring's offset, so
+ * the two never draw on the same line.
+ */
+const INVALID_OUTLINE_OFFSET = "1px";
+
+/**
+ * The shape that marks every invalid value control, beside the danger color:
+ * a dashed outline. Color alone cannot carry the refusal, because Night caps
+ * every foreground's red and the danger border sits about 1.5:1 from the
+ * ordinary one there. A rule using it stands aside while the control shows
+ * visible focus, because the focus ring owns the outline there.
+ */
+export const INVALID_OUTLINE_DECLARATIONS = /* @__PURE__ */ [
+  "  outline: 1px dashed var(--snui-color-danger);",
+  `  outline-offset: ${INVALID_OUTLINE_OFFSET};`,
 ].join("\n");
 
 /**
@@ -372,9 +463,10 @@ export const FORCED_COLORS_FOCUS_VISIBLE_DECLARATIONS = /* @__PURE__ */ [
  * flattens the danger border to a system color and would otherwise erase the
  * valid versus invalid distinction. Indented for a forced-colors media block.
  */
-export const FORCED_COLORS_INVALID_DECLARATIONS =
-  `    outline: 2px dashed CanvasText;
-    outline-offset: 1px;` as string;
+export const FORCED_COLORS_INVALID_DECLARATIONS = /* @__PURE__ */ [
+  "    outline: 2px dashed CanvasText;",
+  `    outline-offset: ${INVALID_OUTLINE_OFFSET};`,
+].join("\n");
 
 /**
  * The size of the glyph a selection control paints: the checkbox box and the

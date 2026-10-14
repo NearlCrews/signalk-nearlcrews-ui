@@ -1,11 +1,6 @@
+// One namespace import serves both the share scope, which hands the whole
+// module to the remote, and every React API this file calls.
 import * as React from "react";
-import {
-  Component,
-  createElement,
-  type ReactNode,
-  Suspense,
-  useState,
-} from "react";
 import * as ReactDOM from "react-dom";
 
 import {
@@ -56,7 +51,7 @@ const containerInitializations = new WeakMap<
 
 /** The Admin's fallback for a module it could not load. */
 function errorModule(message: string): PanelRemoteModule {
-  function ErrorLoadingComponent(): ReactNode {
+  function ErrorLoadingComponent(): React.ReactNode {
     return (
       <div className="p-4 text-center">
         <h4 className="text-danger">Error loading component</h4>
@@ -155,7 +150,7 @@ async function loadPanelRemoteModule(
 }
 
 interface PluginErrorBoundaryProps {
-  readonly children: ReactNode;
+  readonly children: React.ReactNode;
   readonly pluginName: string;
 }
 
@@ -164,7 +159,7 @@ interface PluginErrorBoundaryState {
 }
 
 /** The Admin's own boundary around a configuration panel, with its words. */
-class PluginErrorBoundary extends Component<
+class PluginErrorBoundary extends React.Component<
   PluginErrorBoundaryProps,
   PluginErrorBoundaryState
 > {
@@ -174,7 +169,7 @@ class PluginErrorBoundary extends Component<
     return { error };
   }
 
-  override render(): ReactNode {
+  override render(): React.ReactNode {
     const { error } = this.state;
     if (error === null) return this.props.children;
     return (
@@ -204,6 +199,12 @@ class PluginErrorBoundary extends Component<
  * Mirrors `EmbeddedPluginConfigurationForm` and `toLazyDynamicComponent` in
  * signalk-server at 756b555d (2.33.0). The legacy React 16 bridge is left
  * out: a panel built on this package needs React 19.
+ *
+ * The remote is loaded once per mount, as the Admin builds one lazy component
+ * per panel it opens, and `configuration` seeds the state once in the same
+ * way. Changing `packageName`, `type`, `url`, or `shareScope` on a mounted
+ * frame loads nothing new: give the frame a `key` built from them to open
+ * another remote.
  */
 export function HostPanelFrame({
   configuration: initialConfiguration,
@@ -212,8 +213,8 @@ export function HostPanelFrame({
   shareScope,
   type,
   url,
-}: HostPanelFrameProps): ReactNode {
-  const [Panel] = useState(() =>
+}: HostPanelFrameProps): React.ReactNode {
+  const [Panel] = React.useState(() =>
     React.lazy(() => {
       pageShareScope ??= createHostShareScope(React, ReactDOM);
       return loadPanelRemoteModule(
@@ -223,7 +224,7 @@ export function HostPanelFrame({
     }),
   );
   const [configuration, setConfiguration] =
-    useState<unknown>(initialConfiguration);
+    React.useState<unknown>(initialConfiguration);
   const save = (next: unknown): void => {
     onSave?.(next);
     setConfiguration(next);
@@ -232,9 +233,9 @@ export function HostPanelFrame({
   return (
     <div className="card-body" {...{ [HOST_HARNESS_MARKER]: "" }}>
       <PluginErrorBoundary pluginName={packageName}>
-        <Suspense fallback="Loading...">
-          {createElement(Panel, { configuration, save })}
-        </Suspense>
+        <React.Suspense fallback="Loading...">
+          {React.createElement(Panel, { configuration, save })}
+        </React.Suspense>
       </PluginErrorBoundary>
     </div>
   );

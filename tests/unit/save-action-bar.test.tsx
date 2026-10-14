@@ -302,6 +302,29 @@ describe("SaveActionBar", () => {
     expect(screen.getByRole("button", { name: "Discard" })).toBeEnabled();
   });
 
+  it("keeps the reader on a button that goes idle under them", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderInPanel(
+      saveBar({ dirty: true, labels: LABELS }),
+    );
+    const discard = screen.getByRole("button", { name: "Discard" });
+    discard.focus();
+
+    // The panel's own data catches up with the edit, so nothing is left to
+    // do while the reader still stands on Discard.
+    rerender(panel(saveBar({ dirty: false, labels: LABELS })));
+    expect(discard).toHaveFocus();
+    expect(discard).toBeEnabled();
+    expect(discard).toHaveAttribute("aria-disabled", "true");
+    expect(discard).toHaveAccessibleDescription("Nothing to save");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+
+    // Once the reader moves on, the idle button leaves the tab order.
+    await user.tab({ shift: true });
+    expect(discard).not.toHaveFocus();
+    expect(discard).toBeDisabled();
+  });
+
   it("keeps a saving button focusable and busy", async () => {
     const user = userEvent.setup();
     const onSave = vi.fn();

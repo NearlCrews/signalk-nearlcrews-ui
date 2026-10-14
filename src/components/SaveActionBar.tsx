@@ -91,6 +91,9 @@ export type SaveActionBarAction =
   | (() => void)
   | (() => SaveActionBarFocusTarget);
 
+/** The two buttons the bar renders. */
+type BarAction = "discard" | "save";
+
 /**
  * What the panel heard back about its last save request, shown in the bar's
  * own status. The bar only presents it: the request, its timing, and any
@@ -464,8 +467,8 @@ export function SaveActionBar({
   const statusRef = useRef<HTMLDivElement>(null);
   const statusId = useId();
   const bundledLabels = usePanelLabels()?.saveActionBar;
-  // Seven labels of which at most four ever render, re-resolved on every
-  // dirty, saving, and saved transition otherwise.
+  // Only a few of the labels ever render at once, and the whole set would
+  // otherwise be resolved again on every dirty, saving, and saved transition.
   const labels = useMemo(
     () =>
       resolveBundledLabels(
@@ -520,19 +523,34 @@ export function SaveActionBar({
     status.focus();
   };
 
+  // Which action the reader stands on, so a prop change that leaves nothing
+  // to do never natively disables the button holding focus.
+  const [standingOn, setStandingOn] = useState<BarAction | null>(null);
+
   // A refusal keeps a button where the reader is standing and points at the
   // status line for the reason. Native disabled is left for the states where
-  // there is genuinely nothing to do.
+  // there is genuinely nothing to do, and waits until the reader moves off
+  // the button, because it would drop their focus on the body.
   const availability = (
+    action: BarAction,
     unavailable: boolean,
   ): Pick<
     ButtonAsButtonProps,
-    "aria-describedby" | "ariaDisabled" | "disabled"
-  > => ({
-    ariaDisabled: state.blocked && unavailable,
-    "aria-describedby": state.blocked ? statusId : undefined,
-    disabled: unavailable && !state.blocked,
-  });
+    "aria-describedby" | "ariaDisabled" | "disabled" | "onBlur" | "onFocus"
+  > => {
+    const refuses = unavailable && (state.blocked || standingOn === action);
+    return {
+      ariaDisabled: refuses,
+      "aria-describedby": state.blocked || refuses ? statusId : undefined,
+      disabled: unavailable && !refuses,
+      onBlur: () => {
+        setStandingOn(null);
+      },
+      onFocus: () => {
+        setStandingOn(action);
+      },
+    };
+  };
 
   return (
     <ActionBar
@@ -559,7 +577,7 @@ export function SaveActionBar({
             loadingLabel={labels.saving}
             // Saving blocks activation through Button's own busy state, so it
             // never reaches native disabled.
-            {...availability(state.saveDisabled && !saving)}
+            {...availability("save", state.saveDisabled && !saving)}
             onClick={() => {
               runAction(onSave);
             }}
@@ -567,7 +585,7 @@ export function SaveActionBar({
             {labels.save}
           </Button>
           <Button
-            {...availability(state.discardDisabled)}
+            {...availability("discard", state.discardDisabled)}
             onClick={() => {
               runAction(onDiscard);
             }}

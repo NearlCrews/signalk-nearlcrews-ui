@@ -136,14 +136,46 @@ describe("control and form stylesheets", () => {
     );
     expect(hovers.length).toBeGreaterThan(0);
     for (const { atRules, selector } of hovers) {
-      const gated = atRules.some(
-        (rule) =>
-          rule.includes("(hover: hover)") ||
-          // The forced-colors block restates hover so the system colors hold;
-          // it never adds a hover-only fill of its own.
-          rule.includes("(forced-colors: active)"),
-      );
-      expect(gated, `ungated hover rule: ${selector}`).toBe(true);
+      if (atRules.some((rule) => rule.includes("(hover: hover)"))) continue;
+      // The one ungated form: a forced-colors rule that restates a control's
+      // resting look through its hover, so the system colors hold. Each
+      // hovered selector it lists sits beside its resting form, which is how
+      // the rule shows it adds no hover-only fill of its own.
+      expect(
+        atRules.some((rule) => rule.includes("(forced-colors: active)")),
+        `ungated hover rule: ${selector}`,
+      ).toBe(true);
+      const listed = selector.split(/,(?![^()]*\))/).map((part) => part.trim());
+      for (const part of listed.filter((entry) => entry.includes(":hover"))) {
+        const resting = part
+          .replace(":hover", "")
+          .replace(/:not\([^)]*\)+/g, "");
+        expect(
+          listed.some(
+            (entry) =>
+              !entry.includes(":hover") &&
+              entry.replace(/:not\([^)]*\)+/g, "") === resting,
+          ),
+          `forced-colors hover rule with no resting form beside it: ${part}`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("guards every direction selector behind a check the engine can answer", () => {
+    // Chromium and Edge 118 and 119 match no :dir() selector. Each such rule
+    // sits under @supports, where its comment states what the floor loses;
+    // the Night resize grip states its loss in the foundation sheet instead.
+    const directional = everyRule.filter(({ selector }) =>
+      selector.includes(":dir("),
+    );
+    expect(directional.length).toBeGreaterThan(0);
+    for (const { atRules, selector } of directional) {
+      if (selector.includes("::-webkit-resizer")) continue;
+      expect(
+        atRules.some((rule) => rule === "@supports selector(:dir(rtl))"),
+        `unguarded direction rule: ${selector}`,
+      ).toBe(true);
     }
   });
 
@@ -192,12 +224,13 @@ describe("control and form stylesheets", () => {
     // The dashed reconstruction outweighs the ring a field gets under forced
     // colors, so each selector that draws it has to stand aside while the
     // control shows visible focus.
-    const invalidRules = [controls, range, radio].flatMap((sheet) =>
-      [...sheet.matchAll(/([^{}]+)\{\s*outline: 2px dashed CanvasText;/g)].map(
-        (match) => match[1] ?? "",
-      ),
+    const invalidRules = [controls, range, radio, switchStyles].flatMap(
+      (sheet) =>
+        [
+          ...sheet.matchAll(/([^{}]+)\{\s*outline: 2px dashed CanvasText;/g),
+        ].map((match) => match[1] ?? ""),
     );
-    expect(invalidRules.length).toBe(3);
+    expect(invalidRules.length).toBe(4);
     for (const list of invalidRules) {
       for (const selector of list.split(",")) {
         expect(selector.trim()).toMatch(
@@ -216,6 +249,117 @@ describe("control and form stylesheets", () => {
     expect(controls).toMatch(
       /\.snui-button--danger \{[^}]*border-style: dashed;/,
     );
+  });
+
+  it("marks every invalid value control with the same dashed shape, aside while focused", () => {
+    const shaped = [controls, range, radio, switchStyles].flatMap((sheet) =>
+      [
+        ...sheet.matchAll(
+          /([^{}]+)\{\s*outline: 1px dashed var\(--snui-color-danger\);\s*outline-offset: 1px;/g,
+        ),
+      ].map((match) => normalizedCss((match[1] ?? "").trim())),
+    );
+    expect(shaped.sort()).toEqual(
+      [
+        '.snui-checkbox__input[aria-invalid="true"]:not(:focus-visible)',
+        '.snui-input[aria-invalid="true"]:not(:focus-visible)',
+        ".snui-radio__button[data-invalid]:not([data-focus-visible]) .snui-radio__control",
+        '.snui-range[aria-invalid="true"]:not(:focus-visible)',
+        ".snui-switch__button[data-invalid]:not([data-focus-visible]) .snui-switch__track",
+      ].sort(),
+    );
+    // A switch had no invalid rule at all; it takes the danger border too.
+    expect(normalizedCss(switchStyles)).toContain(
+      ".snui-switch__button[data-invalid] .snui-switch__track { border-color: var(--snui-color-danger); }",
+    );
+  });
+
+  it("keeps the danger border of an invalid dial or track under the pointer and in forced colors", () => {
+    for (const [sheet, block, part] of [
+      [radio, "radio", "control"],
+      [switchStyles, "switch", "track"],
+    ] as const) {
+      const hovers = styleRules(sheet)
+        .map(({ selector }) => selector)
+        .filter((selector) => selector.includes("[data-hovered]"));
+      expect(hovers.length).toBeGreaterThan(0);
+      for (const selector of hovers) {
+        expect(selector).toContain(
+          ":not([data-disabled], [data-readonly], [data-invalid])",
+        );
+      }
+      // The part opts out of forced colors, so the themed danger border is
+      // restated in the system palette, ahead of the selected rule.
+      const forced = normalizedCss(stylesFrom(sheet, FORCED_COLORS));
+      const restated = `.snui-${block}__${part}, .snui-${block}__button[data-invalid] .snui-${block}__${part} { forced-color-adjust: none; border-color: ButtonText;`;
+      expect(forced).toContain(restated);
+      expect(forced.indexOf(restated)).toBeLessThan(
+        forced.indexOf(
+          `.snui-${block}__button[data-selected] .snui-${block}__${part} {`,
+        ),
+      );
+    }
+  });
+
+  it("treats a toggle or tab held through aria-disabled as a disabled one", () => {
+    // The control stays focusable, so only the styles say it takes no press:
+    // no hover or press fill, and the disabled presentation.
+    const live = everyRule.filter(
+      ({ selector }) =>
+        /\.snui-(collapsible__toggle|tab)\b/.test(selector) &&
+        /:hover|:active/.test(selector),
+    );
+    expect(live.length).toBeGreaterThan(0);
+    for (const { selector } of live) {
+      expect(selector).toContain(
+        ':not(:is(:disabled, [aria-disabled="true"]))',
+      );
+    }
+    const blocked = everyRule.map(({ selector }) => selector);
+    expect(blocked).toContain(
+      '.snui-collapsible__toggle:is(:disabled, [aria-disabled="true"])',
+    );
+    expect(blocked).toContain(
+      '.snui-tab:is(:disabled, [aria-disabled="true"])',
+    );
+  });
+
+  it("tells a pointer that a read-only switch or radio takes no press", () => {
+    expect(normalizedCss(switchStyles)).toContain(
+      ".snui-switch__button[data-readonly] { cursor: not-allowed; }",
+    );
+    expect(normalizedCss(radio)).toContain(
+      ".snui-radio__button[data-readonly] { cursor: not-allowed; }",
+    );
+  });
+
+  it("answers the pointer and the press on a text button, and keeps it in system colors", () => {
+    const live = ':not(:disabled):not([aria-disabled="true"])';
+    const flat = normalizedCss(controls);
+    expect(flat).toContain(
+      `@media (hover: hover) { .snui-button--text${live}:hover { background: var(--snui-color-interactive-hover); } }`,
+    );
+    expect(flat).toMatch(
+      /\.snui-button--text:not\(:disabled\):not\(\[aria-disabled="true"\]\):active \{ background: var\(--snui-color-accent-subtle\); \}/,
+    );
+    const forced = normalizedCss(forcedControls);
+    expect(forced).toContain(
+      `.snui-button--text, .snui-button--text${live}:hover { forced-color-adjust: none; border-color: ButtonText; background: Canvas; color: ButtonText; }`,
+    );
+    expect(forced).toContain(".snui-button--text:focus-visible,");
+  });
+
+  it("leaves accent-color off every control drawn with appearance: none", () => {
+    // accent-color only tints a control the engine draws itself, and forced
+    // colors resets it, so beside appearance: none it paints nothing.
+    for (const module of STYLE_MODULES) {
+      for (const { body, selectors } of ruleBlocks(
+        stripComments(module.styles),
+      )) {
+        if (!body.includes("appearance: none")) continue;
+        expect(body, selectors.join(", ")).not.toContain("accent-color");
+      }
+    }
   });
 
   it("uses tone, track, and disabled tokens instead of derived colors", () => {
@@ -274,12 +418,12 @@ describe("control and form stylesheets", () => {
     expect(controls).toContain("margin-block-end: var(--snui-space-2);");
   });
 
-  it("reconstructs secondary and ghost buttons under forced colors", () => {
+  it("reconstructs secondary, ghost, and text buttons under forced colors", () => {
     expect(forcedControls).toMatch(
       /\.snui-button--secondary,\s*\.snui-button--secondary:not\(:disabled\):not\(\[aria-disabled="true"\]\):hover \{\s*forced-color-adjust: none;\s*border-color: ButtonText;\s*background: ButtonFace;\s*color: ButtonText;/,
     );
     expect(forcedControls).toMatch(
-      /\.snui-button--ghost,\s*\.snui-button--ghost:not\(:disabled\):not\(\[aria-disabled="true"\]\):hover \{\s*forced-color-adjust: none;/,
+      /\.snui-button--ghost,\s*\.snui-button--ghost:not\(:disabled\):not\(\[aria-disabled="true"\]\):hover,\s*\.snui-button--text,\s*\.snui-button--text:not\(:disabled\):not\(\[aria-disabled="true"\]\):hover \{\s*forced-color-adjust: none;/,
     );
     expect(forcedControls).toMatch(
       /\.snui-button--secondary:focus-visible,\s*\.snui-button--ghost:focus-visible,/,

@@ -18,7 +18,8 @@ import {
 import { hasAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { HEADING_ELEMENTS, type HeadingLevel } from "../utils/heading.js";
-import { DEFAULT_DISMISS_LABEL, resolveBundledLabel } from "../utils/labels.js";
+import { resolveBundledLabel } from "../utils/labels.js";
+import { DEFAULT_DISMISS_LABEL } from "../utils/panel-label-defaults.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { definedProps } from "../utils/props.js";
 import { hasReactContent } from "../utils/react-node.js";
@@ -27,6 +28,7 @@ import {
   useRepeatAnnouncement,
 } from "../utils/repeat-announcement.js";
 import type { StatusTone } from "../utils/tone.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 import { Button } from "./Button.js";
 import { ToneMark } from "./ToneMark.js";
 
@@ -164,6 +166,20 @@ export function Banner({
     !hasAccessibleName(props["aria-label"], props["aria-labelledby"])
       ? generatedTitleId
       : undefined;
+  const generatedBodyId = useId();
+  /*
+   * A role read on focus speaks its name and description, not its contents,
+   * so a banner that takes focus under a role of the consumer's would leave
+   * its message unread on arrival. Its body describes it instead.
+   */
+  const bodyId =
+    suppliedRole !== undefined &&
+    !announcing &&
+    props.tabIndex !== undefined &&
+    props["aria-describedby"] === undefined &&
+    hasReactContent(children)
+      ? generatedBodyId
+      : undefined;
 
   const bannerRef = useRef<HTMLDivElement | null>(null);
   // One callback ref owns the node so a caller ref is attached and released
@@ -213,9 +229,12 @@ export function Banner({
     <div
       {...props}
       // Spread rather than written out: an explicit undefined would erase an
-      // `aria-labelledby` the consumer passed, and a consumer who passed one
-      // always leaves the title id unset.
-      {...definedProps({ "aria-labelledby": titleId })}
+      // `aria-labelledby` or `aria-describedby` the consumer passed, and a
+      // consumer who passed one always leaves the generated id unset.
+      {...definedProps({
+        "aria-describedby": bodyId,
+        "aria-labelledby": titleId,
+      })}
       ref={attachBanner}
       className={classNames("snui-banner", `snui-banner--${tone}`, className)}
       role={attributes.role}
@@ -240,10 +259,12 @@ export function Banner({
                         reader taking the banner in one pass. It sits beside
                         the title rather than inside it, so a landmark named by
                         the title is not named "Provider unavailable .". */}
-                    <span className="snui-visually-hidden">. </span>
+                    <span className={VISUALLY_HIDDEN_CLASS}>. </span>
                   </>
                 ) : null}
-                <div className="snui-banner__body">{children}</div>
+                <div className="snui-banner__body" id={bodyId}>
+                  {children}
+                </div>
               </div>
             </div>
           )}

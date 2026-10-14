@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createDocumentRegistry,
   type DocumentRegistryRecord,
-  once,
 } from "../../src/utils/document-registry.js";
+import { once } from "../../src/utils/once.js";
 
 interface FixtureValue {
   readonly label: string;

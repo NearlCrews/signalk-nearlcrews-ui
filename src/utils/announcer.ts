@@ -14,9 +14,10 @@ export interface PanelAnnounceOptions {
  *
  * Each message is added to its region as a node of its own, so the same words
  * twice in a row are read twice and two messages from one handler are both
- * read. Each leaves the region on its own after seven seconds, so an old
- * status never waits in the region for a reader in browse mode, and there is
- * nothing to clear by hand. Blank text is ignored.
+ * read. Each leaves the region on its own a few seconds later, after the
+ * lifetime `PanelAnnouncer` sets as `MESSAGE_LIFETIME_MS`, so an old status
+ * never waits in the region for a reader in browse mode, and there is nothing
+ * to clear by hand. Blank text is ignored.
  */
 export type PanelAnnounce = (
   message: string,

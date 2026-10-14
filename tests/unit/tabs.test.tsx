@@ -322,6 +322,121 @@ describe("Tabs", () => {
     );
   });
 
+  it("blocks a tab through ariaDisabled while arrow keys still reach it", async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn();
+    renderInPanel(
+      <Tabs defaultValue="a" onValueChange={onValueChange}>
+        <TabList aria-label="Pages">
+          <Tab value="a">First</Tab>
+          <Tab
+            value="b"
+            ariaDisabled
+            disabledReason="Available once the chart loads"
+          >
+            Second
+          </Tab>
+          <Tab value="c">Third</Tab>
+        </TabList>
+        <TabPanel value="a">A</TabPanel>
+        <TabPanel value="b">B</TabPanel>
+        <TabPanel value="c">C</TabPanel>
+      </Tabs>,
+    );
+
+    const first = screen.getByRole("tab", { name: "First" });
+    const second = screen.getByRole("tab", { name: "Second" });
+    first.focus();
+    await user.keyboard("{ArrowRight}");
+
+    // The blocked tab is a stop on the way, so the reader hears why it
+    // refuses, and arriving on it selects nothing.
+    expect(second).toHaveFocus();
+    expect(second).toHaveAttribute("aria-disabled", "true");
+    expect(second).toHaveAccessibleDescription(
+      "Available once the chart loads",
+    );
+    expect(second).toHaveAttribute("aria-selected", "false");
+    await user.keyboard("{Enter}");
+    await user.click(second);
+    expect(onValueChange).not.toHaveBeenCalled();
+
+    await user.keyboard("{ArrowRight}");
+    expect(screen.getByRole("tab", { name: "Third" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(onValueChange).toHaveBeenCalledExactlyOnceWith("c");
+  });
+
+  it("keeps a focused tab when it becomes blocked", () => {
+    const tabs = (blocked: boolean): React.JSX.Element =>
+      panel(
+        <Tabs defaultValue="a">
+          <TabList aria-label="Pages">
+            <Tab value="a" ariaDisabled={blocked} disabledReason="Saving">
+              First
+            </Tab>
+            <Tab value="b">Second</Tab>
+          </TabList>
+          <TabPanel value="a">A</TabPanel>
+          <TabPanel value="b">B</TabPanel>
+        </Tabs>,
+      );
+    const { rerender } = render(tabs(false));
+    const first = screen.getByRole("tab", { name: "First" });
+    first.focus();
+
+    rerender(tabs(true));
+    expect(first).toHaveFocus();
+    expect(first).toHaveAttribute("tabindex", "0");
+  });
+
+  it("warns about a tab whose panel was never written", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    renderInPanel(
+      <Tabs defaultValue="a">
+        <TabList aria-label="Pages">
+          <Tab value="a">First</Tab>
+          <Tab value="orphan">Second</Tab>
+        </TabList>
+        <TabPanel value="a">A</TabPanel>
+      </Tabs>,
+    );
+
+    expect(warn).toHaveBeenCalledExactlyOnceWith(
+      expect.stringContaining('Tab "orphan" controls no TabPanel.'),
+    );
+  });
+
+  it("finds the selected tab without walking the list on a parent's render", () => {
+    function Parent({ tick }: { readonly tick: number }): React.JSX.Element {
+      return (
+        <Tabs defaultValue="a" data-tick={tick}>
+          <TabList aria-label="Pages">
+            <Tab value="a">First</Tab>
+            <Tab value="b">Second</Tab>
+          </TabList>
+          <TabPanel value="a">A</TabPanel>
+          <TabPanel value="b">B</TabPanel>
+        </Tabs>
+      );
+    }
+    const { rerender } = render(panel(<Parent tick={0} />));
+    const list = screen.getByRole("tablist");
+    const walk = vi.spyOn(list, "querySelector");
+
+    // Each render hands the list new children, which reruns the check; the
+    // selected tab answers it, so the list itself is never searched.
+    rerender(panel(<Parent tick={1} />));
+    rerender(panel(<Parent tick={2} />));
+    expect(walk).not.toHaveBeenCalled();
+    expect(screen.getByRole("tab", { name: "First" })).toHaveAttribute(
+      "tabindex",
+      "0",
+    );
+  });
+
   it("lets a tab's own handlers block the selection and the focus move", async () => {
     const user = userEvent.setup();
     const onValueChange = vi.fn();

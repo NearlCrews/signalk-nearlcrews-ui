@@ -3,6 +3,7 @@ import {
   FOCUS_RING_WIDTH,
   focusRingDeclarations,
   TABLE_CAPTION_DECLARATIONS,
+  TABLE_CELL_MIN_WIDTH,
   TONE_BAR_WIDTH,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
@@ -50,7 +51,14 @@ export const DATA_GRID_COLUMN_MIN_PROPERTY = "--snui-data-grid-column-min";
  * narrower carries the smaller value on its own cells and the panel can lower
  * the floor for a whole grid.
  */
-const COLUMN_MIN = `var(${DATA_GRID_COLUMN_MIN_PROPERTY}, 6rem)`;
+const COLUMN_MIN = `var(${DATA_GRID_COLUMN_MIN_PROPERTY}, ${TABLE_CELL_MIN_WIDTH})`;
+
+/*
+ * The sort glyph, in ems of the header text so it tracks whatever size the
+ * header takes: a step smaller, so the arrow reads as a mark on the label
+ * rather than a second word.
+ */
+const SORT_GLYPH_SIZE = "0.8em";
 
 /**
  * The row floor compact density trades for. A compact row has to measure the
@@ -95,12 +103,12 @@ ${HEADER_CELL} {
   inset-block-start: 0;
   z-index: var(--snui-z-sticky);
   height: var(--snui-control-min-height);
+  min-width: ${COLUMN_MIN};
   padding: var(--snui-space-2) var(--snui-space-3);
   border-block-end: 1px solid var(--snui-color-border-subtle);
   background: var(--snui-color-surface-raised);
   color: var(--snui-color-text);
   font-weight: var(--snui-font-weight-bold);
-  min-width: ${COLUMN_MIN};
   text-align: start;
 }
 
@@ -130,7 +138,7 @@ ${SORTABLE_HEADER}::after {
   content: "\\21C5" / "";
   margin-inline-start: var(--snui-space-2);
   color: var(--snui-color-text-muted);
-  font-size: 0.8em;
+  font-size: ${SORT_GLYPH_SIZE};
 }
 
 ${HEADER_CELL}[data-sort-direction="ascending"]::after {
@@ -145,9 +153,9 @@ ${HEADER_CELL}[data-sort-direction="descending"]::after {
 
 ${BODY_CELL} {
   box-sizing: border-box;
+  min-width: ${COLUMN_MIN};
   padding: var(--snui-space-2) var(--snui-space-3);
   border-block-end: 1px solid var(--snui-color-border-subtle);
-  min-width: ${COLUMN_MIN};
   /* Live values tick over without shifting their neighbors. Tabular figures
      are an OpenType feature most faces carry for Western Arabic digits alone,
      so a locale rendering another digit set keeps the alignment only as far

@@ -1,8 +1,11 @@
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 import {
   FOCUS_RING_WIDTH,
   focusRingDeclarations,
   INSET_FOCUS_RING_OFFSET,
   NARROW_PANEL_QUERY,
+  TIGHT_LEADING,
+  TITLE_LEADING,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
@@ -277,7 +280,7 @@ h5,
 h6 {
   margin: 0;
   font-weight: var(--snui-font-weight-semibold);
-  line-height: 1.3;
+  line-height: ${TITLE_LEADING};
 }
 
 h1 { font-size: var(--snui-font-size-2xl); }
@@ -287,9 +290,10 @@ h4,
 h5,
 h6 { font-size: var(--snui-font-size); }
 
-/* The display steps set their own leading: 1.3 reads loose at 24 and 20 px. */
+/* The display steps set their own leading: the title one reads loose at 24
+   and 20 px. */
 h1,
-h2 { line-height: 1.2; }
+h2 { line-height: ${TIGHT_LEADING}; }
 
 p,
 ul,
@@ -606,7 +610,7 @@ ${NIGHT_ROOT} textarea:dir(rtl)::-webkit-resizer {
   }
 }
 
-.snui-visually-hidden {
+.${VISUALLY_HIDDEN_CLASS} {
 ${visuallyHiddenDeclarations(true)}
 }
 

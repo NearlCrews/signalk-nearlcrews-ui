@@ -4,6 +4,7 @@ import {
   FORCED_COLORS_OUTLINE_DECLARATIONS,
   MUTED_PROSE_DECLARATIONS,
   NARROW_PANEL_QUERY,
+  OVERLAY_SLIDE_LONG,
   overlayFadeTransition,
   RAISED_PAINT_DECLARATIONS,
   RAISED_SURFACE_TOKEN_DECLARATIONS,
@@ -25,6 +26,13 @@ export const VISUAL_VIEWPORT_HEIGHT_PROPERTY = "--snui-visual-viewport-height";
 
 /** The measured height, or `100dvh` for a dialog read before its first frame. */
 const VISUAL_VIEWPORT_HEIGHT = `var(${VISUAL_VIEWPORT_HEIGHT_PROPERTY}, 100dvh)`;
+
+/*
+ * The scrim's blur at rest. Lighter than the sticky action bar's frosting: the
+ * scrim already dims the page, so the blur only has to take the edge off the
+ * text behind it, and a full-viewport blur is the costlier of the two.
+ */
+const SCRIM_BLUR = "0.25rem";
 
 /**
  * Modal dialog and scrim styles. Installed by `Dialog` and `AlertDialog`
@@ -48,8 +56,8 @@ ${SAFE_AREA_PADDING_DECLARATIONS}
 }
 
 .snui-scrim--blur {
-  -webkit-backdrop-filter: blur(0.25rem);
-  backdrop-filter: blur(0.25rem);
+  -webkit-backdrop-filter: blur(${SCRIM_BLUR});
+  backdrop-filter: blur(${SCRIM_BLUR});
 }
 
 .snui-scrim[data-entering],
@@ -79,7 +87,7 @@ ${overlayFadeTransition("normal")}
 .snui-dialog-frame[data-entering],
 .snui-dialog-frame[data-exiting] {
   opacity: 0;
-  transform: translateY(0.5rem);
+  transform: translateY(${OVERLAY_SLIDE_LONG});
 }
 
 .snui-dialog {

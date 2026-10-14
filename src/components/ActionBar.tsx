@@ -46,6 +46,12 @@ export interface ActionBarProps
   readonly children?: ReactNode | undefined;
   readonly status?: ReactNode | undefined;
   readonly statusRef?: Ref<HTMLDivElement> | undefined;
+  /**
+   * Where the bar holds while the panel scrolls. Choose it once per bar:
+   * `"viewport-bottom"` measures the viewport through a placement of its
+   * own, so a change to or from it mounts a new bar, which loses the focus
+   * and state of anything inside the old one.
+   */
   readonly sticky?: ActionBarSticky | undefined;
   readonly variant?: ActionBarVariant | undefined;
 }
@@ -567,6 +573,8 @@ export function ActionBar({
 }: ActionBarProps): React.JSX.Element {
   requireContent(props.actions, "ActionBar requires at least one action.");
 
+  // Two component types, so a change across this line remounts the bar; the
+  // `sticky` documentation tells a panel to choose once.
   const Bar =
     props.sticky === "viewport-bottom"
       ? ViewportBottomActionBar

@@ -8,9 +8,12 @@ import {
   MUTED_PROSE_DECLARATIONS,
   NARROW_PANEL_QUERY,
   PROSE_MEASURE_DECLARATION,
+  SECTION_LEADING_DECLARATIONS,
   stretchedActionRules,
+  TITLE_LEADING,
   TONE_DOT_DECLARATIONS,
   TONE_GLYPH_BOX_EM,
+  TOP_SECTION_TITLE_DECLARATION,
   visuallyHiddenDeclarations,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
@@ -44,9 +47,15 @@ const BODY_SIZE_TITLE_DECLARATIONS = `  min-width: 0;
   margin: 0;
   font-size: var(--snui-font-size);
   font-weight: var(--snui-font-weight-bold);
-  line-height: 1.3;
+  line-height: ${TITLE_LEADING};
   overflow-wrap: anywhere;
   text-wrap: balance;`;
+
+/*
+ * The sticky action bar's frosting: enough to keep the content scrolling
+ * under the translucent bar from reading as part of it.
+ */
+const ACTION_BAR_BLUR = "0.4rem";
 
 export const COMPONENT_STYLES = scopeStyles(`
 /*
@@ -203,6 +212,10 @@ ${INSET_SURFACES} {
   flex: 1 1 auto;
 }
 
+.snui-section__leading {
+${SECTION_LEADING_DECLARATIONS}
+}
+
 .snui-section__actions {
 ${ACTION_ROW_DECLARATIONS}
   justify-content: flex-end;
@@ -215,13 +228,17 @@ ${ACTION_ROW_DECLARATIONS}
 
 /*
  * Bold, the package's title weight, which the collapsible toggle carries too,
- * so a title's weight no longer depends on whether its section collapses. The
- * size follows depth, in the collapsible module, where both shells' title
- * sizes are set together.
+ * so a title's weight does not depend on whether its section collapses. The
+ * size follows depth, the way the collapsible heading's does.
  */
 .snui-section__title {
 ${BODY_SIZE_TITLE_DECLARATIONS}
   color: var(--snui-color-text);
+}
+
+/* After the title's base size, which it replaces for a top section. */
+.snui-section__title--top {
+${TOP_SECTION_TITLE_DECLARATION}
 }
 
 .snui-section__description {
@@ -326,8 +343,8 @@ ${toneDotShapeRules("snui-status", "snui-status__dot")}
   border-radius: var(--snui-radius-md);
   background: var(--snui-action-bar-surface);
   box-shadow: var(--snui-shadow-raised);
-  -webkit-backdrop-filter: blur(0.4rem);
-  backdrop-filter: blur(0.4rem);
+  -webkit-backdrop-filter: blur(${ACTION_BAR_BLUR});
+  backdrop-filter: blur(${ACTION_BAR_BLUR});
 }
 
 .snui-action-bar__content {

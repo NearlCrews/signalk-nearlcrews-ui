@@ -107,8 +107,10 @@ export type CollapsibleSummaryVisibility = "always" | "collapsed";
 export type CollapsibleVariant = "default" | "embedded";
 export interface CollapsibleSectionProps extends Omit<HTMLAttributes<HTMLElement>, "onToggle" | "title">, RefAttributes<HTMLElement> {
     readonly actions?: ReactNode | undefined;
+    readonly ariaDisabled?: boolean | undefined;
     readonly defaultOpen?: boolean | undefined;
     readonly disabled?: boolean | undefined;
+    readonly disabledReason?: ReactNode | undefined;
     readonly headingLevel?: HeadingLevel | undefined;
     readonly idPrefix?: string | undefined;
     readonly landmark?: boolean | undefined;
@@ -143,7 +145,7 @@ interface DataGridBaseProps<TRow> extends Omit<HTMLAttributes<HTMLDivElement>, "
     readonly density?: Density | undefined;
     readonly emptyDescription?: ReactNode | undefined;
     readonly emptyState?: ReactNode | undefined;
-    readonly emptyTitle?: string | undefined;
+    readonly emptyTitle?: ReactNode | undefined;
     readonly items: readonly TRow[];
     readonly onSelectionChange?: ((keys: Selection) => void) | undefined;
     readonly onSortChange?: ((descriptor: SortDescriptor) => void) | undefined;
@@ -435,6 +437,7 @@ interface MetricGridOwnProps {
 export type MetricGridProps = PolymorphicProps<MetricGridElement, "div", MetricGridOwnProps>;
 export declare function MetricGrid(props: MetricGridProps): React.JSX.Element;
 export interface MetricProps extends Omit<HTMLAttributes<HTMLDivElement>, "children">, RefAttributes<HTMLDivElement> {
+    readonly announceKey?: string | number | undefined;
     readonly deferFirstMessage?: boolean | undefined;
     readonly detail?: ReactNode | undefined;
     readonly label: ReactNode;
@@ -562,6 +565,7 @@ export interface PanelErrorBoundaryProps {
     readonly onReload?: (() => void) | undefined;
     readonly reloadDescription?: ReactNode | undefined;
     readonly reloadLabel?: ReactNode | undefined;
+    readonly resetKeys?: readonly unknown[] | undefined;
     readonly retryLabel?: ReactNode | undefined;
     readonly title?: ReactNode | undefined;
 }
@@ -570,14 +574,18 @@ interface PanelErrorBoundaryState {
     readonly failed: boolean;
 }
 export declare class PanelErrorBoundary extends Component<PanelErrorBoundaryProps, PanelErrorBoundaryState> {
-    static getDerivedStateFromError(error: unknown): PanelErrorBoundaryState;
     state: PanelErrorBoundaryState;
+    static getDerivedStateFromError(error: unknown): PanelErrorBoundaryState;
+    private readonly fallbackPanelRoot;
     private readonly reset;
+    componentDidUpdate(previousProps: PanelErrorBoundaryProps, previousState: PanelErrorBoundaryState): void;
     componentDidCatch(error: unknown, info: ErrorInfo): void;
+    private restoreFocus;
     render(): ReactNode;
 }
 
 === components/PanelRoot.d.ts ===
+export type PanelWidth = "standard" | "wide" | "full";
 export interface PanelRootProps extends HTMLAttributes<HTMLDivElement>, RefAttributes<HTMLDivElement> {
     readonly children: ReactNode;
     readonly defaultTheme?: ThemeChoice | undefined;
@@ -586,7 +594,6 @@ export interface PanelRootProps extends HTMLAttributes<HTMLDivElement>, RefAttri
     readonly styleNonce?: string | undefined;
     readonly width?: PanelWidth | undefined;
 }
-export type PanelWidth = "standard" | "wide" | "full";
 export declare function PanelRoot(props: PanelRootProps): React.JSX.Element;
 
 === components/PanelShell.d.ts ===
@@ -642,11 +649,13 @@ export interface RadioGroupProps extends Omit<HTMLAttributes<HTMLDivElement>, "c
     readonly disabled?: boolean | undefined;
     readonly error?: ReactNode | undefined;
     readonly errorLive?: AnnouncementMode | undefined;
+    readonly form?: string | undefined;
     readonly label: ReactNode;
     readonly name?: string | undefined;
     readonly onValueChange?: ((value: string) => void) | undefined;
     readonly orientation?: Orientation | undefined;
     readonly readOnly?: boolean | undefined;
+    readonly required?: boolean | undefined;
     readonly value?: string | undefined;
 }
 export declare function RadioGroup(props: RadioGroupProps): React.JSX.Element;
@@ -833,8 +842,10 @@ export interface TabListProps extends HTMLAttributes<HTMLDivElement>, RefAttribu
 }
 export declare function TabList(props: TabListProps): React.JSX.Element;
 export interface TabProps<Value extends string = string> extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "role" | "tabIndex" | "type" | "value">, RefAttributes<HTMLButtonElement> {
+    readonly ariaDisabled?: boolean | undefined;
     readonly badge?: ReactNode | undefined;
     readonly children: ReactNode;
+    readonly disabledReason?: ReactNode | undefined;
     readonly value: Value;
 }
 export declare function Tab<Value extends string = string>(props: TabProps<Value>): React.JSX.Element;
@@ -900,6 +911,7 @@ export interface ToastEviction<T extends ToastContent = ToastContent> {
     readonly toast: QueuedToast<T>;
 }
 export interface ToastQueueOptions<T extends ToastContent = ToastContent> {
+    readonly maxQueued?: number | undefined;
     readonly onEvict?: ((eviction: ToastEviction<T>) => void) | undefined;
 }
 export interface ToastQueue<T extends ToastContent = ToastContent> {
@@ -1401,7 +1413,7 @@ export interface HostPanelFrameProps {
     readonly type?: PanelRemoteType | undefined;
     readonly url: string;
 }
-export declare function HostPanelFrame(props: HostPanelFrameProps): ReactNode;
+export declare function HostPanelFrame(props: HostPanelFrameProps): React.ReactNode;
 
 === host-harness/load-remote.d.ts ===
 export interface HostConfigurationPanelProps {
@@ -1682,11 +1694,11 @@ export interface PanelLabels {
         readonly description?: string | undefined;
         readonly label?: string | undefined;
     } | undefined;
-    readonly tone?: Partial<Readonly<Record<SemanticTone, string>>> | undefined;
     readonly toastRegion?: {
         readonly dismiss?: string | undefined;
         readonly label?: string | undefined;
     } | undefined;
+    readonly tone?: Partial<Readonly<Record<SemanticTone, string>>> | undefined;
     readonly unsupportedBrowser?: {
         readonly description?: string | undefined;
         readonly title?: string | undefined;
@@ -1775,4 +1787,4 @@ export declare const SPACE_SCALE: readonly [
 export type SpaceScale = (typeof SPACE_SCALE)[number];
 
 === version.d.ts ===
-export declare const PACKAGE_VERSION = "0.13.0";
+export declare const PACKAGE_VERSION = "0.14.0";

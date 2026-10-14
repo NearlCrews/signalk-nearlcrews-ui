@@ -36,6 +36,47 @@ export interface AccordionProps
 }
 
 /**
+ * What a rejected child was, so the author can find it. A minified consumer
+ * bundle points its stack at the accordion rather than at the element.
+ */
+function describeChild(child: ReactNode): string {
+  if (!isValidElement(child)) return typeof child;
+  const { type } = child;
+  if (typeof type === "string") return `<${type}>`;
+  if (typeof type === "function") {
+    const named = type as { displayName?: string; name?: string };
+    return `<${named.displayName ?? named.name ?? "anonymous component"}>`;
+  }
+  return "an element";
+}
+
+/**
+ * A child element carries a new props object on every render, so the report is
+ * keyed on the mistake rather than on the child, which would repeat it for
+ * every frame the mistake survives.
+ */
+function warnIgnoredOpen(): void {
+  warnOnce(
+    "accordion-ignored-open",
+    "Accordion owns the open state of every child, so the open prop on a CollapsibleSection inside it is ignored. Control the accordion through openIndex instead.",
+  );
+}
+
+/**
+ * Position of the section a set of children opens with. Only one section is
+ * open at a time, so the first `defaultOpen` wins and any later ones are
+ * ignored.
+ */
+function initialOpenIndex(
+  sections: readonly ReactElement<CollapsibleSectionProps>[],
+): number | null {
+  const initial = sections.findIndex(
+    (section) => section.props.defaultOpen === true,
+  );
+  return initial === -1 ? null : initial;
+}
+
+/**
  * Coordinates a set of collapsible sections so at most one is open. The
  * accordion owns `open` for every child: a child's own `open` is ignored, and
  * its `onOpenChange` is called for every change the accordion makes, including
@@ -110,46 +151,5 @@ export function Accordion({
         }),
       )}
     </div>
-  );
-}
-
-/**
- * Position of the section a set of children opens with. Only one section is
- * open at a time, so the first `defaultOpen` wins and any later ones are
- * ignored.
- */
-function initialOpenIndex(
-  sections: readonly ReactElement<CollapsibleSectionProps>[],
-): number | null {
-  const initial = sections.findIndex(
-    (section) => section.props.defaultOpen === true,
-  );
-  return initial === -1 ? null : initial;
-}
-
-/**
- * What a rejected child was, so the author can find it. A minified consumer
- * bundle points its stack at the accordion rather than at the element.
- */
-function describeChild(child: ReactNode): string {
-  if (!isValidElement(child)) return typeof child;
-  const { type } = child;
-  if (typeof type === "string") return `<${type}>`;
-  if (typeof type === "function") {
-    const named = type as { displayName?: string; name?: string };
-    return `<${named.displayName ?? named.name ?? "anonymous component"}>`;
-  }
-  return "an element";
-}
-
-/**
- * A child element carries a new props object on every render, so the report is
- * keyed on the mistake rather than on the child, which would repeat it for
- * every frame the mistake survives.
- */
-function warnIgnoredOpen(): void {
-  warnOnce(
-    "accordion-ignored-open",
-    "Accordion owns the open state of every child, so the open prop on a CollapsibleSection inside it is ignored. Control the accordion through openIndex instead.",
   );
 }

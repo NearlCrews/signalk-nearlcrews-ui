@@ -81,7 +81,11 @@ function withHoverAliases(tokens: ThemeTokenSource): ThemeTokenSet {
  * readable on them; the neutral tint differs from both hover fills, so a
  * tinted tile never reads as hovered. Two border weights split the work: the
  * border proper holds 3:1 for every control boundary, and the subtle border
- * outlines containers and draws dividers at about 1.5:1.
+ * outlines containers and draws dividers at about 1.5:1. The border and the
+ * disabled text sit just dark enough to hold 3:1 on the hovered selected row,
+ * the darkest fill a control lands on, and the track just dark enough to hold
+ * 1.5:1 on the panel background, where a range or a progress bar can sit
+ * outside any card.
  *
  * @internal
  */
@@ -94,10 +98,10 @@ export const LIGHT_TOKENS: ThemeTokenSet = /* @__PURE__ */ withHoverAliases({
   "--snui-color-hover-raised": "#eef2f7",
   "--snui-color-text": "#18202c",
   "--snui-color-text-muted": "#596273",
-  "--snui-color-text-disabled": "#7a8494",
-  "--snui-color-border": "#7c8797",
+  "--snui-color-text-disabled": "#768090",
+  "--snui-color-border": "#758090",
   "--snui-color-border-subtle": "#cbd3dd",
-  "--snui-color-track": "#cbd3dd",
+  "--snui-color-track": "#c3cbd5",
   "--snui-color-accent-fill": "#2563eb",
   "--snui-color-accent-fill-hover": "#1d4ed8",
   "--snui-color-accent-subtle": "#e3ebfb",
@@ -171,9 +175,11 @@ export const DARK_TOKENS: ThemeTokenSet = /* @__PURE__ */ withHoverAliases({
  * frames around content stay far dimmer than the text in it. The tones and the
  * subtle fills therefore differ little or not at all, and focus reaches the
  * same value as text: shape, glyph, offset, and tone label carry status and
- * focus in Night, never hue. The cap also bounds contrast: the brightest
- * allowed text on the surface is 5.9:1, about APCA Lc 41, so Night is gated on
- * WCAG AA and the APCA column in the contrast tests is advisory.
+ * focus in Night, never hue. That includes a visited link, which sits about
+ * 1.05:1 from an unvisited one: the underline marks a link in Night, and
+ * whether it was followed is not shown. The cap also bounds contrast: the
+ * brightest allowed text on the surface is 5.9:1, about APCA Lc 41, so Night
+ * is gated on WCAG AA and the APCA column in the contrast tests is advisory.
  *
  * @internal
  */
@@ -294,9 +300,23 @@ export const TRANSITION_FAST_MS = 140;
  * grows the controls under, and the one a component asks in script when it
  * mirrors those sizes, as the data grid does to pick its row heights.
  *
+ * Any pointer rather than the primary one, on purpose: a touchscreen laptop
+ * driven by a mouse still gets the touch sizes, because the same screen can
+ * be tapped at any moment, and a target too small for a finger costs an
+ * operator more than a roomier one costs a mouse.
+ *
  * @internal
  */
 export const COARSE_POINTER_QUERY = "(any-pointer: coarse)";
+
+/**
+ * How far an outset focus ring stands clear of its control. The ring's band in
+ * `--snui-focus-ring` is exactly this wide, because it fills the gap between
+ * the control's edge and the ring, so the two are written from one value.
+ *
+ * @internal
+ */
+export const FOCUS_RING_OFFSET = "2px";
 
 /**
  * Initial data-grid row-height estimates in pixels, per density, for a coarse
@@ -439,7 +459,13 @@ export const PUBLIC_TOKEN_NAMES: readonly (
   ).concat(PUBLIC_FOUNDATION_TOKEN_NAMES),
 );
 
-/** Ancestor markers a host sets on a dark page. */
+/**
+ * Ancestor markers a host sets on a dark page. Matched as ancestors at any
+ * depth, so a light marker nested inside a dark one does not bring the base
+ * palette back: the dark block still matches there. A region that has to stay
+ * light inside a dark host sets the panel's own theme, which every host
+ * marker yields to.
+ */
 const DARK_HOST_MARKERS = [
   '[data-bs-theme="dark"]',
   '[data-coreui-theme="dark"]',
@@ -501,7 +527,7 @@ ${TYPE_BLOCK}
   --snui-content-width-wide: 96rem;
   --snui-color-focus-ring-band: var(--snui-color-surface);
   --snui-focus-ring:
-    0 0 0 2px var(--snui-color-focus-ring-band),
+    0 0 0 ${FOCUS_RING_OFFSET} var(--snui-color-focus-ring-band),
     0 0 0 6px color-mix(in srgb, var(--snui-color-focus) 38%, transparent);
   --snui-focus-ring-width: 2px;
   --snui-ease-standard: cubic-bezier(0.2, 0, 0, 1);

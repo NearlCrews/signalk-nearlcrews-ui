@@ -5,6 +5,7 @@ import {
   type ReactNode,
   type RefAttributes,
   useCallback,
+  useEffect,
   useId,
   useLayoutEffect,
   useMemo,
@@ -16,14 +17,25 @@ import { useControllableStateWhen } from "../hooks/use-controllable-state.js";
 import { useNodeRef } from "../hooks/use-node-ref.js";
 import { TABS_STYLES } from "../styles/tabs.js";
 import { useOptionalModuleStyles } from "../styles/use-module-styles.js";
-import { requireAccessibleName } from "../utils/aria.js";
+import {
+  blockedActivationProps,
+  reportBlockedReason,
+} from "../utils/activation.js";
+import { joinIdReferences, requireAccessibleName } from "../utils/aria.js";
 import { classNames } from "../utils/class-names.js";
 import { createRequiredContext, createValueContext } from "../utils/context.js";
 import { isRightToLeft } from "../utils/direction.js";
+import { isDevelopment } from "../utils/environment.js";
 import type { MountStrategy } from "../utils/mount-strategy.js";
-import { hasReactContent, requireContent } from "../utils/react-node.js";
+import {
+  hasReactContent,
+  reactNodeText,
+  requireContent,
+} from "../utils/react-node.js";
 import { nextRovingIndex } from "../utils/roving.js";
 import type { Orientation } from "../utils/variants.js";
+import { warnOnce } from "../utils/warn-once.js";
+import { HiddenDescription } from "./HiddenDescription.js";
 
 /** `"automatic"` selects a tab as arrow keys focus it; `"manual"` waits for Enter or Space. */
 export type TabsActivation = "automatic" | "manual";
@@ -52,6 +64,16 @@ function tabId(baseId: string, value: string): string {
 
 function panelId(baseId: string, value: string): string {
   return `${baseId}-panel-${encodeURIComponent(value)}`;
+}
+
+/**
+ * Looks an id up in the document or shadow root that holds a node, which is
+ * where a tab and its panel live. Undefined for a node in neither, where the
+ * question has no answer.
+ */
+function elementById(node: Node, id: string): Element | null | undefined {
+  const root = node.getRootNode() as Partial<NonElementParentNode>;
+  return root.getElementById?.(id);
 }
 
 export interface TabsProps<Value extends string = string>
@@ -91,6 +113,8 @@ export interface TabsProps<Value extends string = string>
 export function Tabs<Value extends string = string>(
   props: TabsProps<Value>,
 ): React.JSX.Element {
+  // Destructured here rather than in the signature, because whether `value`
+  // was passed at all is read from the whole props object below.
   const {
     activation = "automatic",
     children,
@@ -167,7 +191,8 @@ const SELECTED_TAB_SELECTOR =
 /**
  * Moves focus among the enabled tabs of the list the pressed tab belongs to.
  * Reading the list from the DOM keeps the order and the disabled state
- * authoritative without registering each tab.
+ * authoritative without registering each tab. A tab blocked through
+ * `ariaDisabled` takes focus like any other but is never selected by it.
  */
 function moveFocus(
   event: KeyboardEvent<HTMLButtonElement>,
@@ -196,7 +221,10 @@ function moveFocus(
   const target = tabs[next];
   if (target === undefined) return;
   target.focus();
-  if (activation === "automatic") {
+  if (
+    activation === "automatic" &&
+    target.getAttribute("aria-disabled") !== "true"
+  ) {
     const value = target.dataset.snuiTabValue;
     if (value !== undefined) select(value);
   }
@@ -213,7 +241,7 @@ export function TabList({
 }: TabListProps): React.JSX.Element {
   // The ancestor is read first, so a list outside Tabs reports that rather
   // than whichever of the two mistakes the consumer made second.
-  const { orientation, selected } = useTabsContext("TabList");
+  const { baseId, orientation, selected } = useTabsContext("TabList");
   requireAccessibleName("TabList", ariaLabel, ariaLabelledBy);
 
   const listRef = useRef<HTMLDivElement | null>(null);
@@ -231,17 +259,30 @@ export function TabList({
    * reads it, so its order and disabled state stay authoritative, and it is
    * read again whenever the list could have gained, lost, or disabled a tab,
    * which is any commit carrying new children, and whenever the selection
-   * moved. Writing the same answer back bails out of rendering, so the update
-   * chain the exhaustive-deps rule guards against ends on the first pass.
+   * moved. A parent hands the list new children on almost every render, so
+   * the selected tab is found by its id first, and the list is walked for a
+   * stand-in only while no enabled tab holds the selection. Writing the same
+   * answer back bails out of rendering, so the update chain the
+   * exhaustive-deps rule guards against ends on the first pass.
    */
   useLayoutEffect(() => {
     const list = listRef.current;
-    const fallback =
-      list !== null && list.querySelector(SELECTED_TAB_SELECTOR) === null
-        ? list.querySelector<HTMLButtonElement>(TAB_SELECTOR)
-        : null;
-    setFallbackValue(fallback?.dataset.snuiTabValue);
-  }, [children, selected]);
+    if (list === null) return;
+    const selectedTab =
+      selected === undefined
+        ? null
+        : elementById(list, tabId(baseId, selected));
+    const selectionHoldsStop =
+      selectedTab != null &&
+      list.contains(selectedTab) &&
+      selectedTab.matches(SELECTED_TAB_SELECTOR);
+    setFallbackValue(
+      selectionHoldsStop
+        ? undefined
+        : list.querySelector<HTMLButtonElement>(TAB_SELECTOR)?.dataset
+            .snuiTabValue,
+    );
+  }, [baseId, children, selected]);
 
   return (
     <div
@@ -266,17 +307,34 @@ export interface TabProps<Value extends string = string>
       "role" | "tabIndex" | "type" | "value"
     >,
     RefAttributes<HTMLButtonElement> {
+  /**
+   * Blocks the tab while it stays focusable, the way
+   * `SegmentedControlOption.ariaDisabled` does: arrow keys reach it, and
+   * neither a press nor arriving on it selects it. `disabled` takes it out of
+   * the arrow-key order instead, which destroys focus if the reader is
+   * standing on it.
+   */
+  readonly ariaDisabled?: boolean | undefined;
   /** A count or `Badge` shown after the label; it joins the tab's name. */
   readonly badge?: ReactNode | undefined;
   readonly children: ReactNode;
+  /**
+   * Why the tab refuses while `ariaDisabled` holds, read as its description
+   * and dropped once the tab is live. Development says so once for a blocked
+   * tab without one.
+   */
+  readonly disabledReason?: ReactNode | undefined;
   /** Names the tab, and with it the TabPanel written with the same value. */
   readonly value: Value;
 }
 
 export function Tab<Value extends string = string>({
+  ariaDisabled = false,
+  "aria-describedby": ariaDescribedBy,
   badge,
   children,
   className,
+  disabledReason,
   onClick,
   onKeyDown,
   ref,
@@ -288,30 +346,76 @@ export function Tab<Value extends string = string>({
     useTabsContext("Tab");
   const isSelected = selected === value;
   const holdsFallbackStop = useTabListFallback() === value;
+  const id = tabId(baseId, value);
+  const controls = panelId(baseId, value);
+  const tabRef = useRef<HTMLButtonElement | null>(null);
+  const attachTab = useNodeRef(tabRef, ref);
+  const nativeDisabled = props.disabled === true;
+  const hasReason = hasReactContent(disabledReason);
+  // Native disabled takes the tab out of reach, where its reason would reach
+  // no one, so it is dropped there.
+  const showsReason = ariaDisabled && !nativeDisabled && hasReason;
+  const reasonId = `${id}-reason`;
+
+  if (isDevelopment()) {
+    reportBlockedReason({
+      blocked: ariaDisabled && !nativeDisabled,
+      component: "Tab",
+      describedBy: ariaDescribedBy,
+      hasReason,
+      name: reactNodeText(children),
+      nativeDisabled,
+      noun: "tab",
+    });
+  }
+
+  // A tab names its panel in `aria-controls` whether or not one was written,
+  // and a reference to nothing fails an accessibility audit, so development
+  // says which panel is missing.
+  useEffect(() => {
+    const tab = tabRef.current;
+    if (!isDevelopment() || tab === null) return;
+    if (elementById(tab, controls) !== null) return;
+    warnOnce(
+      `tab-without-panel:${value}`,
+      `Tab ${JSON.stringify(value)} controls no TabPanel. Render a TabPanel with the same value inside the same Tabs; mountStrategy="unmount" keeps an unselected panel from building its content.`,
+    );
+  }, [controls, value]);
 
   return (
     <button
       {...props}
-      ref={ref}
+      ref={attachTab}
       type="button"
       role="tab"
-      id={tabId(baseId, value)}
+      id={id}
       aria-selected={isSelected}
-      aria-controls={panelId(baseId, value)}
+      aria-controls={controls}
+      aria-describedby={joinIdReferences(
+        ariaDescribedBy,
+        showsReason ? reasonId : undefined,
+      )}
       tabIndex={isSelected || holdsFallbackStop ? 0 : -1}
       data-snui-tab-value={value}
       className={classNames("snui-tab", className)}
-      onClick={(event) => {
-        onClick?.(event);
-        if (event.defaultPrevented) return;
-        select(value);
-      }}
-      onKeyDown={(event) => {
-        onKeyDown?.(event);
-        if (event.defaultPrevented) return;
-        moveFocus(event, orientation, activation, select);
-      }}
+      {...blockedActivationProps<HTMLButtonElement>({
+        blocked: ariaDisabled,
+        disabled: nativeDisabled,
+        onClick: (event) => {
+          onClick?.(event);
+          if (event.defaultPrevented) return;
+          select(value);
+        },
+        onKeyDown: (event) => {
+          onKeyDown?.(event);
+          if (event.defaultPrevented) return;
+          moveFocus(event, orientation, activation, select);
+        },
+      })}
     >
+      {showsReason ? (
+        <HiddenDescription id={reasonId}>{disabledReason}</HiddenDescription>
+      ) : null}
       <span className="snui-tab__label">{children}</span>
       {hasReactContent(badge) ? (
         // The space keeps the badge from fusing with the label in the name.

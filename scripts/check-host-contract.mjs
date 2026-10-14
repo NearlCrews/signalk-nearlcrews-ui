@@ -83,9 +83,10 @@ async function refreshBaseline() {
 async function readBaseline() {
   try {
     return await readJson(baselinePath);
-  } catch {
+  } catch (cause) {
     throw new Error(
       "Missing or unreadable host contract baseline. Run `npm run host-contract:update`.",
+      { cause },
     );
   }
 }

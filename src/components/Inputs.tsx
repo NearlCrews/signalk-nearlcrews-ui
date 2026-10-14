@@ -28,6 +28,8 @@ import {
   withoutFieldLookupIds,
 } from "../utils/field-forwarding.js";
 import { afterMicrotaskIfConnected } from "../utils/form-reset.js";
+import { createFormatterCache, type PanelLocale } from "../utils/intl.js";
+import { usePanelLocale } from "../utils/locale.js";
 import {
   hasReactContent,
   reactNodeText,
@@ -37,6 +39,7 @@ import { type UnitContent, unitSpokenText } from "../utils/unit.js";
 import type { Visibility } from "../utils/variants.js";
 import { warnOnce } from "../utils/warn-once.js";
 import { blurBeforeWheel } from "../utils/wheel-guard.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 import { FieldError } from "./FieldError.js";
 import { FieldMarker } from "./FieldMarker.js";
 import { HiddenDescription } from "./HiddenDescription.js";
@@ -62,17 +65,17 @@ export interface MonospaceControlProps {
 
 /**
  * The class list every text entry control carries: the shared input look, the
- * control's own modifiers, the monospace stack when asked for, and the
- * caller's class last.
+ * control's own modifier, the monospace stack when asked for, and the
+ * caller's class last. The parameters follow that order.
  */
 function inputClassNames(
+  modifier: string | undefined,
   monospace: boolean,
   className: string | undefined,
-  ...modifiers: readonly (string | undefined)[]
 ): string {
   return classNames(
     "snui-input",
-    ...modifiers,
+    modifier,
     monospace && "snui-input--monospace",
     className,
   );
@@ -146,7 +149,7 @@ export const TextInput = /* @__PURE__ */ markForwardsFieldControlProps(
         ref={inputRef}
         type={type}
         value={value}
-        className={inputClassNames(monospace, className)}
+        className={inputClassNames(undefined, monospace, className)}
       />
     );
   },
@@ -180,7 +183,7 @@ export const NumberInput = /* @__PURE__ */ markForwardsFieldControlProps(
         ref={inputRef}
         type="number"
         value={value}
-        className={inputClassNames(monospace, className)}
+        className={inputClassNames(undefined, monospace, className)}
         onWheel={(event) => {
           blurBeforeWheel(event);
           onWheel?.(event);
@@ -215,21 +218,38 @@ function setRangeProgress(element: HTMLInputElement): void {
   element.style.setProperty(RANGE_PROGRESS_PROPERTY, `${String(safePercent)}%`);
 }
 
+const rangeValueFormatters =
+  /* @__PURE__ */ createFormatterCache<Intl.NumberFormat>();
+
+function buildRangeValueFormat(
+  locales: readonly string[] | undefined,
+): Intl.NumberFormat {
+  // The value is read with every digit the slider holds, so a fine step is
+  // not rounded away in speech.
+  return new Intl.NumberFormat(locales, { maximumFractionDigits: 20 });
+}
+
 /**
  * Writes the unit value text, or removes one this control wrote. A value text
- * the caller passes belongs to React, so it is left alone.
+ * the caller passes belongs to React, so it is left alone. The number takes
+ * the panel's locale, as every other value the package formats does, rather
+ * than the raw form the element holds.
  */
 function setRangeValueText(
   element: HTMLInputElement,
   owned: boolean,
   spokenUnit: string | undefined,
+  locale: PanelLocale | undefined,
 ): void {
   if (!owned) return;
   if (spokenUnit === undefined) {
     element.removeAttribute("aria-valuetext");
     return;
   }
-  element.setAttribute("aria-valuetext", `${element.value} ${spokenUnit}`);
+  const value = rangeValueFormatters(locale, "", buildRangeValueFormat).format(
+    Number(element.value),
+  );
+  element.setAttribute("aria-valuetext", `${value} ${spokenUnit}`);
 }
 
 export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
@@ -245,11 +265,12 @@ export const RangeInput = /* @__PURE__ */ markForwardsFieldControlProps(
 
     const ownsValueText = ariaValueText === undefined;
     const spokenUnit = unitSpokenText(unit);
+    const locale = usePanelLocale();
     // The fill and the value text both follow the value the element holds,
     // which an uncontrolled slider changes without a render.
     const syncRange = (element: HTMLInputElement): void => {
       setRangeProgress(element);
-      setRangeValueText(element, ownsValueText, spokenUnit);
+      setRangeValueText(element, ownsValueText, spokenUnit, locale);
     };
 
     const inputRef = useResettableControl(ref, props.form, syncRange);
@@ -304,7 +325,7 @@ export const Select = /* @__PURE__ */ markForwardsFieldControlProps(
         {...withoutFieldLookupIds(props)}
         ref={selectRef}
         value={value}
-        className={inputClassNames(monospace, className, "snui-select")}
+        className={inputClassNames("snui-select", monospace, className)}
       />
     );
   },
@@ -340,14 +361,16 @@ export const Textarea = /* @__PURE__ */ markForwardsFieldControlProps(
         ref={ref}
         rows={rows ?? minRows}
         className={inputClassNames(
+          classNames(
+            "snui-textarea",
+            // Either prop states a row count, so either has to release the
+            // fixed minimum height; otherwise a small count renders no
+            // smaller.
+            (rows !== undefined || minRows !== undefined) &&
+              "snui-textarea--rows",
+          ),
           monospace,
           className,
-          "snui-textarea",
-          // Either prop states a row count, so either has to release the fixed
-          // minimum height; otherwise a small count renders no smaller.
-          rows === undefined && minRows === undefined
-            ? undefined
-            : "snui-textarea--rows",
         )}
       />
     );
@@ -587,7 +610,7 @@ export function Checkbox({
           id={labelId}
           className={classNames(
             "snui-checkbox__label",
-            labelHidden && "snui-visually-hidden",
+            labelHidden && VISUALLY_HIDDEN_CLASS,
           )}
         >
           {label}

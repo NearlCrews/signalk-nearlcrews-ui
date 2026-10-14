@@ -4,6 +4,7 @@ import {
   assertPublicBundleBudgets,
   assertPublicCssExport,
   exportSpecifier,
+  isPackageDistFile,
   panelJavaScriptEntries,
   TOOLING_ENTRIES,
 } from "../../scripts/lib/bundle-contract.mjs";
@@ -114,5 +115,40 @@ describe("public bundle contract", () => {
       ["index", "./dist/index.js"],
       ["forms", "./dist/forms.js"],
     ]);
+  });
+});
+
+describe("matching a built file in the module graph", () => {
+  const dist = "/work/signalk-nearlcrews-ui/dist";
+
+  it("matches the resolved file and the relative name that reaches dist directly", () => {
+    expect(isPackageDistFile(`${dist}/index.js`, "index.js", dist)).toBe(true);
+    expect(isPackageDistFile("../../../dist/index.js", "index.js", dist)).toBe(
+      true,
+    );
+    expect(isPackageDistFile("./dist/forms.js", "forms.js", dist)).toBe(true);
+    expect(
+      isPackageDistFile("C:/work/dist/index.js", "index.js", "C:\\work\\dist"),
+    ).toBe(true);
+  });
+
+  it("does not let a dependency's dist file stand in for the package entry", () => {
+    expect(
+      isPackageDistFile(
+        "/work/signalk-nearlcrews-ui/node_modules/react-aria/dist/index.js",
+        "index.js",
+        dist,
+      ),
+    ).toBe(false);
+    expect(
+      isPackageDistFile(
+        "../../../node_modules/x/dist/index.js",
+        "index.js",
+        dist,
+      ),
+    ).toBe(false);
+    expect(isPackageDistFile(`${dist}/index.js.map`, "index.js", dist)).toBe(
+      false,
+    );
   });
 });

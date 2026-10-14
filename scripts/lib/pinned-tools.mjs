@@ -11,7 +11,7 @@
  */
 
 import { settleInOrder } from "./promises.mjs";
-import { compareStableVersions, parseStableVersion } from "./version.mjs";
+import { compareVersions, parseStableVersion } from "./version.mjs";
 
 /** The pin file every workflow reads, from the repository root. */
 export const PINNED_TOOLS_PATH = ".github/pinned-tools.json";
@@ -58,17 +58,7 @@ export function versionFromTag(tool, tag) {
   return parseStableVersion(version) === undefined ? undefined : version;
 }
 
-/** Orders two x.y.z versions numerically: negative, zero, or positive. */
-export function compareVersions(left, right) {
-  const parse = (version) => {
-    const parts = parseStableVersion(version);
-    if (parts === undefined) {
-      throw new Error(`${version} is not an x.y.z version.`);
-    }
-    return parts;
-  };
-  return compareStableVersions(parse(left), parse(right));
-}
+export { compareVersions };
 
 /**
  * Every pin with a newer release, each with the checksum of the archive the

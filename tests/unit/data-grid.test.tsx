@@ -17,6 +17,7 @@ import {
   focusRingDeclarations,
 } from "../../src/styles/fragments.js";
 import { TABLE_STYLES } from "../../src/styles/table.js";
+import { COARSE_POINTER_QUERY } from "../../src/styles/tokens.js";
 import { ruleBody, stripComments, stylesFrom } from "../css-helpers.js";
 import { callsMentioning, panel, renderInPanel } from "../helpers.js";
 import {
@@ -38,6 +39,25 @@ import {
 /** A header column drawn through a consumer component rather than the package Column. */
 function WrappedColumn(props: DataGridColumnProps): ReactElement {
   return <Column {...props} />;
+}
+
+/**
+ * Whether a value is the column signature a resolved header serializes: the
+ * column keys beside the options each column carries.
+ */
+function isHeaderSignature(value: unknown): boolean {
+  if (!Array.isArray(value) || value.length !== 2) return false;
+  const [keys, decorations] = value as [unknown, unknown];
+  return (
+    Array.isArray(keys) &&
+    Array.isArray(decorations) &&
+    decorations.every(
+      (decoration) =>
+        typeof decoration === "object" &&
+        decoration !== null &&
+        "numeric" in decoration,
+    )
+  );
 }
 
 function lastSelection(
@@ -148,6 +168,45 @@ describe("DataGrid", () => {
       ).toBeInTheDocument();
       expect(bodyRows(container)).toHaveLength(BOATS.length);
       expect(rowNames(container)).toEqual(["Aster", "Brine", "Coral", "Drift"]);
+    });
+
+    it("reads the pointer when a virtualized grid first renders, not when the module loads", async () => {
+      const matchMedia = vi.fn((query: string) => ({
+        matches: query === COARSE_POINTER_QUERY,
+        media: query,
+      }));
+      vi.stubGlobal("matchMedia", matchMedia);
+      const pointerReads = (): number =>
+        matchMedia.mock.calls.filter(
+          ([query]) => query === COARSE_POINTER_QUERY,
+        ).length;
+
+      // A fresh copy of the source, because the one this file imported has
+      // already loaded and may have rendered a virtualized grid.
+      vi.resetModules();
+      const fresh = await import("../../src/data-grid.js");
+      const { PanelRoot } = await import("../../src/index.js");
+      expect(pointerReads()).toBe(0);
+
+      const grid = (): ReactElement => (
+        <PanelRoot>
+          <fresh.DataGrid
+            aria-label="Boats"
+            items={BOATS}
+            renderRow={renderBoatRow}
+            virtualize="always"
+          >
+            <fresh.Column id="name">Name</fresh.Column>
+            <fresh.Column id="depth">Depth</fresh.Column>
+          </fresh.DataGrid>
+        </PanelRoot>
+      );
+      render(grid());
+      expect(pointerReads()).toBe(1);
+
+      // The pointer belongs to the device, so a second grid reuses the answer.
+      render(grid());
+      expect(pointerReads()).toBe(1);
     });
 
     it("supports a dynamic header through columns and function children", () => {
@@ -445,6 +504,38 @@ describe("DataGrid", () => {
       );
     });
 
+    it("resolves a static header again only when its columns change", () => {
+      // A static header is new JSX on every render of its parent, so the
+      // grid compares what the columns carry before it resolves the header
+      // and serializes the signature its rows are cached against.
+      const stringify = vi.spyOn(JSON, "stringify");
+      const signatures = (): number =>
+        stringify.mock.calls.filter(([value]) => isHeaderSignature(value))
+          .length;
+      const tree = (depthNumeric: boolean): ReactElement =>
+        panel(
+          <DataGrid aria-label="Boats" items={BOATS} renderRow={renderBoatRow}>
+            <Column id="name">Name</Column>
+            <Column id="depth" numeric={depthNumeric} width={64}>
+              Depth
+            </Column>
+          </DataGrid>,
+        );
+      const view = render(tree(true));
+      const afterMount = signatures();
+      expect(afterMount).toBeGreaterThan(0);
+
+      view.rerender(tree(true));
+      view.rerender(tree(true));
+      expect(signatures()).toBe(afterMount);
+
+      view.rerender(tree(false));
+      expect(signatures()).toBeGreaterThan(afterMount);
+      expect(cellAt(rowAt(view.container, 0), 1)).not.toHaveAttribute(
+        "data-snui-numeric",
+      );
+    });
+
     it("keys dynamic column options to the entry each column was rendered from", () => {
       // A column the render function draws through its own component still
       // holds its slot, so the columns after it read their keys from the
@@ -595,6 +686,20 @@ describe("DataGrid", () => {
       renderGrid({ emptyTitle: "No boats underway", items: [] });
 
       expect(screen.getByText("No boats underway")).toBeInTheDocument();
+    });
+
+    it("takes rich content as the emptyTitle", () => {
+      renderGrid({
+        emptyTitle: (
+          <>
+            No boats <em>underway</em>
+          </>
+        ),
+        items: [],
+      });
+
+      expect(screen.getByText("underway").tagName).toBe("EM");
+      expect(screen.queryByText("Nothing to show yet")).toBeNull();
     });
 
     it("renders a custom emptyState instead of the default", () => {

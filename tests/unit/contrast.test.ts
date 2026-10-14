@@ -91,22 +91,21 @@ const SUBTLE_FILLS = [
   "--snui-color-neutral-subtle",
 ] as const satisfies readonly ColorTokenName[];
 
-/** Every fill the package paints behind text, a boundary, or a control. */
-const ALL_FILLS = [...TEXT_SURFACES, ...SUBTLE_FILLS];
-
 /**
- * Every fill a status or a link is read on: the plain surfaces, the tints,
- * and the hovered selected row, where a Badge or a visited link inside the
- * row the operator just selected is exactly the text they are reading.
+ * Every fill the package paints behind text, a boundary, or a control: the
+ * plain surfaces, the tints, and the hovered selected row, where a Badge, a
+ * visited link, a separator, or a disabled control inside the row the
+ * operator just selected is exactly what they are reading.
  */
-const READING_FILLS = [
-  ...ALL_FILLS,
+const ALL_FILLS = [
+  ...TEXT_SURFACES,
+  ...SUBTLE_FILLS,
   "--snui-color-row-selected-hover",
 ] as const satisfies readonly ColorTokenName[];
 
 describe.each(THEME_CASES)("%s theme contrast", (_name, tokens) => {
-  it("keeps primary and muted text above WCAG AA on every reading fill", () => {
-    for (const surface of READING_FILLS) {
+  it("keeps primary and muted text above WCAG AA on every fill", () => {
+    for (const surface of ALL_FILLS) {
       expect(
         contrastRatio(tokens["--snui-color-text"], tokens[surface]),
         `text on ${surface}`,
@@ -135,7 +134,7 @@ describe.each(THEME_CASES)("%s theme contrast", (_name, tokens) => {
 
   it("keeps semantic status text above WCAG AA", () => {
     for (const tone of SEMANTIC_TONES) {
-      for (const surface of READING_FILLS) {
+      for (const surface of ALL_FILLS) {
         expect(
           contrastRatio(tokens[`--snui-color-${tone}`], tokens[surface]),
           `${tone} on ${surface}`,
@@ -150,7 +149,7 @@ describe.each(THEME_CASES)("%s theme contrast", (_name, tokens) => {
       "--snui-color-link-hover",
       "--snui-color-link-visited",
     ] as const) {
-      for (const surface of READING_FILLS) {
+      for (const surface of ALL_FILLS) {
         expect(
           contrastRatio(tokens[token], tokens[surface]),
           `${token} on ${surface}`,
@@ -169,8 +168,9 @@ describe.each(THEME_CASES)("%s theme contrast", (_name, tokens) => {
   });
 
   it("keeps control boundaries distinguishable from every fill behind them", () => {
-    // Including the hover fills and the subtle fills: a data-grid separator
-    // sits on both, under the pointer and on a selected row.
+    // Including the hover fills, the subtle fills, and the hovered selected
+    // row: a data-grid separator sits on all of them, under the pointer and
+    // on a selected row.
     for (const fill of ALL_FILLS) {
       expect(
         contrastRatio(tokens["--snui-color-border"], tokens[fill]),
@@ -199,13 +199,10 @@ describe.each(THEME_CASES)("%s theme contrast", (_name, tokens) => {
   });
 
   /**
-   * The hovered selected row is not measured with the resting fills above.
-   * Darkening a selected row far enough to be felt under the pointer and still
-   * clearing a 3:1 floor for a grey disabled label and a grey separator is not
-   * possible on the light palette, and a selected row is identified by its
-   * leading accent bar rather than by the tint alone. What has to hold is that
-   * the row stays visibly a step from the resting selected fill; its text is
-   * measured with every other reading fill above.
+   * The hovered selected row is measured with every other fill above, so its
+   * boundaries and its disabled text hold 3:1. It also has to stay visibly a
+   * step from the resting selected fill, or the pointer leaves no trace on
+   * the row the operator just selected.
    */
   it("keeps the hovered selected row a visible step from the resting one", () => {
     expect(
@@ -329,8 +326,10 @@ describe.each(THEME_CASES)("%s theme contrast", (_name, tokens) => {
 
   it("keeps the track visible and the progress fill distinct from it", () => {
     // Raised as well as flat: a range or a progress bar inside a dialog, a
-    // popover, or a toast sits on the raised surface.
+    // popover, or a toast sits on the raised surface, and one placed outside
+    // any card sits on the panel background.
     for (const surface of [
+      "--snui-color-background",
       "--snui-color-surface",
       "--snui-color-surface-raised",
     ] as const) {

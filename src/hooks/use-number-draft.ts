@@ -389,6 +389,14 @@ export function useNumberDraft(
   // resumed subtree does not repeat the last report.
   const reportedValid = useRef(true);
   const forgetInvalid = useRef<(() => void) | null>(null);
+  // An effect event of its own, so the reset reaches the callback the field
+  // last rendered with rather than the one it held when the draft turned
+  // invalid, which an inline consumer callback has long since replaced.
+  const reportResetValid = useEffectEvent((): void => {
+    forgetInvalid.current = null;
+    reportedValid.current = true;
+    onValidityChange?.(true);
+  });
   const reportValidity = useEffectEvent((next: boolean): void => {
     reportedValid.current = next;
     if (next) {
@@ -401,9 +409,7 @@ export function useNumberDraft(
       // reset reaching a field that has since left reports a valid state
       // nobody can contradict, and clears the entry.
       forgetInvalid.current ??= trackInvalid(() => {
-        forgetInvalid.current = null;
-        reportedValid.current = true;
-        onValidityChange?.(true);
+        reportResetValid();
       });
     }
     onValidityChange?.(next);

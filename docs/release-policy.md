@@ -54,7 +54,7 @@ Every release candidate must pass:
 - Formatting, type-aware linting, Knip, type checking, unit tests, and coverage
 - Chromium, Firefox, WebKit, and mobile Chromium browser tests
 - Axe, contrast, reduced-motion, forced-colors, and screenshot checks
-- 320-pixel reflow and 44-by-44-pixel coarse-pointer target checks
+- 320-pixel reflow and 44-by-44-pixel coarse-pointer target checks, apart from the compact selectable `DataGrid` row, the one documented exception
 - Packed-artifact inspection and type-resolution checks, the public type surface against its baseline, and the compacted style text against its source
 - Documentation examples compiled against the packed declarations and rendered without a console warning, and the English defaults table against the package
 - Bundle-size checks against the carried budgets, and React plus React DOM externalization checks

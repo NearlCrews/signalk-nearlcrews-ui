@@ -24,6 +24,7 @@ import {
   showcaseScreenshotPath,
 } from "./lib/package-contract.mjs";
 import { packageBinaryEntry, repositoryPath } from "./lib/paths.mjs";
+import { themeLabel } from "./lib/themes.mjs";
 
 const require = createRequire(import.meta.url);
 
@@ -59,6 +60,10 @@ server.on("close", () => {
   closed = true;
 });
 
+// Playwright's webServer option would wait for the same URL, but it belongs to
+// the test runner and this is a plain script. The wait below also reports a
+// server that exited early or failed to start, which would otherwise surface
+// as 60 seconds of timeouts.
 try {
   let ready = false;
   for (let attempt = 0; attempt < READY_ATTEMPTS; attempt += 1) {
@@ -102,7 +107,7 @@ try {
     await page.getByRole("heading", { level: 1 }).first().waitFor();
 
     for (const theme of SHOWCASE_THEMES) {
-      const name = theme[0].toUpperCase() + theme.slice(1);
+      const name = themeLabel(theme);
       await page.getByRole("radio", { name }).first().click();
       await page
         .locator(`[data-snui-version][data-snui-theme="${theme}"]`)

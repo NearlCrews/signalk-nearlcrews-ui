@@ -18,8 +18,10 @@ import {
   missingSnapshotFiles,
   orphanSnapshotFiles,
   readSnapshotSpecs,
+  SNAPSHOT_PLATFORM,
   SNAPSHOT_SPECS,
   snapshotDirectory,
+  snapshotProjects,
   takesScreenshots,
 } from "../../scripts/lib/snapshot-families.mjs";
 import {
@@ -184,6 +186,32 @@ describe("hosted visual-baseline families", () => {
     }
   });
 
+  it("regenerates every project a screenshot maps to in the refresh workflow", () => {
+    const requested = [...refreshWorkflow.matchAll(/--project=([\w-]+)/g)]
+      .map(([, project]) => project)
+      .sort();
+
+    expect(
+      requested,
+      "The refresh workflow's --project flags must name exactly the projects PROJECT_BY_SNAPSHOT maps screenshots to, plus desktop Chromium.",
+    ).toEqual(snapshotProjects());
+  });
+
+  it("declares each screenshot project, and the file naming, in the Playwright config", () => {
+    const config = readFileSync(repositoryPath("playwright.config.ts"), "utf8");
+
+    for (const project of snapshotProjects()) {
+      expect(
+        config,
+        `playwright.config.ts has no ${project} project`,
+      ).toContain(`name: "${project}"`);
+    }
+    expect(config).toContain(
+      `{arg}-{projectName}-{platform}-\${snapshotVariant}{ext}`,
+    );
+    expect(SNAPSHOT_PLATFORM).toBe("linux");
+  });
+
   it("uploads every snapshot directory from the refresh workflow", () => {
     for (const spec of SNAPSHOT_SPECS) {
       expect(refreshWorkflow).toContain(`${snapshotDirectory(spec)}/`);
@@ -238,6 +266,11 @@ describe("npm bootstrap steps", () => {
     }
   });
 
+  // The copies are deliberate: a composite action for this step and for the
+  // pinned-tool installs would write GITHUB_PATH and env inside
+  // .github/actions, which zizmor reports at high severity. This equality
+  // check is what keeps the inline copies from drifting; do not replace it
+  // with a composite action.
   it("writes every copy of the bootstrap exactly as the canonical body", () => {
     for (const [name, body] of NPM_BOOTSTRAP_BODIES) {
       const copies = WORKFLOW_STEPS.filter((step) => step.name === name);

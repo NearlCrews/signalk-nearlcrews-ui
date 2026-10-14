@@ -7,5 +7,26 @@ import process from "node:process";
  * share it, so each reads `status`, `stdout`, and `stderr` the same way.
  */
 export function runNode(script, ...args) {
-  return spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });
+  return runNodeWith({}, script, ...args);
+}
+
+/** {@link runNode} with spawnSync options, such as an environment or a timeout. */
+export function runNodeWith(options, script, ...args) {
+  return spawnSync(process.execPath, [script, ...args], {
+    encoding: "utf8",
+    ...options,
+  });
+}
+
+/**
+ * Runs an ES module source text under the same Node through `--eval`, for the
+ * specs that measure or isolate a module in a process of its own. `options`
+ * reaches spawnSync, so a spec can set an environment or a timeout.
+ */
+export function runNodeEval(source, options = {}) {
+  return spawnSync(
+    process.execPath,
+    ["--input-type=module", "--eval", source],
+    { encoding: "utf8", ...options },
+  );
 }

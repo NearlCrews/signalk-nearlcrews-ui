@@ -11,10 +11,10 @@ import {
 } from "./browser-server.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
-const federationRoots = {
+const federationRoots: Readonly<Record<string, string>> = {
   classic: resolve(repositoryRoot, "fixtures/federation/classic/dist"),
   esm: resolve(repositoryRoot, "fixtures/federation/esm/dist"),
-} as const;
+};
 
 interface PackageAlias {
   readonly find: string;
@@ -114,27 +114,31 @@ function federationAssetServer(): Plugin {
           /^\/federation-assets\/(classic|esm)\/([a-zA-Z0-9._-]+)$/.exec(
             requestPathname(request),
           );
-        if (match === null) {
-          next();
-          return;
-        }
-
-        const [, format, filename] = match;
-        if ((format !== "classic" && format !== "esm") || !filename) {
+        const [, format = "", filename = ""] = match ?? [];
+        const root = federationRoots[format];
+        if (root === undefined) {
           next();
           return;
         }
 
         try {
-          const source = readFileSync(
-            resolve(federationRoots[format], filename),
-          );
+          const source = readFileSync(resolve(root, filename));
           response.statusCode = 200;
           response.setHeader("Cache-Control", "no-store");
           response.setHeader("Content-Type", "text/javascript; charset=utf-8");
           response.end(source);
         } catch (error) {
-          next(error);
+          if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+            next(error);
+            return;
+          }
+          // A missing file means the federation fixtures were never built,
+          // which a 500 from the middleware chain would not say.
+          response.statusCode = 404;
+          response.setHeader("Content-Type", "text/plain; charset=utf-8");
+          response.end(
+            `${filename} is not in the ${format} federation build. Run npm run test:federation first.`,
+          );
         }
       });
     },

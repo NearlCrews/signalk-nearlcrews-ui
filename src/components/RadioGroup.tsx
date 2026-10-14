@@ -37,6 +37,8 @@ export interface RadioGroupProps
   readonly disabled?: boolean | undefined;
   readonly error?: ReactNode | undefined;
   readonly errorLive?: AnnouncementMode | undefined;
+  /** Associates every radio with a form outside the group's DOM subtree. */
+  readonly form?: string | undefined;
   readonly label: ReactNode;
   /** Applied to every radio input, so native form submission and reset work. */
   readonly name?: string | undefined;
@@ -54,6 +56,11 @@ export interface RadioGroupProps
    * standing on. React Aria owns the blocking, as it does for `Switch`.
    */
   readonly readOnly?: boolean | undefined;
+  /**
+   * Requires a choice before the form submits, and reports the group as
+   * required to assistive technology.
+   */
+  readonly required?: boolean | undefined;
   readonly value?: string | undefined;
 }
 
@@ -66,12 +73,14 @@ export function RadioGroup({
   disabled,
   error,
   errorLive = "off",
+  form,
   label,
   name,
   onValueChange,
   orientation = "vertical",
   readOnly,
   ref,
+  required,
   value,
   ...props
 }: RadioGroupProps): React.JSX.Element {
@@ -104,9 +113,11 @@ export function RadioGroup({
       className={classNames("snui-radio-group", className)}
       isDisabled={disabled ?? false}
       isReadOnly={readOnly ?? false}
+      isRequired={required ?? false}
       isInvalid={hasError}
       orientation={orientation}
       {...definedProps({
+        form,
         name,
         value,
         defaultValue,

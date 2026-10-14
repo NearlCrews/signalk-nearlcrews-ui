@@ -305,6 +305,41 @@ describe("Banner announcements, actions, and focus", () => {
     ).toBeVisible();
   });
 
+  it("describes a banner that takes focus under a consumer role by its body", () => {
+    renderInPanel(
+      <>
+        <Banner role="group" tabIndex={-1} title="Provider unavailable">
+          Check the optional provider.
+        </Banner>
+        <Banner
+          role="group"
+          tabIndex={-1}
+          title="Chart download"
+          aria-describedby="chart-help"
+        >
+          The download stopped.
+        </Banner>
+        <p id="chart-help">Charts resume from the last tile.</p>
+        <Banner role="region" title="Storage">
+          The disk is nearly full.
+        </Banner>
+      </>,
+    );
+
+    // A role read on focus speaks its name and description only, so the
+    // message would go unread without one.
+    expect(
+      screen.getByRole("group", { name: "Provider unavailable" }),
+    ).toHaveAccessibleDescription("Check the optional provider.");
+    expect(
+      screen.getByRole("group", { name: "Chart download" }),
+    ).toHaveAccessibleDescription("Charts resume from the last tile.");
+    // A banner nobody focuses is read through its contents.
+    expect(screen.getByRole("region", { name: "Storage" })).not.toHaveAttribute(
+      "aria-describedby",
+    );
+  });
+
   it("leaves naming alone where the consumer or the role already owns it", () => {
     renderInPanel(
       <>

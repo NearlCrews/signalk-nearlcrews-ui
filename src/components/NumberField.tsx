@@ -5,7 +5,7 @@ import {
   type NumberDraftOptions,
   useNumberDraft,
 } from "../hooks/use-number-draft.js";
-import { joinIdReferences } from "../utils/aria.js";
+import { idReferenceList, joinIdReferences } from "../utils/aria.js";
 import { resolveBundledContent } from "../utils/labels.js";
 import { usePanelLabels } from "../utils/panel-labels.js";
 import { hasUnitContent, renderUnit, type UnitContent } from "../utils/unit.js";
@@ -258,6 +258,7 @@ function resolveMessage(
  */
 export function NumberField({
   allowEmpty,
+  controlDescribedBy,
   controlWidth = "grow",
   defaultValue,
   error,
@@ -325,7 +326,18 @@ export function NumberField({
   const { enterKeyHint, inputMode, ...draftInputProps } = draft.inputProps;
 
   return (
-    <LabeledField {...fieldProps} error={draftMessage ?? error}>
+    <LabeledField
+      {...fieldProps}
+      // An `aria-describedby` in `inputProps` takes the place one on a plain
+      // child takes: after the field's own text and before the ids named in
+      // `controlDescribedBy`. Spread on its own it would be overwritten by
+      // the field's merged list.
+      controlDescribedBy={[
+        inputProps?.["aria-describedby"],
+        ...idReferenceList(controlDescribedBy),
+      ]}
+      error={draftMessage ?? error}
+    >
       {(controlContract) => {
         const { controlProps } = splitLabeledFieldControlProps(controlContract);
         const unitId = showUnit ? `${controlProps.id}-unit` : undefined;

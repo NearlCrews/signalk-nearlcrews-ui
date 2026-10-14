@@ -18,6 +18,7 @@ import { definedProps } from "../utils/props.js";
 import { racDomProps } from "../utils/react-aria.js";
 import { requireContent } from "../utils/react-node.js";
 import type { SemanticTone } from "../utils/tone.js";
+import { VISUALLY_HIDDEN_CLASS } from "../version.js";
 import { ToneMark } from "./ToneMark.js";
 
 export type ProgressTone = SemanticTone;
@@ -129,7 +130,7 @@ export function Progress({
               toneLabel={toneLabel}
             />
             {waiting ? (
-              <span className="snui-visually-hidden">{valueText}</span>
+              <span className={VISUALLY_HIDDEN_CLASS}>{valueText}</span>
             ) : null}
           </span>
         ) : null}

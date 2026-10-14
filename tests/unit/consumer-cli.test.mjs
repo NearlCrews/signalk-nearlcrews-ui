@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 
 import { afterAll, describe, expect, it } from "vitest";
@@ -213,6 +214,86 @@ exports.default = ${exported};
 
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain("Usage: snui-check-consumer");
+  });
+
+  it("names the option that is missing", () => {
+    const noRoot = runCli("--remote", REMOTE_ENTRY);
+    expect(noRoot.stderr).toContain("--root is required.");
+    expect(noRoot.stderr).not.toContain("--remote is required");
+
+    const neither = runCli();
+    expect(neither.stderr).toContain("--root and --remote are required.");
+  });
+
+  it("lists every option in --help and prints the package version for --version", () => {
+    const help = runCli("--help");
+    expect(help.status, help.stderr).toBe(0);
+    for (const option of [
+      "--expect",
+      "--expect-unsupported",
+      "--no-compatibility-render",
+      "--props",
+      "--runtime-dependency",
+    ]) {
+      expect(help.stdout).toContain(option);
+    }
+
+    const version = runCli("--version");
+    expect(version.status, version.stderr).toBe(0);
+    expect(version.stdout).toBe(`${manifest.name} ${manifest.version}\n`);
+  });
+
+  it("says to run npm install when the package is not installed", () => {
+    const root = createConsumer();
+    rmSync(join(root, "node_modules"), { force: true, recursive: true });
+
+    const result = checkConsumer(root);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(`${manifest.name} is not installed under`);
+    expect(result.stderr).toContain("Run npm install in");
+    expect(result.stderr).not.toContain("Require stack");
+  });
+
+  it("names the missing package.json instead of a bare ENOENT", () => {
+    const root = createConsumer();
+    rmSync(join(root, "package.json"));
+
+    const result = checkConsumer(root);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("package.json does not exist.");
+    expect(result.stderr).toContain("Point --root at the consumer plugin");
+  });
+
+  it("names a --webpack-config file that does not exist", () => {
+    const root = createConsumer();
+
+    const result = checkConsumer(
+      root,
+      "--webpack-config",
+      "missing.config.cjs",
+    );
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("missing.config.cjs, which does not exist");
+  });
+
+  it("names a --stats or --baseline file that does not exist", () => {
+    const root = createConsumer();
+
+    const stats = checkConsumer(root, "--stats", "missing-stats.json");
+    expect(stats.stderr).toContain("missing-stats.json does not exist.");
+
+    const baseline = checkConsumer(root, "--baseline", "missing-size.json");
+    expect(baseline.stderr).toContain("missing-size.json does not exist.");
+  });
+
+  it("tells an option written --name=value to pass the value separately", () => {
+    const result = runCli("--root=.", "--remote", REMOTE_ENTRY);
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Write the value as a separate argument");
   });
 
   it("rejects a following flag where a path belongs", () => {

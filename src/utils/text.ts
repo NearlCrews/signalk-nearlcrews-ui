@@ -53,9 +53,31 @@ export function formatCount(
  */
 const SENTENCE_ENDINGS = new Set([".", "!", "?", "…"]);
 
-/** Whether text already closes a sentence. */
+/**
+ * Closing quotes and brackets that may follow a sentence's own stop, as in
+ * `Reported "Pump failed."`, where the stop sits inside the quote.
+ */
+const TRAILING_CLOSERS = new Set([
+  ")",
+  "]",
+  "}",
+  '"',
+  "'",
+  "\u2019",
+  "\u201D",
+  "\u00BB",
+  "\u203A",
+]);
+
+/**
+ * Whether text already closes a sentence, inside any closing quote. The scan
+ * steps back over closers one character at a time, so the cost stays linear
+ * however many a caller's text ends with.
+ */
 function endsSentence(text: string): boolean {
-  return SENTENCE_ENDINGS.has(text.slice(-1));
+  let end = text.length;
+  while (end > 0 && TRAILING_CLOSERS.has(text.charAt(end - 1))) end -= 1;
+  return SENTENCE_ENDINGS.has(text.charAt(end - 1));
 }
 
 /**

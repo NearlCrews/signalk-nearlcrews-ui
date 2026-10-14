@@ -3,21 +3,24 @@ import type { Orientation } from "./variants.js";
 /**
  * The axis a key travels along, whatever the group's own orientation.
  *
- * The radio and tab patterns bind both axes, so Down moves to the next option
- * in a horizontal group too. Only the horizontal pair mirrors in a
- * right-to-left panel, which is exactly what asking the step below for a
- * vertical group expresses.
+ * A radio-like group binds both axes, so Down moves to the next option in a
+ * horizontal group too: the segmented control asks for the step below along
+ * the key's own axis. A tab list binds only its own axis, as the WAI-ARIA tabs
+ * pattern does, and asks with the list's orientation instead. Only the
+ * horizontal pair mirrors in a right-to-left panel, which is exactly what
+ * asking the step below for a vertical group expresses. A Map rather than an
+ * object, so no key a caller passes can reach a prototype member.
  */
-const KEY_AXIS: Readonly<Record<string, Orientation>> = {
-  ArrowDown: "vertical",
-  ArrowLeft: "horizontal",
-  ArrowRight: "horizontal",
-  ArrowUp: "vertical",
-};
+const KEY_AXIS: ReadonlyMap<string, Orientation> = new Map([
+  ["ArrowDown", "vertical"],
+  ["ArrowLeft", "horizontal"],
+  ["ArrowRight", "horizontal"],
+  ["ArrowUp", "vertical"],
+]);
 
 /** The axis an arrow key travels along, or undefined for any other key. */
 export function rovingKeyAxis(key: string): Orientation | undefined {
-  return KEY_AXIS[key];
+  return KEY_AXIS.get(key);
 }
 
 /** One arrow, Home, or End press against a roving-focus group. */

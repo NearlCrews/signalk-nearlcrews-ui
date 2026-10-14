@@ -149,6 +149,25 @@ describe("loadPanelRemote", () => {
     );
   });
 
+  it("reads the global at once from a script it has already seen finish", async () => {
+    const unavailable = `signalk-nearlcrews-ui: Module "${PACKAGE_NAME}" is not available.`;
+    const first = loadPanelRemote({
+      packageName: PACKAGE_NAME,
+      url: REMOTE_URL,
+    });
+    document.querySelector("script")?.dispatchEvent(new Event("error"));
+    await expect(first).rejects.toThrow(unavailable);
+
+    // The script has fired the only event it ever will, so a second load,
+    // such as another frame for the same missing remote, starts no wait.
+    const wait = vi.spyOn(window, "setTimeout");
+    await expect(
+      loadPanelRemote({ packageName: PACKAGE_NAME, url: REMOTE_URL }),
+    ).rejects.toThrow(unavailable);
+    expect(wait).not.toHaveBeenCalled();
+    expect(document.querySelectorAll("script")).toHaveLength(1);
+  });
+
   it("imports a module remote and reads get and init off it", async () => {
     const url = moduleUrl(
       "export const get = async () => () => ({ default: () => null });\nexport const init = () => {};",

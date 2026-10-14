@@ -83,17 +83,13 @@ export function blockChange<Target>(
 export const BUTTON_ACTIVATION_KEYS: ReadonlySet<string> = new Set([
   "Enter",
   " ",
-  "Spacebar",
 ]);
 
 /**
  * Keys that toggle a checkbox. Enter is not one of them: it submits the
  * surrounding form, which is the form's business rather than the box's.
  */
-export const CHECKBOX_ACTIVATION_KEYS: ReadonlySet<string> = new Set([
-  " ",
-  "Spacebar",
-]);
+export const CHECKBOX_ACTIVATION_KEYS: ReadonlySet<string> = new Set([" "]);
 
 /**
  * Resolves whether a control is held inoperable through `aria-disabled`.

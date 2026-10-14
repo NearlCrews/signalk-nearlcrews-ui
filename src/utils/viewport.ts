@@ -40,7 +40,7 @@ function getResizeObserver(
  */
 export function readViewportEdges(ownerWindow: Window): ViewportEdges {
   const viewport = getVisualViewport(ownerWindow);
-  if (viewport == null) {
+  if (viewport === null || viewport === undefined) {
     return {
       top: 0,
       right: ownerWindow.innerWidth,
@@ -68,10 +68,13 @@ export function roundedLayoutValue(value: number): number {
  * {@link roundedLayoutValue} or a flag measured beside one, so equality is the
  * whole rule and a member added later is compared without a line to remember.
  * A comparator that silently stopped at the members it knew is what makes a
- * scroll frame write geometry it should have skipped.
+ * scroll frame write geometry it should have skipped, so a member only one
+ * side carries is a mismatch too.
  */
 export function layoutMatches<T extends object>(current: T, next: T): boolean {
-  for (const key of Object.keys(current) as (keyof T)[]) {
+  const keys = Object.keys(current) as (keyof T)[];
+  if (keys.length !== Object.keys(next).length) return false;
+  for (const key of keys) {
     if (current[key] !== next[key]) return false;
   }
   return true;

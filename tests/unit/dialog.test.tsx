@@ -257,6 +257,29 @@ describe("Dialog", () => {
     expect(scrimView.queryByRole("dialog")).toBeNull();
   });
 
+  it("reports React Aria's hidden Dismiss button as the scrim route it stands in for", async () => {
+    const user = userEvent.setup();
+    const onCancel = vi.fn();
+    renderDialog({ defaultOpen: true, onCancel });
+
+    // A dismissable dialog carries a visually hidden Dismiss button, the
+    // screen reader's way to the exit a scrim press offers by sight, so it
+    // reports the same route.
+    await user.click(
+      screen.getByRole("button", { hidden: true, name: "Dismiss" }),
+    );
+    expect(onCancel).toHaveBeenCalledExactlyOnceWith("scrim");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("offers no hidden Dismiss button where the scrim does not dismiss", () => {
+    renderDialog({ defaultOpen: true, dismissable: false });
+
+    expect(
+      screen.queryAllByRole("button", { hidden: true, name: "Dismiss" }),
+    ).toHaveLength(0);
+  });
+
   it("reports a scrim press as itself after a confirmation inside the dialog took an Escape", async () => {
     const user = userEvent.setup();
     const onCancel = vi.fn();
@@ -691,6 +714,12 @@ describe("AlertDialog", () => {
     ).toThrow(
       "signalk-nearlcrews-ui: AlertDialog requires a non-empty cancelLabel so the user always has an explicit way out.",
     );
+  });
+
+  it("opens with focus on the cancel action, the least destructive choice", () => {
+    renderAlertDialog({ actions: DISCARD_ACTION });
+
+    expect(screen.getByRole("button", { name: "Keep route" })).toHaveFocus();
   });
 
   it("ignores scrim presses by default but declines on Escape", async () => {

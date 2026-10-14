@@ -1,21 +1,26 @@
 import {
   ACTION_ROW_DECLARATIONS,
+  BLOCKED_SELECTOR,
   DISABLED_DECLARATIONS,
   FIRST_LINE_GLYPH_SLOT_DECLARATIONS,
   FORCED_COLORS_HIGHLIGHT_DECLARATIONS,
   NARROW_PANEL_QUERY,
   PRESSED_FILL_DECLARATION,
+  SECTION_LEADING_DECLARATIONS,
   TONE_GLYPH_BOX_EM,
   TONE_GLYPH_GAP_EM,
+  TOP_SECTION_TITLE_DECLARATION,
 } from "./fragments.js";
 import { scopeStyles } from "./scope.js";
-import { toneAccentBar } from "./tone-rules.js";
+import { forcedColorsToneBarRule, toneAccentBar } from "./tone-rules.js";
 
 /**
  * The toggle while it can be pressed, which the hover, pressed, and
- * forced-colors rules all target.
+ * forced-colors rules all target. A toggle held through aria-disabled stays
+ * focusable but answers no press, so it is left out with a disabled one; the
+ * one `:not()` weighs what `:not(:disabled)` did.
  */
-const ENABLED_TOGGLE = ".snui-collapsible__toggle:not(:disabled)";
+const ENABLED_TOGGLE = `.snui-collapsible__toggle:not(${BLOCKED_SELECTOR})`;
 
 /**
  * The chevron's box: the largest title size, so one length holds whatever
@@ -91,16 +96,8 @@ ${FIRST_LINE_GLYPH_SLOT_DECLARATIONS}
   padding-inline-end: var(--snui-section-inset);
 }
 
-/*
- * The leading slot is one shape in both section shells: a Section's glyph and
- * a collapsible section's enable checkbox sit before the heading the same way.
- */
-.snui-collapsible__leading,
-.snui-section__leading {
-  display: flex;
-  flex: none;
-  align-items: center;
-  min-width: 0;
+.snui-collapsible__leading {
+${SECTION_LEADING_DECLARATIONS}
 }
 
 /*
@@ -114,15 +111,9 @@ ${FIRST_LINE_GLYPH_SLOT_DECLARATIONS}
   font-size: var(--snui-font-size);
 }
 
-/*
- * Both shells size their titles by depth below the shell's own title rather
- * than by heading level: a top section takes the larger step whether the
- * shell handed it level 2 or, below a panel title, level 3, and every deeper
- * section takes the body size. Written here, after both shells' base sizes.
- */
-.snui-section__title--top,
+/* After the heading's base size, which it replaces for a top section. */
 .snui-collapsible__heading--top {
-  font-size: var(--snui-font-size-lg);
+${TOP_SECTION_TITLE_DECLARATION}
 }
 
 /*
@@ -160,7 +151,7 @@ ${ENABLED_TOGGLE}:active {
 ${PRESSED_FILL_DECLARATION}
 }
 
-.snui-collapsible__toggle:disabled {
+.snui-collapsible__toggle${BLOCKED_SELECTOR} {
 ${DISABLED_DECLARATIONS}
 }
 
@@ -188,16 +179,25 @@ ${DISABLED_DECLARATIONS}
   transition: transform var(--snui-transition-fast);
 }
 
-.snui-collapsible__chevron:dir(rtl) {
-  transform: scaleX(-1);
-}
-
 .snui-collapsible__toggle[aria-expanded="true"] .snui-collapsible__chevron {
   transform: rotate(90deg);
 }
 
-.snui-collapsible__toggle[aria-expanded="true"] .snui-collapsible__chevron:dir(rtl) {
-  transform: scaleX(-1) rotate(90deg);
+/*
+ * A right-to-left section points its closed chevron the other way. Chromium
+ * and Edge 118 and 119 match no :dir() selector, so there a closed chevron
+ * keeps pointing right; the open one points down in both directions. The
+ * guard states that loss rather than leaving the engine to drop the rules
+ * unseen.
+ */
+@supports selector(:dir(rtl)) {
+  .snui-collapsible__chevron:dir(rtl) {
+    transform: scaleX(-1);
+  }
+
+  .snui-collapsible__toggle[aria-expanded="true"] .snui-collapsible__chevron:dir(rtl) {
+    transform: scaleX(-1) rotate(90deg);
+  }
 }
 
 .snui-collapsible__actions {
@@ -283,10 +283,19 @@ ${NARROW_PANEL_QUERY} {
   /*
    * Forced colors flattens the hover and pressed fills, which leaves the
    * toggle painted exactly like the header around it. Reconstruct both states
-   * with a system highlight, as the menu item does.
+   * with a system highlight, as the menu item does; the hover half waits for
+   * a pointer that can hover, as the themed fill does, so a tap does not
+   * leave the highlight latched.
    */
-  ${ENABLED_TOGGLE}:hover,
   ${ENABLED_TOGGLE}:active {
+${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
+  }
+
+${forcedColorsToneBarRule("snui-collapsible")}
+}
+
+@media (forced-colors: active) and (hover: hover) {
+  ${ENABLED_TOGGLE}:hover {
 ${FORCED_COLORS_HIGHLIGHT_DECLARATIONS}
   }
 }
