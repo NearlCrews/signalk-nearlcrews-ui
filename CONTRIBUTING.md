@@ -93,6 +93,12 @@ Every workflow installs npm through an inline step named "Set up npm", or "Set u
 
 `.github/pinned-tools.json` pins the version and archive checksum of each tool the workflows download directly: actionlint, lychee, and zizmor. No dependency updater can see those pins, so `npm run tools:outdated` compares each one with the tool's latest GitHub release and fails with the new version and its checksum, ready to paste. The weekly host contract workflow runs the same check as a non-required job. It needs the network, and a `GITHUB_TOKEN` in the environment lifts the anonymous API rate limit. A unit test holds every workflow download step to the pinned table.
 
+### Dependency override
+
+<!-- cspell:ignore katex pmpm -->
+
+`package.json` carries one `overrides` entry, `katex` at `^0.18.11`. markdownlint reaches katex through `micromark-extension-math`, which still asks for the 0.16 line that GHSA-238p-pmpm-9mq7 affects. markdownlint imports only the math syntax extension and never calls the katex renderer, so the lift changes no behavior and exists to keep `npm audit` at zero. Drop the entry once `micromark-extension-math` asks for a patched katex range, and confirm with `npm audit` afterward. The override sits in development tooling only: the published package depends on `react-aria` and `react-aria-components`, and nothing else.
+
 ## TypeScript toolchain
 
 Two TypeScript compilers are installed on purpose, through npm aliases in `devDependencies`:
@@ -138,7 +144,7 @@ Update every affected document in the same change. Do not copy exhaustive prop l
 
 ## Deferred component proposals
 
-The removed historical roadmap is not a current package contract, but two candidate dispositions remain useful during feature review:
+Two candidate dispositions remain useful during feature review:
 
 - Keep overflow actions as a composition of the existing `Menu`, `Popover`, and button primitives unless at least two React administration consumers demonstrate the same reusable action-priority contract. A future `OverflowActions` proposal must retain a visible primary action and accept localized labels.
 - Keep slide-over shells consumer-local. Reconsider a shared `SlideOver` only when at least two React administration consumers require the same host-contained panel behavior without chart, phone-minimization, viewport-navigation, or application-shell assumptions. Any proposal must separately define modal and nonmodal focus, inertness, scrolling, dismissal, safe-area, CSP, and nested-version behavior.
@@ -151,7 +157,7 @@ These names are deferred candidates, not reserved exports or release commitments
 2. Add tests that fail without the change and pass with it.
 3. Run `npm run validate` and the browser suite relevant to the change.
 4. Include Light, Dark, and Night screenshots when presentation changes.
-5. Confirm 320-pixel reflow and 44-by-44-pixel coarse-pointer targets when layout changes.
+5. Confirm 320-pixel reflow and 44-by-44-pixel coarse-pointer targets when layout changes, apart from the compact selectable `DataGrid` row, the one documented exception.
 6. Update the changelog, API reference, design contract, migration guidance, and consumer overview when required.
 7. Complete the pull request template and call out compatibility or semantic-versioning impact.
 

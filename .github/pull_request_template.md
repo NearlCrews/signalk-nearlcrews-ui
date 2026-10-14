@@ -27,7 +27,7 @@
 - [ ] `npm run test:browser` passes when UI or browser behavior changed.
 - [ ] Keyboard behavior, visible focus, and full Axe results pass.
 - [ ] Auto, System, Light, Dark, Night, reduced motion, increased contrast, reduced transparency, and forced colors were checked when relevant.
-- [ ] 320-pixel reflow and 44-by-44-pixel coarse-pointer targets pass when layout changed.
+- [ ] 320-pixel reflow and 44-by-44-pixel coarse-pointer targets pass when layout changed, apart from the compact selectable `DataGrid` row, the one documented exception.
 - [ ] Local Markdown links resolve when documentation changed.
 - [ ] Updated screenshots were visually inspected.
 - [ ] `git diff --check` passes.

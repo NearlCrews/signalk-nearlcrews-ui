@@ -8,4 +8,6 @@ Choose the channel that matches the request:
 - Use a [private security advisory](https://github.com/NearlCrews/signalk-nearlcrews-ui/security/advisories/new) for vulnerabilities or sensitive reports.
 - Use the [Signal K project site](https://signalk.org/) for platform questions unrelated to this package.
 
+Fixes target the latest published release only, as the [security policy](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/.github/SECURITY.md) records, so check that a defect reproduces on the current release before reporting it.
+
 Do not include access tokens, credentials, private vessel data, or unsanitized server output in any public report.
