@@ -1,6 +1,6 @@
 {
   "name": "signalk-nearlcrews-ui",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "description": "Accessible, theme-aware React primitives for Signal K administration panels.",
   "type": "module",
   "sideEffects": [
@@ -115,6 +115,7 @@
     "build": "node scripts/clean.mjs && node scripts/tsc7.mjs -p tsconfig.build.json && node scripts/build-tokens-css.mjs && node scripts/compact-style-text.mjs && node scripts/build-federation-entry.mjs",
     "clean": "node scripts/clean.mjs",
     "format": "biome check --write . && prettier --write \"**/*.{md,yml,yaml}\"",
+    "format:check:docs": "prettier --check \"**/*.{md,yml,yaml}\"",
     "lint": "npm run lint:biome && npm run lint:eslint",
     "lint:biome": "biome check --error-on-warnings .",
     "lint:eslint": "eslint . --max-warnings 0",
@@ -156,8 +157,7 @@
     "validate": "npm run format:check:docs && npm run docs:check && npm run host-contract && npm run dependency-contract && npm run build && npm run lint && npm run knip && npm run type-check && npm run type-check:ts6 && npm run test:coverage && npm run audit:runtime && npm run test:package:built && npm run test:bundle:built && npm run test:federation:built",
     "release:check": "node scripts/check-release-approval.mjs && npm run validate && playwright test",
     "prepublishOnly": "node scripts/check-release-approval.mjs && npm run test:browser",
-    "prepack": "npm run build",
-    "format:check:docs": "prettier --check \"**/*.{md,yml,yaml}\""
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@arethetypeswrong/cli": "^0.18.5",

@@ -6,6 +6,49 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-10-14
+
+The root entry's size budget rises from 39936 to 41984 gzip bytes. Recovery focus in `PanelErrorBoundary`, the no-native-disable routes on `CollapsibleSection` and `Tab`, the paused toast countdown and its queue cap, and the other accessibility fixes below grow the root entry by about 1.1 KB gzip, to 40713 bytes.
+
+### Breaking
+
+- `SecretInput`'s reveal button is named by the visible word and the field, "Show API token" rather than "Show". `showLabel` and `hideLabel` are still the visible word and the start of that name. A test that queries the button with `name: "Show"` exactly matches the new name or uses a regular expression.
+- `Popover` is named by its `aria-label` when one is given. The trigger's name used to win over it; it still names a popover given neither `aria-label` nor `aria-labelledby`, and `aria-labelledby` still wins over `aria-label`. A test that found a labelled popover by its trigger's name uses the label.
+
+### Added
+
+- `PanelErrorBoundary.resetKeys`: a change to any key clears a caught error, the way a changed route or configuration should.
+- `CollapsibleSection.ariaDisabled` and `Tab.ariaDisabled`, each with `disabledReason`, block the control while it keeps focus and its tab stop, as `Button` and `Checkbox` already did. Native `disabled` keeps its meaning.
+- `RadioGroup.required` and `RadioGroup.form`, as `Switch` and `Checkbox` have.
+- `Metric.announceKey`, which repeats an unchanged announcement on purpose, as `StatusIndicator` and `Banner` do.
+- `ToastQueueOptions.maxQueued`, five by default. Sticky warning and danger toasts are still never evicted by a lower priority.
+- `snui-check-consumer --help` and `--version`. The usage text lists every option, a missing `--root` or `--remote` is named, `--option=value` gets a hint to pass the value separately, and a consumer without the package installed, without a `package.json`, or with a missing webpack config, stats file, or size baseline gets a message naming the fix instead of a Node stack.
+
+### Changed
+
+- The Light palette darkens three tokens so control boundaries and disabled text keep 3:1 on a hovered selected row and the track keeps 1.5:1 on the panel background: `--snui-color-border` `#758090`, `--snui-color-text-disabled` `#768090`, and `--snui-color-track` `#c3cbd5`.
+- `Checkbox`, `RadioGroup`, `RangeInput`, and `Switch` draw the dashed danger outline text inputs already had when invalid, in every theme, so an invalid choice does not rest on color alone. `Switch` also takes the danger border.
+- A read-only `Switch` or `RadioGroup` shows a not-allowed cursor and no hover accent.
+- `Button variant="text"` answers hover and press, and keeps system colors and the system focus ring under forced colors.
+- Menu items and data grid rows show only their inset focus ring; the outer halo no longer spills over neighbors.
+- `AlertDialog` opens with focus on its cancel action, the least destructive choice.
+- Timed toasts pause while the document is hidden and resume with the time left.
+- `InlineConfirm` marks its Confirm button busy rather than the whole region.
+- `RangeInput` formats the number in its value text for the panel locale.
+- `SaveActionBar` keeps a focused Save or Discard button focusable, `aria-disabled` and described by the status, when it goes idle under the reader, instead of disabling it natively.
+- Development warns about a `Tab` with no matching `TabPanel`.
+- The `:dir(rtl)` rules for the select arrow, range fill, collapsible chevron, and progress slide sit behind `@supports selector(:dir(rtl))`, so Chromium and Edge 118 and 119 keep the left-to-right look rather than dropping the rule.
+- `HostPanelFrame` loads its remote once per mount; key it to change remotes. `loadPanelRemote` no longer waits out its timeout for a script it already saw finish.
+
+### Fixed
+
+- A `Card density="flush"` keeps zero padding in a narrow panel.
+- After Try again recovers, focus left nowhere returns to the panel root, and recovered content that focuses its own control keeps it. The default fallback is a group named by its title and described by its body.
+- `NumberField` reads an `aria-describedby` passed through `inputProps`; it was dropped.
+- Forced-colors hover fills on collapsible toggles and tabs no longer latch after a tap on a touch screen, and `CollapsibleSection` and `Toast` tone bars stay distinct under forced colors.
+- `useNumberDraft` calls the current `onValidityChange` when Discard runs, not the one from an earlier render, and `useFocusReturn` releases the element it held once the overlay closes.
+- A panel event listener that throws no longer stops the listeners after it, and a style module whose root never resolves stops asking after three tries with one development warning instead of reaching React's update-depth error.
+
 ## [0.13.0] - 2026-10-05
 
 Six props are renamed or removed, several defaults and announcement semantics change, the shipped style text is compacted, and the Night theme, section surfaces, tone glyphs, and borders are repainted. `snui-check-consumer` checks the Signal K host loading contract in its default run, and a new `signalk-nearlcrews-ui/host-harness` entry stands in for the Admin loader in consumer browser tests. `docs/migration.md` records the required work under "Changes in 0.13.0".
@@ -733,7 +776,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.13.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.14.0...HEAD
+[0.14.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.11.1...v0.12.0
 [0.11.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.11.0...v0.11.1
