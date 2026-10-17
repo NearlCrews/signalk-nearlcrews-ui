@@ -368,27 +368,59 @@ describe("size baseline", () => {
 });
 
 describe("loading Webpack's range encoder", () => {
-  it("returns the encoder the loader provides", () => {
-    const parseRange = () => [];
+  const SHARING = "webpack/lib/sharing/semver.js";
+  const UTIL = "webpack/lib/util/semver.js";
+
+  /** A require function that serves `modules` and throws for anything else. */
+  function loaderFor(modules) {
+    const requested = [];
     const load = (specifier) => {
-      expect(specifier).toBe("webpack/lib/util/semver.js");
-      return { parseRange };
+      requested.push(specifier);
+      if (specifier in modules) return modules[specifier];
+      throw new Error("Cannot find module");
     };
+    return { load, requested };
+  }
+
+  it("loads the encoder from lib/sharing, where Webpack 5.112 keeps it", () => {
+    const parseRange = () => [];
+    const { load, requested } = loaderFor({ [SHARING]: { parseRange } });
+
+    expect(loadWebpackParseRange(load, "Needed to encode ranges.")).toBe(
+      parseRange,
+    );
+    expect(requested).toEqual([SHARING]);
+  });
+
+  it("falls back to lib/util for Webpack 5.111 and earlier", () => {
+    const parseRange = () => [];
+    const { load, requested } = loaderFor({ [UTIL]: { parseRange } });
+
+    expect(loadWebpackParseRange(load, "Needed to encode ranges.")).toBe(
+      parseRange,
+    );
+    expect(requested).toEqual([SHARING, UTIL]);
+  });
+
+  it("passes over a module at a known path that has no encoder", () => {
+    const parseRange = () => [];
+    const { load } = loaderFor({
+      [SHARING]: {},
+      [UTIL]: { parseRange },
+    });
 
     expect(loadWebpackParseRange(load, "Needed to encode ranges.")).toBe(
       parseRange,
     );
   });
 
-  it("names the internal, the cause, and the purpose when it does not load", () => {
-    const load = () => {
-      throw new Error("Cannot find module");
-    };
+  it("names every location, each cause, and the purpose when none loads", () => {
+    const { load } = loaderFor({ [UTIL]: { parseRange: "not a function" } });
 
     expect(() =>
       loadWebpackParseRange(load, "Needed to encode ranges."),
     ).toThrow(
-      "webpack/lib/util/semver.js could not be loaded: Cannot find module. Needed to encode ranges.",
+      `Webpack's range encoder was not found. ${SHARING} could not be loaded: Cannot find module; ${UTIL} has no parseRange function. Needed to encode ranges.`,
     );
   });
 });

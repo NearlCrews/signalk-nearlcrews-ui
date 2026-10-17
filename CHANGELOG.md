@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-10-17
+
+### Fixed
+
+- `snui-check-consumer` and the federation build check find webpack's range encoder in `lib/sharing/semver.js`, where webpack 5.112.0 moved it, and fall back to `lib/util/semver.js` on older webpack. A consumer that moved to webpack 5.112.0 failed the check with "webpack/lib/util/semver.js could not be loaded". When neither path has the encoder, the error names both locations and why each one failed.
+
+### Changed
+
+- The package builds and checks its federation fixtures with webpack 5.112.0.
+
 ## [0.14.0] - 2026-10-14
 
 The root entry's size budget rises from 39936 to 41984 gzip bytes. Recovery focus in `PanelErrorBoundary`, the no-native-disable routes on `CollapsibleSection` and `Tab`, the paused toast countdown and its queue cap, and the other accessibility fixes below grow the root entry by about 1.1 KB gzip, to 40713 bytes.
@@ -776,7 +786,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.14.1...HEAD
+[0.14.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.11.1...v0.12.0

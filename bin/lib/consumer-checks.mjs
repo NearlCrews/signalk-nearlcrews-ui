@@ -288,20 +288,34 @@ function firstMarkerIn(source, markers) {
 }
 
 /**
+ * Where Webpack keeps its range encoder, newest first. Webpack 5.112.0 moved
+ * it from lib/util to lib/sharing, and exports neither path.
+ */
+const WEBPACK_SEMVER_MODULES = [
+  "webpack/lib/sharing/semver.js",
+  "webpack/lib/util/semver.js",
+];
+
+/**
  * Loads Webpack's range encoder through `load`, a require function that
- * resolves from the Webpack that built the remote. Webpack does not export
- * lib/util/semver.js, so a move of that internal is named here, with what
+ * resolves from the Webpack that built the remote. Each known location is
+ * tried in turn, so a further move of that internal is named here, with what
  * needed it, rather than surfacing as a bare module-not-found.
  */
 export function loadWebpackParseRange(load, purpose) {
-  try {
-    return load("webpack/lib/util/semver.js").parseRange;
-  } catch (cause) {
-    throw new Error(
-      `webpack/lib/util/semver.js could not be loaded: ${cause.message}. ${purpose}`,
-      { cause },
-    );
+  const failures = [];
+  for (const specifier of WEBPACK_SEMVER_MODULES) {
+    try {
+      const { parseRange } = load(specifier);
+      if (typeof parseRange === "function") return parseRange;
+      failures.push(`${specifier} has no parseRange function`);
+    } catch (cause) {
+      failures.push(`${specifier} could not be loaded: ${cause.message}`);
+    }
   }
+  throw new Error(
+    `Webpack's range encoder was not found. ${failures.join("; ")}. ${purpose}`,
+  );
 }
 
 /**

@@ -15,9 +15,11 @@ The package is intentionally distinct from the official Signal K user interface 
 
 The package is a public npm dependency for NearlCrews Signal K projects. It is not a Signal K plugin, webapp, or App Store package. The API may still change during the `0.x` series, so consumers should pin an exact version.
 
-## What's new in 0.14.0
+## What's new in 0.14.1
 
-Version 0.14.0 is an accessibility and correctness release with two changes that can move a consumer's test queries, so read the [0.14.0 migration notes](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/migration.md#changes-in-0140) before moving a pin.
+Version 0.14.1 fixes `snui-check-consumer` for panels built with webpack 5.112.0 or newer. That release moved the range encoder the check uses to read a remote entry's shared versions, so the check failed with "webpack/lib/util/semver.js could not be loaded". It now looks in the new place first and falls back to the old one, so a consumer can move webpack without moving anything else. No component, style, or public type changes.
+
+Everything 0.14.0 brought ships here too. It is an accessibility and correctness release with two changes that can move a consumer's test queries, so read the [0.14.0 migration notes](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/docs/migration.md#changes-in-0140) before moving a pin from 0.13.
 
 - **Focus stays where the reader is.** After Try again recovers a crashed panel, focus returns to the panel root instead of the page body. `CollapsibleSection` and `Tab` take `ariaDisabled` with `disabledReason`, and `SaveActionBar` keeps a focused Save or Discard button focusable when it goes idle, so no control is disabled out from under the reader.
 - **Invalid and read-only states are visible in every theme.** `Checkbox`, `RadioGroup`, `RangeInput`, and `Switch` draw the dashed danger outline text inputs already had, and a read-only `Switch` or `RadioGroup` no longer looks interactive.
@@ -26,7 +28,7 @@ Version 0.14.0 is an accessibility and correctness release with two changes that
 - **New props.** `PanelErrorBoundary.resetKeys`, `RadioGroup.required` and `form`, `Metric.announceKey`, and `ToastQueueOptions.maxQueued`. Timed toasts pause while the page is hidden.
 - **A friendlier `snui-check-consumer`.** It takes `--help` and `--version`, lists every option, and names the fix when the package or a file it needs is missing.
 
-The full list, with every fix, is in the [0.14.0 changelog](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/CHANGELOG.md#0140---2026-10-14).
+The full list, with every fix, is in the [0.14.1 changelog](https://github.com/NearlCrews/signalk-nearlcrews-ui/blob/main/CHANGELOG.md#0141---2026-10-17) and the 0.14.0 entry beneath it.
 
 ## Compatibility
 
@@ -168,7 +170,7 @@ The inventory does not describe the loader, which has changed its share and scri
 Install an exact version as a development dependency because the consumer bundles the package into its panel remote:
 
 ```sh
-npm install --save-dev --save-exact signalk-nearlcrews-ui@0.14.0
+npm install --save-dev --save-exact signalk-nearlcrews-ui@0.14.1
 ```
 
 For unpublished local changes, build and pack this repository, then install the resulting tarball. `--pack-destination ..` keeps the tarball out of the repository tree:
@@ -176,7 +178,7 @@ For unpublished local changes, build and pack this repository, then install the 
 ```sh
 npm run build
 npm pack --ignore-scripts --pack-destination ..
-npm install --save-dev --save-exact ../signalk-nearlcrews-ui-0.14.0.tgz
+npm install --save-dev --save-exact ../signalk-nearlcrews-ui-0.14.1.tgz
 ```
 
 Do not configure this package as a runtime Module Federation share. Each plugin should embed the selected package version in its own remote while resolving React and React DOM from the Signal K Admin host through the integration supported by its bundler.
@@ -461,11 +463,11 @@ A touch kiosk whose browser reports a fine pointer keeps the 40-pixel desktop co
 
 The repository ships a fixture page that renders every exported component. The top of that page in each theme:
 
-![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.14.0/docs/screenshots/showcase-light.png)
+![Component showcase in the Light theme](https://unpkg.com/signalk-nearlcrews-ui@0.14.1/docs/screenshots/showcase-light.png)
 
-![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.14.0/docs/screenshots/showcase-dark.png)
+![Component showcase in the Dark theme](https://unpkg.com/signalk-nearlcrews-ui@0.14.1/docs/screenshots/showcase-dark.png)
 
-![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.14.0/docs/screenshots/showcase-night.png)
+![Component showcase in the Night theme](https://unpkg.com/signalk-nearlcrews-ui@0.14.1/docs/screenshots/showcase-night.png)
 
 The Night palette preserves red for dark-adapted vision at the helm. The showcase page itself lives in the fixtures directory of the repository and builds with the browser fixture bundle.
 
