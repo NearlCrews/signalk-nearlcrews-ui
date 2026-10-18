@@ -11,7 +11,10 @@ import {
 } from "../../bin/lib/panel-runtime.mjs";
 
 describe("the panel context", () => {
-  /** What React Aria's focus-visible setup and transition tracker touch. */
+  /**
+   * What React Aria's focus-visible setup, transition tracker, and keyboard
+   * tracker touch.
+   */
   const REACT_ARIA_SETUP = `
     if (typeof document === "undefined") throw new Error("no document");
     if (document.readyState === "loading") throw new Error("deferred to DOMContentLoaded");
@@ -27,6 +30,9 @@ describe("the panel context", () => {
     document.body.addEventListener("transitionend", () => {});
     window.addEventListener("focus", () => {}, true);
     window.addEventListener("blur", () => {}, false);
+    window.screen.orientation?.angle ?? 0;
+    window.screen.orientation.addEventListener("change", () => {});
+    window.addEventListener("focus", () => {}, { capture: true, passive: true });
     document.currentScript.src;
   `;
 

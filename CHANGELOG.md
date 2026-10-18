@@ -6,6 +6,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Fixed
+
+- `snui-check-consumer --runtime` and the federation build check give the rendered panel a `window.screen` whose `orientation` answers its `angle` and its event listeners. React Aria 3.53 reads `window.screen.orientation` the moment its on-screen keyboard tracker loads, so a consumer whose lockfile resolved React Aria 3.53 failed the runtime check with "Cannot read properties of undefined (reading 'orientation')". A consumer that held React Aria at 3.52 to keep the check passing can drop the hold once it re-pins this release.
+
+### Changed
+
+- The package depends on React Aria 3.53.1 and React Aria Components 1.22.1, which bring React Stately 3.51.0, up from 3.52.1, 1.21.1, and 3.50.0. The dependency ranges are `^3.53.1` and `^1.22.1`.
+
 ## [0.14.1] - 2026-10-17
 
 ### Fixed

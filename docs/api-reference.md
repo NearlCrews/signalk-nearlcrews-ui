@@ -30,12 +30,12 @@ The budget column is the ceiling the size check enforces, and it carries forward
 | Import path                          | Gzip bytes | Budget (bytes) |
 | ------------------------------------ | ---------: | -------------: |
 | `signalk-nearlcrews-ui`              |      40709 |          41984 |
-| `signalk-nearlcrews-ui/composites`   |      24166 |          25600 |
-| `signalk-nearlcrews-ui/data-grid`    |      77575 |          81920 |
+| `signalk-nearlcrews-ui/composites`   |      23901 |          25600 |
+| `signalk-nearlcrews-ui/data-grid`    |      78266 |          81920 |
 | `signalk-nearlcrews-ui/format`       |       1149 |           2048 |
-| `signalk-nearlcrews-ui/forms`        |      27793 |          29696 |
+| `signalk-nearlcrews-ui/forms`        |      27718 |          29696 |
 | `signalk-nearlcrews-ui/host-harness` |       1818 |           2048 |
-| `signalk-nearlcrews-ui/overlays`     |      64793 |          68608 |
+| `signalk-nearlcrews-ui/overlays`     |      66122 |          68608 |
 | `signalk-nearlcrews-ui/tokens.css`   |       1749 |           2048 |
 | `fixtures/size/consumer-panel.ts`    |      35756 |          35840 |
 
