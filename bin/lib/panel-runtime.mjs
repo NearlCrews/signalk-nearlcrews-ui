@@ -101,21 +101,24 @@ function createStylesheetLink() {
  * place, because they track other people's import-time global setup rather
  * than anything this package chose.
  *
- * React Aria's `useFocusVisible` and its transition tracker both run setup the
- * moment their chunk evaluates, guarded only on `document` being defined. This
- * context defines `document` and `window`, so it also has to answer what that
- * setup touches. Measured against this package's own federation fixture and a
- * consumer panel, the remote reads every member below while it evaluates,
- * apart from the two guards, which turn a network call and a stray element
- * into a finding rather than a confusing failure. The one element the
- * document builds is the stylesheet link Webpack's CSS chunk loader appends
- * for a panel that ships CSS modules, and the head answers its load at once:
+ * React Aria's `useFocusVisible`, its transition tracker, and, from React Aria
+ * 3.53, its on-screen keyboard tracker all run setup the moment their chunk
+ * evaluates, guarded only on `document` being defined. This context defines
+ * `document` and `window`, so it also has to answer what that setup touches.
+ * Measured against this package's own federation fixture and a consumer
+ * panel, the remote reads every member below while it evaluates, apart from
+ * the two guards, which turn a network call and a stray element into a
+ * finding rather than a confusing failure. The one element the document
+ * builds is the stylesheet link Webpack's CSS chunk loader appends for a
+ * panel that ships CSS modules, and the head answers its load at once:
  * rendering happens server-side, so no stylesheet would ever apply.
  * `document.documentElement`, `localStorage`, and `matchMedia`, which an
- * earlier copy of this harness carried, are read by neither, and this library
- * feature-detects the last two itself, so their absence is a state it
- * supports rather than a hole here. These are inert listeners and not a DOM
- * implementation.
+ * earlier copy of this harness carried, are read by none of them, and this
+ * library feature-detects the last two itself, so their absence is a state it
+ * supports rather than a hole here. The keyboard tracker reads
+ * `visualViewport` and falls back to `innerWidth` and `innerHeight` without
+ * failing when all three are absent, so they are left out for the same
+ * reason. These are inert listeners and not a DOM implementation.
  *
  * Recheck this list on a React Aria upgrade: a failing load names the member.
  */
@@ -168,7 +171,11 @@ export function createDomStubs(scriptUrl) {
     window: {
       // The focus-visible setup replaces HTMLElement.prototype.focus.
       HTMLElement: class HTMLElement {},
-      // The same setup binds focus and blur on the window.
+      // The keyboard tracker reads the orientation angle through the screen,
+      // which it does not guard, and binds the orientation's change event.
+      screen: { orientation: { angle: 0, ...eventTarget() } },
+      // The focus-visible setup binds focus and blur on the window, and the
+      // keyboard tracker binds focus.
       ...eventTarget(),
       // Not a stub: a render that reaches the network is a finding, so make
       // it one rather than letting Node's own fetch answer.

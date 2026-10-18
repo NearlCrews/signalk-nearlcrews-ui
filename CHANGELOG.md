@@ -6,6 +6,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [0.14.2] - 2026-10-18
+
+### Fixed
+
+- `snui-check-consumer --runtime` and the federation build check give the rendered panel a `window.screen` whose `orientation` answers its `angle` and its event listeners. React Aria 3.53 reads `window.screen.orientation` the moment its on-screen keyboard tracker loads, so a consumer whose lockfile resolved React Aria 3.53 failed the runtime check with "Cannot read properties of undefined (reading 'orientation')". A consumer that held React Aria at 3.52 to keep the check passing can drop the hold once it re-pins this release.
+
+### Changed
+
+- The package depends on React Aria 3.53.1 and React Aria Components 1.22.1, which bring React Stately 3.51.0, up from 3.52.1, 1.21.1, and 3.50.0. The dependency ranges are `^3.53.1` and `^1.22.1`.
+
 ## [0.14.1] - 2026-10-17
 
 ### Fixed
@@ -786,7 +796,8 @@ This version was tagged but not published to npm. Install 0.4.1 instead.
 - Biome formatting and linting, type-aware ESLint, Knip dead-code checks, package audits, type validation, and bundle limits.
 - GitHub repository policy, protected npm publication workflow, security configuration, and migration guidance.
 
-[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.14.1...HEAD
+[Unreleased]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.14.2...HEAD
+[0.14.2]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.14.1...v0.14.2
 [0.14.1]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.14.0...v0.14.1
 [0.14.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/NearlCrews/signalk-nearlcrews-ui/compare/v0.12.0...v0.13.0
